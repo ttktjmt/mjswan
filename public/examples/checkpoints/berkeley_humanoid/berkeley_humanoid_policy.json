@@ -84,7 +84,7 @@
             }
         ]
     },
-    "action_scale": 0.3,
-    "stiffness": 15.0,
-    "damping": 1.0
+    "action_scale": 0.05,
+    "stiffness": 50.0,
+    "damping": 5.0
 }
