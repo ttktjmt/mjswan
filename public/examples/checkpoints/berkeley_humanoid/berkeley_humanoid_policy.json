@@ -2,26 +2,42 @@
     "onnx": {
         "meta": {
             "in_keys": [
-                "command",
                 "policy",
                 "is_init",
-                "adapt_hx"
+                "adapt_hx",
+                "command_"
             ],
             "out_keys": [
-                "command",
                 "policy",
-                "actions",
-                "adapt_hx"
+                "priv_pred",
+                "ext_pred",
+                [
+                    "info",
+                    "ext_rec"
+                ],
+                [
+                    "next",
+                    "adapt_hx"
+                ],
+                "_actor_inp",
+                "_actor_feature",
+                "loc",
+                "scale",
+                "flag",
+                "action",
+                "sample_log_prob",
+                "retro_inp",
+                "retro_feat",
+                [
+                    "info",
+                    "retro_pred"
+                ]
             ],
             "in_shapes": [
                 [
                     [
                         1,
-                        3
-                    ],
-                    [
-                        1,
-                        60
+                        117
                     ],
                     [
                         1,
@@ -29,7 +45,11 @@
                     ],
                     [
                         1,
-                        32
+                        128
+                    ],
+                    [
+                        1,
+                        16
                     ]
                 ]
             ]
@@ -40,7 +60,7 @@
         "policy": [
             {
                 "name": "GravityMultistep",
-                "joint_name": "torso",
+                "joint_name": "floating_base_joint",
                 "history_steps": 3
             },
             {
@@ -55,12 +75,12 @@
             },
             {
                 "name": "PrevActions",
-                "history_steps": 2
+                "history_steps": 3
             }
         ],
-        "command": [
+        "command_": [
             {
-                "name": "ImpedanceCommand"
+                "name": "VelocityCommand"
             }
         ]
     },

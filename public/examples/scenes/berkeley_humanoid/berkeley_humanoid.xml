@@ -62,7 +62,7 @@
   <worldbody>
     <light name="spotlight" mode="targetbodycom" target="torso" pos="0 -1 2"/>
     <body name="torso" childclass="berkeley_humanoid" pos="0 0 0.6">
-      <freejoint/>
+      <freejoint name="floating_base_joint"/>
       <site name="imu"/>
       <camera name="track" pos="1.210 -0.435 0.32" xyaxes="0.342 0.940 0.000 -0.321 0.117 0.940" mode="trackcom"/>
       <inertial pos="0.0123294 -0.0023557 0.114047" quat="0.997324 0.0100377 0.00560983 -0.0721951" mass="5.37812"
