@@ -1,0 +1,70 @@
+{
+    "onnx": {
+        "meta": {
+            "in_keys": [
+                "command",
+                "policy",
+                "is_init",
+                "adapt_hx"
+            ],
+            "out_keys": [
+                "command",
+                "policy",
+                "actions",
+                "adapt_hx"
+            ],
+            "in_shapes": [
+                [
+                    [
+                        1,
+                        3
+                    ],
+                    [
+                        1,
+                        60
+                    ],
+                    [
+                        1,
+                        1
+                    ],
+                    [
+                        1,
+                        32
+                    ]
+                ]
+            ]
+        },
+        "path": "./examples/checkpoints/berkeley_humanoid/berkeley_humanoid_policy.onnx"
+    },
+    "obs_config": {
+        "policy": [
+            {
+                "name": "GravityMultistep",
+                "joint_name": "torso",
+                "history_steps": 3
+            },
+            {
+                "name": "JointPosMultistep",
+                "joint_names": "isaac",
+                "history_steps": 3
+            },
+            {
+                "name": "JointVelMultistep",
+                "joint_names": "isaac",
+                "history_steps": 3
+            },
+            {
+                "name": "PrevActions",
+                "history_steps": 2
+            }
+        ],
+        "command": [
+            {
+                "name": "ImpedanceCommand"
+            }
+        ]
+    },
+    "action_scale": 0.3,
+    "stiffness": 15.0,
+    "damping": 1.0
+}

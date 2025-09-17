@@ -22,6 +22,16 @@
         { "id": "him", "name": "HIMLoco", "path": "./examples/checkpoints/go1/go1_him.json", "ui_controls": [] },
         { "id": "decap", "name": "Decap", "path": "./examples/checkpoints/go1/go1_decap.json", "ui_controls": [] }
       ]
+    },
+    {
+      "id": "3",
+      "name": "Berkeley Humanoid",
+      "model_xml": "berkeley_humanoid/scene.xml",
+      "asset_meta": "./examples/checkpoints/berkeley_humanoid/asset_meta.json",
+      "default_policy": "walking",
+      "policies": [
+        { "id": "walking", "name": "Walking", "path": "./examples/checkpoints/berkeley_humanoid/berkeley_humanoid_policy.json", "ui_controls": [] }
+      ]
     }
   ]
 }

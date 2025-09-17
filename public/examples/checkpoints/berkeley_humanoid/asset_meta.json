@@ -1,0 +1,138 @@
+{
+    "init_state": {
+        "pos": [
+            0.0,
+            0.0,
+            0.6
+        ],
+        "rot": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+        ],
+        "lin_vel": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "ang_vel": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "joint_pos": {
+            "LL_HR": -0.071,
+            "LL_HAA": 0.103,
+            "LL_HFE": -0.463,
+            "LL_KFE": 0.983,
+            "LL_FFE": -0.350,
+            "LL_FAA": 0.126,
+            "LR_HR": 0.071,
+            "LR_HAA": -0.103,
+            "LR_HFE": -0.463,
+            "LR_KFE": 0.983,
+            "LR_FFE": -0.350,
+            "LR_FAA": -0.126
+        },
+        "joint_vel": {
+            ".*": 0.0
+        }
+    },
+    "body_names_isaac": [
+        "torso",
+        "ll_hr",
+        "ll_haa",
+        "ll_hfe",
+        "ll_kfe",
+        "ll_ffe",
+        "ll_faa",
+        "lr_hr",
+        "lr_haa",
+        "lr_hfe",
+        "lr_kfe",
+        "lr_ffe",
+        "lr_faa"
+    ],
+    "joint_names_isaac": [
+        "LL_HR",
+        "LL_HAA",
+        "LL_HFE",
+        "LL_KFE",
+        "LL_FFE",
+        "LL_FAA",
+        "LR_HR",
+        "LR_HAA",
+        "LR_HFE",
+        "LR_KFE",
+        "LR_FFE",
+        "LR_FAA"
+    ],
+    "actuators": {
+        "base_legs": {
+            "class_type": "isaaclab.actuators.actuator_pd:ImplicitActuator",
+            "joint_names_expr": [
+                "LL_HR",
+                "LL_HAA",
+                "LL_HFE",
+                "LL_KFE",
+                "LL_FFE",
+                "LL_FAA",
+                "LR_HR",
+                "LR_HAA",
+                "LR_HFE",
+                "LR_KFE",
+                "LR_FFE",
+                "LR_FAA"
+            ],
+            "effort_limit": {
+                "LL_HR": 20.0,
+                "LL_HAA": 20.0,
+                "LL_HFE": 30.0,
+                "LL_KFE": 30.0,
+                "LL_FFE": 20.0,
+                "LL_FAA": 5.0,
+                "LR_HR": 20.0,
+                "LR_HAA": 20.0,
+                "LR_HFE": 30.0,
+                "LR_KFE": 30.0,
+                "LR_FFE": 20.0,
+                "LR_FAA": 5.0
+            },
+            "velocity_limit": 30.0,
+            "effort_limit_sim": {
+                "LL_HR": 20.0,
+                "LL_HAA": 20.0,
+                "LL_HFE": 30.0,
+                "LL_KFE": 30.0,
+                "LL_FFE": 20.0,
+                "LL_FAA": 5.0,
+                "LR_HR": 20.0,
+                "LR_HAA": 20.0,
+                "LR_HFE": 30.0,
+                "LR_KFE": 30.0,
+                "LR_FFE": 20.0,
+                "LR_FAA": 5.0
+            },
+            "velocity_limit_sim": 30.0,
+            "stiffness": 15.0,
+            "damping": 1.0,
+            "armature": null,
+            "friction": null
+        }
+    },
+    "default_joint_pos": [
+        -0.071,
+        0.103,
+        -0.463,
+        0.983,
+        -0.350,
+        0.126,
+        0.071,
+        -0.103,
+        -0.463,
+        0.983,
+        -0.350,
+        -0.126
+    ]
+}
