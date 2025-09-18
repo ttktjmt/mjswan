@@ -6,12 +6,10 @@
       "model_xml": "unitree_go2/scene.xml",
       "asset_meta": "./examples/checkpoints/go2/asset_meta.json",
       "default_policy": "facet",
-      "policy_optional": false,
       "policies": [
         { "id": "facet", "name": "Facet", "path": "./examples/checkpoints/policy-05-03_21-31.json", "ui_controls": ["setpoint", "stiffness"] },
         { "id": "robust", "name": "Robust", "path": "./examples/checkpoints/robust.json", "ui_controls": [] },
-        { "id": "vanilla", "name": "Vanilla", "path": "./examples/checkpoints/vanilla.json", "ui_controls": [] },
-        { "id": "visualization", "name": "Visualization Only", "path": null, "ui_controls": [] }
+        { "id": "vanilla", "name": "Vanilla", "path": "./examples/checkpoints/vanilla.json", "ui_controls": [] }
       ]
     },
     {
@@ -20,23 +18,18 @@
       "model_xml": "unitree_go1/go1.xml",
       "asset_meta": "./examples/checkpoints/go1/asset_meta.json",
       "default_policy": "him",
-      "policy_optional": false,
       "policies": [
         { "id": "him", "name": "HIMLoco", "path": "./examples/checkpoints/go1/go1_him.json", "ui_controls": [] },
-        { "id": "decap", "name": "Decap", "path": "./examples/checkpoints/go1/go1_decap.json", "ui_controls": [] },
-        { "id": "visualization", "name": "Visualization Only", "path": null, "ui_controls": [] }
+        { "id": "decap", "name": "Decap", "path": "./examples/checkpoints/go1/go1_decap.json", "ui_controls": [] }
       ]
     },
     {
       "id": "3",
-      "name": "Go2 Visualization",
+      "name": "Go2 NoPolicy",
       "model_xml": "unitree_go2/scene.xml",
       "asset_meta": "./examples/checkpoints/go2/asset_meta.json",
-      "default_policy": "visualization",
-      "policy_optional": true,
-      "policies": [
-        { "id": "visualization", "name": "Visualization Only", "path": null, "ui_controls": [] }
-      ]
+      "default_policy": null,
+      "policies": []
     }
   ]
 }

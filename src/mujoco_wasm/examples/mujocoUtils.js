@@ -87,13 +87,13 @@ export async function reloadPolicy(policy_path) {
     await new Promise(resolve => setTimeout(resolve, 10)); // Wait 10ms before checking again
   }
 
-  // Handle visualization mode (no policy)
+  // Handle nopolicy mode (no policy)
   if (!policy_path) {
-    console.log("Running in visualization mode - no policy loaded");
+    console.log("Running in nopolicy mode - no policy loaded");
     this.policy = null;
     this.observations = {};
     
-    // Initialize default actions for visualization
+    // Initialize default actions for nopolicy mode
     if (this.lastActions) {
       this.lastActions.fill(0);
     }

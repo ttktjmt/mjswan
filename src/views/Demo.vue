@@ -11,40 +11,62 @@
         </v-btn>
 
         <v-card class="control-card" :elevation="isMobile ? 0 : 2">
-            <v-tabs v-model="task" bg-color="primary" @update:modelValue="updateTaskCallback()"
+            <v-tabs v-model="task" bg-color="primary" @update:modelValue="handleTaskChange"
                 :density="isMobile ? 'compact' : 'default'" class="tabs-container">
-                <v-tab v-for="task in config.tasks" :key="task.id" :value="task.id" :class="{ 'mobile-tab': isMobile }">
+                <v-tab v-for="task in config.tasks" :key="task.id" :value="task.id" :class="{ 'mobile-tab': isMobile }"
+                    @click="handleTabClick(task.id)">
                     {{ task.name }}
                 </v-tab>
             </v-tabs>
 
             <v-tabs-window v-model="task">
                 <v-tabs-window-item v-for="task in config.tasks" :key="task.id" :value="task.id">
-                    <v-tabs v-model="policy" bg-color="primary" @update:modelValue="updatePolicyCallback()"
-                        :density="isMobile ? 'compact' : 'default'">
-                        <v-tab v-for="policy in task.policies" :key="policy.id" :value="policy.id"
-                            :class="{ 'mobile-tab': isMobile }">
-                            {{ policy.name }}
-                        </v-tab>
-                    </v-tabs>
+                    <!-- No Policy Mode - when policies array is empty or default_policy is null -->
+                    <div v-if="isNoPolicyMode">
+                        <!-- No Policy Mode Indicator -->
+                        <v-card-text :class="{ 'mobile-padding': isMobile }">
+                            <v-alert type="info" variant="tonal" :density="isMobile ? 'compact' : 'default'">
+                                <v-icon icon="mdi-eye-off" start></v-icon>
+                                <strong>No Policy Mode</strong>
+                                <div class="text-caption mt-1">
+                                    No policy active. You can still interact with the model using force controls and reset the simulation.
+                                </div>
+                            </v-alert>
+                        </v-card-text>
 
-                    <!-- Policy-specific contents -->
-                    <v-tabs-window v-model="policy">
-                        <v-tabs-window-item v-for="policy in task.policies" :key="policy.id" :value="policy.id">
-                            <!-- Visualization Mode Indicator -->
-                            <v-card-text v-if="isVisualizationMode" :class="{ 'mobile-padding': isMobile }">
-                                <v-alert type="info" variant="tonal" :density="isMobile ? 'compact' : 'default'">
-                                    <v-icon icon="mdi-eye" start></v-icon>
-                                    <strong>Visualization Mode</strong>
-                                    <div class="text-caption mt-1">
-                                        No policy active. You can still interact with the model using force controls and reset the simulation.
-                                    </div>
-                                </v-alert>
-                            </v-card-text>
+                        <!-- Force Controls for No Policy Mode -->
+                        <v-divider></v-divider>
+                        <v-card-text :class="{ 'mobile-padding': isMobile, 'pb-2': !isMobile }">
+                            <div class="control-section-title">Force Controls</div>
+                            <div class="force-description">
+                                Drag on the robot to apply force
+                            </div>
+                            <v-btn @click="StartImpulse" color="primary" block :size="isMobile ? 'large' : 'default'"
+                                class="impulse-button">
+                                Impulse
+                            </v-btn>
+                            <div class="force-description">
+                                Click the button to apply an impulse
+                            </div>
+                        </v-card-text>
+                    </div>
 
-                            <!-- Command Controls Group -->
-                            <v-card-text v-if="!isVisualizationMode" :class="{ 'mobile-padding': isMobile }">
-                                <div class="control-section-title">Target Controls</div>
+                    <!-- Regular Policy Mode -->
+                    <div v-else>
+                        <v-tabs v-model="policy" bg-color="primary" @update:modelValue="updatePolicyCallback()"
+                            :density="isMobile ? 'compact' : 'default'">
+                            <v-tab v-for="policy in task.policies" :key="policy.id" :value="policy.id"
+                                :class="{ 'mobile-tab': isMobile }">
+                                {{ policy.name }}
+                            </v-tab>
+                        </v-tabs>
+
+                        <!-- Policy-specific contents -->
+                        <v-tabs-window v-model="policy">
+                            <v-tabs-window-item v-for="policy in task.policies" :key="policy.id" :value="policy.id">
+                                <!-- Command Controls Group -->
+                                <v-card-text :class="{ 'mobile-padding': isMobile }">
+                                    <div class="control-section-title">Target Controls</div>
 
                                 <!-- Setpoint checkbox -->
                                 <v-checkbox v-if="policy.ui_controls && policy.ui_controls.includes('setpoint')"
@@ -83,8 +105,8 @@
 
                             <!-- Stiffness Controls Group -->
                             <v-divider
-                                v-if="!isVisualizationMode && policy.ui_controls && policy.ui_controls.includes('stiffness')"></v-divider>
-                            <v-card-text v-if="!isVisualizationMode && policy.ui_controls && policy.ui_controls.includes('stiffness')"
+                                v-if="policy.ui_controls && policy.ui_controls.includes('stiffness')"></v-divider>
+                            <v-card-text v-if="policy.ui_controls && policy.ui_controls.includes('stiffness')"
                                 :class="{ 'mobile-padding': isMobile }">
                                 <div class="control-section-title">Stiffness Controls</div>
 
@@ -133,6 +155,7 @@
                             Click the button to apply an impulse
                         </div>
                     </v-card-text>
+                    </div>
                 </v-tabs-window-item>
             </v-tabs-window>
 
@@ -196,7 +219,7 @@ export default {
         config: { tasks: [] },
         task: null,
         policy: null,
-        isVisualizationMode: false,
+        isNoPolicyMode: false,
         facet_kp: 24,
         command_vel_x: 0.0,
         use_setpoint: true,
@@ -217,6 +240,21 @@ export default {
         },
         togglePanel() {
             this.isPanelCollapsed = !this.isPanelCollapsed;
+        },
+        handleTabClick(taskId) {
+            // If clicking the same tab, reload the default policy
+            if (this.task === taskId) {
+                const selectedTask = this.config.tasks.find(t => t.id === taskId);
+                if (selectedTask && !this.isNoPolicyMode && selectedTask.default_policy) {
+                    this.policy = selectedTask.default_policy;
+                    this.updatePolicyCallback();
+                }
+            }
+        },
+        handleTaskChange(newTaskId) {
+            if (this.task !== newTaskId) {
+                this.updateTaskCallback();
+            }
         },
         async init() {
             if (typeof WebAssembly !== "object" || typeof WebAssembly.instantiate !== "function") {
@@ -255,21 +293,39 @@ export default {
             const selectedTask = this.config.tasks.find(t => t.id === this.task);
             if (!selectedTask) return;
 
-            this.policy = selectedTask.default_policy;
+            // Check if this is nopolicy mode
+            this.isNoPolicyMode = !selectedTask.policies.length || !selectedTask.default_policy;
+            
+            if (this.isNoPolicyMode) {
+                this.policy = null;
+            } else {
+                this.policy = selectedTask.default_policy;
+            }
+            
             this.demo.alive = false;
             await this.demo.reloadScene(selectedTask.model_xml, selectedTask.asset_meta);
             this.updatePolicyCallback();
         },
         async updatePolicyCallback() {
             const selectedTask = this.config.tasks.find(t => t.id === this.task);
-            const selectedPolicy = selectedTask.policies.find(p => p.id === this.policy);
             
+            // Handle nopolicy mode
+            if (this.isNoPolicyMode) {
+                this.demo.alive = false;
+                try {
+                    await this.demo.reloadPolicy(null);
+                    this.demo.alive = true;
+                    this.demo.main_loop();
+                } catch (error) {
+                    console.error('Failed to initialize nopolicy mode:', error);
+                }
+                return;
+            }
+            
+            const selectedPolicy = selectedTask.policies.find(p => p.id === this.policy);
             if (!selectedPolicy) return;
 
             this.demo.alive = false;
-            
-            // Check if we're in visualization mode (no policy path)
-            this.isVisualizationMode = !selectedPolicy.path;
             
             try {
                 await this.demo.reloadPolicy(selectedPolicy.path);
@@ -277,8 +333,8 @@ export default {
                 this.demo.main_loop();
             } catch (error) {
                 console.error('Failed to load policy:', error);
-                // If policy loading fails, fall back to visualization mode
-                this.isVisualizationMode = true;
+                // If policy loading fails, fall back to nopolicy mode
+                this.isNoPolicyMode = true;
                 await this.demo.reloadPolicy(null);
                 this.demo.alive = true;
                 this.demo.main_loop();
