@@ -87,6 +87,22 @@ export async function reloadPolicy(policy_path) {
     await new Promise(resolve => setTimeout(resolve, 10)); // Wait 10ms before checking again
   }
 
+  // Handle visualization mode (no policy)
+  if (!policy_path) {
+    console.log("Running in visualization mode - no policy loaded");
+    this.policy = null;
+    this.observations = {};
+    
+    // Initialize default actions for visualization
+    if (this.lastActions) {
+      this.lastActions.fill(0);
+    }
+    
+    this.simulation.resetData();
+    this.simulation.forward();
+    return;
+  }
+
   // Load policy config from JSON
   const response = await fetch(policy_path);
   const config = await response.json();

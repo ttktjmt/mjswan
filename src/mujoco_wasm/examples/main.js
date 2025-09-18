@@ -137,23 +137,36 @@ export class MuJoCoDemo {
   }
 
   async main_loop() {
-    this.inputDict = this.policy.initInput();
+    // Initialize input dict only if policy exists
+    if (this.policy) {
+      this.inputDict = this.policy.initInput();
+    }
+    
     while (this.alive) {
       const loopStart = performance.now();
-      if (!this.params["paused"] && this.model != null && this.state != null && this.simulation != null && this.observations != null) {
+      if (!this.params["paused"] && this.model != null && this.state != null && this.simulation != null) {
         let time_start = performance.now();
-        // Run policy inference
-        const quat = this.simulation.qpos.subarray(3, 7);
-        this.quat = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]);
-        this.rpy.setFromQuaternion(this.quat);
-        this.computeObservations(this.simulation);
         
-        try {
-          await this.runInference();
-        } catch (e) {
-          console.error("Inference error in main loop:", e);
-          this.alive = false; // Break the while loop
-          break;
+        // Only run policy inference if policy exists
+        if (this.policy && this.observations != null) {
+          // Run policy inference
+          const quat = this.simulation.qpos.subarray(3, 7);
+          this.quat = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]);
+          this.rpy.setFromQuaternion(this.quat);
+          this.computeObservations(this.simulation);
+          
+          try {
+            await this.runInference();
+          } catch (e) {
+            console.error("Inference error in main loop:", e);
+            this.alive = false; // Break the while loop
+            break;
+          }
+        } else {
+          // When no policy is loaded, use zero actions or maintain current position
+          if (this.lastActions) {
+            this.lastActions.fill(0);
+          }
         }
 
         let time_end = performance.now();
@@ -321,6 +334,10 @@ export class MuJoCoDemo {
 
   async runInference() {
     if (!this.policy || this.isInferencing) {
+      if (!this.policy) {
+        // No policy loaded - use zero actions for visualization mode
+        return;
+      }
       console.log("inference lag");
       return;
     }

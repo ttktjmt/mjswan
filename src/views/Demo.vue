@@ -31,8 +31,19 @@
                     <!-- Policy-specific contents -->
                     <v-tabs-window v-model="policy">
                         <v-tabs-window-item v-for="policy in task.policies" :key="policy.id" :value="policy.id">
+                            <!-- Visualization Mode Indicator -->
+                            <v-card-text v-if="isVisualizationMode" :class="{ 'mobile-padding': isMobile }">
+                                <v-alert type="info" variant="tonal" :density="isMobile ? 'compact' : 'default'">
+                                    <v-icon icon="mdi-eye" start></v-icon>
+                                    <strong>Visualization Mode</strong>
+                                    <div class="text-caption mt-1">
+                                        No policy active. You can still interact with the model using force controls and reset the simulation.
+                                    </div>
+                                </v-alert>
+                            </v-card-text>
+
                             <!-- Command Controls Group -->
-                            <v-card-text :class="{ 'mobile-padding': isMobile }">
+                            <v-card-text v-if="!isVisualizationMode" :class="{ 'mobile-padding': isMobile }">
                                 <div class="control-section-title">Target Controls</div>
 
                                 <!-- Setpoint checkbox -->
@@ -72,8 +83,8 @@
 
                             <!-- Stiffness Controls Group -->
                             <v-divider
-                                v-if="policy.ui_controls && policy.ui_controls.includes('stiffness')"></v-divider>
-                            <v-card-text v-if="policy.ui_controls && policy.ui_controls.includes('stiffness')"
+                                v-if="!isVisualizationMode && policy.ui_controls && policy.ui_controls.includes('stiffness')"></v-divider>
+                            <v-card-text v-if="!isVisualizationMode && policy.ui_controls && policy.ui_controls.includes('stiffness')"
                                 :class="{ 'mobile-padding': isMobile }">
                                 <div class="control-section-title">Stiffness Controls</div>
 
@@ -185,6 +196,7 @@ export default {
         config: { tasks: [] },
         task: null,
         policy: null,
+        isVisualizationMode: false,
         facet_kp: 24,
         command_vel_x: 0.0,
         use_setpoint: true,
@@ -251,12 +263,26 @@ export default {
         async updatePolicyCallback() {
             const selectedTask = this.config.tasks.find(t => t.id === this.task);
             const selectedPolicy = selectedTask.policies.find(p => p.id === this.policy);
+            
             if (!selectedPolicy) return;
 
             this.demo.alive = false;
-            await this.demo.reloadPolicy(selectedPolicy.path);
-            this.demo.alive = true;
-            this.demo.main_loop();
+            
+            // Check if we're in visualization mode (no policy path)
+            this.isVisualizationMode = !selectedPolicy.path;
+            
+            try {
+                await this.demo.reloadPolicy(selectedPolicy.path);
+                this.demo.alive = true;
+                this.demo.main_loop();
+            } catch (error) {
+                console.error('Failed to load policy:', error);
+                // If policy loading fails, fall back to visualization mode
+                this.isVisualizationMode = true;
+                await this.demo.reloadPolicy(null);
+                this.demo.alive = true;
+                this.demo.main_loop();
+            }
         },
         reset() {
             this.demo.params["paused"] = true;
