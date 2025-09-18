@@ -252,9 +252,7 @@ export default {
             }
         },
         handleTaskChange(newTaskId) {
-            if (this.task !== newTaskId) {
-                this.updateTaskCallback();
-            }
+            this.updateTaskCallback();
         },
         async init() {
             if (typeof WebAssembly !== "object" || typeof WebAssembly.instantiate !== "function") {
