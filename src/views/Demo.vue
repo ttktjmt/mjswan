@@ -21,8 +21,8 @@
 
             <v-tabs-window v-model="task">
                 <v-tabs-window-item v-for="task in config.tasks" :key="task.id" :value="task.id">
-                    <!-- No Policy Mode - when policies array is empty or default_policy is null -->
-                    <div v-if="isNoPolicyMode">
+                    <!-- Case 1: No policies at all (empty policies array) - show only nopolicy mode -->
+                    <div v-if="!task.policies.length">
                         <!-- No Policy Mode Indicator -->
                         <v-card-text :class="{ 'mobile-padding': isMobile }">
                             <v-alert type="info" variant="tonal" :density="isMobile ? 'compact' : 'default'">
@@ -51,7 +51,7 @@
                         </v-card-text>
                     </div>
 
-                    <!-- Regular Policy Mode -->
+                    <!-- Case 2: Has policies (may or may not have default_policy) -->
                     <div v-else>
                         <v-tabs v-model="policy" bg-color="primary" @update:modelValue="updatePolicyCallback()"
                             :density="isMobile ? 'compact' : 'default'">
@@ -60,6 +60,19 @@
                                 {{ policy.name }}
                             </v-tab>
                         </v-tabs>
+
+                        <!-- Show No Policy Mode indicator when in nopolicy mode (policy is null) -->
+                        <div v-if="isNoPolicyMode && policy === null">
+                            <v-card-text :class="{ 'mobile-padding': isMobile }">
+                                <v-alert type="info" variant="tonal" :density="isMobile ? 'compact' : 'default'">
+                                    <v-icon icon="mdi-eye-off" start></v-icon>
+                                    <strong>No Policy Mode</strong>
+                                    <div class="text-caption mt-1">
+                                        No policy active. Select a policy from the tabs above or interact with the model using force controls.
+                                    </div>
+                                </v-alert>
+                            </v-card-text>
+                        </div>
 
                         <!-- Policy-specific contents -->
                         <v-tabs-window v-model="policy">
@@ -242,12 +255,20 @@ export default {
             this.isPanelCollapsed = !this.isPanelCollapsed;
         },
         handleTabClick(taskId) {
-            // If clicking the same tab, reload the default policy
+            // If clicking the same tab, reload the default policy or activate nopolicy mode
             if (this.task === taskId) {
                 const selectedTask = this.config.tasks.find(t => t.id === taskId);
-                if (selectedTask && !this.isNoPolicyMode && selectedTask.default_policy) {
-                    this.policy = selectedTask.default_policy;
-                    this.updatePolicyCallback();
+                if (selectedTask) {
+                    if (selectedTask.default_policy) {
+                        // Has a default policy - reload it
+                        this.policy = selectedTask.default_policy;
+                        this.updatePolicyCallback();
+                    } else {
+                        // default_policy is null - activate nopolicy mode
+                        this.policy = null;
+                        this.isNoPolicyMode = true;
+                        this.updatePolicyCallback();
+                    }
                 }
             }
         },
@@ -280,7 +301,20 @@ export default {
                 const response = await fetch('./config.json');
                 this.config = await response.json();
                 this.task = this.config.tasks[0]?.id;
-                this.policy = this.config.tasks[0]?.default_policy;
+                
+                // Handle initial policy setting
+                const firstTask = this.config.tasks[0];
+                if (firstTask) {
+                    if (!firstTask.policies.length || !firstTask.default_policy) {
+                        // No policies or default_policy is null - start in nopolicy mode
+                        this.policy = null;
+                        this.isNoPolicyMode = true;
+                    } else {
+                        // Has policies and default_policy - use default
+                        this.policy = firstTask.default_policy;
+                        this.isNoPolicyMode = false;
+                    }
+                }
             } catch (error) {
                 console.error('Failed to load config:', error);
                 this.state = -1;
@@ -289,14 +323,22 @@ export default {
         },
         async updateTaskCallback() {
             const selectedTask = this.config.tasks.find(t => t.id === this.task);
-            if (!selectedTask) return;
+            if (!selectedTask || !this.demo) return;
 
-            // Check if this is nopolicy mode
-            this.isNoPolicyMode = !selectedTask.policies.length || !selectedTask.default_policy;
+            // Determine if this task can run in nopolicy mode
+            const canRunNoPolicyMode = !selectedTask.policies.length || !selectedTask.default_policy;
             
-            if (this.isNoPolicyMode) {
+            if (!selectedTask.policies.length) {
+                // No policies at all - force nopolicy mode
+                this.isNoPolicyMode = true;
+                this.policy = null;
+            } else if (!selectedTask.default_policy) {
+                // Has policies but default_policy is null - start in nopolicy mode but allow policy selection
+                this.isNoPolicyMode = true;
                 this.policy = null;
             } else {
+                // Has policies and default_policy - use default
+                this.isNoPolicyMode = false;
                 this.policy = selectedTask.default_policy;
             }
             
@@ -306,9 +348,11 @@ export default {
         },
         async updatePolicyCallback() {
             const selectedTask = this.config.tasks.find(t => t.id === this.task);
+            if (!selectedTask || !this.demo) return;
             
-            // Handle nopolicy mode
-            if (this.isNoPolicyMode) {
+            // Handle nopolicy mode (when policy is null)
+            if (this.policy === null) {
+                this.isNoPolicyMode = true;
                 this.demo.alive = false;
                 try {
                     await this.demo.reloadPolicy(null);
@@ -320,9 +364,11 @@ export default {
                 return;
             }
             
+            // Handle policy mode (when policy is selected)
             const selectedPolicy = selectedTask.policies.find(p => p.id === this.policy);
             if (!selectedPolicy) return;
 
+            this.isNoPolicyMode = false;
             this.demo.alive = false;
             
             try {
@@ -333,6 +379,7 @@ export default {
                 console.error('Failed to load policy:', error);
                 // If policy loading fails, fall back to nopolicy mode
                 this.isNoPolicyMode = true;
+                this.policy = null;
                 await this.demo.reloadPolicy(null);
                 this.demo.alive = true;
                 this.demo.main_loop();

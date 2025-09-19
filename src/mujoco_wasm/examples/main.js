@@ -106,20 +106,6 @@ export class MuJoCoDemo {
   
   async reload(mjcf_path, meta_path) {
     await this.reloadScene(mjcf_path, meta_path);
-    await this.reloadScene(mjcf_path, meta_path);
-    // Initialize the three.js Scene using the .xml Model
-    // Set up simulation parameters
-    this.timestep = this.model.getOptions().timestep;
-    this.decimation = Math.round(0.02 / this.timestep);
-    this.mujoco_time = 0.0;
-    this.simStepCount = 0;
-    this.inferenceStepCount = 0;
-    
-    console.log("timestep:", this.timestep, "decimation:", this.decimation);
-    
-    this.adapt_hx = new Float32Array(128);
-    this.rpy = new THREE.Euler();
-    await this.reloadScene(mjcf_path, meta_path);    
     // Initialize the three.js Scene using the .xml Model
     // Set up simulation parameters
     this.timestep = this.model.getOptions().timestep;
