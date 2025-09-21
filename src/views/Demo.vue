@@ -53,8 +53,10 @@
 
                     <!-- Case 2: Has policies (may or may not have default_policy) -->
                     <div v-else>
-                        <v-tabs v-model="policy" bg-color="primary" @update:modelValue="updatePolicyCallback()"
-                            :density="isMobile ? 'compact' : 'default'">
+                        <v-tabs :model-value="isNoPolicyMode ? undefined : policy" 
+                                bg-color="primary" 
+                                @update:modelValue="handlePolicySelection"
+                                :density="isMobile ? 'compact' : 'default'">
                             <v-tab v-for="policy in task.policies" :key="policy.id" :value="policy.id"
                                 :class="{ 'mobile-tab': isMobile }">
                                 {{ policy.name }}
@@ -233,6 +235,7 @@ export default {
         task: null,
         policy: null,
         isNoPolicyMode: false,
+        isInitializing: true,
         facet_kp: 24,
         command_vel_x: 0.0,
         use_setpoint: true,
@@ -272,6 +275,17 @@ export default {
                 }
             }
         },
+        handlePolicySelection(selectedPolicyId) {
+            // Don't process policy selection during initialization
+            if (this.isInitializing) return;
+            
+            // Only update if a policy is actually selected (not auto-selection)
+            if (selectedPolicyId) {
+                this.policy = selectedPolicyId;
+                this.isNoPolicyMode = false;
+                this.updatePolicyCallback();
+            }
+        },
         handleTaskChange(newTaskId) {
             this.updateTaskCallback();
         },
@@ -290,6 +304,8 @@ export default {
                 this.updateTaskCallback();
                 this.demo.params["paused"] = false;
                 this.state = 1;
+                // Mark initialization as complete
+                this.isInitializing = false;
             } catch (error) {
                 this.state = -1;
                 this.extra_error_message = error.toString();

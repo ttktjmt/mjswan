@@ -70,7 +70,7 @@ export async function reloadScene(mjcf_path, meta_path) {
 }
 
 export async function reloadPolicy(policy_path) {
-  console.log("Reloading policy:", this.params.policy);
+  console.log("Reloading policy:", policy_path);
 
   // Wait until inference is not running
   // TODO: use thread lock instead of polling

@@ -98,7 +98,8 @@ export class MuJoCoDemo {
     this.adapt_hx = new Float32Array(128);
     this.rpy = new THREE.Euler();
     await this.reloadScene("unitree_go2/scene.xml", "./examples/checkpoints/go2/asset_meta.json");
-    await this.reloadPolicy('./examples/checkpoints/policy-05-03_21-31.json');
+    // Policy loading is now handled by the Vue component, not here
+    // await this.reloadPolicy('./examples/checkpoints/policy-05-03_21-31.json');
     // await this.reloadScene("unitree_go1/go1.xml", "./examples/checkpoints/go1/asset_meta.json");
     // await this.reloadPolicy('./examples/checkpoints/go1/go1_him.json');
     this.alive = true;
@@ -118,7 +119,8 @@ export class MuJoCoDemo {
     
     this.adapt_hx = new Float32Array(128);
     this.rpy = new THREE.Euler();
-    await this.reloadPolicy();
+    // Policy loading is now handled by the Vue component, not here
+    // await this.reloadPolicy();
     this.alive = true;
   }
 
