@@ -5,7 +5,7 @@
       "name": "Go2",
       "model_xml": "unitree_go2/scene.xml",
       "asset_meta": "./examples/checkpoints/go2/asset_meta.json",
-      "default_policy": null,
+      "default_policy": "facet",
       "policies": [
         { "id": "facet", "name": "Facet", "path": "./examples/checkpoints/policy-05-03_21-31.json", "ui_controls": ["setpoint", "stiffness"] },
         { "id": "robust", "name": "Robust", "path": "./examples/checkpoints/robust.json", "ui_controls": [] },
@@ -22,14 +22,6 @@
         { "id": "him", "name": "HIMLoco", "path": "./examples/checkpoints/go1/go1_him.json", "ui_controls": [] },
         { "id": "decap", "name": "Decap", "path": "./examples/checkpoints/go1/go1_decap.json", "ui_controls": [] }
       ]
-    },
-    {
-      "id": "3",
-      "name": "Go2 NoPolicy",
-      "model_xml": "unitree_go2/scene.xml",
-      "asset_meta": "./examples/checkpoints/go2/asset_meta.json",
-      "default_policy": null,
-      "policies": []
     }
   ]
 }

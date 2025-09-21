@@ -67,31 +67,24 @@ export async function reloadScene(mjcf_path, meta_path) {
   this.actionBuffer = new Array(4).fill().map(() => new Float32Array(this.numActions));
   this.lastActions = new Float32Array(this.numActions);
 
+  // Initialize the three.js Scene using the .xml Model
+  // Set up simulation parameters
+  this.timestep = this.model.getOptions().timestep;
+  this.decimation = Math.round(0.02 / this.timestep);
+  this.mujoco_time = 0.0;
+  this.simStepCount = 0;
+  this.inferenceStepCount = 0;
+  console.log("timestep:", this.timestep, "decimation:", this.decimation);
+
 }
 
 export async function reloadPolicy(policy_path) {
-  console.log("Reloading policy:", policy_path);
+  console.log("Reloading policy:", this.params.policy);
 
   // Wait until inference is not running
   // TODO: use thread lock instead of polling
   while (this.isInferencing) {
     await new Promise(resolve => setTimeout(resolve, 10)); // Wait 10ms before checking again
-  }
-
-  // Handle nopolicy mode (no policy)
-  if (!policy_path) {
-    console.log("Running in nopolicy mode - no policy loaded");
-    this.policy = null;
-    this.observations = {};
-    
-    // Initialize default actions for nopolicy mode
-    if (this.lastActions) {
-      this.lastActions.fill(0);
-    }
-    
-    this.simulation.resetData();
-    this.simulation.forward();
-    return;
   }
 
   // Load policy config from JSON
