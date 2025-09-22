@@ -11,7 +11,7 @@
         </v-btn>
 
         <v-card class="control-card" :elevation="isMobile ? 0 : 2">
-            <v-tabs v-model="task" bg-color="primary" @update:modelValue="updateTaskCallback()"
+            <v-tabs v-model="task" bg-color="primary" @update:modelValue="handleTaskChange"
                 :density="isMobile ? 'compact' : 'default'" class="tabs-container">
                 <v-tab v-for="task in config.tasks" :key="task.id" :value="task.id" :class="{ 'mobile-tab': isMobile }">
                     {{ task.name }}
@@ -20,16 +20,78 @@
 
             <v-tabs-window v-model="task">
                 <v-tabs-window-item v-for="task in config.tasks" :key="task.id" :value="task.id">
-                    <v-tabs v-model="policy" bg-color="primary" @update:modelValue="updatePolicyCallback()"
-                        :density="isMobile ? 'compact' : 'default'">
-                        <v-tab v-for="policy in task.policies" :key="policy.id" :value="policy.id"
-                            :class="{ 'mobile-tab': isMobile }">
-                            {{ policy.name }}
-                        </v-tab>
-                    </v-tabs>
+                    <!-- Case 1: No policies available (empty policies array) -->
+                    <div v-if="!task.policies.length">
+                        <v-card-text :class="{ 'mobile-padding': isMobile }">
+                            <v-alert type="info" variant="tonal" :density="isMobile ? 'compact' : 'default'">
+                                <v-icon icon="mdi-eye-off" start></v-icon>
+                                <strong>No Policy Mode</strong>
+                                <div class="text-caption mt-1">
+                                    No RL control active. You can interact with the model using force controls and reset the simulation.
+                                </div>
+                            </v-alert>
+                        </v-card-text>
+                        
+                        <v-divider></v-divider>
+                        
+                        <!-- Force Controls always available in no-policy mode -->
+                        <v-card-text :class="{ 'mobile-padding': isMobile }">
+                            <div class="control-section-title">Force Controls</div>
+                            <div class="force-description">
+                                Drag on the robot to apply force
+                            </div>
+                            <v-btn @click="StartImpulse" color="primary" block :size="isMobile ? 'large' : 'default'"
+                                class="impulse-button">
+                                Impulse
+                            </v-btn>
+                            <div class="force-description">
+                                Click the button to apply an impulse
+                            </div>
+                        </v-card-text>
+                    </div>
 
-                    <!-- Policy-specific contents -->
-                    <v-tabs-window v-model="policy">
+                    <!-- Case 2: Has policies (may or may not have default_policy) -->
+                    <div v-else>
+                        <v-tabs v-model="policy" bg-color="primary" @update:modelValue="updatePolicyCallback()"
+                            :density="isMobile ? 'compact' : 'default'">
+                            <v-tab v-for="policy in task.policies" :key="policy.id" :value="policy.id"
+                                :class="{ 'mobile-tab': isMobile }">
+                                {{ policy.name }}
+                            </v-tab>
+                        </v-tabs>
+
+                        <!-- Show No Policy Mode indicator when in no-policy mode (policy is null) -->
+                        <div v-if="isNoPolicyMode && policy === null">
+                            <v-card-text :class="{ 'mobile-padding': isMobile }">
+                                <v-alert type="info" variant="tonal" :density="isMobile ? 'compact' : 'default'">
+                                    <v-icon icon="mdi-eye-off" start></v-icon>
+                                    <strong>No Policy Mode</strong>
+                                    <div class="text-caption mt-1">
+                                        No policy active. Select a policy from the tabs above or interact with the model using force controls.
+                                    </div>
+                                </v-alert>
+                            </v-card-text>
+                            
+                            <v-divider></v-divider>
+                            
+                            <!-- Force Controls in no-policy mode -->
+                            <v-card-text :class="{ 'mobile-padding': isMobile }">
+                                <div class="control-section-title">Force Controls</div>
+                                <div class="force-description">
+                                    Drag on the robot to apply force
+                                </div>
+                                <v-btn @click="StartImpulse" color="primary" block :size="isMobile ? 'large' : 'default'"
+                                    class="impulse-button">
+                                    Impulse
+                                </v-btn>
+                                <div class="force-description">
+                                    Click the button to apply an impulse
+                                </div>
+                            </v-card-text>
+                        </div>
+
+                        <!-- Policy-specific contents (only when policy is selected) -->
+                        <v-tabs-window v-if="!isNoPolicyMode" v-model="policy">
                         <v-tabs-window-item v-for="policy in task.policies" :key="policy.id" :value="policy.id">
                             <!-- Command Controls Group -->
                             <v-card-text :class="{ 'mobile-padding': isMobile }">
@@ -105,23 +167,24 @@
                                 </div>
                             </v-card-text>
                         </v-tabs-window-item>
-                    </v-tabs-window>
+                        </v-tabs-window>
 
-                    <!-- Force Controls Group -->
-                    <v-divider></v-divider>
-                    <v-card-text :class="{ 'mobile-padding': isMobile, 'pb-2': !isMobile }">
-                        <div class="control-section-title">Force Controls</div>
-                        <div class="force-description">
-                            Drag on the robot to apply force
-                        </div>
-                        <v-btn @click="StartImpulse" color="primary" block :size="isMobile ? 'large' : 'default'"
-                            class="impulse-button">
-                            Impulse
-                        </v-btn>
-                        <div class="force-description">
-                            Click the button to apply an impulse
-                        </div>
-                    </v-card-text>
+                        <!-- Force Controls for policy mode -->
+                        <v-divider v-if="!isNoPolicyMode"></v-divider>
+                        <v-card-text v-if="!isNoPolicyMode" :class="{ 'mobile-padding': isMobile, 'pb-2': !isMobile }">
+                            <div class="control-section-title">Force Controls</div>
+                            <div class="force-description">
+                                Drag on the robot to apply force
+                            </div>
+                            <v-btn @click="StartImpulse" color="primary" block :size="isMobile ? 'large' : 'default'"
+                                class="impulse-button">
+                                Impulse
+                            </v-btn>
+                            <div class="force-description">
+                                Click the button to apply an impulse
+                            </div>
+                        </v-card-text>
+                    </div>
                 </v-tabs-window-item>
             </v-tabs-window>
 
@@ -185,6 +248,7 @@ export default {
         config: { tasks: [] },
         task: null,
         policy: null,
+        isNoPolicyMode: false,
         facet_kp: 24,
         command_vel_x: 0.0,
         use_setpoint: true,
@@ -232,31 +296,93 @@ export default {
                 const response = await fetch('./config.json');
                 this.config = await response.json();
                 this.task = this.config.tasks[0]?.id;
-                this.policy = this.config.tasks[0]?.default_policy;
+                
+                // Handle initial policy setting - check for no-policy mode
+                const firstTask = this.config.tasks[0];
+                if (firstTask) {
+                    if (!firstTask.policies.length || !firstTask.default_policy) {
+                        // No policies or default_policy is null - start in no-policy mode
+                        this.policy = null;
+                        this.isNoPolicyMode = true;
+                    } else {
+                        // Has policies and default_policy - use default
+                        this.policy = firstTask.default_policy;
+                        this.isNoPolicyMode = false;
+                    }
+                }
             } catch (error) {
                 console.error('Failed to load config:', error);
                 this.state = -1;
                 this.extra_error_message = 'Config load failed: ' + error;
             }
         },
+        async handleTaskChange(newTaskId) {
+            if (newTaskId === this.task) {
+                // User clicked the same tab - reload default policy
+                await this.updateTaskCallback();
+            } else {
+                // Different task selected
+                this.task = newTaskId;
+                await this.updateTaskCallback();
+            }
+        },
         async updateTaskCallback() {
             const selectedTask = this.config.tasks.find(t => t.id === this.task);
-            if (!selectedTask) return;
+            if (!selectedTask || !this.demo) return;
 
-            this.policy = selectedTask.default_policy;
+            // Determine if this task should run in no-policy mode
+            if (!selectedTask.policies.length || !selectedTask.default_policy) {
+                // No policies or default_policy is null - set no-policy mode
+                this.isNoPolicyMode = true;
+                this.policy = null;
+            } else {
+                // Has policies and default_policy - use default
+                this.isNoPolicyMode = false;
+                this.policy = selectedTask.default_policy;
+            }
+
             this.demo.alive = false;
             await this.demo.reloadScene(selectedTask.model_xml, selectedTask.asset_meta);
             this.updatePolicyCallback();
         },
         async updatePolicyCallback() {
             const selectedTask = this.config.tasks.find(t => t.id === this.task);
+            if (!selectedTask || !this.demo) return;
+            
+            // Handle no-policy mode (when policy is null)
+            if (this.policy === null) {
+                this.isNoPolicyMode = true;
+                this.demo.alive = false;
+                try {
+                    await this.demo.reloadPolicy(null);
+                    this.demo.alive = true;
+                    this.demo.main_loop();
+                } catch (error) {
+                    console.error('Failed to initialize no-policy mode:', error);
+                }
+                return;
+            }
+            
+            // Handle policy mode (when policy is selected)
             const selectedPolicy = selectedTask.policies.find(p => p.id === this.policy);
             if (!selectedPolicy) return;
 
+            this.isNoPolicyMode = false;
             this.demo.alive = false;
-            await this.demo.reloadPolicy(selectedPolicy.path);
-            this.demo.alive = true;
-            this.demo.main_loop();
+            
+            try {
+                await this.demo.reloadPolicy(selectedPolicy.path);
+                this.demo.alive = true;
+                this.demo.main_loop();
+            } catch (error) {
+                console.error('Failed to load policy:', error);
+                // If policy loading fails, fall back to no-policy mode
+                this.isNoPolicyMode = true;
+                this.policy = null;
+                await this.demo.reloadPolicy(null);
+                this.demo.alive = true;
+                this.demo.main_loop();
+            }
         },
         reset() {
             this.demo.params["paused"] = true;

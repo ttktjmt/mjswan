@@ -79,12 +79,28 @@ export async function reloadScene(mjcf_path, meta_path) {
 }
 
 export async function reloadPolicy(policy_path) {
-  console.log("Reloading policy:", this.params.policy);
+  console.log("Reloading policy:", policy_path);
 
   // Wait until inference is not running
   // TODO: use thread lock instead of polling
   while (this.isInferencing) {
     await new Promise(resolve => setTimeout(resolve, 10)); // Wait 10ms before checking again
+  }
+
+  // Handle no-policy mode (when policy_path is null or undefined)
+  if (!policy_path) {
+    console.log("Running in no-policy mode - no RL control");
+    this.policy = null;
+    this.observations = {};
+    
+    // Initialize default actions for no-policy mode
+    if (this.lastActions) {
+      this.lastActions.fill(0);
+    }
+    
+    this.simulation.resetData();
+    this.simulation.forward();
+    return;
   }
 
   // Load policy config from JSON

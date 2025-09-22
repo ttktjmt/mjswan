@@ -98,7 +98,8 @@ export class MuJoCoDemo {
     this.adapt_hx = new Float32Array(128);
     this.rpy = new THREE.Euler();
     await this.reloadScene("unitree_go2/scene.xml", "./examples/checkpoints/go2/asset_meta.json");
-    await this.reloadPolicy('./examples/checkpoints/policy-05-03_21-31.json');
+    // Policy loading is now handled by the Vue component
+    // await this.reloadPolicy('./examples/checkpoints/policy-05-03_21-31.json');
     // await this.reloadScene("unitree_go1/go1.xml", "./examples/checkpoints/go1/asset_meta.json");
     // await this.reloadPolicy('./examples/checkpoints/go1/go1_him.json');
     this.alive = true;
@@ -106,7 +107,6 @@ export class MuJoCoDemo {
   
   async reload(mjcf_path, meta_path) {
     await this.reloadScene(mjcf_path, meta_path);
-    await this.reloadScene(mjcf_path, meta_path);
     // Initialize the three.js Scene using the .xml Model
     // Set up simulation parameters
     this.timestep = this.model.getOptions().timestep;
@@ -119,41 +119,42 @@ export class MuJoCoDemo {
     
     this.adapt_hx = new Float32Array(128);
     this.rpy = new THREE.Euler();
-    await this.reloadScene(mjcf_path, meta_path);    
-    // Initialize the three.js Scene using the .xml Model
-    // Set up simulation parameters
-    this.timestep = this.model.getOptions().timestep;
-    this.decimation = Math.round(0.02 / this.timestep);
-    this.mujoco_time = 0.0;
-    this.simStepCount = 0;
-    this.inferenceStepCount = 0;
-    
-    console.log("timestep:", this.timestep, "decimation:", this.decimation);
-    
-    this.adapt_hx = new Float32Array(128);
-    this.rpy = new THREE.Euler();
-    await this.reloadPolicy();
+    // Policy loading is now handled by the Vue component
+    // await this.reloadPolicy();
     this.alive = true;
   }
 
   async main_loop() {
-    this.inputDict = this.policy.initInput();
+    // Initialize input dict only if policy exists
+    if (this.policy) {
+      this.inputDict = this.policy.initInput();
+    }
+    
     while (this.alive) {
       const loopStart = performance.now();
-      if (!this.params["paused"] && this.model != null && this.state != null && this.simulation != null && this.observations != null) {
+      if (!this.params["paused"] && this.model != null && this.state != null && this.simulation != null) {
         let time_start = performance.now();
-        // Run policy inference
-        const quat = this.simulation.qpos.subarray(3, 7);
-        this.quat = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]);
-        this.rpy.setFromQuaternion(this.quat);
-        this.computeObservations(this.simulation);
         
-        try {
-          await this.runInference();
-        } catch (e) {
-          console.error("Inference error in main loop:", e);
-          this.alive = false; // Break the while loop
-          break;
+        // Only run policy inference if policy exists
+        if (this.policy && this.observations) {
+          // Run policy inference
+          const quat = this.simulation.qpos.subarray(3, 7);
+          this.quat = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]);
+          this.rpy.setFromQuaternion(this.quat);
+          this.computeObservations(this.simulation);
+          
+          try {
+            await this.runInference();
+          } catch (e) {
+            console.error("Inference error in main loop:", e);
+            this.alive = false; // Break the while loop
+            break;
+          }
+        } else {
+          // No-policy mode: use zero actions
+          if (this.lastActions) {
+            this.lastActions.fill(0);
+          }
         }
 
         let time_end = performance.now();
