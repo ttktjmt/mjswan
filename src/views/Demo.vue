@@ -52,10 +52,10 @@
 
                     <!-- Case 2: Has policies (may or may not have default_policy) -->
                     <div v-else>
-                        <v-tabs v-model="policy" bg-color="primary" @update:modelValue="updatePolicyCallback()"
+                        <v-tabs v-model="policy" bg-color="primary" @update:modelValue="handlePolicyChange"
                             :density="isMobile ? 'compact' : 'default'">
                             <v-tab v-for="policy in task.policies" :key="policy.id" :value="policy.id"
-                                :class="{ 'mobile-tab': isMobile }">
+                                :class="{ 'mobile-tab': isMobile }" @click="handlePolicyTabClick(policy.id)">
                                 {{ policy.name }}
                             </v-tab>
                         </v-tabs>
@@ -248,6 +248,7 @@ export default {
         config: { tasks: [] },
         task: null,
         policy: null,
+        previousPolicy: null,
         isNoPolicyMode: false,
         facet_kp: 24,
         command_vel_x: 0.0,
@@ -316,9 +317,25 @@ export default {
                 this.extra_error_message = 'Config load failed: ' + error;
             }
         },
+        handlePolicyTabClick(clickedPolicyId) {
+            if (clickedPolicyId === this.policy && this.demo && this.demo.simulation) {
+                // User clicked the same policy tab - reset simulation
+                console.log('Same policy tab clicked - resetting simulation');
+                this.reset();
+            }
+            // If different policy, let the v-model handle the change
+        },
+        async handlePolicyChange(newPolicyId) {
+            // Only handle policy changes, not same-policy clicks
+            if (newPolicyId !== this.policy) {
+                console.log('Different policy selected:', newPolicyId, 'from:', this.policy);
+                await this.updatePolicyCallback();
+            }
+        },
         async handleTaskChange(newTaskId) {
             if (newTaskId === this.task) {
-                // User clicked the same tab - reload default policy
+                // User clicked the same tab - reload with default policy from config
+                console.log('Same task tab clicked - reloading with default policy');
                 await this.updateTaskCallback();
             } else {
                 // Different task selected
@@ -348,6 +365,9 @@ export default {
         async updatePolicyCallback() {
             const selectedTask = this.config.tasks.find(t => t.id === this.task);
             if (!selectedTask || !this.demo) return;
+            
+            // Track previous policy for click detection
+            this.previousPolicy = this.policy;
             
             // Handle no-policy mode (when policy is null)
             if (this.policy === null) {

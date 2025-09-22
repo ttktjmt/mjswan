@@ -163,22 +163,31 @@ export class MuJoCoDemo {
 
         // step simulation for decimation times
         for (let substep = 0; substep < this.decimation; substep++) {
-          // Apply control torque
-          if (this.control_type == "joint_position") {
-            for (let i = 0; i < this.numActions; i++) {
-              const qpos_adr = this.qpos_adr_isaac[i];
-              const qvel_adr = this.qvel_adr_isaac[i];
-              const ctrl_adr = this.ctrl_adr_isaac[i];
+          // Apply control torque only if policy is active
+          if (this.policy && this.observations) {
+            // Policy mode: apply computed control torques
+            if (this.control_type == "joint_position") {
+              for (let i = 0; i < this.numActions; i++) {
+                const qpos_adr = this.qpos_adr_isaac[i];
+                const qvel_adr = this.qvel_adr_isaac[i];
+                const ctrl_adr = this.ctrl_adr_isaac[i];
 
-              const targetJpos = this.action_scale[i] * this.lastActions[i] + this.defaultJpos[i];
-              const torque = this.jntKp[i] * (targetJpos - this.simulation.qpos[qpos_adr]) + this.jntKd[i] * (0 - this.simulation.qvel[qvel_adr]);
-              this.simulation.ctrl[ctrl_adr] = torque;
+                const targetJpos = this.action_scale[i] * this.lastActions[i] + this.defaultJpos[i];
+                const torque = this.jntKp[i] * (targetJpos - this.simulation.qpos[qpos_adr]) + this.jntKd[i] * (0 - this.simulation.qvel[qvel_adr]);
+                this.simulation.ctrl[ctrl_adr] = torque;
+              }
+            } else if (this.control_type == "torque") {
+              for (let i = 0; i < this.numActions; i++) {
+                const ctrl_adr = this.ctrl_adr_isaac[i];
+                const torque = this.action_scale[i] * this.lastActions[i];
+                this.simulation.ctrl[ctrl_adr] = torque;
+              }
             }
-          } else if (this.control_type == "torque") {
+          } else {
+            // No-policy mode: disable all control forces to prevent stiff/weak legs
             for (let i = 0; i < this.numActions; i++) {
               const ctrl_adr = this.ctrl_adr_isaac[i];
-              const torque = this.action_scale[i] * this.lastActions[i];
-              this.simulation.ctrl[ctrl_adr] = torque;
+              this.simulation.ctrl[ctrl_adr] = 0.0;
             }
           }
 
