@@ -20,6 +20,8 @@
 
 ## What is Muwanx?
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/b3ceee7507e545eabba03992d9a94dad)](https://app.codacy.com/gh/ttktjmt/muwanx?utm_source=github.com&utm_medium=referral&utm_content=ttktjmt/muwanx&utm_campaign=Badge_Grade)
+
 **Muwanx** is a lightweight, browser-based reinforcement learning demo web application built with [mujoco_wasm](https://github.com/zalo/mujoco_wasm/) and [ONNX Runtime Web](https://www.onnxruntime.ai/docs/build/web.html). This allows you to run MuJoCo simulations in real-time with trained policies controlling entirely client-side. Ideal for sharing interactive demos as a static site (e.g., hosting on GitHub Pages), prototyping policies, or building customizable RL playgrounds directly in the browser.
 ### 🚀 [Visit the Live Demo Here](https://ttktjmt.github.io/muwanx/)
 
