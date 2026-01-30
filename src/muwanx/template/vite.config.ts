@@ -12,12 +12,13 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['mujoco-js'],
+    exclude: ['@/mujoco'],
   },
   server: {
     port: 8000,
     host: true,
   },
+  assetsInclude: ['**/*.wasm'],
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
@@ -25,11 +26,6 @@ export default defineConfig({
     chunkSizeWarningLimit: 11000,
     rollupOptions: {
       input: path.resolve(__dirname, 'index.html'),
-      output: {
-        manualChunks: {
-          'mujoco': ['mujoco-js'],
-        },
-      },
     },
   },
   worker: {

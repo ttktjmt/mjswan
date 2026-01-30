@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { MjData, MjModel } from 'mujoco-js';
+import type { MjData, MjModel } from '@/mujoco';
 import type { Mujoco } from '../../types/mujoco';
 import {
   downloadExampleScenesFolder,

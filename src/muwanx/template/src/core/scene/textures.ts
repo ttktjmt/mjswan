@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MjModel } from 'mujoco-js';
+import type { MjModel } from '@/mujoco';
 import type { Mujoco } from '../../types/mujoco';
 
 interface CreateTextureParams {

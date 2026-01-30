@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MjData, MjModel } from 'mujoco-js';
+import type { MjData, MjModel } from '@/mujoco';
 import type { Mujoco } from '../../types/mujoco';
 import { mujocoAssetCollector } from '../utils/mujocoAssetCollector';
 import { normalizeScenePath } from '../utils/pathUtils';
@@ -132,13 +132,13 @@ export async function loadSceneFromURL(
     if (modelPath.toLowerCase().endsWith('.mjb')) {
       throw new Error('Binary model format (.mjb) requires XML conversion');
     }
-    newModel = mujoco.MjModel.loadFromXML(modelPath);
+    newModel = mujoco.MjModel.mj_loadXML(modelPath);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to load MjModel from ${modelPath}: ${message}`);
   }
   if (!newModel) {
-    throw new Error(`MjModel.loadFromXML returned null for ${modelPath}`);
+    throw new Error(`MjModel.mj_loadXML returned null for ${modelPath}`);
   }
 
   let newData: MjData | null = null;

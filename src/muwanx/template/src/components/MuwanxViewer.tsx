@@ -33,8 +33,8 @@ const MuwanxViewer: React.FC<MuwanxViewerProps> = ({
     const init = async () => {
       notify('Loading MuJoCo...');
       if (!mujocoRef.current) {
-        const mujocoModule = await import('mujoco-js');
-        mujocoRef.current = await mujocoModule.default();
+        const mujocoModule = await import('@/mujoco');
+        mujocoRef.current = await mujocoModule.default() as unknown as Mujoco;
       }
       if (cancelled) {
         return;

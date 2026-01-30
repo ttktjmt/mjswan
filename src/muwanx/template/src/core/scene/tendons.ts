@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MjData, MjModel } from 'mujoco-js';
+import type { MjData, MjModel } from '@/mujoco';
 import { getPosition } from './scene';
 
 export interface TendonMeshes {
