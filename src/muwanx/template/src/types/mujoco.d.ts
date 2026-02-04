@@ -1,7 +1,7 @@
-import type { MjModel, MjData } from '@/mujoco';
+import type { MjModel, MjData, MjVFS } from '@/mujoco';
 
 // Re-export types for convenience
-export type { MjModel, MjData };
+export type { MjModel, MjData, MjVFS };
 
 // Emscripten File System interface (permissive)
 interface EmscriptenFS {
@@ -22,10 +22,17 @@ interface EmscriptenMEMFS {
   [key: string]: unknown;
 }
 
+// MjVFS interface for virtual file system
+interface MjVFSInterface {
+  makeEmptyFile(filename: string, filesize: number): void;
+  [key: string]: unknown;
+}
+
 // MjModel constructor interface
 interface MjModelConstructor {
   new(model: MjModel): MjModel;
   mj_loadXML(path: string): MjModel;
+  mj_loadBinary(path: string, vfs: MjVFSInterface): MjModel;
 }
 
 // MjData constructor interface
@@ -39,6 +46,11 @@ interface MjEnumValue {
   value: number;
 }
 
+// MjVFS constructor interface
+interface MjVFSConstructor {
+  new(): MjVFSInterface;
+}
+
 // Extended Mujoco interface with all necessary properties
 export interface Mujoco {
   // Emscripten filesystem
@@ -48,6 +60,7 @@ export interface Mujoco {
   // Class constructors
   MjModel: MjModelConstructor;
   MjData: MjDataConstructor;
+  MjVFS: MjVFSConstructor;
 
   // Core simulation functions
   mj_forward(model: MjModel, data: MjData): void;
