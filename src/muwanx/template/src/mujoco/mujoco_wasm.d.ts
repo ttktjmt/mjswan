@@ -2499,6 +2499,7 @@ interface EmbindModule {
   MjModel: {
     new(_0: MjModel): MjModel;
     mj_loadXML(_0: EmbindString): MjModel;
+    mj_loadBinary(_0: EmbindString, _1: MjVFS): MjModel;
   };
   MjOption: {
     new(): MjOption;
