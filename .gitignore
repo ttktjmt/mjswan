@@ -62,3 +62,6 @@ muwanx-*.tgz
 
 # Docs
 docs/site
+
+# MuJoCo WASM build directory
+mujoco-wasm-build/
