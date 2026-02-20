@@ -12,16 +12,11 @@ export interface TendonState {
   matrix: THREE.Matrix4;
 }
 
-export function createTendonMeshes(mujocoRoot: THREE.Group, mjModel: MjModel): TendonMeshes {
+export function createTendonMeshes(mujocoRoot: THREE.Group): TendonMeshes {
   const tendonMat = new THREE.MeshPhongMaterial();
   tendonMat.color = new THREE.Color(0.8, 0.3, 0.3);
 
-  // maxCylinders: safe upper bound (actual value is nwrap - number of spatial tendons or less)
-  // maxSpheres   = total number of wrap points = nwrap (this is the official correct value)
-  const maxCylinders = Math.max(0, mjModel.nwrap);
-  const maxSpheres   = Math.max(0, mjModel.nwrap);
-
-  const cylinders = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1), tendonMat, maxCylinders);
+  const cylinders = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1), tendonMat, 1023);
   cylinders.receiveShadow = true;
   cylinders.castShadow = true;
   cylinders.count = 0;
@@ -29,7 +24,7 @@ export function createTendonMeshes(mujocoRoot: THREE.Group, mjModel: MjModel): T
   cylinders.computeBoundingSphere();
   mujocoRoot.add(cylinders);
 
-  const spheres = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 10), tendonMat, maxSpheres);
+  const spheres = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 10), tendonMat, 1023);
   spheres.receiveShadow = true;
   spheres.castShadow = true;
   spheres.count = 0;

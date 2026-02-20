@@ -483,7 +483,7 @@ export async function loadSceneFromURL(
     }
   }
 
-  createTendonMeshes(mujocoRoot, mjModel);
+  createTendonMeshes(mujocoRoot);
 
   const lights: THREE.Light[] = createLights({ mujoco, mjModel, mujocoRoot, bodies });
 
