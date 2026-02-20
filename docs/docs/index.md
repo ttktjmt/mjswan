@@ -5,7 +5,7 @@ icon: octicons/home-16
 # Welcome to mjswan!
 
 <p align="center">
-  <img src="https://github.com/ttktjmt/mjswan/raw/main/assets/banner.png" alt="mjswan Header" style="width: 80%;">
+  <img src="https://github.com/ttktjmt/mjswan/raw/main/assets/banner.svg" alt="mjswan Header" style="width: 80%;">
   <br/>
   <strong><em>Real-time Interactive AI Robot Simulation in Your Browser</em></strong>
 </p>

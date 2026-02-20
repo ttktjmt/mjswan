@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="200 200 640 620" width="640" height="620">
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 200 3000 640" width="4000" height="1400">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@600&amp;display=swap');
+    </style>
+  </defs>
   <!-- floating animation: 10s still → 3 cycles of bobbing (1.8s each), repeat -->
   <g>
     <animateTransform
@@ -134,4 +139,15 @@
     </path>
 
   </g>
+
+  <!-- logotype -->
+  <text
+    x="870"
+    y="610"
+    font-family="'Roboto', sans-serif"
+    font-weight="600"
+    font-size="520"
+    fill="#8DB7D0"
+    dominant-baseline="middle"
+  >mjswan</text>
 </svg>

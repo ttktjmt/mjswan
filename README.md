@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="mjswan" width="60%">
+  <img src="assets/banner.svg" alt="mjswan" width="60%">
 </p>
 <p align="center">
   <strong><em>Real-time Interactive AI Robot Simulation in Your Browser</em></strong>
