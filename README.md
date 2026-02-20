@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  mjswan is a powerful framework for creating interactive MuJoCo simulations with real-time policy control, running entirely in the browser. Built on top of <a href="https://github.com/google-deepmind/mujoco/tree/main/wasm"><strong>MU</strong>joco <strong>WA</strong>sm</a>, <a href="https://github.com/microsoft/onnxruntime">on<strong>NX</strong> runtime</a>, and <a href="https://github.com/mrdoob/three.js/">three.js</a>, it enables easy sharing of AI robot simulation demos as static sites, perfect for GitHub Pages hosting.
+  mjswan is a powerful framework for creating interactive MuJoCo simulations with real-time policy control, running entirely in the browser. Built on top of <a href="https://github.com/google-deepmind/mujoco/tree/main/wasm">mujoco wasm</a>, <a href="https://github.com/microsoft/onnxruntime">onnxruntime</a>, and <a href="https://github.com/mrdoob/three.js/">three.js</a>, it enables easy sharing of AI robot simulation demos as static sites, perfect for GitHub Pages hosting.
 </p>
 
 <p align="center">
