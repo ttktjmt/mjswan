@@ -3,7 +3,7 @@
 Interactive MuJoCo simulations with ONNX policies running entirely in the browser.
 """
 
-__version__ = "0.0.9"
+__version__ = "0.0.10"
 
 from .app import mjswanApp
 from .builder import Builder

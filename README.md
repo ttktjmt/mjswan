@@ -8,6 +8,7 @@
 <p align="center">
   <a href="https://github.com/ttktjmt/mjswan/actions/workflows/deploy.yml"><img src="https://github.com/ttktjmt/mjswan/actions/workflows/deploy.yml/badge.svg" alt="deploy"/></a>
   <a href="https://github.com/ttktjmt/mjswan/actions/workflows/pytest.yml"><img src="https://github.com/ttktjmt/mjswan/actions/workflows/pytest.yml/badge.svg" alt="test"/></a>
+  <a href="https://mjswan.readthedocs.io"><img src="https://img.shields.io/readthedocs/mjswan?logo=readthedocs" alt="docs"/></a>
   <a href="https://pypi.org/project/mjswan"><img src="https://img.shields.io/pypi/v/mjswan.svg?logo=pypi" alt="pypi version"></a>
   <a href="https://www.npmjs.com/package/mjswan"><img src="https://img.shields.io/npm/v/mjswan.svg?logo=nodedotjs" alt="npm version"></a>
 </p>
