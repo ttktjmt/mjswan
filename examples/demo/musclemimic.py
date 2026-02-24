@@ -5,9 +5,10 @@ https://github.com/amathislab/musclemimic
 
 import mujoco
 import musclemimic_models as mm
-import muwanx
 
-builder = muwanx.Builder()
+import mjswan
+
+builder = mjswan.Builder()
 
 mm_project = builder.add_project(name="MuscleMimic Demo")
 
