@@ -640,7 +640,8 @@ export class mjswanRuntime {
         this.onnxInputDict = { ...this.onnxInputDict, ...carry };
       }
 
-      const actionTensor = result.action ?? result.policy ?? null;
+      const outKey = this.onnxModule.outKeys[0];
+      const actionTensor = (outKey ? result[outKey] : null) ?? result.action ?? result.policy ?? null;
       if (!actionTensor) {
         return;
       }
