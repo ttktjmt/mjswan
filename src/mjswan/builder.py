@@ -127,8 +127,8 @@ class Builder:
                     "scenes": [
                         {
                             "name": scene.name,
-                            # "path": scene.path,
                             "path": f"{name2id(scene.name)}/{scene.scene_filename}",
+                            **({"splat": scene.splat.to_dict()} if scene.splat is not None else {}),
                             "policies": [
                                 (
                                     {

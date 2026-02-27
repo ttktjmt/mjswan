@@ -6,6 +6,7 @@ import { MJSWAN_VERSION } from '../Version';
 import FloatingPanel from './FloatingPanel';
 import { LabeledInput } from './LabeledInput';
 import { CommandSection } from './CommandSection';
+import { SplatSection } from './SplatSection';
 import {
   getCommandManager,
   type CommandDefinition,
@@ -32,6 +33,10 @@ interface ControlPanelProps {
   commandsEnabled?: boolean;
   /** Callback when reset button is pressed */
   onReset?: () => void;
+  /** Splat loading */
+  onLoadSplat?: (url: string, scale: number, groundOffset: number) => void;
+  onClearSplat?: () => void;
+  splatLoaded?: boolean;
 }
 
 /**
@@ -116,6 +121,9 @@ function ControlPanel(props: ControlPanelProps) {
     onPolicyChange,
     commandsEnabled = false,
     onReset,
+    onLoadSplat,
+    onClearSplat,
+    splatLoaded = false,
   } = props;
 
   const [aboutModalOpened, { open: openAbout, close: closeAbout }] = useDisclosure(false);
@@ -337,6 +345,8 @@ function ControlPanel(props: ControlPanelProps) {
               })}
             </>
           )}
+
+          <SplatSection onLoad={onLoadSplat} onClear={onClearSplat} loaded={splatLoaded} />
 
           {/* Reset Button - always at bottom */}
           <Divider my="xs" mx="xs" />

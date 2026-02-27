@@ -24,6 +24,7 @@
     "@mantine/core": "^8.3.0",
     "@mantine/hooks": "^8.3.0",
     "@mantine/vanilla-extract": "^8.3.0",
+    "@sparkjsdev/spark": "^0.1.10",
     "@tabler/icons-react": "^3.0.0",
     "jszip": "^3.10.1",
     "onnxruntime-web": "^1.21.1",

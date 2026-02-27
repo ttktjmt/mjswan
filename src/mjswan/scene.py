@@ -19,6 +19,33 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class SplatConfig:
+    """Configuration for a Gaussian Splat scene background."""
+
+    url: str
+    """URL or local path to the .spz splat file."""
+
+    scale: float = 1.0
+    """Metric scale factor (converts splat units to meters)."""
+
+    ground_offset: float = 0.0
+    """Ground plane offset in the splat's coordinate system."""
+
+    collider_url: str | None = None
+    """Optional URL or local path to a .glb collider mesh."""
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "url": self.url,
+            "scale": self.scale,
+            "groundOffset": self.ground_offset,
+        }
+        if self.collider_url is not None:
+            d["colliderUrl"] = self.collider_url
+        return d
+
+
+@dataclass
 class SceneConfig:
     """Configuration for a MuJoCo scene."""
 
@@ -36,6 +63,9 @@ class SceneConfig:
 
     metadata: dict[str, Any] = field(default_factory=dict)
     """Additional metadata for the scene."""
+
+    splat: SplatConfig | None = None
+    """Optional Gaussian Splat background configuration."""
 
     @property
     def scene_filename(self) -> str:
@@ -114,5 +144,32 @@ class SceneHandle:
         self._config.metadata[key] = value
         return self
 
+    def set_splat(
+        self,
+        url: str,
+        *,
+        scale: float = 1.0,
+        ground_offset: float = 0.0,
+        collider_url: str | None = None,
+    ) -> SceneHandle:
+        """Set a Gaussian Splat background for this scene.
 
-__all__ = ["SceneConfig", "SceneHandle"]
+        Args:
+            url: URL or local path to the .spz splat file.
+            scale: Metric scale factor (metric_scale_factor from world.json).
+            ground_offset: Ground plane offset (ground_plane_offset from world.json).
+            collider_url: Optional URL or local path to a .glb collider mesh.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._config.splat = SplatConfig(
+            url=url,
+            scale=scale,
+            ground_offset=ground_offset,
+            collider_url=collider_url,
+        )
+        return self
+
+
+__all__ = ["SplatConfig", "SceneConfig", "SceneHandle"]

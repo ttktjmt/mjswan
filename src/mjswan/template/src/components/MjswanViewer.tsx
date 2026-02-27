@@ -1,23 +1,28 @@
 import React, { useEffect, useRef } from 'react';
 import { mjswanRuntime } from '../core/engine/runtime';
+import type { SplatConfig } from '../core/scene/splat';
 import type { MainModule } from 'mujoco';
 
 type MjswanViewerProps = {
   scenePath: string;
   baseUrl: string;
   policyConfigPath?: string | null;
+  splatConfig?: SplatConfig | null;
   onStatusChange?: (status: string) => void;
   onError?: (error: Error) => void;
   onReady?: () => void;
+  onRuntimeReady?: (runtime: mjswanRuntime) => void;
 };
 
 const MjswanViewer = ({
   scenePath,
   baseUrl,
   policyConfigPath,
+  splatConfig,
   onStatusChange,
   onError,
   onReady,
+  onRuntimeReady,
 }: MjswanViewerProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<mjswanRuntime | null>(null);
@@ -54,10 +59,11 @@ const MjswanViewer = ({
 
       if (!runtimeRef.current) {
         runtimeRef.current = new mjswanRuntime(mujoco, container, { baseUrl });
+        onRuntimeReady?.(runtimeRef.current);
       }
 
       notify('Loading scene assets...');
-      await runtimeRef.current.loadEnvironment(scenePath, policyConfigPath ?? null);
+      await runtimeRef.current.loadEnvironment(scenePath, policyConfigPath ?? null, splatConfig ?? null);
       if (cancelled) {
         return;
       }
@@ -78,7 +84,7 @@ const MjswanViewer = ({
       runtimeRef.current?.dispose();
       runtimeRef.current = null;
     };
-  }, [scenePath, baseUrl, policyConfigPath, onStatusChange, onError, onReady]);
+  }, [scenePath, baseUrl, policyConfigPath, splatConfig, onStatusChange, onError, onReady]);
 
   return <div ref={containerRef} className="viewer" />;
 };

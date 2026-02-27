@@ -18,7 +18,7 @@ from .command import (
 )
 from .policy import PolicyConfig, PolicyHandle
 from .project import ProjectConfig, ProjectHandle
-from .scene import SceneConfig, SceneHandle
+from .scene import SceneConfig, SceneHandle, SplatConfig
 
 __all__ = [
     # Builder and App
@@ -31,6 +31,7 @@ __all__ = [
     # Configs
     "ProjectConfig",
     "SceneConfig",
+    "SplatConfig",
     "PolicyConfig",
     # Commands
     "Slider",

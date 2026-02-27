@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MantineProvider } from '@mantine/core';
 import MjswanViewer from './components/MjswanViewer';
 import ControlPanel from './ControlPanel';
+import type { mjswanRuntime } from './core/engine/runtime';
+import type { SplatConfig } from './core/scene/splat';
 import { theme } from './AppTheme';
 import { LoadingProvider, useLoading } from './contexts/LoadingContext';
 import { Loader } from './components/Loader';
@@ -18,6 +20,7 @@ interface SceneConfig {
   metadata: Record<string, unknown>;
   policies: PolicyConfig[];
   path?: string;
+  splat?: SplatConfig;
 }
 
 interface ProjectConfig {
@@ -213,6 +216,8 @@ function AppContent() {
   const [currentScene, setCurrentScene] = useState<SceneConfig | null>(null);
   const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [splatLoaded, setSplatLoaded] = useState(false);
+  const runtimeRef = useRef<mjswanRuntime | null>(null);
   const { showLoading, hideLoading } = useLoading();
 
   const projectId = useMemo(() => getProjectIdFromLocation(), []);
@@ -310,6 +315,24 @@ function AppContent() {
     hideLoading();
   }, [hideLoading]);
 
+  useEffect(() => {
+    setSplatLoaded(false);
+  }, [scenePath]);
+
+  const handleRuntimeReady = useCallback((runtime: mjswanRuntime) => {
+    runtimeRef.current = runtime;
+  }, []);
+
+  const handleLoadSplat = useCallback((url: string, scale: number, groundOffset: number) => {
+    runtimeRef.current?.setSplat({ url, scale, groundOffset });
+    setSplatLoaded(true);
+  }, []);
+
+  const handleClearSplat = useCallback(() => {
+    runtimeRef.current?.setSplat(null);
+    setSplatLoaded(false);
+  }, []);
+
   const handleProjectChange = useCallback(
     (value: string | null) => {
       if (!config || !value) {
@@ -393,13 +416,18 @@ function AppContent() {
           policyValue={selectedPolicy}
           onPolicyChange={handlePolicyChange}
           commandsEnabled={!!policyConfigPath}
+          onLoadSplat={handleLoadSplat}
+          onClearSplat={handleClearSplat}
+          splatLoaded={splatLoaded}
         />
         <MjswanViewer
           scenePath={scenePath}
           baseUrl={import.meta.env.BASE_URL || '/'}
           policyConfigPath={policyConfigPath}
+          splatConfig={currentScene.splat ?? null}
           onError={handleViewerError}
           onReady={handleViewerReady}
+          onRuntimeReady={handleRuntimeReady}
         />
       </div>
     </MantineProvider>
