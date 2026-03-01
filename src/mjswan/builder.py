@@ -6,6 +6,7 @@ for programmatically creating interactive MuJoCo simulations.
 
 from __future__ import annotations
 
+import gc
 import inspect
 import json
 import shutil
@@ -315,6 +316,7 @@ class Builder:
                     if scene.spec is not None:
                         scene.spec.assets.update(collect_spec_assets(scene.spec))
                         to_zip_deflated(scene.spec, str(scene_path))  # Saves as .mjz
+                        scene.spec = None
                     else:
                         if scene.model is None:
                             raise RuntimeError(
@@ -323,6 +325,8 @@ class Builder:
                         mujoco.mj_saveModel(
                             scene.model, str(scene_path)
                         )  # Saves as .mjb
+                        scene.model = None
+                    gc.collect()
 
                     # Save policies
                     for policy in scene.policies:
