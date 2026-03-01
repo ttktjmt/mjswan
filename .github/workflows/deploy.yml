@@ -46,7 +46,7 @@ jobs:
 
     - name: Build demo application
       run: |
-        (while true; do echo "$(date '+%H:%M:%S') disk: $(df -h / | awk 'NR==2{print $3 "/" $2 " (" $5 " used)"}')"; sleep 10; done) &
+        (while true; do echo "$(date '+%H:%M:%S') disk: $(df -h / | awk 'NR==2{print $3 "/" $2 " (" $5 " used)")') mem: $(free -h | awk '/^Mem/{print $3 "/" $2}')"; sleep 5; done) &
         MONITOR=$!
         PYTHONUNBUFFERED=1 MJSWAN_BASE_PATH="/mjswan/" MJSWAN_NO_LAUNCH=1 uv run python examples/demo/main.py
         kill $MONITOR
