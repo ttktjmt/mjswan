@@ -70,6 +70,17 @@ class TestProjectIdAssignment:
 
 
 # ===========================================================================
+# L1 — GTM ID handling
+# ===========================================================================
+class TestBuilderGtmId:
+    def test_defaults_to_none(self):
+        assert Builder()._gtm_id is None
+
+    def test_stored_when_provided(self):
+        assert Builder(gtm_id="GTM-W79HQ38W")._gtm_id == "GTM-W79HQ38W"
+
+
+# ===========================================================================
 # L1 — validation
 # ===========================================================================
 class TestBuilderValidation:
@@ -217,3 +228,24 @@ class TestFullBuild:
         builder.add_project(name="Test").add_scene(name="S", model=minimal_model)
         app = builder.build(tmp_path / "out")
         assert isinstance(app, mjswan.mjswanApp)
+
+
+@pytest.mark.slow
+class TestFullBuildGtmId:
+    def test_gtm_snippet_injected_into_all_html_files(self, tmp_path, minimal_model):
+        builder = Builder(gtm_id="GTM-SAMPLE123")
+        builder.add_project(name="Test").add_scene(name="Scene", model=minimal_model)
+        builder.build(tmp_path / "out")
+        out = tmp_path / "out"
+        for html_file in [out / "index.html", out / "main" / "index.html"]:
+            html = html_file.read_text()
+            assert "GTM-SAMPLE123" in html
+            assert "googletagmanager.com/gtm.js" in html  # <head> script
+            assert "googletagmanager.com/ns.html" in html  # <body> noscript
+
+    def test_no_gtm_without_gtm_id(self, tmp_path, minimal_model):
+        builder = Builder()
+        builder.add_project(name="Test").add_scene(name="Scene", model=minimal_model)
+        builder.build(tmp_path / "out")
+        html = (tmp_path / "out" / "index.html").read_text()
+        assert "googletagmanager.com" not in html

@@ -148,12 +148,16 @@ class ClientBuilder:
             env=build_env,
         )
 
-    def build(self, clean: bool = False, base_path: str = "/") -> None:
+    def build(
+        self, clean: bool = False, base_path: str = "/", gtm_id: str | None = None
+    ) -> None:
         try:
             self.create_env(clean=clean)
             self.sync_version_from_python()
             self.install_dependencies()
-            env = {"MJSWAN_BASE_PATH": base_path}
+            env: dict[str, str] = {"MJSWAN_BASE_PATH": base_path}
+            if gtm_id:
+                env["MJSWAN_GTM_ID"] = gtm_id
             self.run_build_script("build", env=env)
             print("✓ Build completed successfully")
         except subprocess.CalledProcessError as e:

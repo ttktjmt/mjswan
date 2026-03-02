@@ -91,7 +91,7 @@ def setup_builder() -> mjswan.Builder:
     # Ensure asset-relative paths resolve regardless of current working directory.
     os.chdir(Path(__file__).resolve().parent)
     base_path = os.getenv("MJSWAN_BASE_PATH", "/")
-    builder = mjswan.Builder(base_path=base_path)
+    builder = mjswan.Builder(base_path=base_path, gtm_id="GTM-W79HQ38W")
 
     # =======================
     # 1. mjswan Demo Project

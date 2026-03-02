@@ -31,15 +31,18 @@ class Builder:
     interactive MuJoCo simulations with ONNX policies. It handles projects, scenes, and policies hierarchically.
     """
 
-    def __init__(self, base_path: str = "/") -> None:
+    def __init__(self, base_path: str = "/", gtm_id: str | None = None) -> None:
         """Initialize a new Builder instance.
 
         Args:
             base_path: Base path for the application (e.g., '/mjswan/').
                       This is used for deployment to subdirectories.
+            gtm_id: Google Tag Manager container ID (e.g., 'GTM-XXXXXXX').
+                   If provided, the GTM snippet is injected into the built HTML.
         """
         self._projects: list[ProjectConfig] = []
         self._base_path = base_path
+        self._gtm_id = gtm_id
 
     def add_project(self, name: str, *, id: str | None = None) -> ProjectHandle:
         """Add a new project to the builder.
@@ -212,7 +215,7 @@ class Builder:
             if package_json.exists():
                 print("Building the mjswan application...")
                 builder = ClientBuilder(template_dir)
-                builder.build(base_path=self._base_path)
+                builder.build(base_path=self._base_path, gtm_id=self._gtm_id)
 
             # Copy all files from template to output_path
             shutil.copytree(
