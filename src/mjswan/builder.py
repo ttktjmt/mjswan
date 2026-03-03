@@ -15,7 +15,13 @@ from pathlib import Path
 
 import mujoco
 import onnx
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+)
 
 from . import __version__
 from ._build_client import ClientBuilder
@@ -305,6 +311,7 @@ class Builder:
 
             # Save scenes and policies
             with Progress(
+                SpinnerColumn(spinner_name="dots"),
                 TextColumn("[progress.description]{task.description}"),
                 BarColumn(),
                 MofNCompleteColumn(),
