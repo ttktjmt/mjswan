@@ -1786,7 +1786,7 @@ dependencies = [
     { name = "mujoco" },
     { name = "nodeenv" },
     { name = "onnx" },
-    { name = "tqdm" },
+    { name = "rich" },
     { name = "wandb" },
 ]
 
@@ -1824,10 +1824,10 @@ requires-dist = [
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.3.2" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.407" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
+    { name = "rich", specifier = ">=13.0.0" },
     { name = "robot-descriptions", marker = "extra == 'examples'", specifier = ">=1.22.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.9" },
     { name = "torch", marker = "extra == 'examples'", specifier = ">=2.9.1" },
-    { name = "tqdm", specifier = ">=4.60.0" },
     { name = "wandb", specifier = ">=0.23.1" },
 ]
 provides-extras = ["dev", "examples"]

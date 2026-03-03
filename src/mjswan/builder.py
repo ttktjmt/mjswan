@@ -15,7 +15,7 @@ from pathlib import Path
 
 import mujoco
 import onnx
-from tqdm import tqdm
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
 
 from . import __version__
 from ._build_client import ClientBuilder
@@ -304,14 +304,19 @@ class Builder:
                     shutil.copy(str(src_static), str(project_dir / static_name))
 
             # Save scenes and policies
-            with tqdm(
-                project.scenes,
-                desc=project.name.ljust(max_name_len),
-                unit="scene",
-                bar_format="{l_bar}{bar:30}{r_bar}",
-            ) as pbar:
-                for scene in pbar:
-                    pbar.set_postfix_str(scene.name)
+            with Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TextColumn("[dim]{task.fields[scene]}"),
+            ) as progress:
+                task = progress.add_task(
+                    project.name.ljust(max_name_len),
+                    total=len(project.scenes),
+                    scene="",
+                )
+                for scene in project.scenes:
+                    progress.update(task, scene=scene.name)
                     scene_id = name2id(scene.name)
                     scene_dir = project_assets_dir / scene_id
                     scene_dir.mkdir(parents=True, exist_ok=True)
@@ -378,6 +383,7 @@ class Builder:
                             }
                             with open(target, "w") as f:
                                 json.dump(data, f, indent=2)
+                    progress.advance(task)
 
         print(f"✓ Saved mjswan application to: {output_path}")
 
