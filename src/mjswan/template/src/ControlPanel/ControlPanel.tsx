@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Anchor, Box, Button, Divider, Image, Menu, Modal, Select, Slider, Stack, Text, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconChevronDown, IconRefresh } from '@tabler/icons-react';
-import { MJSWAN_VERSION } from '../Version';
+import { MJSWAN_VERSION, GITHUB_CONTRIBUTORS, type Contributor } from '../Version';
 import FloatingPanel from './FloatingPanel';
 import { LabeledInput } from './LabeledInput';
 import { CommandSection } from './CommandSection';
@@ -178,7 +178,7 @@ function ControlPanel(props: ControlPanelProps) {
     <Modal
       opened={aboutModalOpened}
       onClose={closeAbout}
-      size="md"
+      size="lg"
       title={null}
       centered
       styles={{ body: { textAlign: 'center' } }}
@@ -187,8 +187,9 @@ function ControlPanel(props: ControlPanelProps) {
         <Image src="./logo-color.svg" style={{ width: '8em', height: 'auto' }} />
         <Text size="xl" fw={700}>powered by mjswan</Text>
         <Text size="sm" c="dimmed">version {MJSWAN_VERSION}</Text>
+        <Text size="sm" c="dimmed">MuJoco Simulation on Web Assembly with Neural netwroks</Text>
         <Divider w="100%" />
-        <Box pb="lg">
+        <Box>
           <Anchor href="https://github.com/ttktjmt/mjswan" target="_blank" style={{ fontWeight: '600' }}>
             GitHub
           </Anchor>
@@ -196,6 +197,32 @@ function ControlPanel(props: ControlPanelProps) {
           <Anchor href="https://mjswan.readthedocs.io" target="_blank" style={{ fontWeight: '600' }}>
             Documentation
           </Anchor>
+        </Box>
+        <Divider w="100%" />
+        <Box
+          style={{
+            textAlign: 'left',
+            maxHeight: '120px',
+            overflowY: 'auto',
+            lineHeight: '1',
+            fontSize: '0.8rem',
+            opacity: '0.75',
+          }}
+          px="md"
+        >
+          Thanks to our contributors! <br />
+          {GITHUB_CONTRIBUTORS.map((contributor: Contributor, index: number) => (
+            <span key={contributor.login}>
+              <Anchor
+                href={contributor.html_url}
+                target="_blank"
+                style={{ textDecoration: 'none', fontSize: '0.75rem' }}
+              >
+                {contributor.login}
+              </Anchor>
+              {index < GITHUB_CONTRIBUTORS.length - 1 && ', '}
+            </span>
+          ))}
         </Box>
       </Stack>
     </Modal>
