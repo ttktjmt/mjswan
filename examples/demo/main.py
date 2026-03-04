@@ -15,6 +15,7 @@ from mjlab.scene import Scene
 from mjlab.tasks.registry import load_env_cfg
 from mujoco_playground import registry
 
+# Suppress gymnasium logger output from myosuite
 _prev_gym_level = gym_logger.min_level
 gym_logger.set_level(gym_logger.DISABLED)
 
@@ -101,13 +102,13 @@ def setup_builder() -> mjswan.Builder:
 
     # 1.A. Unitree G1
     g1_scene = demo_project.add_scene(
-        spec=mujoco.MjSpec.from_file("assets/scene/mjswan/unitree_g1/scene.xml"),
+        spec=mujoco.MjSpec.from_file("assets/unitree_g1/scene.xml"),
         name="G1",
     )
     g1_loco_policy = g1_scene.add_policy(
-        policy=onnx.load("assets/policy/unitree_g1/locomotion.onnx"),
+        policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
         name="Locomotion",
-        config_path="assets/policy/unitree_g1/locomotion.json",
+        config_path="assets/unitree_g1/locomotion.json",
     )
     g1_loco_policy.add_velocity_command(
         lin_vel_x=(-1.5, 1.5),
@@ -116,46 +117,46 @@ def setup_builder() -> mjswan.Builder:
         default_lin_vel_y=0.0,
     )
     g1_scene.add_policy(
-        policy=onnx.load("assets/policy/unitree_g1/balance.onnx"),
+        policy=onnx.load("assets/unitree_g1/balance.onnx"),
         name="Balance",
-        config_path="assets/policy/unitree_g1/balance.json",
+        config_path="assets/unitree_g1/balance.json",
     )
 
     # 1.B. Unitree Go2
     go2_scene = demo_project.add_scene(
-        spec=mujoco.MjSpec.from_file("assets/scene/mjswan/unitree_go2/scene.xml"),
+        spec=mujoco.MjSpec.from_file("assets/unitree_go2/scene.xml"),
         name="Go2",
     )
     go2_scene.add_policy(
-        policy=onnx.load("assets/policy/unitree_go2/facet.onnx"),
+        policy=onnx.load("assets/unitree_go2/facet.onnx"),
         name="Facet",
-        config_path="assets/policy/unitree_go2/facet.json",
+        config_path="assets/unitree_go2/facet.json",
     ).add_velocity_command()
     go2_scene.add_policy(
-        policy=onnx.load("assets/policy/unitree_go2/vanilla.onnx"),
+        policy=onnx.load("assets/unitree_go2/vanilla.onnx"),
         name="Vanilla",
-        config_path="assets/policy/unitree_go2/vanilla.json",
+        config_path="assets/unitree_go2/vanilla.json",
     ).add_velocity_command()
     go2_scene.add_policy(
-        policy=onnx.load("assets/policy/unitree_go2/robust.onnx"),
+        policy=onnx.load("assets/unitree_go2/robust.onnx"),
         name="Robust",
-        config_path="assets/policy/unitree_go2/robust.json",
+        config_path="assets/unitree_go2/robust.json",
     ).add_velocity_command()
 
     # 1.C. Unitree Go1
     go1_scene = demo_project.add_scene(
-        spec=mujoco.MjSpec.from_file("assets/scene/mjswan/unitree_go1/go1.xml"),
+        spec=mujoco.MjSpec.from_file("assets/unitree_go1/go1.xml"),
         name="Go1",
     )
     go1_scene.add_policy(
-        policy=onnx.load("assets/policy/unitree_go1/himloco.onnx"),
+        policy=onnx.load("assets/unitree_go1/himloco.onnx"),
         name="HiMLoco",
-        config_path="assets/policy/unitree_go1/himloco.json",
+        config_path="assets/unitree_go1/himloco.json",
     ).add_velocity_command()
     go1_scene.add_policy(
-        policy=onnx.load("assets/policy/unitree_go1/decap.onnx"),
+        policy=onnx.load("assets/unitree_go1/decap.onnx"),
         name="Decap",
-        config_path="assets/policy/unitree_go1/decap.json",
+        config_path="assets/unitree_go1/decap.json",
     ).add_velocity_command()
 
     # ============================
@@ -175,9 +176,9 @@ def setup_builder() -> mjswan.Builder:
     anymal_c_scene.add_policy(
         name="velocity 3000 iters",
         policy=onnx.load(
-            "assets/policy/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.onnx"
+            "assets/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.onnx"
         ),
-        config_path="assets/policy/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.json",
+        config_path="assets/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.json",
     ).add_velocity_command(
         lin_vel_x=(-1.0, 1.0),
         lin_vel_y=(-1.0, 1.0),
