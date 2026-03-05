@@ -337,7 +337,7 @@ function AppContent() {
   const handleCalibrateSplat = useCallback((scale: number, xOffset: number, yOffset: number, zOffset: number, roll: number, pitch: number, yaw: number) => {
     const splat = currentScene?.splat;
     if (splat) {
-      runtimeRef.current?.setSplat({ ...splat, scale, xOffset, yOffset, zOffset, roll, pitch, yaw });
+      runtimeRef.current?.calibrateSplat({ ...splat, scale, xOffset, yOffset, zOffset, roll, pitch, yaw });
     }
   }, [currentScene?.splat]);
 

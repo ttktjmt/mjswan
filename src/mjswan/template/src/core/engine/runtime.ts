@@ -8,7 +8,7 @@ import {
   getQuaternion,
   loadSceneFromURL,
 } from '../scene/scene';
-import { type SplatConfig, type SplatMesh, loadSplat, disposeSplat } from '../scene/splat';
+import { type SplatConfig, type SplatMesh, loadSplat, disposeSplat, applySplatTransform } from '../scene/splat';
 import { loadCollider, disposeCollider } from '../scene/collider';
 import { DragStateManager } from '../utils/dragStateManager';
 import { createTendonState, updateTendonGeometry, updateTendonRendering } from '../scene/tendons';
@@ -374,6 +374,13 @@ export class mjswanRuntime {
           this.scene
         );
       }
+    }
+  }
+
+  /** Update transform of the existing splat without disposing/reloading. */
+  calibrateSplat(config: SplatConfig): void {
+    if (this.splatMesh) {
+      applySplatTransform(this.splatMesh, config);
     }
   }
 

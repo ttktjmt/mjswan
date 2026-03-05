@@ -21,10 +21,10 @@ export interface SplatConfig {
 }
 
 const DEG2RAD = Math.PI / 180;
+const BASE_QUAT = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, 0));
 
-export function loadSplat(config: SplatConfig, scene: THREE.Scene): SplatMesh {
-  const splat = new SplatMesh({ url: config.url });
-
+/** Apply scale, position, and rotation from config to an existing SplatMesh. */
+export function applySplatTransform(splat: SplatMesh, config: SplatConfig): void {
   const scale = config.scale ?? 1.0;
   const xOffset = config.xOffset ?? 0.0;
   const yOffset = config.yOffset ?? 0.0;
@@ -38,12 +38,15 @@ export function loadSplat(config: SplatConfig, scene: THREE.Scene): SplatMesh {
   // WorldLabs splats use COLMAP/OpenCV convention (Y-down, Z-into-scene).
   // Rotating 180° around X flips to Three.js convention (Y-up, Z-towards-viewer).
   // User roll/pitch/yaw are applied on top via quaternion composition.
-  const baseQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, 0));
   const userQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, yaw, roll));
-  splat.quaternion.copy(baseQuat.multiply(userQuat));
+  splat.quaternion.copy(BASE_QUAT.clone().multiply(userQuat));
 
   splat.position.set(xOffset * scale, zOffset * scale, yOffset * scale);
+}
 
+export function loadSplat(config: SplatConfig, scene: THREE.Scene): SplatMesh {
+  const splat = new SplatMesh({ url: config.url });
+  applySplatTransform(splat, config);
   scene.add(splat);
   return splat;
 }
