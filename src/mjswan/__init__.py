@@ -18,7 +18,8 @@ from .command import (
 )
 from .policy import PolicyConfig, PolicyHandle
 from .project import ProjectConfig, ProjectHandle
-from .scene import SceneConfig, SceneHandle, SplatConfig, SplatHandle
+from .scene import SceneConfig, SceneHandle
+from .splat import SplatConfig, SplatHandle
 
 __all__ = [
     # Builder and App

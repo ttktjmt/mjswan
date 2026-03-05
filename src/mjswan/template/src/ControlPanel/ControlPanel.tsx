@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActionIcon, Anchor, Box, Button, Divider, Flex, Image, Menu, Modal, Select, Slider, Stack, Text, Tooltip } from '@mantine/core';
+import { Anchor, Box, Button, Divider, Image, Menu, Modal, Select, Slider, Stack, Text, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconChevronDown, IconEye, IconEyeOff, IconRefresh } from '@tabler/icons-react';
+import { IconChevronDown, IconRefresh } from '@tabler/icons-react';
 import type { SplatConfig } from '../core/scene/splat';
 import { MJSWAN_VERSION, GITHUB_CONTRIBUTORS, type Contributor } from '../Version';
 import FloatingPanel from './FloatingPanel';
@@ -27,6 +27,13 @@ interface ControlPanelProps {
   scenes: SelectOption[];
   sceneValue: string | null;
   onSceneChange: (value: string | null) => void;
+  splats: SelectOption[];
+  splatValue: string | null;
+  onSplatChange: (value: string | null) => void;
+  /** Splat config from the current scene (null if no splat), used for dev-mode calibration. */
+  splatConfig?: SplatConfig | null;
+  /** Dev-mode: update splat calibration (scale, ground offset) live. */
+  onCalibrateSplat?: (scale: number, groundOffset: number) => void;
   policies: SelectOption[];
   policyValue: string | null;
   onPolicyChange: (value: string | null) => void;
@@ -34,14 +41,6 @@ interface ControlPanelProps {
   commandsEnabled?: boolean;
   /** Callback when reset button is pressed */
   onReset?: () => void;
-  /** Splat config from the current scene (null if no splat). */
-  splatConfig?: SplatConfig | null;
-  /** Whether the splat is currently visible. */
-  splatVisible?: boolean;
-  /** Toggle splat visibility. */
-  onToggleSplat?: (visible: boolean) => void;
-  /** Dev-mode: update splat calibration (scale, ground offset) live. */
-  onCalibrateSplat?: (scale: number, groundOffset: number) => void;
 }
 
 /**
@@ -121,15 +120,16 @@ function ControlPanel(props: ControlPanelProps) {
     scenes,
     sceneValue,
     onSceneChange,
+    splats,
+    splatValue,
+    onSplatChange,
+    splatConfig,
+    onCalibrateSplat,
     policies,
     policyValue,
     onPolicyChange,
     commandsEnabled = false,
     onReset,
-    splatConfig,
-    splatVisible = true,
-    onToggleSplat,
-    onCalibrateSplat,
   } = props;
 
   const [aboutModalOpened, { open: openAbout, close: closeAbout }] = useDisclosure(false);
@@ -331,6 +331,34 @@ function ControlPanel(props: ControlPanelProps) {
             </LabeledInput>
           )}
 
+          {splats.length > 0 && (
+            <LabeledInput id="splat-select" label="Splat">
+              <Select
+                id="splat-select"
+                placeholder="Select splat"
+                data={splats}
+                value={splatValue}
+                onChange={onSplatChange}
+                size="xs"
+                radius="xs"
+                clearable
+                styles={{
+                  input: { minHeight: '1.625rem', height: '1.625rem', padding: '0.5em' },
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+              />
+            </LabeledInput>
+          )}
+
+          {/* Dev-mode calibration controls — only when splat.dev === true and splat is selected */}
+          {splatConfig?.dev && splatValue !== null && onCalibrateSplat && (
+            <SplatSection
+              scale={splatConfig.scale ?? 1.0}
+              groundOffset={splatConfig.groundOffset ?? 0.0}
+              onCalibrate={onCalibrateSplat}
+            />
+          )}
+
           {policies.length > 0 && (
             <LabeledInput id="policy-select" label="Policy">
               <Select
@@ -377,39 +405,6 @@ function ControlPanel(props: ControlPanelProps) {
                 );
               })}
             </>
-          )}
-
-          {/* Splat toggle — visible whenever the scene has a splat */}
-          {splatConfig && (
-            <Box pb="0.5em" px="xs">
-              <Flex align="center" justify="space-between">
-                <Text
-                  c="dimmed"
-                  style={{ fontSize: '0.875em', fontWeight: 450, letterSpacing: '-0.75px' }}
-                >
-                  Background
-                </Text>
-                <Tooltip label={splatVisible ? 'Hide background' : 'Show background'} position="left">
-                  <ActionIcon
-                    variant="subtle"
-                    size="sm"
-                    color={splatVisible ? 'blue' : 'gray'}
-                    onClick={() => onToggleSplat?.(!splatVisible)}
-                  >
-                    {splatVisible ? <IconEye size={14} /> : <IconEyeOff size={14} />}
-                  </ActionIcon>
-                </Tooltip>
-              </Flex>
-            </Box>
-          )}
-
-          {/* Dev-mode calibration controls — only when splat.dev === true */}
-          {splatConfig?.dev && onCalibrateSplat && (
-            <SplatSection
-              scale={splatConfig.scale ?? 1.0}
-              groundOffset={splatConfig.groundOffset ?? 0.0}
-              onCalibrate={onCalibrateSplat}
-            />
           )}
 
           {/* Reset Button - always at bottom */}

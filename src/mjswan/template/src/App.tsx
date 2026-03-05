@@ -216,7 +216,7 @@ function AppContent() {
   const [currentScene, setCurrentScene] = useState<SceneConfig | null>(null);
   const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [splatVisible, setSplatVisible] = useState(true);
+  const [selectedSplat, setSelectedSplat] = useState<string | null>(null);
   const runtimeRef = useRef<mjswanRuntime | null>(null);
   const { showLoading, hideLoading } = useLoading();
 
@@ -315,18 +315,23 @@ function AppContent() {
     hideLoading();
   }, [hideLoading]);
 
-  // Reset splat visibility when switching scenes
+  // Reset splat selection when switching scenes
   useEffect(() => {
-    setSplatVisible(true);
-  }, [scenePath]);
+    setSelectedSplat(currentScene?.splat ? 'splat' : null);
+  }, [currentScene]);
 
   const handleRuntimeReady = useCallback((runtime: mjswanRuntime) => {
     runtimeRef.current = runtime;
   }, []);
 
-  const handleToggleSplat = useCallback((visible: boolean) => {
-    runtimeRef.current?.setSplatVisible(visible);
-    setSplatVisible(visible);
+  const splatOptions = useMemo(() => {
+    if (!currentScene?.splat) return [] as { value: string; label: string }[];
+    return [{ value: 'splat', label: 'Background' }];
+  }, [currentScene?.splat]);
+
+  const handleSplatChange = useCallback((value: string | null) => {
+    runtimeRef.current?.setSplatVisible(value !== null);
+    setSelectedSplat(value);
   }, []);
 
   const handleCalibrateSplat = useCallback((scale: number, groundOffset: number) => {
@@ -415,14 +420,15 @@ function AppContent() {
           scenes={sceneOptions}
           sceneValue={sceneValue}
           onSceneChange={handleSceneChange}
+          splats={splatOptions}
+          splatValue={selectedSplat}
+          onSplatChange={handleSplatChange}
+          splatConfig={currentScene.splat ?? null}
+          onCalibrateSplat={handleCalibrateSplat}
           policies={policyOptions}
           policyValue={selectedPolicy}
           onPolicyChange={handlePolicyChange}
           commandsEnabled={!!policyConfigPath}
-          splatConfig={currentScene.splat ?? null}
-          splatVisible={splatVisible}
-          onToggleSplat={handleToggleSplat}
-          onCalibrateSplat={handleCalibrateSplat}
         />
         <MjswanViewer
           scenePath={scenePath}
