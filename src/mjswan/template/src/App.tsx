@@ -329,17 +329,32 @@ function AppContent() {
     return [{ value: 'splat', label: currentScene.splat.name }];
   }, [currentScene?.splat]);
 
+  const [customSplatUrl, setCustomSplatUrl] = useState<string | null>(null);
+
   const handleSplatChange = useCallback((value: string | null) => {
     runtimeRef.current?.setSplatVisible(value !== null);
     setSelectedSplat(value);
+    setCustomSplatUrl(null);
+  }, []);
+
+  const handleSplatUrlLoad = useCallback(async (url: string): Promise<boolean> => {
+    try {
+      const res = await fetch(url, { method: 'HEAD' });
+      if (!res.ok) return false;
+    } catch {
+      return false;
+    }
+    runtimeRef.current?.setSplat({ name: 'Custom', url });
+    setCustomSplatUrl(url);
+    return true;
   }, []);
 
   const handleCalibrateSplat = useCallback((scale: number, xOffset: number, yOffset: number, zOffset: number, roll: number, pitch: number, yaw: number) => {
-    const splat = currentScene?.splat;
+    const splat = currentScene?.splat ?? (customSplatUrl ? { name: 'Custom', url: customSplatUrl } : null);
     if (splat) {
       runtimeRef.current?.calibrateSplat({ ...splat, scale, xOffset, yOffset, zOffset, roll, pitch, yaw });
     }
-  }, [currentScene?.splat]);
+  }, [currentScene?.splat, customSplatUrl]);
 
   const handleProjectChange = useCallback(
     (value: string | null) => {
@@ -425,6 +440,7 @@ function AppContent() {
           onSplatChange={handleSplatChange}
           splatConfig={currentScene.splat ?? null}
           onCalibrateSplat={handleCalibrateSplat}
+          onSplatUrlLoad={handleSplatUrlLoad}
           policies={policyOptions}
           policyValue={selectedPolicy}
           onPolicyChange={handlePolicyChange}
