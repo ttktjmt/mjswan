@@ -350,8 +350,8 @@ function ControlPanel(props: ControlPanelProps) {
             </LabeledInput>
           )}
 
-          {/* Dev-mode calibration controls — only when splat.dev === true and splat is selected */}
-          {splatConfig?.dev && splatValue !== null && onCalibrateSplat && (
+          {/* Splat controls — only when splat.control === true and splat is selected */}
+          {splatConfig?.control && splatValue !== null && onCalibrateSplat && (
             <SplatSection
               scale={splatConfig.scale ?? 1.0}
               groundOffset={splatConfig.groundOffset ?? 0.0}

@@ -31,7 +31,7 @@ export function SplatSection({ scale: initialScale, groundOffset: initialGroundO
   };
 
   return (
-    <CommandSection label="Splat (dev)" expandByDefault={true}>
+    <CommandSection label="Splat Control" expandByDefault={true}>
       <Box px="xs" pb="xs">
         <Box pb="xs">
           <Text c="dimmed" style={{ fontSize: '0.8em', marginBottom: '0.25em' }}>

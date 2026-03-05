@@ -7,8 +7,8 @@ export interface SplatConfig {
   scale?: number;
   groundOffset?: number;
   colliderUrl?: string;
-  /** If true, exposes scale and ground offset controls in the viewer control panel. */
-  dev?: boolean;
+  /** If true, shows scale and ground offset controls in the viewer control panel. */
+  control?: boolean;
 }
 
 export function loadSplat(config: SplatConfig, scene: THREE.Scene): SplatMesh {

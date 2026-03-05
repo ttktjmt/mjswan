@@ -112,7 +112,7 @@ class SceneHandle:
         scale: float = 1.0,
         ground_offset: float = 0.0,
         collider_url: str | None = None,
-        dev: bool = False,
+        control: bool = False,
     ) -> SplatHandle:
         """Add a Gaussian Splat background to this scene.
 
@@ -126,8 +126,8 @@ class SceneHandle:
             ground_offset: Ground plane offset in the splat's coordinate system.
                 Use ``ground_plane_offset`` from your capture metadata if available.
             collider_url: Optional URL or local path to a .glb collision mesh.
-            dev: If True, exposes scale and ground offset controls in the viewer
-                control panel for interactive calibration. Defaults to False.
+            control: If True, shows scale and ground offset controls in the viewer
+                control panel. Defaults to False.
 
         Returns:
             SplatHandle for further configuration.
@@ -144,7 +144,7 @@ class SceneHandle:
             scale=scale,
             ground_offset=ground_offset,
             collider_url=collider_url,
-            dev=dev,
+            control=control,
         )
         self._config.splat = splat_config
         return SplatHandle(splat_config, self)

@@ -25,8 +25,8 @@ class SplatConfig:
     collider_url: str | None = None
     """Optional URL or local path to a .glb collider mesh."""
 
-    dev: bool = False
-    """Expose calibration controls (scale, offset) in the viewer UI."""
+    control: bool = False
+    """Show scale and ground offset controls in the viewer control panel."""
 
     metadata: dict[str, Any] = field(default_factory=dict)
     """Additional metadata for the splat."""
@@ -39,8 +39,8 @@ class SplatConfig:
         }
         if self.collider_url is not None:
             d["colliderUrl"] = self.collider_url
-        if self.dev:
-            d["dev"] = True
+        if self.control:
+            d["control"] = True
         return d
 
 
