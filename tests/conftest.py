@@ -1,5 +1,7 @@
 """Shared pytest fixtures for the mjswan test suite."""
 
+import gzip
+import struct
 from pathlib import Path
 
 import mujoco
@@ -28,6 +30,24 @@ def minimal_model() -> mujoco.MjModel:
         '<worldbody><geom type="sphere" size="0.1"/></worldbody>'
         "</mujoco>"
     )
+
+
+@pytest.fixture
+def minimal_spz(tmp_path: Path) -> Path:
+    """Minimal .spz file — valid 16-byte header (NGSp v2), zero Gaussian points."""
+    header = struct.pack(
+        "<IIIBBBB",
+        0x5053474E,  # magic "NGSP"
+        2,  # version
+        0,  # num_points = 0
+        0,  # sh_degree
+        0,  # fractional_bits
+        0,  # flags
+        0,  # reserved
+    )
+    path = tmp_path / "background.spz"
+    path.write_bytes(gzip.compress(header))
+    return path
 
 
 @pytest.fixture
