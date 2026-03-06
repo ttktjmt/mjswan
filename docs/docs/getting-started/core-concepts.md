@@ -4,7 +4,7 @@ icon: octicons/light-bulb-16
 
 # Core Concepts
 
-mjswan uses a four-level hierarchy to describe a browser application: **Builder → Project → Scene → Policy**. Understanding this structure is the fastest way to get oriented before looking at the API.
+mjswan uses a four-level hierarchy to describe a browser application: **Builder → Project → Scene → Policy/Splat**. Understanding this structure is the fastest way to get oriented before looking at the API.
 
 ```
 Builder
@@ -70,6 +70,53 @@ scene = project.add_scene(
 !!! tip "Which format should I use?"
     Use `spec=` unless you have a specific reason to prefer `model=`. The `.mjz` format uses DEFLATE compression and is significantly smaller — important when approaching GitHub Pages' 1 GB deployment limit.
 
+## Splat
+
+A splat is a [Gaussian Splat](https://en.wikipedia.org/wiki/Gaussian_splatting) background rendered behind the MuJoCo simulation. Splats are stored as `.spz` files and give scenes a photorealistic real-world environment without affecting physics.
+
+Add one or more splats to a scene using `add_splat()`. You must supply exactly one of `source` or `url`:
+
+```python
+# Recommended: bundle the .spz file into the app
+scene.add_splat(
+    "Lab Environment",
+    source="lab.spz",        # copied into dist/ at build time
+    scale=1.35,              # converts splat units → meters
+    z_offset=0.71,           # vertical shift to align ground planes
+)
+
+# Alternative: reference an external URL (not bundled)
+scene.add_splat(
+    "Outdoor",
+    url="https://example.com/outdoor.spz",
+    scale=3.0,
+    z_offset=0.5,
+)
+```
+
+When multiple splats are attached to the same scene, the viewer shows a selector so users can switch between them at runtime.
+
+### Source vs URL
+
+| Option | Effect |
+|---|---|
+| `source` | Copies the `.spz` into `dist/` at build time — fully self-contained, works offline |
+| `url` | Browser fetches the file at runtime — smaller build, requires network access |
+
+### Alignment controls
+
+| Parameter | Description |
+|---|---|
+| `scale` | Metric scale factor (splat units → metres). Use `metric_scale_factor` from capture metadata if available |
+| `x_offset`, `y_offset`, `z_offset` | Position offsets in scaled splat units. `z_offset` aligns ground planes; use `ground_plane_offset` from capture metadata if available |
+| `roll`, `pitch`, `yaw` | Rotation in degrees applied on top of the COLMAP → Three.js base rotation |
+
+Set `control=True` to expose these alignment controls as live sliders in the viewer — useful while calibrating a new capture:
+
+```python
+scene.add_splat("Lab", source="lab.spz", scale=1.35, control=True)
+```
+
 ## Policy
 
 A policy is an ONNX model that runs inference inside the browser. Attach one or more policies to a scene:
@@ -133,7 +180,8 @@ dist/
         └── <scene-id>/
             ├── scene.mjz    ← or scene.mjb
             ├── <policy>.onnx
-            └── <policy>.json
+            ├── <policy>.json
+            └── <splat>.spz  ← only when source= is used
 ```
 
 The result is a fully static site: copy `dist/` to any static host (GitHub Pages, Netlify, S3, …) and it works without a server.

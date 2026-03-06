@@ -139,6 +139,49 @@ Attach an ONNX policy to the scene.
 
 **Returns** — `PolicyHandle`
 
+### SceneHandle.add_splat
+
+```python
+def add_splat(
+    name: str,
+    *,
+    source: str | None = None,
+    url: str | None = None,
+    scale: float = 1.0,
+    x_offset: float = 0.0,
+    y_offset: float = 0.0,
+    z_offset: float = 0.0,
+    roll: float = 0.0,
+    pitch: float = 0.0,
+    yaw: float = 0.0,
+    collider_url: str | None = None,
+    control: bool = False,
+) -> SplatHandle
+```
+
+Add a Gaussian Splat background to the scene. Exactly one of `source` or `url` must be supplied.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `name` | `str` | — | Display name shown in the viewer selector. |
+| `source` | `str \| None` | `None` | Local path to a `.spz` file. The file is copied into `dist/` during `Builder.build()`. Mutually exclusive with `url`. |
+| `url` | `str \| None` | `None` | URL to an external `.spz` file. Fetched by the browser at runtime; not bundled. Mutually exclusive with `source`. |
+| `scale` | `float` | `1.0` | Metric scale factor (converts splat units to metres). |
+| `x_offset` | `float` | `0.0` | X-axis position offset in scaled splat units. |
+| `y_offset` | `float` | `0.0` | Y-axis position offset in scaled splat units. |
+| `z_offset` | `float` | `0.0` | Vertical position offset. Use `ground_plane_offset` from capture metadata if available. |
+| `roll` | `float` | `0.0` | Roll rotation in degrees applied on top of the COLMAP → Three.js base rotation. |
+| `pitch` | `float` | `0.0` | Pitch rotation in degrees applied on top of the COLMAP → Three.js base rotation. |
+| `yaw` | `float` | `0.0` | Yaw rotation in degrees applied on top of the COLMAP → Three.js base rotation. |
+| `collider_url` | `str \| None` | `None` | Optional URL or local path to a `.glb` collision mesh. |
+| `control` | `bool` | `False` | Show live scale/offset/rotation controls in the viewer control panel. Useful during calibration. |
+
+**Returns** — `SplatHandle`
+
+**Raises** — `ValueError` if both or neither of `source`/`url` are provided.
+
 ### SceneHandle.set_metadata
 
 ```python
@@ -207,6 +250,34 @@ Set a metadata entry for the policy. Returns `self` for chaining.
 |---|---|---|
 | `name` | `str` | Display name of the policy. |
 | `model` | `onnx.ModelProto` | The attached ONNX model. |
+
+---
+
+## SplatHandle
+
+Returned by `SceneHandle.add_splat()`.
+
+### SplatHandle.set_metadata
+
+```python
+def set_metadata(key: str, value: Any) -> SplatHandle
+```
+
+Set a metadata entry for the splat. Returns `self` for chaining.
+
+### SplatHandle properties
+
+| Property | Type | Description |
+|---|---|---|
+| `source` | `str \| None` | Local path to the bundled `.spz` file, or `None` if `url` was used. |
+| `url` | `str \| None` | External URL to the `.spz` file, or `None` if `source` was used. |
+| `scale` | `float` | Metric scale factor. |
+| `x_offset` | `float` | X-axis position offset. |
+| `y_offset` | `float` | Y-axis position offset. |
+| `z_offset` | `float` | Vertical position offset. |
+| `roll` | `float` | Roll rotation in degrees. |
+| `pitch` | `float` | Pitch rotation in degrees. |
+| `yaw` | `float` | Yaw rotation in degrees. |
 
 ---
 

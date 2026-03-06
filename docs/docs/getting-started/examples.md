@@ -126,6 +126,67 @@ humanoids.add_scene(spec=mujoco.MjSpec.from_file("g1/scene.xml"), name="G1")
 builder.build().launch()
 ```
 
+## Gaussian Splat background (bundled)
+
+Use `source=` to bundle a `.spz` file into the built application. This is the recommended approach: the file is copied into `dist/` at build time, so the app works offline.
+
+```python
+import mujoco
+import mjswan
+
+builder = mjswan.Builder()
+project = builder.add_project(name="Robot")
+
+scene = project.add_scene(
+    spec=mujoco.MjSpec.from_file("robot/scene.xml"),
+    name="G1",
+)
+scene.add_splat(
+    "Lab",
+    source="lab.spz",   # bundled into dist/
+    scale=1.35,
+    z_offset=0.71,
+)
+
+builder.build().launch()
+```
+
+## Gaussian Splat background (external URL)
+
+Use `url=` to reference a `.spz` file hosted externally. The build stays small, but the browser must fetch the file at runtime.
+
+```python
+scene.add_splat(
+    "Outdoor",
+    url="https://example.com/outdoor.spz",
+    scale=3.0,
+    z_offset=0.5,
+)
+```
+
+## Multiple splats on one scene
+
+Add several splats to the same scene — the viewer shows a selector to switch between them at runtime.
+
+```python
+scene.add_splat("Lab A", source="lab_a.spz", scale=1.35, z_offset=0.71)
+scene.add_splat("Lab B", source="lab_b.spz", scale=1.20, z_offset=0.65)
+```
+
+## Calibrating a new splat capture
+
+Set `control=True` to expose live sliders for scale, offset, and rotation while you dial in the alignment. Remove `control=True` once the values are finalised.
+
+```python
+scene.add_splat(
+    "Lab",
+    source="lab.spz",
+    scale=1.35,
+    z_offset=0.71,
+    control=True,   # shows calibration controls in the viewer
+)
+```
+
 ## Headless build (no browser)
 
 ```python
@@ -139,7 +200,7 @@ app = builder.build()
 Or without modifying the script:
 
 ```bash
-MJSWAN_NO_LAUNCH=1 python build.py
+python build.py
 ```
 
 See [Deployment](../guides/deployment.md) for GitHub Pages and CI/CD setup.

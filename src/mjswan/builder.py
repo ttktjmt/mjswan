@@ -229,7 +229,8 @@ class Builder:
                     └── <scene-id>/
                         ├── scene.mjz/.mjb
                         ├── <policy-id>.onnx
-                        └── <policy-id>.json
+                        ├── <policy-id>.json
+                        └── <splat-id>.spz  (when local source provided)
         """
         if output_path.exists():
             shutil.rmtree(output_path)
