@@ -1,0 +1,149 @@
+{
+  "policy_joint_names": [
+    "robot/LF_HAA",
+    "robot/LF_HFE",
+    "robot/LF_KFE",
+    "robot/RF_HAA",
+    "robot/RF_HFE",
+    "robot/RF_KFE",
+    "robot/LH_HAA",
+    "robot/LH_HFE",
+    "robot/LH_KFE",
+    "robot/RH_HAA",
+    "robot/RH_HFE",
+    "robot/RH_KFE"
+  ],
+  "default_joint_pos": [
+    0.0,
+    0.4,
+    -0.8,
+    0.0,
+    0.4,
+    -0.8,
+    0.0,
+    -0.4,
+    0.8,
+    0.0,
+    -0.4,
+    0.8
+  ],
+  "obs_config": {
+    "obs": [
+      {
+        "name": "BaseLinearVelocity",
+        "world_frame": false
+      },
+      {
+        "name": "BaseAngularVelocity"
+      },
+      {
+        "name": "ProjectedGravityB"
+      },
+      {
+        "name": "JointPos",
+        "pos_steps": [
+          0
+        ],
+        "subtract_default": true,
+        "scale": 1.0
+      },
+      {
+        "name": "JointVelocities"
+      },
+      {
+        "name": "PrevActions",
+        "history_steps": 1
+      },
+      {
+        "name": "SimpleVelocityCommand"
+      }
+    ]
+  },
+  "action_scale": [
+    1.013,
+    1.013,
+    1.013,
+    1.013,
+    1.013,
+    1.013,
+    1.013,
+    1.013,
+    1.013,
+    1.013,
+    1.013,
+    1.013
+  ],
+  "stiffness": [
+    19.739,
+    19.739,
+    19.739,
+    19.739,
+    19.739,
+    19.739,
+    19.739,
+    19.739,
+    19.739,
+    19.739,
+    19.739,
+    19.739
+  ],
+  "damping": [
+    1.257,
+    1.257,
+    1.257,
+    1.257,
+    1.257,
+    1.257,
+    1.257,
+    1.257,
+    1.257,
+    1.257,
+    1.257,
+    1.257
+  ],
+  "control_type": "joint_position",
+  "onnx": {
+    "meta": {
+      "in_keys": [
+        "obs"
+      ],
+      "out_keys": [
+        "action"
+      ]
+    },
+    "path": "velocity_3000_iters.onnx"
+  },
+  "commands": {
+    "velocity": {
+      "inputs": [
+        {
+          "type": "slider",
+          "name": "lin_vel_x",
+          "label": "Forward Velocity",
+          "min": -1.0,
+          "max": 1.0,
+          "step": 0.05,
+          "default": 0.5
+        },
+        {
+          "type": "slider",
+          "name": "lin_vel_y",
+          "label": "Lateral Velocity",
+          "min": -1.0,
+          "max": 1.0,
+          "step": 0.05,
+          "default": 0.0
+        },
+        {
+          "type": "slider",
+          "name": "ang_vel_z",
+          "label": "Yaw Rate",
+          "min": -0.5,
+          "max": 0.5,
+          "step": 0.05,
+          "default": 0.0
+        }
+      ]
+    }
+  }
+}

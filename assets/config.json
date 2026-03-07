@@ -1,0 +1,672 @@
+{
+  "version": "0.2.0",
+  "projects": [
+    {
+      "name": "mjswan Demo",
+      "id": null,
+      "scenes": [
+        {
+          "name": "G1",
+          "path": "g1/scene.mjz",
+          "splats": [
+            {
+              "name": "Street",
+              "scale": 3.275,
+              "xOffset": 0.0,
+              "yOffset": 0.0,
+              "zOffset": 0.708,
+              "yaw": 40,
+              "control": true,
+              "path": "g1/street.spz"
+            }
+          ],
+          "policies": [
+            {
+              "name": "Locomotion",
+              "config": "g1/locomotion.json"
+            },
+            {
+              "name": "Balance",
+              "config": "g1/balance.json"
+            }
+          ]
+        },
+        {
+          "name": "Go2",
+          "path": "go2/scene.mjz",
+          "policies": [
+            {
+              "name": "Facet",
+              "config": "go2/facet.json"
+            },
+            {
+              "name": "Vanilla",
+              "config": "go2/vanilla.json"
+            },
+            {
+              "name": "Robust",
+              "config": "go2/robust.json"
+            }
+          ]
+        },
+        {
+          "name": "Go1",
+          "path": "go1/scene.mjz",
+          "policies": [
+            {
+              "name": "HiMLoco",
+              "config": "go1/himloco.json"
+            },
+            {
+              "name": "Decap",
+              "config": "go1/decap.json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MuJoCo Menagerie",
+      "id": "menagerie",
+      "scenes": [
+        {
+          "name": "ANYmal C Velocity",
+          "path": "anymal_c_velocity/scene.mjz",
+          "policies": [
+            {
+              "name": "velocity 3000 iters",
+              "config": "anymal_c_velocity/velocity_3000_iters.json"
+            }
+          ]
+        },
+        {
+          "name": "A1",
+          "path": "a1/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Ability Hand",
+          "path": "ability_hand/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Adam Lite",
+          "path": "adam_lite/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Aero Hand Open",
+          "path": "aero_hand_open/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Aliengo",
+          "path": "aliengo/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Allegro Hand",
+          "path": "allegro_hand/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Aloha",
+          "path": "aloha/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Anymal B",
+          "path": "anymal_b/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Anymal C",
+          "path": "anymal_c/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Apollo",
+          "path": "apollo/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Arx L5",
+          "path": "arx_l5/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Booster T1",
+          "path": "booster_t1/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Cassie",
+          "path": "cassie/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Cf2",
+          "path": "cf2/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Dynamixel 2r",
+          "path": "dynamixel_2r/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Elf2",
+          "path": "elf2/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Fr3",
+          "path": "fr3/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Fr3 V2",
+          "path": "fr3_v2/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "G1",
+          "path": "g1/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Gen3",
+          "path": "gen3/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Go1",
+          "path": "go1/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Go2",
+          "path": "go2/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "H1",
+          "path": "h1/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "H1 2",
+          "path": "h1_2/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Iiwa14",
+          "path": "iiwa14/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Jvrc",
+          "path": "jvrc/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Leap Hand",
+          "path": "leap_hand/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Low Cost Robot Arm",
+          "path": "low_cost_robot_arm/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Mujoco Humanoid",
+          "path": "mujoco_humanoid/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "N1",
+          "path": "n1/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Op3",
+          "path": "op3/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Panda",
+          "path": "panda/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Piper",
+          "path": "piper/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Robotiq 2f85",
+          "path": "robotiq_2f85/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Robotiq 2f85 V4",
+          "path": "robotiq_2f85_v4/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Rsk",
+          "path": "rsk/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Sawyer",
+          "path": "sawyer/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Shadow Dexee",
+          "path": "shadow_dexee/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Shadow Hand",
+          "path": "shadow_hand/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Skydio X2",
+          "path": "skydio_x2/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "So Arm100",
+          "path": "so_arm100/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "So Arm101",
+          "path": "so_arm101/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Spot",
+          "path": "spot/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Stretch",
+          "path": "stretch/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Stretch 3",
+          "path": "stretch_3/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Talos",
+          "path": "talos/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Tiago++",
+          "path": "tiago++/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Toddlerbot 2xc",
+          "path": "toddlerbot_2xc/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Toddlerbot 2xm",
+          "path": "toddlerbot_2xm/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Ur10e",
+          "path": "ur10e/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Ur5e",
+          "path": "ur5e/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Viper",
+          "path": "viper/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Widow",
+          "path": "widow/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Xarm7",
+          "path": "xarm7/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Yam",
+          "path": "yam/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Z1",
+          "path": "z1/scene.mjz",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "name": "MuJoCo Playground",
+      "id": "playground",
+      "scenes": [
+        {
+          "name": "AcrobotSwingup",
+          "path": "acrobotswingup/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "BallInCup",
+          "path": "ballincup/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "CartpoleBalance",
+          "path": "cartpolebalance/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "CartpoleSwingup",
+          "path": "cartpoleswingup/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "CheetahRun",
+          "path": "cheetahrun/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "FingerSpin",
+          "path": "fingerspin/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "FingerTurnEasy",
+          "path": "fingerturneasy/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "FingerTurnHard",
+          "path": "fingerturnhard/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "FishSwim",
+          "path": "fishswim/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "HopperHop",
+          "path": "hopperhop/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "HopperStand",
+          "path": "hopperstand/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "HumanoidStand",
+          "path": "humanoidstand/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "HumanoidWalk",
+          "path": "humanoidwalk/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "HumanoidRun",
+          "path": "humanoidrun/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "PendulumSwingup",
+          "path": "pendulumswingup/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "PointMass",
+          "path": "pointmass/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "ReacherEasy",
+          "path": "reachereasy/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "ReacherHard",
+          "path": "reacherhard/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "SwimmerSwimmer6",
+          "path": "swimmerswimmer6/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "WalkerRun",
+          "path": "walkerrun/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "WalkerStand",
+          "path": "walkerstand/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "WalkerWalk",
+          "path": "walkerwalk/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "ApolloJoystickFlatTerrain",
+          "path": "apollojoystickflatterrain/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "BarkourJoystick",
+          "path": "barkourjoystick/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "BerkeleyHumanoidJoystickFlatTerrain",
+          "path": "berkeleyhumanoidjoystickflatterrain/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "BerkeleyHumanoidJoystickRoughTerrain",
+          "path": "berkeleyhumanoidjoystickroughterrain/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "G1JoystickFlatTerrain",
+          "path": "g1joystickflatterrain/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "G1JoystickRoughTerrain",
+          "path": "g1joystickroughterrain/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Go1JoystickFlatTerrain",
+          "path": "go1joystickflatterrain/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Go1JoystickRoughTerrain",
+          "path": "go1joystickroughterrain/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Go1Getup",
+          "path": "go1getup/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Go1Handstand",
+          "path": "go1handstand/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Go1Footstand",
+          "path": "go1footstand/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "H1InplaceGaitTracking",
+          "path": "h1inplacegaittracking/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "H1JoystickGaitTracking",
+          "path": "h1joystickgaittracking/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "Op3Joystick",
+          "path": "op3joystick/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "SpotFlatTerrainJoystick",
+          "path": "spotflatterrainjoystick/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "SpotGetup",
+          "path": "spotgetup/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "SpotJoystickGaitTracking",
+          "path": "spotjoystickgaittracking/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "T1JoystickFlatTerrain",
+          "path": "t1joystickflatterrain/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "T1JoystickRoughTerrain",
+          "path": "t1joystickroughterrain/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "AlohaHandOver",
+          "path": "alohahandover/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "AlohaSinglePegInsertion",
+          "path": "alohasinglepeginsertion/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "PandaPickCube",
+          "path": "pandapickcube/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "PandaPickCubeOrientation",
+          "path": "pandapickcubeorientation/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "PandaPickCubeCartesian",
+          "path": "pandapickcubecartesian/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "PandaOpenCabinet",
+          "path": "pandaopencabinet/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "PandaRobotiqPushCube",
+          "path": "pandarobotiqpushcube/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "LeapCubeReorient",
+          "path": "leapcubereorient/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "LeapCubeRotateZAxis",
+          "path": "leapcuberotatezaxis/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "AeroCubeRotateZAxis",
+          "path": "aerocuberotatezaxis/scene.mjz",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "name": "MyoSuite",
+      "id": "myosuite",
+      "scenes": [
+        {
+          "name": "mc22 Die Reorient",
+          "path": "mc22_die_reorient/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "mc22 Baoding",
+          "path": "mc22_baoding/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "mc23 Relocate",
+          "path": "mc23_relocate/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "mc23 Chase Tag",
+          "path": "mc23_chase_tag/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "mc24 Bimanual",
+          "path": "mc24_bimanual/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "mc24 OSL Run",
+          "path": "mc24_osl_run/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "mc25 Table Tennis",
+          "path": "mc25_table_tennis/scene.mjz",
+          "policies": []
+        },
+        {
+          "name": "mc25 Soccer",
+          "path": "mc25_soccer/scene.mjz",
+          "policies": []
+        }
+      ]
+    }
+  ]
+}
