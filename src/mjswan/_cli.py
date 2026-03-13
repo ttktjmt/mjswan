@@ -40,3 +40,18 @@ def splat() -> None:
 def mjlab() -> None:
     """Run examples/mjlab/mjlab_integration.py"""
     _run_script("examples/mjlab/mjlab_integration.py")
+
+
+def serve() -> None:
+    """Launch a pre-built mjswan app from a dist directory.
+
+    Usage: serve <dist-dir>
+    """
+    if len(sys.argv) < 2:
+        print("Usage: serve <dist-dir>", file=sys.stderr)
+        sys.exit(1)
+
+    from mjswan.app import mjswanApp
+
+    app = mjswanApp(Path(sys.argv[1]).resolve())
+    app.launch()

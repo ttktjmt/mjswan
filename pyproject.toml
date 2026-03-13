@@ -80,6 +80,7 @@ main = "mjswan._cli:main"
 simple = "mjswan._cli:simple"
 splat = "mjswan._cli:splat"
 mjlab = "mjswan._cli:mjlab"
+serve = "mjswan._cli:serve"
 
 [tool.pyright]
 extraPaths = []
