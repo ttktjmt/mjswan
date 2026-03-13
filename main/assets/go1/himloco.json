@@ -1,0 +1,125 @@
+{
+  "_comment": "Go1 HIM Locomotion using modular components with interleaved history managed by ConfigObservationManager.",
+  "policy_joint_names": [
+    "FL_hip_joint",
+    "FL_thigh_joint",
+    "FL_calf_joint",
+    "FR_hip_joint",
+    "FR_thigh_joint",
+    "FR_calf_joint",
+    "RL_hip_joint",
+    "RL_thigh_joint",
+    "RL_calf_joint",
+    "RR_hip_joint",
+    "RR_thigh_joint",
+    "RR_calf_joint"
+  ],
+  "default_joint_pos": [
+    0.10000000149011612,
+    0.8,
+    -1.5,
+    -0.10000000149011612,
+    0.8,
+    -1.5,
+    0.10000000149011612,
+    1.0,
+    -1.5,
+    -0.10000000149011612,
+    1.0,
+    -1.5
+  ],
+  "onnx": {
+    "meta": {
+      "in_keys": [
+        "obs_history"
+      ],
+      "out_keys": [
+        "action"
+      ],
+      "in_shapes": [
+        [
+          [
+            1,
+            270
+          ]
+        ]
+      ]
+    },
+    "path": "himloco.onnx"
+  },
+  "obs_config": {
+    "obs_history": {
+      "history_steps": 6,
+      "interleaved": true,
+      "components": [
+        {
+          "name": "SimpleVelocityCommand",
+          "scale": [
+            2.0,
+            2.0,
+            0.25
+          ]
+        },
+        {
+          "name": "BaseAngularVelocity",
+          "world_frame": true,
+          "scale": 0.25
+        },
+        {
+          "name": "ProjectedGravity",
+          "joint_name": "floating_base_joint"
+        },
+        {
+          "name": "JointPositions",
+          "joint_names": "isaac",
+          "subtract_default": true,
+          "scale": 1.0
+        },
+        {
+          "name": "JointVelocities",
+          "joint_names": "isaac",
+          "scale": 0.05
+        },
+        {
+          "name": "PreviousActions"
+        }
+      ]
+    }
+  },
+  "action_scale": 0.25,
+  "stiffness": 40.0,
+  "damping": 1.0,
+  "commands": {
+    "velocity": {
+      "inputs": [
+        {
+          "type": "slider",
+          "name": "lin_vel_x",
+          "label": "Forward Velocity",
+          "min": -1.0,
+          "max": 1.0,
+          "step": 0.05,
+          "default": 0.5
+        },
+        {
+          "type": "slider",
+          "name": "lin_vel_y",
+          "label": "Lateral Velocity",
+          "min": -0.5,
+          "max": 0.5,
+          "step": 0.05,
+          "default": 0.0
+        },
+        {
+          "type": "slider",
+          "name": "ang_vel_z",
+          "label": "Yaw Rate",
+          "min": -1.0,
+          "max": 1.0,
+          "step": 0.05,
+          "default": 0.0
+        }
+      ]
+    }
+  }
+}
