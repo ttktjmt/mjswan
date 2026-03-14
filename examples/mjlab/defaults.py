@@ -4,8 +4,7 @@ Extracts the MuJoCo model from each mjlab default task and visualizes them
 in the browser using mjswan.
 """
 
-from mjlab.scene import Scene
-from mjlab.tasks.registry import list_tasks, load_env_cfg
+from mjlab.tasks.registry import list_tasks
 
 import mjswan
 
@@ -15,10 +14,7 @@ def main():
     project = builder.add_project(name="mjlab Examples")
 
     for task_id in list_tasks():
-        env_cfg = load_env_cfg(task_id)
-        env_cfg.scene.num_envs = 1
-        scene = Scene(env_cfg.scene, device="cpu")
-        project.add_scene(spec=scene.spec, name=task_id)
+        project.add_mjlab_scene(task_id)
 
     app = builder.build()
     app.launch()

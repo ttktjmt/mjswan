@@ -52,6 +52,47 @@ class Builder:
         self._base_path = base_path
         self._gtm_id = gtm_id
 
+    @classmethod
+    def from_mjlab(
+        cls,
+        task_id: str,
+        *,
+        project_name: str = "mjlab",
+        base_path: str = "/",
+        gtm_id: str | None = None,
+    ) -> Builder:
+        """Create a Builder pre-configured with a single mjlab task.
+
+        This is a convenience factory for the common pattern of visualizing one
+        mjlab task. The returned Builder can be further modified before calling
+        :meth:`build`.
+
+        Args:
+            task_id: mjlab task identifier (e.g. ``"go2_flat"``).
+            project_name: Name for the auto-created project. Defaults to ``"mjlab"``.
+            base_path: Base path for the application (e.g., ``"/mjswan/"``).
+            gtm_id: Optional Google Tag Manager container ID.
+
+        Returns:
+            Builder with one project and one scene already configured.
+
+        Example:
+            ```python
+            # Minimal usage
+            app = mjswan.Builder.from_mjlab("go2_flat").build()
+            app.launch()
+
+            # Customise before building
+            builder = mjswan.Builder.from_mjlab("go2_flat")
+            scene = builder.get_projects()[0].scenes[0]  # access SceneConfig
+            app = builder.build()
+            ```
+        """
+        builder = cls(base_path=base_path, gtm_id=gtm_id)
+        project = builder.add_project(name=project_name)
+        project.add_mjlab_scene(task_id)
+        return builder
+
     def add_project(self, name: str, *, id: str | None = None) -> ProjectHandle:
         """Add a new project to the builder.
 

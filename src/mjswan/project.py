@@ -115,4 +115,39 @@ class ProjectHandle:
         return SceneHandle(scene_config, self)
 
 
+    def add_mjlab_scene(self, task_id: str) -> SceneHandle:
+        """Add a MuJoCo scene from an mjlab task.
+
+        Loads the task's MuJoCo spec from the mjlab task registry and adds it
+        as a scene to this project. ``mjlab`` must be installed.
+
+        Args:
+            task_id: mjlab task identifier (e.g. ``"go2_flat"``).
+
+        Returns:
+            SceneHandle for further configuration (add_policy, add_splat, etc.)
+
+        Example:
+            ```python
+            builder = mjswan.Builder()
+            project = builder.add_project(name="My App")
+            scene = project.add_mjlab_scene("go2_flat")
+            app = builder.build()
+            ```
+        """
+        try:
+            from mjlab.scene import Scene
+            from mjlab.tasks.registry import load_env_cfg
+        except ImportError as e:
+            raise ImportError(
+                "mjlab is required for add_mjlab_scene(). "
+                "Install it with: pip install mjlab"
+            ) from e
+
+        env_cfg = load_env_cfg(task_id)
+        env_cfg.scene.num_envs = 1
+        scene = Scene(env_cfg.scene, device="cpu")
+        return self.add_scene(spec=scene.spec, name=task_id)
+
+
 __all__ = ["ProjectConfig", "ProjectHandle"]
