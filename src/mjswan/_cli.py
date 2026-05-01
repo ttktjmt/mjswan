@@ -102,9 +102,45 @@ def _cmd_gh_pages(args: argparse.Namespace) -> None:
     sys.exit(result.returncode)
 
 
+def _cmd_info(args: argparse.Namespace) -> None:
+    import importlib.metadata
+
+    app_dir = _resolve_app_dir(args.path)
+    files = list(app_dir.rglob("*"))
+    regular_files = [f for f in files if f.is_file()]
+    total_bytes = sum(f.stat().st_size for f in regular_files)
+
+    if total_bytes < 1024:
+        size_str = f"{total_bytes} B"
+    elif total_bytes < 1024**2:
+        size_str = f"{total_bytes / 1024:.1f} KB"
+    elif total_bytes < 1024**3:
+        size_str = f"{total_bytes / 1024**2:.1f} MB"
+    else:
+        size_str = f"{total_bytes / 1024**3:.2f} GB"
+
+    try:
+        version = importlib.metadata.version("mjswan")
+    except importlib.metadata.PackageNotFoundError:
+        version = "unknown"
+
+    print(f"app dir : {app_dir}")
+    print(f"files   : {len(regular_files)}")
+    print(f"size    : {size_str}")
+    print(f"mjswan  : {version}")
+
+
 def mjswan_cli() -> None:
     """Unified mjswan command-line interface."""
+    import importlib.metadata
+
+    try:
+        version = importlib.metadata.version("mjswan")
+    except importlib.metadata.PackageNotFoundError:
+        version = "unknown"
+
     parser = argparse.ArgumentParser(prog="mjswan", description="mjswan CLI")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_serve = sub.add_parser("serve", help="Serve a pre-built app directory locally")
@@ -123,7 +159,15 @@ def mjswan_cli() -> None:
     p_gh = sub.add_parser("gh-pages", help="Deploy app directory to GitHub Pages")
     p_gh.add_argument("path", nargs="?", help="Path to app directory (default: ./dist)")
 
+    p_info = sub.add_parser("info", help="Show information about an app directory")
+    p_info.add_argument(
+        "path", nargs="?", help="Path to app directory (default: ./dist)"
+    )
+
     args = parser.parse_args()
-    {"serve": _cmd_serve, "cf-pages": _cmd_cf_pages, "gh-pages": _cmd_gh_pages}[
-        args.command
-    ](args)
+    {
+        "serve": _cmd_serve,
+        "cf-pages": _cmd_cf_pages,
+        "gh-pages": _cmd_gh_pages,
+        "info": _cmd_info,
+    }[args.command](args)
