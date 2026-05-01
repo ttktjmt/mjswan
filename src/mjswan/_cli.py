@@ -1,5 +1,7 @@
 """CLI entry points for mjswan scripts."""
 
+import argparse
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -45,3 +47,83 @@ def serve() -> None:
 
     app = mjswanApp(Path(sys.argv[1]).resolve())
     app.launch()
+
+
+# ---------------------------------------------------------------------------
+# mjswan unified CLI
+# ---------------------------------------------------------------------------
+
+
+def _resolve_app_dir(path: str | None) -> Path:
+    if path is not None:
+        return Path(path).resolve()
+    dist = Path.cwd() / "dist"
+    if not dist.exists():
+        print(f"Error: dist directory not found at {dist}", file=sys.stderr)
+        sys.exit(1)
+    return dist
+
+
+def _cmd_serve(args: argparse.Namespace) -> None:
+    from mjswan.app import mjswanApp
+
+    mjswanApp(_resolve_app_dir(args.path)).launch()
+
+
+def _cmd_cf_pages(args: argparse.Namespace) -> None:
+    app_dir = _resolve_app_dir(args.path)
+    name: str = args.name or app_dir.parent.name
+    wrangler = shutil.which("wrangler")
+    if wrangler:
+        cmd = [wrangler, "pages", "deploy", str(app_dir), "--project-name", name]
+    else:
+        npx = shutil.which("npx")
+        if not npx:
+            print(
+                "Error: wrangler or npx not found. Install with: npm install -g wrangler",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        cmd = [npx, "wrangler", "pages", "deploy", str(app_dir), "--project-name", name]
+    result = subprocess.run(cmd, check=False)
+    sys.exit(result.returncode)
+
+
+def _cmd_gh_pages(args: argparse.Namespace) -> None:
+    app_dir = _resolve_app_dir(args.path)
+    ghp = shutil.which("ghp-import")
+    if not ghp:
+        print(
+            "Error: ghp-import not found. Install with: pip install ghp-import",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    result = subprocess.run([ghp, "-p", "-f", str(app_dir)], check=False)
+    sys.exit(result.returncode)
+
+
+def mjswan_cli() -> None:
+    """Unified mjswan command-line interface."""
+    parser = argparse.ArgumentParser(prog="mjswan", description="mjswan CLI")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_serve = sub.add_parser("serve", help="Serve a pre-built app directory locally")
+    p_serve.add_argument(
+        "path", nargs="?", help="Path to app directory (default: ./dist)"
+    )
+
+    p_cf = sub.add_parser("cf-pages", help="Deploy app directory to Cloudflare Pages")
+    p_cf.add_argument("path", nargs="?", help="Path to app directory (default: ./dist)")
+    p_cf.add_argument(
+        "--name",
+        "-n",
+        help="Cloudflare Pages project name (default: parent directory name)",
+    )
+
+    p_gh = sub.add_parser("gh-pages", help="Deploy app directory to GitHub Pages")
+    p_gh.add_argument("path", nargs="?", help="Path to app directory (default: ./dist)")
+
+    args = parser.parse_args()
+    {"serve": _cmd_serve, "cf-pages": _cmd_cf_pages, "gh-pages": _cmd_gh_pages}[
+        args.command
+    ](args)

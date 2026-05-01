@@ -76,6 +76,7 @@ examples = [
 "GitHub" = "https://github.com/ttktjmt/mjswan"
 
 [project.scripts]
+mjswan = "mjswan._cli:mjswan_cli"
 main = "mjswan._cli:main"
 simple = "mjswan._cli:simple"
 mjlab = "mjswan._cli:mjlab"
