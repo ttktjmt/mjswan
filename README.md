@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://ttktjmt.github.io/mjswan/"><img src="assets/demo.gif" width="70%"/></a>
+  <a href="https://ttktjmt.github.io/mjswan/"><img src="https://github.com/ttktjmt/mjswan/raw/main/assets/demo.gif" width="70%"/></a>
 </p>
 
 <p align="center">
