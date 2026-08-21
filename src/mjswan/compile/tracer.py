@@ -725,19 +725,46 @@ _WRITE_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 
+class WriteCaptures(dict):
+    """``kind`` → written tensors, plus the entity each write was made on.
+
+    A term names its target however it likes — mjlab's own convention is an
+    ``asset_cfg`` param, but a task is free to take a plain ``ball_name`` — so the
+    entity is recorded from the write itself rather than guessed from the params.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.entities: dict[str, str] = {}
+
+
 class _WriteCaptureMixin:
     """Records ``write_*_to_sim`` calls into ``self._captures`` (kind → tensors)."""
+
+    def _capture(self, kind: str, values: tuple[Any, ...]) -> None:
+        self._captures[kind] = values
+        entities = getattr(self._captures, "entities", None)
+        name = getattr(self, "_name", None)
+        if entities is None or name is None:
+            return
+        previous = entities.get(kind)
+        if previous is not None and previous != name:
+            raise ValueError(
+                f"Term wrote {kind!r} on both {previous!r} and {name!r}; the browser "
+                "applies one write per kind, so it would land on one of them only."
+            )
+        entities[kind] = name
 
     def write_joint_state_to_sim(
         self, position, velocity, joint_ids=None, env_ids=None
     ):
-        self._captures["joint_state"] = (position, velocity)
+        self._capture("joint_state", (position, velocity))
 
     def write_root_link_pose_to_sim(self, pose, env_ids=None):
-        self._captures["root_pose"] = (pose,)
+        self._capture("root_pose", (pose,))
 
     def write_root_link_velocity_to_sim(self, velocity, env_ids=None):
-        self._captures["root_velocity"] = (velocity,)
+        self._capture("root_velocity", (velocity,))
 
 
 def _flatten_captures(
@@ -918,7 +945,7 @@ class _EventModule(nn.Module):
         served.update(_const_values(self, self._const_buffers))
         for (entity, field_name), tensor in zip(self._dynamic_keys, dynamic):
             served[("data", entity, field_name)] = tensor
-        captures: dict[str, tuple[torch.Tensor, ...]] = {}
+        captures = WriteCaptures()
         env = _EventReplayEnv(served, captures, real_env=self._real_env)
         with ReplayRng(self._func, rand):
             self._func(env, None, **self._params)
@@ -997,7 +1024,7 @@ def trace_event_term(
     """
     # 1. Discovery on the live env: record draws + reads + written values.
     log: list[tuple[TaggedKey, Any]] = []
-    captures: dict[str, tuple[torch.Tensor, ...]] = {}
+    captures = WriteCaptures()
     proxy = _EventCaptureEnv(env, log, captures)
     with DrawRecorder(func) as rec:
         func(proxy, None, **params)
@@ -1036,12 +1063,14 @@ def trace_event_term(
         opset=opset,
     )
 
+    # The write itself says which entity it landed on; `asset_cfg` is the fallback for a
+    # term whose write the proxies did not attribute.
     asset_cfg = params.get("asset_cfg")
-    entity = getattr(asset_cfg, "name", None)
+    fallback_entity = getattr(asset_cfg, "name", None)
     write_targets = [
         {
             "kind": kind,
-            "entity": entity,
+            "entity": captures.entities.get(kind, fallback_entity),
             "fields": list(_WRITE_FIELDS[kind]),
             **(
                 {"joint_ids": _static_ids(getattr(asset_cfg, "joint_ids", None))}

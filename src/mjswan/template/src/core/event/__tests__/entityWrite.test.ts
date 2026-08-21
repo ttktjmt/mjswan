@@ -8,7 +8,12 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { applyEntityWrite, applyEntityWrites, findFreeJoint } from '../entityWrite';
+import {
+  applyEntityWrite,
+  applyEntityWrites,
+  findEntityFreeJoint,
+  findFreeJoint,
+} from '../entityWrite';
 import type { WriteTarget } from '../entityWrite';
 
 type MjModel = import('mujoco').MjModel;
@@ -42,6 +47,46 @@ function fakeModel(nHinge: number, withFreeJoint = true): MjModel {
     jnt_dofadr: Int32Array.from(dofadr),
     names: new Uint8Array(0).buffer,
     name_jntadr: Int32Array.from(jntType.map(() => 0)),
+    _nq: q,
+    _nv: d,
+  } as unknown as MjModel;
+}
+
+/**
+ * A robot (free joint + `nHinge` hinges) followed by a free-floating ball, named as
+ * mjlab prefixes them: `robot/pelvis`, `ball/ball`.
+ */
+function fakeSceneModel(nHinge = 2): MjModel {
+  const jntType = [0, ...Array.from({ length: nHinge }, () => 3), 0];
+  const qposadr: number[] = [];
+  const dofadr: number[] = [];
+  let q = 0;
+  let d = 0;
+  for (const type of jntType) {
+    qposadr.push(q);
+    dofadr.push(d);
+    q += type === 0 ? 7 : 1;
+    d += type === 0 ? 6 : 1;
+  }
+  // One body per joint, plus the world body at index 0.
+  const bodyNames = ['world', 'robot/pelvis', ...Array.from({ length: nHinge }, (_, i) => `robot/link${i}`), 'ball/ball'];
+  const encoder = new TextEncoder();
+  const blob: number[] = [];
+  const bodyAdr: number[] = [];
+  for (const name of bodyNames) {
+    bodyAdr.push(blob.length);
+    blob.push(...encoder.encode(name), 0);
+  }
+  return {
+    njnt: jntType.length,
+    nbody: bodyNames.length,
+    jnt_type: Int32Array.from(jntType),
+    jnt_qposadr: Int32Array.from(qposadr),
+    jnt_dofadr: Int32Array.from(dofadr),
+    jnt_bodyid: Int32Array.from(jntType.map((_, j) => j + 1)),
+    names: Uint8Array.from(blob).buffer,
+    name_jntadr: Int32Array.from(jntType.map(() => 0)),
+    name_bodyadr: Int32Array.from(bodyAdr),
     _nq: q,
     _nv: d,
   } as unknown as MjModel;
@@ -206,5 +251,55 @@ describe('applyEntityWrites', () => {
     expect(applied).toBe(2);
     expect(data.qpos[0]).toBeCloseTo(0.4, 6);
     expect(data.qpos[3]).toBeCloseTo(1, 6);
+  });
+});
+
+describe('findEntityFreeJoint', () => {
+  it('finds the named entity\'s own free joint, not the first one', () => {
+    const model = fakeSceneModel();
+    expect(findEntityFreeJoint(model, 'robot')).toBe(0);
+    expect(findEntityFreeJoint(model, 'ball')).toBe(3);
+  });
+
+  it('falls back to the first free joint without a name, or with an unknown one', () => {
+    const model = fakeSceneModel();
+    expect(findEntityFreeJoint(model, null)).toBe(0);
+    expect(findEntityFreeJoint(model, 'nobody')).toBe(0);
+  });
+
+  it('falls back for a single-entity scene, whose names carry no prefix', () => {
+    expect(findEntityFreeJoint(fakeModel(2), 'robot')).toBe(0);
+  });
+});
+
+describe('applyEntityWrite: a second entity', () => {
+  // A thrown ball is the case: the event writes the ball's root, and landing it on the
+  // robot's instead launches the robot across the scene while the ball never moves.
+  it('writes the pose and velocity at the named entity\'s address', () => {
+    const model = fakeSceneModel();
+    const data = fakeData(model);
+    const applied = applyEntityWrites(
+      model,
+      data,
+      [
+        { kind: 'root_pose', entity: 'ball', fields: ['pose'] },
+        { kind: 'root_velocity', entity: 'ball', fields: ['velocity'] },
+      ],
+      {
+        root_pose__pose: new Float32Array([2, 0.5, 1.8, 1, 0, 0, 0]),
+        root_velocity__velocity: new Float32Array([-4, -1, 0, 0, 0, 0]),
+      },
+    );
+    expect(applied).toBe(2);
+    // The ball's free joint starts after the robot's 7 qpos + 2 hinges.
+    expect(Array.from(data.qpos.slice(9, 16))).toEqual(
+      [2, 0.5, 1.8, 1, 0, 0, 0].map(v => expect.closeTo(v, 6)),
+    );
+    expect(Array.from(data.qvel.slice(8, 14))).toEqual(
+      [-4, -1, 0, 0, 0, 0].map(v => expect.closeTo(v, 6)),
+    );
+    // The robot stayed where it was.
+    expect(Array.from(data.qpos.slice(0, 7))).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect(Array.from(data.qvel.slice(0, 6))).toEqual([0, 0, 0, 0, 0, 0]);
   });
 });

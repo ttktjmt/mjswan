@@ -130,6 +130,15 @@ All kept as aliases via `_compat.py`, removed in 0.9:
   place — on the very object the task's live env config holds, leaving mjlab unable to
   resolve them when the tracing env was built, several frames from the cause. An
   unrecognized term is now copied rather than shared.
+- An event's write now lands on the entity it was made on. The write target's entity was
+  read off an `asset_cfg` param, which mjlab's own terms carry but a task's term need not
+  — a thrown ball's launcher takes a plain `ball_name` — so it serialized as `null`, and
+  the runtime then wrote every root pose to the model's *first* free joint. In a
+  two-entity scene (a robot and a ball) that launched the robot across the floor while
+  the ball never moved. The tracer records the entity from the write itself, `asset_cfg`
+  stays the fallback, and the runtime resolves a named entity's own free joint through
+  its body prefix. Two entities writing the same kind in one term is now an error rather
+  than a silent drop.
 - `run_parity` no longer feeds a graph inputs it does not declare, matching the runtime.
   A read the body only *indexes* with — a tracking command's `time_steps` — is recorded
   as a slot but folded in as a constant, so the export prunes it and ORT refused the
