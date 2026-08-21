@@ -727,7 +727,7 @@ class TestWriteTargetEntity:
         )
 
     def test_the_write_names_the_entity_it_was_made_on(self):
-        import torch
+        torch = pytest.importorskip("torch")
 
         def throw(env, env_ids, ball_name="ball"):
             ball = env.scene[ball_name]
@@ -742,7 +742,8 @@ class TestWriteTargetEntity:
 
     def test_an_asset_cfg_still_names_it(self):
         """mjlab's own convention keeps working, and stays the fallback."""
-        import torch
+        torch = pytest.importorskip("torch")
+        pytest.importorskip("mjlab")
         from mjlab.managers.scene_entity_config import SceneEntityCfg
 
         def reset(env, env_ids, asset_cfg=None):
@@ -755,7 +756,7 @@ class TestWriteTargetEntity:
 
     def test_two_entities_writing_one_kind_is_refused(self):
         """One write per kind reaches the browser, so silently dropping one is worse."""
-        import torch
+        torch = pytest.importorskip("torch")
 
         def throw_both(env, env_ids):
             for name in ("ball", "robot"):
