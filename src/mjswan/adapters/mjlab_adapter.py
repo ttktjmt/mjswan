@@ -58,9 +58,17 @@ from ..managers.termination_manager import (
 
 
 def _is_from_mjlab(obj: Any) -> bool:
-    """Check whether *obj*'s class originates from the ``mjlab`` package."""
-    module = getattr(type(obj), "__module__", "") or ""
-    return module.startswith("mjlab")
+    """Check whether *obj*'s class derives from the ``mjlab`` package.
+
+    The whole MRO, not just the class: a task is free to subclass an mjlab config to
+    add a field of its own, and such a subclass reports its *own* module. Missing it
+    would pass the config through unadapted — mjlab term objects reaching the
+    serializer, where they fail on the first mjswan-only field.
+    """
+    return any(
+        (getattr(klass, "__module__", "") or "").startswith("mjlab")
+        for klass in type(obj).__mro__
+    )
 
 
 # --- Observation adaptation ---
@@ -122,8 +130,21 @@ def _sanitize_obs_params(params: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _mjlab_history_steps(frames: int) -> tuple[int, ...]:
+    """mjlab's dense stack, as the look-back offsets that reproduce its order.
+
+    mjlab flattens a term's ``CircularBuffer`` chronologically — ``[x_{t-n+1} … x_t]``,
+    oldest frame first — while a bare ``history_length`` counts outward from the newest
+    frame. Naming the offsets pins mjlab's order for a traced task without moving
+    mjswan's own default.
+    """
+    return tuple(range(frames - 1, -1, -1))
+
+
 def _adapt_obs_term(
-    term: Any, term_name: str | None = None
+    term: Any,
+    term_name: str | None = None,
+    group_history_length: int | None = None,
 ) -> MjswanObservationTermCfg:
     """Convert a single mjlab ``ObservationTermCfg`` to mjswan.
 
@@ -138,26 +159,34 @@ def _adapt_obs_term(
         if isinstance(func, ObservationBinding)
         else raw_params
     )
+    # The group level overrides the term's, as mjlab's own `ObservationManager` does.
+    frames = int(group_history_length or getattr(term, "history_length", 0) or 0)
     return MjswanObservationTermCfg(
         func=func,
         params=params,
         scale=getattr(term, "scale", None),
         clip=getattr(term, "clip", None),
-        history_length=getattr(term, "history_length", 0) or 0,
+        history_steps=_mjlab_history_steps(frames) if frames > 1 else None,
     )
 
 
 def _adapt_obs_group(group: Any) -> MjswanObservationGroupCfg:
-    """Convert a single mjlab ``ObservationGroupCfg`` to mjswan."""
+    """Convert a single mjlab ``ObservationGroupCfg`` to mjswan.
+
+    Any history the group declares is resolved into its terms' ``history_steps``, so the
+    adapted group carries no count of its own — mjlab stacks per term anyway, and the
+    offsets already say which frames and in which order.
+    """
     raw_terms = getattr(group, "terms", None) or {}
+    group_history = getattr(group, "history_length", None)
     terms = {
-        name: _adapt_obs_term(cfg, term_name=name) for name, cfg in raw_terms.items()
+        name: _adapt_obs_term(cfg, term_name=name, group_history_length=group_history)
+        for name, cfg in raw_terms.items()
     }
     return MjswanObservationGroupCfg(
         terms=terms,
         concatenate_terms=getattr(group, "concatenate_terms", True),
         enable_corruption=getattr(group, "enable_corruption", False),
-        history_length=getattr(group, "history_length", None),
     )
 
 

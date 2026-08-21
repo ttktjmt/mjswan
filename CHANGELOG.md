@@ -130,6 +130,22 @@ All kept as aliases via `_compat.py`, removed in 0.9:
   place — on the very object the task's live env config holds, leaving mjlab unable to
   resolve them when the tracing env was built, several frames from the cause. An
   unrecognized term is now copied rather than shared.
+- The observation and termination adapters convert a config wherever its class lives,
+  as the command and action adapters now do. `_is_from_mjlab` read the class's own
+  module, so a task's *subclass* of an mjlab `ObservationGroupCfg` — how a project adds
+  a field mjlab has no notion of — passed through unadapted, carrying mjlab term objects
+  into the serializer, which failed on the first mjswan-only field it read
+  (`AttributeError: 'ObservationTermCfg' object has no attribute 'history_steps'`). The
+  whole MRO is consulted now, not the leaf class.
+- A traced mjlab task's observation history stacks in mjlab's order. mjlab flattens a
+  term's `CircularBuffer` chronologically — `[x_{t-3} … x_t]`, oldest frame first — while
+  a bare `history_length` counts back from the newest, so every mjlab task carrying
+  per-term or group history handed its policy a correct-width observation with time
+  running backwards. The adapter now resolves an mjlab count into the explicit
+  `history_steps` that reproduce its order (`(n-1, …, 0)`), so mjswan's own
+  `history_length` keeps its newest-first meaning for hand-written configs. Neither the
+  parity harness nor a build error could have caught this: parity compares term bodies,
+  and history is orchestration around them.
 - `run_parity` no longer feeds a graph inputs it does not declare, matching the runtime.
   A read the body only *indexes* with — a tracking command's `time_steps` — is recorded
   as a slot but folded in as a constant, so the export prunes it and ORT refused the

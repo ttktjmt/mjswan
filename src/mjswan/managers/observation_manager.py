@@ -70,16 +70,22 @@ class ObservationTermCfg:
     """(min, max) clipping range applied after scaling."""
 
     history_length: int = 0
-    """Number of past frames to stack. 0 = current only (no history)."""
+    """Number of past frames to stack, newest first (``[x_t, x_{t-1}, …]``).
+    0 = current only (no history).
+
+    mjlab stacks the same frames in the opposite order — its buffer flattens
+    chronologically — so a traced mjlab task arrives with ``history_steps`` spelling
+    that order out, and never with a bare count."""
 
     history_steps: tuple[int, ...] | None = None
-    """Sparse look-back offsets to stack, instead of every frame.
+    """Look-back offsets to stack, in the order the policy reads them, instead of a
+    count of frames.
 
-    mjlab only counts frames (``history_length=n`` → offsets ``0..n-1``), but a
-    policy can be trained on a *sparse* window — e.g. ``(0, 1, 2, 4, 8, 16)``, which
-    reaches 17 frames back while contributing only 6. Naming the offsets keeps the
-    term's width at ``len(history_steps)`` frames; ``history_length`` would give 17.
-    Takes precedence over ``history_length`` when both are set."""
+    Two things a count cannot say. A *sparse* window — e.g. ``(0, 1, 2, 4, 8, 16)`` —
+    reaches 17 frames back while contributing only 6, keeping the term's width at
+    ``len(history_steps)`` where ``history_length`` would give 17. And an *order*:
+    ``(3, 2, 1, 0)`` is mjlab's oldest-first stack of four frames, the reverse of
+    ``history_length=4``. Takes precedence over ``history_length`` when both are set."""
 
     history_interleaved: bool = False
     """Isaac-style joint-major history layout: ``[a0_t, a0_t-1, ..., a1_t, ...]``

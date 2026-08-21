@@ -177,6 +177,12 @@ class TestAdaptObservations:
         assert term.params == {"world_frame": True}
 
     def test_mjlab_obs_scale_and_history(self):
+        """mjlab's dense stack arrives as its offsets: oldest frame first.
+
+        mjlab flattens the term's buffer chronologically, so a bare `history_length=3`
+        — which mjswan reads newest-first — would hand the policy its history reversed:
+        the same width, the same numbers, time running backwards.
+        """
         mjlab_func = _make_mjlab_obs_func("joint_pos_rel")
         mjlab_term = FakeMjlabObsTermCfg(func=mjlab_func, scale=0.5, history_length=3)
         mjlab_group = FakeMjlabObsGroupCfg(terms={"jp": mjlab_term})
@@ -185,7 +191,66 @@ class TestAdaptObservations:
         assert result is not None
         term = result["policy"].terms["jp"]
         assert term.scale == 0.5
-        assert term.history_length == 3
+        assert term.history_steps == (2, 1, 0)
+
+    def test_mjlab_group_history_reaches_every_term(self):
+        """A group-level count overrides the terms', as mjlab's manager does — and the
+        adapted group keeps no count of its own, so nothing can apply it twice."""
+        mjlab_group = FakeMjlabObsGroupCfg(
+            terms={
+                "jp": FakeMjlabObsTermCfg(func=_make_mjlab_obs_func("joint_pos_rel")),
+                "jv": FakeMjlabObsTermCfg(
+                    func=_make_mjlab_obs_func("joint_vel_rel"), history_length=2
+                ),
+            },
+            history_length=4,
+        )
+
+        result = adapt_observations({"policy": mjlab_group})
+        assert result is not None
+        group = result["policy"]
+        assert group.history_length is None
+        assert group.terms["jp"].history_steps == (3, 2, 1, 0)
+        assert group.terms["jv"].history_steps == (3, 2, 1, 0)
+
+    def test_mjlab_single_frame_history_is_no_history(self):
+        """`history_length=1` is a one-frame buffer: the term's own width, unstacked."""
+        mjlab_group = FakeMjlabObsGroupCfg(
+            terms={
+                "jp": FakeMjlabObsTermCfg(func=_make_mjlab_obs_func("joint_pos_rel"))
+            },
+            history_length=1,
+        )
+
+        result = adapt_observations({"policy": mjlab_group})
+        assert result is not None
+        term = result["policy"].terms["jp"]
+        assert term.history_steps is None
+        assert term.history_length == 0
+
+    def test_mjlab_cfg_subclass_is_still_adapted(self):
+        """A task subclassing an mjlab config to add a field of its own is still mjlab.
+
+        The subclass reports its own module, so a check on the class alone passes it
+        through unadapted — and the mjlab *terms* inside it then reach the serializer,
+        which fails on the first mjswan-only field.
+        """
+
+        class TaskObsGroupCfg(FakeMjlabObsGroupCfg):  # defined here, not in mjlab
+            pass
+
+        group = TaskObsGroupCfg(
+            terms={
+                "jp": FakeMjlabObsTermCfg(func=_make_mjlab_obs_func("joint_pos_rel"))
+            },
+            history_length=4,
+        )
+
+        result = adapt_observations({"policy": group})
+        assert result is not None
+        assert isinstance(result["policy"], ObservationGroupCfg)
+        assert isinstance(result["policy"].terms["jp"], ObservationTermCfg)
+        assert result["policy"].terms["jp"].history_steps == (3, 2, 1, 0)
 
     def test_mjlab_asset_cfg_kept_intact_for_tracing(self):
         # A plain (non-Binding) func is traced to ONNX at build time (ADR 0005) via `func(env,
