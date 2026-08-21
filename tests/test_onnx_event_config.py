@@ -677,6 +677,96 @@ class TestFlatPatchSpawnTraces:
         )
 
 
+class TestWriteTargetEntity:
+    """Which entity a traced write lands on.
+
+    The browser resolves a root write through this name, and a scene with two floating
+    bodies — a robot and a thrown ball — has a free joint each. Reading the name off an
+    `asset_cfg` param only is what left it `null`: mjlab's own terms take that param, but
+    a task's term is free to take a plain `ball_name`, and then the write went to
+    whichever free joint came first in the model. The robot got launched; the ball never
+    moved.
+    """
+
+    @staticmethod
+    def _env():
+        torch = pytest.importorskip("torch")
+
+        class _Data:
+            def __init__(self):
+                self.root_link_pos_w = torch.zeros(1, 3)
+
+        class _Entity:
+            def __init__(self):
+                self.data = _Data()
+
+            def write_root_link_pose_to_sim(self, pose, env_ids=None): ...
+
+            def write_root_link_velocity_to_sim(self, velocity, env_ids=None): ...
+
+        class _Scene(dict):
+            def __getitem__(self, name):
+                return self.setdefault(name, _Entity())
+
+        class _Env:
+            def __init__(self):
+                self.scene = _Scene()
+                self.num_envs = 1
+                self.device = "cpu"
+
+        return _Env()
+
+    @staticmethod
+    def _trace(func, params):
+        pytest.importorskip("mjlab")
+        pytest.importorskip("torch")
+        from mjswan.compile import trace_event_term
+
+        return trace_event_term(
+            func, params, TestWriteTargetEntity._env(), name="throw", mode="interval"
+        )
+
+    def test_the_write_names_the_entity_it_was_made_on(self):
+        import torch
+
+        def throw(env, env_ids, ball_name="ball"):
+            ball = env.scene[ball_name]
+            ball.write_root_link_pose_to_sim(torch.zeros(1, 7), env_ids=env_ids)
+            ball.write_root_link_velocity_to_sim(torch.zeros(1, 6), env_ids=env_ids)
+
+        export = self._trace(throw, {"ball_name": "ball"})
+        assert [(w["kind"], w["entity"]) for w in export.write_targets] == [
+            ("root_pose", "ball"),
+            ("root_velocity", "ball"),
+        ]
+
+    def test_an_asset_cfg_still_names_it(self):
+        """mjlab's own convention keeps working, and stays the fallback."""
+        import torch
+        from mjlab.managers.scene_entity_config import SceneEntityCfg
+
+        def reset(env, env_ids, asset_cfg=None):
+            env.scene[asset_cfg.name].write_root_link_pose_to_sim(
+                torch.zeros(1, 7), env_ids=env_ids
+            )
+
+        export = self._trace(reset, {"asset_cfg": SceneEntityCfg("robot")})
+        assert [w["entity"] for w in export.write_targets] == ["robot"]
+
+    def test_two_entities_writing_one_kind_is_refused(self):
+        """One write per kind reaches the browser, so silently dropping one is worse."""
+        import torch
+
+        def throw_both(env, env_ids):
+            for name in ("ball", "robot"):
+                env.scene[name].write_root_link_pose_to_sim(
+                    torch.zeros(1, 7), env_ids=env_ids
+                )
+
+        with pytest.raises(ValueError, match="wrote 'root_pose' on both"):
+            self._trace(throw_both, {})
+
+
 class TestApplyTerrainSpawn:
     """`add_scene_mjlab` swaps mjlab's root-spawn reset once the terrain has patches."""
 
