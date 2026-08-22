@@ -2,9 +2,11 @@
  * `entity_write` apply primitive (ADR 0005 §3).
  *
  * Take a value an ONNX graph already computed and write it into mjData — the
- * graph owns the sampling, so this side only applies. The write kinds and the
- * `"<kind>__<field>"` output naming mirror the Python tracer's `_WRITE_FIELDS`, so
- * these tests double as the contract between the two sides.
+ * graph owns the sampling, so this side only applies. The write kinds, the output
+ * naming (`"<entity>__<kind>__<field>"`, or `"<kind>__<field>"` from a bundle built
+ * before a term could write two entities) and the world-frame velocity convention
+ * mirror the Python tracer's `_WRITE_FIELDS`, so these tests double as the contract
+ * between the two sides.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -53,11 +55,17 @@ function fakeModel(nHinge: number, withFreeJoint = true): MjModel {
 }
 
 /**
- * A robot (free joint + `nHinge` hinges) followed by a free-floating ball, named as
- * mjlab prefixes them: `robot/pelvis`, `ball/ball`.
+ * A robot (free joint + `nHinge` hinges) followed by a free-floating ball, with joints
+ * named as mjlab namespaces them — `robot/…`, `ball/…` — which is how it resolves an
+ * entity's own addresses.
  */
 function fakeSceneModel(nHinge = 2): MjModel {
   const jntType = [0, ...Array.from({ length: nHinge }, () => 3), 0];
+  const jntNames = [
+    'robot/floating_base_joint',
+    ...Array.from({ length: nHinge }, (_, i) => `robot/joint${i}`),
+    'ball/floating_base_joint',
+  ];
   const qposadr: number[] = [];
   const dofadr: number[] = [];
   let q = 0;
@@ -68,25 +76,20 @@ function fakeSceneModel(nHinge = 2): MjModel {
     q += type === 0 ? 7 : 1;
     d += type === 0 ? 6 : 1;
   }
-  // One body per joint, plus the world body at index 0.
-  const bodyNames = ['world', 'robot/pelvis', ...Array.from({ length: nHinge }, (_, i) => `robot/link${i}`), 'ball/ball'];
   const encoder = new TextEncoder();
   const blob: number[] = [];
-  const bodyAdr: number[] = [];
-  for (const name of bodyNames) {
-    bodyAdr.push(blob.length);
+  const jntAdr: number[] = [];
+  for (const name of jntNames) {
+    jntAdr.push(blob.length);
     blob.push(...encoder.encode(name), 0);
   }
   return {
     njnt: jntType.length,
-    nbody: bodyNames.length,
     jnt_type: Int32Array.from(jntType),
     jnt_qposadr: Int32Array.from(qposadr),
     jnt_dofadr: Int32Array.from(dofadr),
-    jnt_bodyid: Int32Array.from(jntType.map((_, j) => j + 1)),
     names: Uint8Array.from(blob).buffer,
-    name_jntadr: Int32Array.from(jntType.map(() => 0)),
-    name_bodyadr: Int32Array.from(bodyAdr),
+    name_jntadr: Int32Array.from(jntAdr),
     _nq: q,
     _nv: d,
   } as unknown as MjModel;
@@ -203,6 +206,7 @@ describe('applyEntityWrite: root pose / velocity', () => {
   it('writes the 6-vector velocity into the free joint qvel', () => {
     const model = fakeModel(1);
     const data = fakeData(model);
+    data.qpos.set([0, 0, 0, 1, 0, 0, 0], 0); // identity orientation
     const vel = new Float32Array([0.1, 0.2, 0.3, -0.1, -0.2, -0.3]);
     expect(
       applyEntityWrite(model, data, { kind: 'root_velocity', fields: ['velocity'] }, {
@@ -210,6 +214,45 @@ describe('applyEntityWrite: root pose / velocity', () => {
       }),
     ).toBe(true);
     for (let i = 0; i < 6; i++) expect(data.qvel[i]).toBeCloseTo(vel[i], 6);
+  });
+
+  it('rotates the angular half into the body frame, as mjlab does', () => {
+    // A free joint's qvel is world-frame linear + *body*-frame angular, but the term
+    // wrote both in the world frame. Skipping the rotation spins the body about the
+    // wrong axis for any orientation but identity.
+    const model = fakeModel(1);
+    const data = fakeData(model);
+    // 90 degrees about +z: (w, x, y, z) = (cos45, 0, 0, sin45).
+    const h = Math.SQRT1_2;
+    data.qpos.set([0, 0, 0, h, 0, 0, h], 0);
+    applyEntityWrite(model, data, { kind: 'root_velocity', fields: ['velocity'] }, {
+      root_velocity__velocity: new Float32Array([1, 0, 0, 2, 0, 0]),
+    });
+    // Linear stays world-frame; world +x angular reads as body -y after the inverse.
+    expect(Array.from(data.qvel.slice(0, 3))).toEqual([1, 0, 0].map(v => expect.closeTo(v, 6)));
+    expect(Array.from(data.qvel.slice(3, 6))).toEqual([0, -2, 0].map(v => expect.closeTo(v, 6)));
+  });
+
+  it('reads the orientation a pose written first left behind', () => {
+    // `write_root_state_to_sim` splits into pose then velocity, and mjlab reads the
+    // quaternion out of qpos — so the new pose is the frame, not the old one.
+    const model = fakeModel(1);
+    const data = fakeData(model);
+    const h = Math.SQRT1_2;
+    const applied = applyEntityWrites(
+      model,
+      data,
+      [
+        { kind: 'root_pose', entity: 'robot', fields: ['pose'] },
+        { kind: 'root_velocity', entity: 'robot', fields: ['velocity'] },
+      ],
+      {
+        root_pose__pose: new Float32Array([0, 0, 1, h, 0, 0, h]),
+        root_velocity__velocity: new Float32Array([0, 0, 0, 2, 0, 0]),
+      },
+    );
+    expect(applied).toBe(2);
+    expect(Array.from(data.qvel.slice(3, 6))).toEqual([0, -2, 0].map(v => expect.closeTo(v, 6)));
   });
 
   it('degrades (returns false) on a fixed-base model instead of throwing', () => {
@@ -261,14 +304,51 @@ describe('findEntityFreeJoint', () => {
     expect(findEntityFreeJoint(model, 'ball')).toBe(3);
   });
 
-  it('falls back to the first free joint without a name, or with an unknown one', () => {
-    const model = fakeSceneModel();
-    expect(findEntityFreeJoint(model, null)).toBe(0);
-    expect(findEntityFreeJoint(model, 'nobody')).toBe(0);
+  it('takes the first free joint when no entity is named', () => {
+    expect(findEntityFreeJoint(fakeSceneModel(), null)).toBe(0);
   });
 
-  it('falls back for a single-entity scene, whose names carry no prefix', () => {
+  it('owns nothing in a namespaced model that has no such entity', () => {
+    // Landing on the first free joint instead is how a thrown ball launches the robot,
+    // and mjlab would not get this far: `env.scene["nobody"]` raises.
+    expect(findEntityFreeJoint(fakeSceneModel(), 'nobody')).toBe(-1);
+  });
+
+  it('takes the one free joint of an unprefixed, single-entity scene', () => {
     expect(findEntityFreeJoint(fakeModel(2), 'robot')).toBe(0);
+  });
+});
+
+describe('applyEntityWrite: entity-prefixed outputs', () => {
+  it('reads each target\'s value through the outputs it declares', () => {
+    // Two entities, one kind: the values only tell them apart by name.
+    const model = fakeSceneModel();
+    const data = fakeData(model);
+    const applied = applyEntityWrites(
+      model,
+      data,
+      [
+        {
+          kind: 'root_pose',
+          entity: 'robot',
+          fields: ['pose'],
+          outputs: ['robot__root_pose__pose'],
+        },
+        {
+          kind: 'root_pose',
+          entity: 'ball',
+          fields: ['pose'],
+          outputs: ['ball__root_pose__pose'],
+        },
+      ],
+      {
+        robot__root_pose__pose: new Float32Array([0, 0, 0.8, 1, 0, 0, 0]),
+        ball__root_pose__pose: new Float32Array([2, 0.5, 1.8, 1, 0, 0, 0]),
+      },
+    );
+    expect(applied).toBe(2);
+    expect(data.qpos[2]).toBeCloseTo(0.8, 6);
+    expect(data.qpos[9]).toBeCloseTo(2, 6);
   });
 });
 

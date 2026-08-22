@@ -16,6 +16,7 @@ import torch
 from .rng import DrawRecorder
 from .tracer import (
     TermExport,
+    WriteCaptures,
     _EventCaptureEnv,
     _flatten_captures,
     read_slot,
@@ -247,7 +248,7 @@ def run_parity(
             )
             for _ in range(n_event_draws):
                 # Record a fresh reference invocation (real draws, no sim write).
-                captures: dict[str, tuple] = {}
+                captures: WriteCaptures = {}
                 proxy = _EventCaptureEnv(env, [], captures)
                 with DrawRecorder(func) as rec:
                     func(proxy, None, **params)

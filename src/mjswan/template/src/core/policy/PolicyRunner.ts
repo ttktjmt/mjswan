@@ -162,10 +162,10 @@ export class PolicyRunner {
           for (let i = 0; i < history.steps; i++) buffer.set(frame, i * frame.length);
           delete this.historyNeedsPrime[key];
         } else {
-          for (let i = buffer.length - 1; i >= frame.length; i--) {
-            buffer[i] = buffer[i - frame.length];
-          }
-          buffer.set(frame, 0);
+          // Shift the oldest frame out the front; the newest lands last, the order
+          // `history_length` and `HistoryObservation` use.
+          buffer.copyWithin(0, frame.length);
+          buffer.set(frame, buffer.length - frame.length);
         }
         // The buffer is frame-major either way; interleaving is an output layout.
         outputs[key] = history.interleaved

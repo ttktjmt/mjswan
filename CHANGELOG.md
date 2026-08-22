@@ -137,24 +137,50 @@ All kept as aliases via `_compat.py`, removed in 0.9:
   into the serializer, which failed on the first mjswan-only field it read
   (`AttributeError: 'ObservationTermCfg' object has no attribute 'history_steps'`). The
   whole MRO is consulted now, not the leaf class.
-- A traced mjlab task's observation history stacks in mjlab's order. mjlab flattens a
-  term's `CircularBuffer` chronologically — `[x_{t-3} … x_t]`, oldest frame first — while
-  a bare `history_length` counts back from the newest, so every mjlab task carrying
-  per-term or group history handed its policy a correct-width observation with time
-  running backwards. The adapter now resolves an mjlab count into the explicit
-  `history_steps` that reproduce its order (`(n-1, …, 0)`), so mjswan's own
-  `history_length` keeps its newest-first meaning for hand-written configs. Neither the
-  parity harness nor a build error could have caught this: parity compares term bodies,
-  and history is orchestration around them.
-- An event's write now lands on the entity it was made on. The write target's entity was
-  read off an `asset_cfg` param, which mjlab's own terms carry but a task's term need not
-  — a thrown ball's launcher takes a plain `ball_name` — so it serialized as `null`, and
-  the runtime then wrote every root pose to the model's *first* free joint. In a
-  two-entity scene (a robot and a ball) that launched the robot across the floor while
-  the ball never moved. The tracer records the entity from the write itself, `asset_cfg`
-  stays the fallback, and the runtime resolves a named entity's own free joint through
-  its body prefix. Two entities writing the same kind in one term is now an error rather
-  than a silent drop.
+- **`history_length` now stacks oldest frame first** — `[x_{t-n+1} … x_t]`, the order
+  mjlab's `CircularBuffer` flattens — where it counted back from the newest frame. Every
+  mjlab task carrying per-term or group history was handing its policy a correct-*width*
+  observation with time running backwards, and the two sides now mean one thing by a
+  count. **A hand-written config trained on the newest-first layout must name its offsets
+  to keep it:** `history_length=3` becomes `history_steps=(0, 1, 2)`. The bundled examples
+  are migrated; `history_steps` is unchanged and still takes precedence. Neither the
+  parity harness nor a build error could have caught the mismatch: parity compares term
+  bodies, and history is orchestration around them.
+- `PolicyRunner`'s group-level frame stack (the hand-authored `{components,
+  history_steps}` config shape) stacks oldest-first too, so one rule holds across both
+  history paths. `history_interleaved` follows the stack, so its layout is now
+  `[a0_{t-n+1}, …, a0_t, a1_…]`.
+- A group's `history_length` replaces its terms' whenever it is set — `0` included, which
+  switches history off for the group, as mjlab's `ObservationManager` does. An explicit
+  `0` used to read as "unset" and leave each term's own count standing.
+- An event's write now lands on the entity it was made on, and on each entity it was made
+  on. The write target's entity was read off an `asset_cfg` param, which mjlab's own terms
+  carry but a task's term need not — a thrown ball's launcher takes a plain `ball_name` —
+  so it serialized as `null`, and the runtime then wrote every root pose to the model's
+  *first* free joint. In a two-entity scene (a robot and a ball) that launched the robot
+  across the floor while the ball never moved. The tracer keys a capture by `(entity,
+  kind)`, as mjlab writes per entity, so one term may now write several; each target
+  names the graph outputs holding its values. `asset_cfg` stays the fallback for a write
+  the proxies could not attribute, and its `joint_ids` scope its own entity only.
+- The runtime resolves a named entity's free joint through its **joint** name prefix, the
+  same rule mjlab uses to resolve an entity's own addresses (and the one `entityJointIds`
+  already applied). A namespaced model with no such entity now writes nothing rather than
+  falling back to the first free joint — mjlab raises on the scene lookup, and the
+  fallback is how a thrown ball launches the robot. An unprefixed model is still a
+  single-entity scene, where the one free joint is the entity's.
+- A root velocity write rotates its angular half into the body frame, as mjlab's
+  `write_root_velocity` does. Both halves arrive world-frame, but a free joint's `qvel`
+  holds world-frame linear and *body*-frame angular velocity, so the value was spinning
+  the body about the wrong axis for any orientation but identity.
+- `write_root_state_to_sim` traces, split into the pose and velocity writes mjlab splits
+  it into, and a `write_*_to_sim` the tracer does *not* capture is refused instead of
+  forwarded — forwarding it mutated the live tracing env, leaving every term traced after
+  it reading a moved sim. A term walking `scene.entities` gets recording stand-ins for the
+  same reason.
+- mjlab's default `reset_scene_to_default` event no longer fails the build. It restores
+  every entity's default root and joint state, which is what the runtime's own reset
+  already does (`mj_resetData` to `qpos0`, or keyframe 0) before any `mode="reset"` event
+  runs, so it is emitted as a native no-op with that reason.
 - `run_parity` no longer feeds a graph inputs it does not declare, matching the runtime.
   A read the body only *indexes* with — a tracking command's `time_steps` — is recorded
   as a slot but folded in as a constant, so the export prunes it and ORT refused the

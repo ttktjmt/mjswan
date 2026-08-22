@@ -10,7 +10,7 @@ group carrying per-term history must not fuse: a fused graph emits one
 concatenation, which the runtime could only stack whole, giving step-major order
 where mjlab gives term-major.
 
-The runtime half of the contract (offset → frame, priming, layout) is pinned in
+The runtime half of the contract (offset → frame, order, priming, layout) is pinned in
 `core/observation/__tests__/HistoryObservation.test.ts`.
 """
 
@@ -68,6 +68,14 @@ def test_group_history_overrides_a_terms_own_length():
     assert _entry(_term(history_length=2), group_history=5)["history_length"] == 5
 
 
+def test_a_group_zero_switches_history_off():
+    """mjlab assigns the group's count whenever it is set, so an explicit 0 is an
+    instruction, not an absent value."""
+    entry = _entry(_term(history_length=4), group_history=0)
+    assert "history_length" not in entry
+    assert "history_offsets" not in entry
+
+
 def test_interleaved_only_ships_alongside_history():
     """It describes a stack's layout, so without a stack it says nothing."""
     assert "history_interleaved" not in _entry(_term(history_interleaved=True))
@@ -103,3 +111,8 @@ def test_only_a_stackless_group_fuses(term_cfg, fusable):
 def test_group_level_history_also_blocks_fusion():
     group = ObservationGroupCfg(terms={"a": _term()}, history_length=3)
     assert _group_is_fusable(group) is False
+
+
+def test_a_group_zero_lets_a_stacking_term_fuse():
+    group = ObservationGroupCfg(terms={"a": _term(history_length=4)}, history_length=0)
+    assert _group_is_fusable(group) is True

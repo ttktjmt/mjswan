@@ -131,9 +131,11 @@ def _apply_observation_pipeline(
         )
     if term_cfg.clip is not None:
         entry["clip"] = list(term_cfg.clip)
+    # A group count replaces the term's whenever it is set, `0` included, as mjlab's
+    # own `ObservationManager` does.
     history = (
         group_history_length
-        if (group_history_length or 0) > 0
+        if group_history_length is not None
         else term_cfg.history_length
     )
     if term_cfg.history_steps:
@@ -213,7 +215,9 @@ def _effective_history(group: ObservationGroupCfg, term_cfg: ObservationTermCfg)
     """
     if term_cfg.history_steps:
         return len(term_cfg.history_steps)
-    return int(group.history_length or term_cfg.history_length or 0)
+    if group.history_length is not None:
+        return int(group.history_length)
+    return int(term_cfg.history_length or 0)
 
 
 def _group_is_fusable(group: ObservationGroupCfg) -> bool:
@@ -784,6 +788,11 @@ _EVENTS_WITH_NOTHING_TO_WRITE: dict[str, str] = {
     "encoder_bias": (
         "it writes `Entity.data.encoder_bias`, which the runtime applies from the policy "
         "config's `encoder_bias` rather than from an event graph"
+    ),
+    "reset_scene_to_default": (
+        "it restores every entity's default root and joint state, which is what the "
+        "runtime's own reset already does (`mj_resetData` to `qpos0`, or keyframe 0) "
+        'before any `mode="reset"` event runs'
     ),
 }
 

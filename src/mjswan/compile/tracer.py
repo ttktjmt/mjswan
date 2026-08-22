@@ -725,35 +725,37 @@ _WRITE_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 
-class WriteCaptures(dict):
-    """``kind`` → written tensors, plus the entity each write was made on.
+#: A write is keyed by the entity it was made on as well as its kind: one term may
+#: write several entities — mjlab's own `reset_scene_to_default` writes every entity
+#: in the scene — and each needs its own outputs and its own target.
+WriteKey = tuple[str | None, str]
+WriteCaptures = dict[WriteKey, tuple[torch.Tensor, ...]]
 
-    A term names its target however it likes — mjlab's own convention is an
-    ``asset_cfg`` param, but a task is free to take a plain ``ball_name`` — so the
-    entity is recorded from the write itself rather than guessed from the params.
+
+def _write_output_name(key: WriteKey, field_name: str) -> str:
+    """Graph-output name for one written tensor.
+
+    Unprefixed when the write carries no entity, which is what a single-entity command
+    term records.
     """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.entities: dict[str, str] = {}
+    entity, kind = key
+    return f"{entity}__{kind}__{field_name}" if entity else f"{kind}__{field_name}"
 
 
 class _WriteCaptureMixin:
-    """Records ``write_*_to_sim`` calls into ``self._captures`` (kind → tensors)."""
+    """Records ``write_*_to_sim`` calls into ``self._captures``.
+
+    A term names its target however it likes — mjlab's own convention is an
+    ``asset_cfg`` param, but a task is free to take a plain ``ball_name`` — so the
+    entity comes from the write itself rather than from the params.
+    """
+
+    #: Entity this proxy stands for; None for a command term whose cfg names none.
+    _name: str | None
+    _captures: WriteCaptures
 
     def _capture(self, kind: str, values: tuple[Any, ...]) -> None:
-        self._captures[kind] = values
-        entities = getattr(self._captures, "entities", None)
-        name = getattr(self, "_name", None)
-        if entities is None or name is None:
-            return
-        previous = entities.get(kind)
-        if previous is not None and previous != name:
-            raise ValueError(
-                f"Term wrote {kind!r} on both {previous!r} and {name!r}; the browser "
-                "applies one write per kind, so it would land on one of them only."
-            )
-        entities[kind] = name
+        self._captures[(self._name, kind)] = values
 
     def write_joint_state_to_sim(
         self, position, velocity, joint_ids=None, env_ids=None
@@ -766,9 +768,14 @@ class _WriteCaptureMixin:
     def write_root_link_velocity_to_sim(self, velocity, env_ids=None):
         self._capture("root_velocity", (velocity,))
 
+    def write_root_state_to_sim(self, root_state, env_ids=None):
+        # mjlab's own split of a 13-wide root state into the two writes above.
+        self._capture("root_pose", (root_state[..., :7],))
+        self._capture("root_velocity", (root_state[..., 7:],))
+
 
 def _flatten_captures(
-    captures: dict[str, tuple[torch.Tensor, ...]],
+    captures: WriteCaptures,
 ) -> tuple[list[str], list[torch.Tensor]]:
     """Flatten a captures dict into (output_names, tensors).
 
@@ -777,9 +784,9 @@ def _flatten_captures(
     """
     names: list[str] = []
     tensors: list[torch.Tensor] = []
-    for kind, values in captures.items():
-        for field_name, tensor in zip(_WRITE_FIELDS[kind], values):
-            names.append(f"{kind}__{field_name}")
+    for key, values in captures.items():
+        for field_name, tensor in zip(_WRITE_FIELDS[key[1]], values):
+            names.append(_write_output_name(key, field_name))
             tensors.append(tensor)
     return names, tensors
 
@@ -809,6 +816,13 @@ class _EvRecEntity(_WriteCaptureMixin):
         object.__setattr__(self, "_captures", captures)
 
     def __getattr__(self, name: str) -> Any:
+        if name.startswith("write_") and name.endswith("_to_sim"):
+            # Forwarding it would mutate the live env mid-trace and capture nothing.
+            raise ValueError(
+                f"Term called {name}() on entity {self._name!r}, which the tracer does "
+                "not capture. Add it to `_WriteCaptureMixin` and `_WRITE_FIELDS` with a "
+                "runtime counterpart, or hand the term to the browser as a TS class."
+            )
         value = getattr(self._real, name)
         # Only tensors and control-flow scalars can be reproduced during replay.
         if isinstance(value, (torch.Tensor, bool, int, float)):
@@ -836,6 +850,14 @@ class _EvRecScene:
         return _EvRecEntity(self._real[name], name, self._log, self._captures)
 
     def __getattr__(self, name: str) -> Any:
+        if name == "entities":
+            # Recording stand-ins, not the live entities: a term that iterates the
+            # scene (mjlab's `reset_scene_to_default`) would otherwise write straight
+            # into the tracing env, leaving every later term traced against a moved sim.
+            return {
+                key: _EvRecEntity(real, key, self._log, self._captures)
+                for key, real in self._real.entities.items()
+            }
         value = getattr(self._real, name)
         if isinstance(value, (torch.Tensor, bool, int, float)):
             self._log.append((("scene", name), value))
@@ -885,14 +907,22 @@ class _EvReplayEntity(_WriteCaptureMixin):
 
 
 class _EvReplayScene:
-    def __init__(self, served, captures):
+    def __init__(self, served, captures, real_env: Any):
         self._served = served
         self._captures = captures
+        self._real_env = real_env
 
     def __getitem__(self, name: str) -> _EvReplayEntity:
         return _EvReplayEntity(name, self._served, self._captures)
 
     def __getattr__(self, name: str) -> Any:
+        if name == "entities":
+            # Which entities the scene holds is static structure, so it comes from the
+            # real env, as `num_envs` does — only their tensors are recorded slots.
+            return {
+                key: _EvReplayEntity(key, self._served, self._captures)
+                for key in self._real_env.scene.entities
+            }
         try:
             return self._served[("scene", name)]
         except KeyError:
@@ -903,7 +933,7 @@ class _EvReplayScene:
 
 class _EventReplayEnv:
     def __init__(self, served, captures, *, real_env: Any):
-        self.scene = _EvReplayScene(served, captures)
+        self.scene = _EvReplayScene(served, captures, real_env)
         self._real_env = real_env
 
     def __getattr__(self, name: str) -> Any:
@@ -945,7 +975,7 @@ class _EventModule(nn.Module):
         served.update(_const_values(self, self._const_buffers))
         for (entity, field_name), tensor in zip(self._dynamic_keys, dynamic):
             served[("data", entity, field_name)] = tensor
-        captures = WriteCaptures()
+        captures: WriteCaptures = {}
         env = _EventReplayEnv(served, captures, real_env=self._real_env)
         with ReplayRng(self._func, rand):
             self._func(env, None, **self._params)
@@ -1024,16 +1054,16 @@ def trace_event_term(
     """
     # 1. Discovery on the live env: record draws + reads + written values.
     log: list[tuple[TaggedKey, Any]] = []
-    captures = WriteCaptures()
+    captures: WriteCaptures = {}
     proxy = _EventCaptureEnv(env, log, captures)
     with DrawRecorder(func) as rec:
         func(proxy, None, **params)
 
     if not captures:
         raise ValueError(
-            f"Event term {name!r} wrote nothing traceable "
-            "(no write_joint_state/root_pose/root_velocity_to_sim call); handle "
-            "it natively or extend _WRITE_FIELDS."
+            f"Event term {name!r} wrote nothing traceable (no write_joint_state / "
+            "write_root_state / write_root_link_pose / write_root_link_velocity call); "
+            "handle it natively or extend _WRITE_FIELDS."
         )
     output_names, ref_tensors = _flatten_captures(captures)
     ref_rand = rec.rand_vector
@@ -1066,20 +1096,22 @@ def trace_event_term(
     # The write itself says which entity it landed on; `asset_cfg` is the fallback for a
     # term whose write the proxies did not attribute.
     asset_cfg = params.get("asset_cfg")
-    fallback_entity = getattr(asset_cfg, "name", None)
-    write_targets = [
-        {
+    asset_name = getattr(asset_cfg, "name", None)
+    write_targets = []
+    for key in captures:
+        entity, kind = key
+        target: dict[str, Any] = {
             "kind": kind,
-            "entity": captures.entities.get(kind, fallback_entity),
+            "entity": entity or asset_name,
             "fields": list(_WRITE_FIELDS[kind]),
-            **(
-                {"joint_ids": _static_ids(getattr(asset_cfg, "joint_ids", None))}
-                if kind == "joint_state"
-                else {}
-            ),
+            "outputs": [_write_output_name(key, f) for f in _WRITE_FIELDS[kind]],
         }
-        for kind in captures
-    ]
+        # `asset_cfg`'s ids scope its own entity; any other one gets all of its joints.
+        joint_ids = _static_ids(getattr(asset_cfg, "joint_ids", None))
+        scoped = entity is None or entity == asset_name
+        if kind == "joint_state" and scoped and joint_ids is not None:
+            target["joint_ids"] = joint_ids
+        write_targets.append(target)
 
     return EventExport(
         name=name,
@@ -1142,7 +1174,7 @@ class _RecordCommand:
         self._attrs = entity_attr_names
         self._entity_name = entity_name
         self.log: list[tuple[TaggedKey, Any]] = []
-        self.captures: dict[str, tuple[torch.Tensor, ...]] = {}
+        self.captures: WriteCaptures = {}
 
     def __enter__(self) -> _RecordCommand:
         self._orig = {a: getattr(self.term, a) for a in self._attrs}
@@ -1234,7 +1266,7 @@ class _CommandModule(nn.Module):
         for (entity, field_name), tensor in zip(self._dynamic_keys, dynamic):
             served[("data", entity, field_name)] = tensor
 
-        captures: dict[str, tuple[torch.Tensor, ...]] = {}
+        captures: WriteCaptures = {}
         orig = {a: getattr(self._term, a) for a in self._entity_attr_names}
         orig_env = getattr(self._term, "_env", None)
         for a in self._entity_attr_names:
@@ -1325,8 +1357,15 @@ def trace_command_term(
 
     output_write_names, _ = _flatten_captures(captures)
     write_targets = [
-        {"kind": kind, "entity": entity_name, "fields": list(_WRITE_FIELDS[kind])}
-        for kind in captures
+        {
+            "kind": kind,
+            "entity": entity or entity_name,
+            "fields": list(_WRITE_FIELDS[kind]),
+            "outputs": [
+                _write_output_name((entity, kind), f) for f in _WRITE_FIELDS[kind]
+            ],
+        }
+        for entity, kind in captures
     ]
 
     # 2. Classify reads: dynamic data inputs vs baked tensor/scalar constants.

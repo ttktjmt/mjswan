@@ -2,9 +2,9 @@
  * `PolicyRunner`'s group-level frame stack: the `{components, history_steps,
  * interleaved}` config shape a hand-authored `policy.json` can declare.
  *
- * Both layouts are the same length, so getting `interleaved` wrong reaches the policy
- * as reordered numbers rather than as a size error — hence a test per layout, and one
- * pinning the group stack against the per-term one.
+ * Both layouts are the same length, so getting `interleaved` — or the direction the
+ * stack grows in — wrong reaches the policy as reordered numbers rather than as a size
+ * error, hence a test per layout and one pinning the size.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -53,18 +53,18 @@ async function collect(instance: PolicyRunner): Promise<number[]> {
 }
 
 describe('PolicyRunner group history', () => {
-  it('stacks frame-major by default', async () => {
+  it('stacks frame-major, oldest first, as a per-term stack does', async () => {
     const instance = await runner(false);
     // Primed: every slot holds frame 1.
     expect(await collect(instance)).toEqual([1, 10, 1, 10]);
-    expect(await collect(instance)).toEqual([2, 20, 1, 10]);
+    expect(await collect(instance)).toEqual([1, 10, 2, 20]);
   });
 
   it('lays the stack out element-major when interleaved', async () => {
     const instance = await runner(true);
     expect(await collect(instance)).toEqual([1, 1, 10, 10]);
-    // [e0_t, e0_t-1, e1_t, e1_t-1] rather than [e0_t, e1_t, e0_t-1, e1_t-1].
-    expect(await collect(instance)).toEqual([2, 1, 20, 10]);
+    // [e0_t-1, e0_t, e1_t-1, e1_t] rather than [e0_t-1, e1_t-1, e0_t, e1_t].
+    expect(await collect(instance)).toEqual([1, 2, 10, 20]);
   });
 
   it('keeps the group size the same either way', async () => {

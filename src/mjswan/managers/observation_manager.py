@@ -70,27 +70,23 @@ class ObservationTermCfg:
     """(min, max) clipping range applied after scaling."""
 
     history_length: int = 0
-    """Number of past frames to stack, newest first (``[x_t, x_{t-1}, …]``).
-    0 = current only (no history).
-
-    mjlab stacks the same frames in the opposite order — its buffer flattens
-    chronologically — so a traced mjlab task arrives with ``history_steps`` spelling
-    that order out, and never with a bare count."""
+    """Number of past frames to stack, oldest first — ``[x_{t-n+1} … x_t]``, as
+    mjlab's chronological history buffer flattens them. 0 = current only."""
 
     history_steps: tuple[int, ...] | None = None
     """Look-back offsets to stack, in the order the policy reads them, instead of a
     count of frames.
 
-    Two things a count cannot say. A *sparse* window — e.g. ``(0, 1, 2, 4, 8, 16)`` —
+    Two things a count cannot say. A *sparse* window — e.g. ``(16, 8, 4, 2, 1, 0)`` —
     reaches 17 frames back while contributing only 6, keeping the term's width at
-    ``len(history_steps)`` where ``history_length`` would give 17. And an *order*:
-    ``(3, 2, 1, 0)`` is mjlab's oldest-first stack of four frames, the reverse of
+    ``len(history_steps)`` where ``history_length`` would give 17. And a different
+    *order*: ``(0, 1, 2, 3)`` stacks four frames newest-first, the reverse of
     ``history_length=4``. Takes precedence over ``history_length`` when both are set."""
 
     history_interleaved: bool = False
-    """Isaac-style joint-major history layout: ``[a0_t, a0_t-1, ..., a1_t, ...]``
-    instead of frame-major (``[a_t, a_t-1, ...]`` each the full vector). Only
-    meaningful when ``history_length`` > 0."""
+    """Isaac-style element-major history layout: ``[a0_{t-n+1}, …, a0_t, a1_…]``
+    instead of frame-major (``[x_{t-n+1}, …, x_t]``, each the full vector). Only
+    meaningful when history is stacked at all."""
 
     flatten_history_dim: bool = True
     """Whether to flatten history into the feature dimension.
@@ -159,7 +155,8 @@ class ObservationGroupCfg:
     """Accepted for mjlab compatibility; ignored (no training in browser)."""
 
     history_length: int | None = None
-    """Group-level history override. If set, applies to all terms."""
+    """Group-level history override. If not None, replaces every term's own count —
+    ``0`` included, which switches history off for the group, as in mjlab."""
 
     flatten_history_dim: bool = True
     """Accepted for mjlab compatibility; mjswan always flattens."""

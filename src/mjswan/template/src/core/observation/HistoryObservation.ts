@@ -4,16 +4,18 @@
  * `PolicyRunner`'s group-level buffer would give step-major order. That is also why a
  * group with per-term history does not fuse.
  *
- * `offsets` generalises the count: dense `history_length: n` arrives as `[0..n-1]`, and
- * a policy trained on sparse look-back names its offsets directly. The buffer holds
- * `max(offsets) + 1` frames; only the named ones reach the output.
+ * `offsets` generalises the count: dense `history_length: n` arrives as `[n-1..0]`, the
+ * chronological stack mjlab's history buffer flattens, and a policy trained on a sparse
+ * or reversed window names its offsets directly. The buffer holds `max(offsets) + 1`
+ * frames; only the named ones reach the output.
  */
 
 import { ObservationBase, type ObservationConfig } from './ObservationBase';
 import type { PolicyState } from '../policy/types';
 import type { PolicyRunner } from '../policy/PolicyRunner';
 
-/** Write `frame` element-major at slot `index` of `count`: `[a_t, a_{t-1}, …, b_t, …]`. */
+/** Write `frame` element-major at slot `index` of `count`: `[a_0, a_1, …, b_0, …]`, each
+ * element's own frames adjacent. */
 export function writeInterleavedFrame(
   out: Float32Array,
   frame: Float32Array,
@@ -33,7 +35,8 @@ export function historyOffsets(entry: ObservationConfig): number[] | null {
   }
   const length = Math.trunc(Number((entry as { history_length?: unknown }).history_length) || 0);
   if (length <= 1) return null;
-  return Array.from({ length }, (_, i) => i);
+  // Oldest frame first, as mjlab's `CircularBuffer.buffer` flattens it.
+  return Array.from({ length }, (_, i) => length - 1 - i);
 }
 
 export class HistoryObservation extends ObservationBase {
@@ -94,7 +97,7 @@ export class HistoryObservation extends ObservationBase {
     return this.gather();
   }
 
-  /** Frame-major (`[frame_t, frame_{t-1}, …]`), or element-major when interleaved. */
+  /** Frame-major, one full vector per offset in order, or element-major when interleaved. */
   private gather(): Float32Array {
     const width = this.base.size;
     const out = new Float32Array(width * this.offsets.length);

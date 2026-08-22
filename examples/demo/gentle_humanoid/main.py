@@ -342,10 +342,11 @@ def setup_builder() -> mjswan.Builder:
                     params={"asset_cfg": policy_joints},
                     history_steps=tuple(tracking_cfg["joint_vel_history_steps"]),
                 ),
-                # The runtime already holds `last_action`, so only the stacking is ours.
+                # The runtime already holds `last_action`, so only the stacking is ours
+                # — newest first, like the offsets the checkpoint names above.
                 "prev_actions": ObservationTermCfg(
                     func=obs_fns.last_action,
-                    history_length=int(tracking_cfg["prev_action_steps"]),
+                    history_steps=tuple(range(int(tracking_cfg["prev_action_steps"]))),
                 ),
             }
         ),

@@ -4,8 +4,9 @@
  *
  * The cases that matter are the ones a wrong buffer makes *plausible* rather than
  * obviously broken: the offset→frame mapping (an off-by-one reads last step's value
- * forever), priming after a reset (a history of zeros the policy never saw in
- * training), and sparse offsets sizing the term by the offsets they name rather
+ * forever), the direction a dense count stacks in (reversing it keeps the width and
+ * runs time backwards), priming after a reset (a history of zeros the policy never saw
+ * in training), and sparse offsets sizing the term by the offsets they name rather
  * than by how far back they reach.
  */
 import { describe, expect, it } from 'vitest';
@@ -45,8 +46,8 @@ function build(config: ObservationConfig): { history: HistoryObservation; base: 
 }
 
 describe('historyOffsets', () => {
-  it('expands a dense length into consecutive offsets', () => {
-    expect(historyOffsets({ name: 'x', history_length: 3 })).toEqual([0, 1, 2]);
+  it('expands a dense length oldest-frame-first, as mjlab flattens its buffer', () => {
+    expect(historyOffsets({ name: 'x', history_length: 3 })).toEqual([2, 1, 0]);
   });
 
   it('treats no history and a single frame alike — nothing to stack', () => {
@@ -73,12 +74,18 @@ describe('HistoryObservation', () => {
     expect(Array.from(await history.compute(STATE))).toEqual([1, 10, 1, 10, 1, 10]);
   });
 
-  it('shifts frame-major, newest first', async () => {
+  it('shifts frame-major, oldest first', async () => {
     const { history } = build({ name: 'x', history_length: 3 });
     await history.compute(STATE);
-    expect(Array.from(await history.compute(STATE))).toEqual([2, 20, 1, 10, 1, 10]);
-    expect(Array.from(await history.compute(STATE))).toEqual([3, 30, 2, 20, 1, 10]);
-    // Frame 1 has now fallen off the end of a 3-deep buffer.
+    expect(Array.from(await history.compute(STATE))).toEqual([1, 10, 1, 10, 2, 20]);
+    expect(Array.from(await history.compute(STATE))).toEqual([1, 10, 2, 20, 3, 30]);
+    // Frame 1 has now fallen off the start of a 3-deep buffer.
+    expect(Array.from(await history.compute(STATE))).toEqual([2, 20, 3, 30, 4, 40]);
+  });
+
+  it('takes a newest-first stack from offsets, which a count no longer spells', async () => {
+    const { history } = build({ name: 'x', history_offsets: [0, 1, 2] });
+    for (let i = 0; i < 3; i++) await history.compute(STATE);
     expect(Array.from(await history.compute(STATE))).toEqual([4, 40, 3, 30, 2, 20]);
   });
 
@@ -101,7 +108,7 @@ describe('HistoryObservation', () => {
   it('lays the stack out element-major when interleaved', async () => {
     const { history } = build({ name: 'x', history_length: 2, history_interleaved: true });
     await history.compute(STATE);
-    // [e0_t, e0_t-1, e1_t, e1_t-1] rather than [e0_t, e1_t, e0_t-1, e1_t-1].
-    expect(Array.from(await history.compute(STATE))).toEqual([2, 1, 20, 10]);
+    // [e0_t-1, e0_t, e1_t-1, e1_t] rather than [e0_t-1, e1_t-1, e0_t, e1_t].
+    expect(Array.from(await history.compute(STATE))).toEqual([1, 2, 10, 20]);
   });
 });

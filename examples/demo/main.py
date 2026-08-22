@@ -46,6 +46,10 @@ from mjswan.trace_env import build_single_entity_trace_env  # noqa: E402
 # own trace env via SceneHandle.set_trace_env, and the terms below are written against
 # the same live-env API mjlab's own use. ---
 
+#: Three frames, newest first. `history_length` stacks chronologically (mjlab's order);
+#: these Go2 checkpoints were trained on the reverse, so they name the offsets.
+GO2_HISTORY_STEPS = (0, 1, 2)
+
 
 def joint_pos_abs(env, *, asset_cfg: SceneEntityCfg = SceneEntityCfg(name="robot")):
     """Absolute joint positions (no default-pose subtraction)."""
@@ -242,17 +246,17 @@ def _add_go2_scene(project) -> None:
         "policy": ObservationGroupCfg(
             terms={
                 "projected_gravity": ObservationTermCfg(
-                    func=obs_fns.projected_gravity, history_length=3
+                    func=obs_fns.projected_gravity, history_steps=GO2_HISTORY_STEPS
                 ),
                 "joint_pos": ObservationTermCfg(
-                    func=obs_fns.joint_pos_rel, history_length=3
+                    func=obs_fns.joint_pos_rel, history_steps=GO2_HISTORY_STEPS
                 ),
                 "joint_vel": ObservationTermCfg(
-                    func=obs_fns.joint_vel_rel, history_length=3
+                    func=obs_fns.joint_vel_rel, history_steps=GO2_HISTORY_STEPS
                 ),
                 "prev_actions": ObservationTermCfg(
                     func=obs_fns.last_action,
-                    history_length=3,
+                    history_steps=GO2_HISTORY_STEPS,
                     history_interleaved=True,
                 ),
             }
@@ -279,17 +283,17 @@ def _add_go2_scene(project) -> None:
             "policy": ObservationGroupCfg(
                 terms={
                     "projected_gravity": ObservationTermCfg(
-                        func=obs_fns.projected_gravity, history_length=3
+                        func=obs_fns.projected_gravity, history_steps=GO2_HISTORY_STEPS
                     ),
                     "joint_pos": ObservationTermCfg(
-                        func=joint_pos_abs, history_length=3
+                        func=joint_pos_abs, history_steps=GO2_HISTORY_STEPS
                     ),
                     "joint_vel": ObservationTermCfg(
-                        func=obs_fns.joint_vel_rel, history_length=3
+                        func=obs_fns.joint_vel_rel, history_steps=GO2_HISTORY_STEPS
                     ),
                     "prev_actions": ObservationTermCfg(
                         func=obs_fns.last_action,
-                        history_length=3,
+                        history_steps=GO2_HISTORY_STEPS,
                         history_interleaved=True,
                     ),
                 }
