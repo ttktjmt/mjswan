@@ -176,6 +176,17 @@ def _enrich_joint_observations(
             term.params = params
 
 
+def _onnx_output_width(model: onnx.ModelProto) -> int | None:
+    """The last dim of the graph's first output, or ``None`` when it is not static."""
+    if not model.graph.output:
+        return None
+    dims = model.graph.output[0].type.tensor_type.shape.dim
+    if len(dims) < 2:
+        return None
+    width = dims[-1].dim_value
+    return int(width) if width > 0 else None
+
+
 def _default_to_latest(handles: list[PolicyHandle]) -> None:
     """Open the scene on the highest-step checkpoint."""
     if not handles:
@@ -485,6 +496,10 @@ class SceneHandle:
             resolve_pd_gains(
                 adapted_actions, policy_joint_names, self._resolve_env_cfg(env_cfg)
             )
+        if policy_num_actions is None and not policy_joint_names:
+            # A muscle policy has no joint transmission to count; the network's own
+            # output width is the one thing that always knows its action count.
+            policy_num_actions = _onnx_output_width(policy)
 
         policy_config = PolicyConfig(
             name=name,

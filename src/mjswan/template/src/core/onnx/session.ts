@@ -34,6 +34,8 @@ export interface OnnxInputSlot {
   field?: string;
   sensor?: string;
   command?: string;
+  /** A raw `mjData` field the term read off mjlab's `SimData` (`act`, `time`, ...). */
+  sim?: string;
   input?: string;
   shape?: number[];
 }
