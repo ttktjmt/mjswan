@@ -269,7 +269,7 @@ def _native_size(
 ) -> int | None:
     """Declared width for a native term, or ``None`` if it isn't native."""
     func_name = getattr(term_cfg.func, "__name__", None)
-    if func_name == "last_action":
+    if func_name in ("last_action", "action_history"):
         # The whole vector; a term-scoped one needs `action_offset` for its slice.
         if term_cfg.params.get("action_name") is not None:
             return None
