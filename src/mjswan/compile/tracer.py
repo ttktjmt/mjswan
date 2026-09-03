@@ -47,6 +47,7 @@ def _is_dynamic_field(field_name: str) -> bool:
 #   (entity_name, data_field)        -> env.scene[entity].data.<field>
 #   (_SENSOR_NS, sensor_name)        -> env.scene[sensor].data (a whole BuiltinSensor)
 #   (_COMMAND_NS, "cmd.attr")        -> env.command_manager.get_term(cmd).<attr>
+#   (_SIM_NS, field)                 -> env.scene[entity].data.data.<field> (raw sim data)
 SlotKey = tuple[str, str]
 
 # A tagged key identifies one value an event/command body reads off ``env``. Wider than
@@ -58,6 +59,11 @@ TaggedKey = tuple
 
 _SENSOR_NS = "__sensor__"
 _COMMAND_NS = "__command__"
+_SIM_NS = "__sim__"
+
+#: Env attributes a replay proxy forwards from the real env: trace-time constants a term
+#: may read for shapes or rates. Anything else raises rather than reading a stand-in.
+_FORWARDED_ENV_ATTRS = ("num_envs", "device", "physics_dt", "step_dt", "cfg")
 
 
 def _class_proxy(real: Any, overrides: dict[str, Any]) -> Any:
@@ -104,6 +110,36 @@ def _is_sensor(scene: Any, name: str) -> bool:
 # --- Recording proxy: discovers which env fields a term reads. ---
 
 
+class _RecordingSimData:
+    """Wraps the raw ``SimData`` behind ``Entity.data.data``, logging each field read.
+
+    mjlab's ``EntityData`` wraps most of the sim but not all of it — a muscle model's
+    ``act``, or ``time`` — so a term reads those straight off the sim. The sim is one
+    object shared by every entity, hence its own namespace rather than the entity's.
+    Fields are warp-backed ``TorchArray`` proxies; the tensor view is what gets logged
+    and returned, since the tracer only follows real tensors.
+    """
+
+    def __init__(self, real: Any, log: list[tuple[SlotKey, Any]]):
+        object.__setattr__(self, "_real", real)
+        object.__setattr__(self, "_log", log)
+
+    def __getattr__(self, name: str) -> Any:
+        value = _sim_tensor(getattr(self._real, name))
+        if isinstance(value, torch.Tensor):
+            self._log.append(((_SIM_NS, name), value))
+        return value
+
+
+def _sim_tensor(value: Any) -> Any:
+    """A raw sim field as the tensor it wraps; anything else passes through."""
+    if isinstance(value, torch.Tensor):
+        return value
+    # `TorchArray.__getattr__` delegates to its tensor, so `detach()` is that tensor.
+    detach = getattr(value, "detach", None)
+    return detach() if callable(detach) else value
+
+
 class _RecordingData:
     """Wraps a real ``Entity.data``, logging every field access."""
 
@@ -114,6 +150,8 @@ class _RecordingData:
 
     def __getattr__(self, name: str) -> Any:
         value = getattr(self._real, name)
+        if name == "data":
+            return _RecordingSimData(value, self._log)
         self._log.append(((self._entity, name), value))
         return value
 
@@ -206,7 +244,8 @@ class _RecordingCommandManager:
 
 
 class _RecordingEnv:
-    """Proxy env recording the reads a term makes (entity data, sensors, commands)."""
+    """Proxy env recording the reads a term makes (entity data, sim data, sensors,
+    commands)."""
 
     def __init__(self, real: Any):
         object.__setattr__(self, "_real", real)
@@ -228,12 +267,29 @@ class _RecordingEnv:
 # --- Replay proxy: serves recorded slots to the term during tracing. ---
 
 
+class _ReplaySimData:
+    """Serves recorded raw ``SimData`` fields during the replay pass."""
+
+    def __init__(self, slots: dict[SlotKey, torch.Tensor]):
+        object.__setattr__(self, "_slots", slots)
+
+    def __getattr__(self, name: str) -> torch.Tensor:
+        key = (_SIM_NS, name)
+        if key not in self._slots:
+            raise AttributeError(
+                f"sim field {name!r} was not recorded during discovery"
+            )
+        return self._slots[key]
+
+
 class _ReplayData:
     def __init__(self, entity: str, slots: dict[SlotKey, torch.Tensor]):
         object.__setattr__(self, "_entity", entity)
         object.__setattr__(self, "_slots", slots)
 
-    def __getattr__(self, name: str) -> torch.Tensor:
+    def __getattr__(self, name: str) -> Any:
+        if name == "data":
+            return _ReplaySimData(self._slots)
         key = (self._entity, name)
         try:
             return self._slots[key]
@@ -325,7 +381,7 @@ class _ReplayEnv:
     def __getattr__(self, name: str) -> Any:
         # Forwarded, not copied, so nothing drifts from the real env. Anything else
         # raises rather than silently reading a stand-in.
-        if name in ("num_envs", "device"):
+        if name in _FORWARDED_ENV_ATTRS:
             return getattr(self._real_env, name)
         raise AttributeError(name)
 
@@ -390,8 +446,8 @@ def _classify_slots(
 ) -> bool:
     """Split a recorded read log into graph inputs and baked constants.
 
-    Sensor and command-state reads are live state by definition; an entity data field is
-    dynamic unless it is a model-derived constant. Returns whether *this* log
+    Sensor, command-state and raw sim-data reads are live state by definition; an entity
+    data field is dynamic unless it is a model-derived constant. Returns whether *this* log
     contributed a dynamic slot, which a group's caller needs per term.
     """
     saw_dynamic = False
@@ -399,7 +455,9 @@ def _classify_slots(
         if not isinstance(value, torch.Tensor):
             continue  # non-tensor attribute access, not a graph slot
         namespace, field_name = key
-        if namespace in (_SENSOR_NS, _COMMAND_NS) or _is_dynamic_field(field_name):
+        if namespace in (_SENSOR_NS, _COMMAND_NS, _SIM_NS) or _is_dynamic_field(
+            field_name
+        ):
             dynamic.setdefault(key, value)
             saw_dynamic = True
         else:
@@ -538,6 +596,8 @@ def _slot_input_name(key: SlotKey) -> str:
         return "sensor__" + re.sub(r"\W", "_", name_part)
     if namespace == _COMMAND_NS:
         return "command__" + re.sub(r"\W", "_", name_part)
+    if namespace == _SIM_NS:
+        return f"sim__{name_part}"
     return f"{namespace}__{name_part}"
 
 
@@ -548,16 +608,18 @@ def slot_label(key: SlotKey) -> str:
         return f"sensor:{name_part}"
     if namespace == _COMMAND_NS:
         return f"command:{name_part}"
+    if namespace == _SIM_NS:
+        return f"sim:{name_part}"
     return f"{namespace}.{name_part}"
 
 
 def slot_to_json(key: SlotKey, shape: Sequence[int] | None = None) -> dict[str, Any]:
     """Serialize one input slot for ``policy.json`` / ``config.json``.
 
-    Three shapes, told apart by which keys are present: ``{"entity", "field"}``,
-    ``{"sensor"}``, or ``{"command", "field"}``. All carry ``input`` (the graph input
-    name) and ``shape`` — the runtime feeds a flat array and cannot recover the rank
-    without it.
+    Four shapes, told apart by which keys are present: ``{"entity", "field"}``,
+    ``{"sensor"}``, ``{"command", "field"}``, or ``{"sim"}`` (a whole raw ``mjData``
+    field). All carry ``input`` (the graph input name) and ``shape`` — the runtime
+    feeds a flat array and cannot recover the rank without it.
     """
     namespace, name_part = key
     if namespace == _SENSOR_NS:
@@ -574,6 +636,8 @@ def slot_to_json(key: SlotKey, shape: Sequence[int] | None = None) -> dict[str, 
             "field": attr,
             "input": _slot_input_name(key),
         }
+    elif namespace == _SIM_NS:
+        entry = {"sim": name_part, "input": _slot_input_name(key)}
     else:
         entry = {
             "entity": namespace,
@@ -710,6 +774,8 @@ def read_slot(env: Any, key: SlotKey) -> torch.Tensor:
     if namespace == _COMMAND_NS:
         command_name, _, attr = name_part.partition(".")
         return getattr(env.command_manager.get_term(command_name), attr)
+    if namespace == _SIM_NS:
+        return _sim_tensor(getattr(env.sim.data, name_part))
     return getattr(env.scene[namespace].data, name_part)
 
 
@@ -931,7 +997,7 @@ class _EventReplayEnv:
 
     def __getattr__(self, name: str) -> Any:
         # Forwarded, not defaulted: replay must see the same N discovery ran against.
-        if name in ("num_envs", "device"):
+        if name in _FORWARDED_ENV_ATTRS:
             return getattr(self._real_env, name)
         raise AttributeError(name)
 

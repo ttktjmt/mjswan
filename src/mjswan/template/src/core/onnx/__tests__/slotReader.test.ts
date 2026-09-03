@@ -320,6 +320,27 @@ describe('createSlotReader — command state slots', () => {
   });
 });
 
+describe('createSlotReader — sim slots', () => {
+  it('serves a whole raw mjData array as float32', () => {
+    const { mjModel, mjData } = fakeScene();
+    mjData.act = Float64Array.from([0.25, 0.5, 0.75]);
+    const read = createSlotReader(() => ({ mjModel, mjData }) as unknown as SlotReaderContext);
+    close(read({ sim: 'act' }), [0.25, 0.5, 0.75]);
+  });
+
+  it('wraps a scalar field such as time in a one-element array', () => {
+    const { mjModel, mjData } = fakeScene();
+    mjData.time = 1.25;
+    const read = createSlotReader(() => ({ mjModel, mjData }) as unknown as SlotReaderContext);
+    close(read({ sim: 'time' }), [1.25]);
+  });
+
+  it('returns null for a field mjData does not carry', () => {
+    const read = createSlotReader(() => context());
+    expect(read({ sim: 'no_such_field' })).toBeNull();
+  });
+});
+
 describe('slotDims', () => {
   it('rebuilds the traced rank with batch pinned to 1', () => {
     // site_pos_w is (batch, num_sites, 3) — feeding (1, 6) would be rejected.

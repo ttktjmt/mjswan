@@ -10,6 +10,10 @@
  * Entities resolve by the `name/` prefix mjlab's `attach` adds; an unprefixed model
  * falls back to the whole model, which is correct because such a scene is
  * single-entity. An unknown field returns null and the caller holds its previous value.
+ *
+ * A `sim` slot is a raw `mjData` field mjlab's `EntityData` does not wrap (`act`,
+ * `time`), read whole: mjlab's `SimData` is the entire sim too, so the graph carries
+ * whatever indexing the term did.
  */
 
 import { quatApply, quatApplyInv } from '../observation/math';
@@ -265,6 +269,16 @@ export function isReadableEntityField(field: string): boolean {
   return field in FIELD_READERS;
 }
 
+/** A whole raw `mjData` field as float32, or null when `mjData` has no such array. */
+export function readSimField(mjData: MjData, field: string): Float32Array | null {
+  const value = (mjData as unknown as Record<string, unknown>)[field];
+  if (typeof value === 'number') return new Float32Array([value]);
+  if (value && typeof (value as ArrayLike<number>).length === 'number') {
+    return Float32Array.from(value as ArrayLike<number>);
+  }
+  return null;
+}
+
 /**
  * A named MuJoCo sensor's `sensordata` window. The build records mjlab's prefixed name
  * (`robot/imu_lin_vel`), while a plain-MJCF model has the bare one, so try both.
@@ -364,6 +378,8 @@ export function createSlotReader(
 
     const { mjModel, mjData } = context;
     if (!mjModel || !mjData) return null;
+
+    if (slot.sim) return readSimField(mjData, slot.sim);
 
     if (slot.sensor) {
       if (slot.field) {

@@ -31,7 +31,8 @@ def _quiet_warp_module_loads() -> None:
     """
     import warp
 
-    if warp.config.log_level == warp.LOG_INFO:
+    # warp 1.12 has no `log_level`; its module loads are quiet by default.
+    if getattr(warp.config, "log_level", None) == getattr(warp, "LOG_INFO", object()):
         warp.config.log_level = warp.LOG_WARNING
 
 

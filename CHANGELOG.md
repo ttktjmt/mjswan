@@ -76,6 +76,12 @@ velocity-command shortcuts were removed outright, see Removed.
   two siblings both marked fail the build, none marked means the first added.
 - `mjswan info` lists each scene's MDPs with their traced-graph counts, and reads a
   `.swn`.
+- Raw `mjData` fields as traced-graph slots: a term reading `entity.data.data.<field>`
+  (mjlab's `SimData`, for what `EntityData` does not wrap — a muscle model's `act`, the
+  sim `time`) now traces, with the browser serving the whole field from `mjData`.
+  Replay proxies also forward `physics_dt` / `step_dt` / `cfg` from the real env, and
+  `add_policy` fills `policy_num_actions` from the ONNX output width when a policy has
+  no joint names (muscle policies).
 - **MDP term bodies are traced to ONNX at build time and run by ONNX Runtime Web**
   ([ADR 0005](docs/adr/0005-onnx-traced-terms-superseding-the-declarative-dsl.md)),
   replacing the hand-written TypeScript DSL (see Removed). mjlab's real
