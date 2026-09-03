@@ -256,7 +256,10 @@ def run_parity(
                 feeds = {"rand": _to_numpy(rec.rand_vector)}
                 for in_name, slot in zip(export.input_names, export.input_slots):
                     feeds[in_name] = _to_numpy(read_slot(env, slot))
-                onnx_outs = session.run(export.output_names, feeds)
+                # A draw-free event has no `rand` input: the export prunes it.
+                onnx_outs = session.run(
+                    export.output_names, _declared_feeds(session, feeds)
+                )
                 for onnx_out, ref in zip(onnx_outs, ref_tensors):
                     ref_np = _to_numpy(ref)
                     tr.max_abs_diff = max(
