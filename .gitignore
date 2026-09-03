@@ -68,6 +68,7 @@ skills-lock.json
 .agents/
 !.claude/settings.json
 !.claude/commands/
+!.claude/skills/
 !.claude/CLAUDE.md
 
 # Auto-generated at build time

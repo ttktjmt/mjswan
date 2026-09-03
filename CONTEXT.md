@@ -49,6 +49,7 @@ examples/            Runnable examples
 
 tests/               pytest suite + dump_*_fixture.py generators for the TS parity fixtures
 skills/              Agent skills this repo publishes (mjlab-to-mjswan: port an mjlab task)
+.claude/skills/      Agent skills this repo uses on itself (pr-eli5: explain a PR as a page)
 docs/                zensical (MkDocs-based) site → Read the Docs; adr/ design records
 typings/             MuJoCo stub generator script
 scripts/             Maintenance scripts (sync_contributors.py)
@@ -231,7 +232,28 @@ Parity is layered, and each layer covers something the others cannot:
 Rollout parity **replays** mjlab's states rather than co-simulating: mjlab integrates with `mujoco_warp` while the browser runs MuJoCo's own WASM build, so a free-running comparison would measure MuJoCo against itself.
 
 
-## Dependencies
+## PR explainers
+
+Every PR gets a visual plain-English walkthrough published as a Claude Artifact, linked from one comment on the PR. It is not a check and not a review: it explains the change for a reader who does not know this codebase, the way the Cloudflare Pages app posts a preview link.
+
+`.claude/skills/pr-eli5/SKILL.md` holds the instructions — read the PR, read past the diff into the surrounding code, build the page, publish, comment. It lives in the repo so it is reviewed and versioned like anything else, and a cloud session picks it up from the clone.
+
+This runs as a **routine**, not a GitHub Action: artifacts are off by default in Actions contexts, so a workflow cannot publish one. A routine's GitHub trigger can, because each firing is a full cloud session signed in to a claude.ai account.
+
+Set it up once at [claude.ai/code/routines](https://claude.ai/code/routines) (the API cannot attach a GitHub trigger; the web form is the only way):
+
+| Field | Value |
+|---|---|
+| Prompt | `Run the pr-eli5 skill for the pull request named in the fire payload.` |
+| Repository | `ttktjmt/mjswan` |
+| Trigger | GitHub event → Pull request → `opened` and `synchronize` |
+| Connectors | Remove everything the run does not need |
+
+The [Claude GitHub App](https://github.com/apps/claude) must be installed on the repo for webhooks to reach it.
+
+**The one manual step is sharing.** A new artifact is private to the account that published it, and there is no API or tool for changing that — the Share control in the page header is the only path. So the first run on a PR needs one click: open the link, share it with the team, turn on **Always share latest version**. Every later push republishes to the same URL and stays shared, which is why the skill posts the link once and never edits the comment.
+
+Costs are per firing, not per token: each event spends a full cloud session against the account's routine allowance, and PR × commits adds up. GitHub webhook events are also capped per routine and per account during the research preview.
 
 Core: `mujoco==3.8.1`, `onnx>=1.20.0`, `nodeenv>=1.9.1`, `rich>=13.0.0`, `wandb>=0.23.1`, `typer>=0.12.0`.
 Dev extras: `pyright`, `ruff==0.16.0` (pinned), `pre-commit`, `pytest`.
