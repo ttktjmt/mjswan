@@ -16,6 +16,13 @@ velocity-command shortcuts were removed outright, see Removed.
 
 ### Added
 
+- `MuscleActivationActionCfg.action_mode` (`sigmoid` / `direct` / `excitation`), named
+  as mjlab/myosuite spells it so the adapter copies it across by itself. `direct` writes
+  the raw action clipped to each actuator's own `ctrlrange` — a myosuite muscle model
+  declares `ctrlrange="-1 1"` and a checkpoint trained against the raw control uses the
+  negative half, which `excitation` would clamp to zero. `normalize` stays as the legacy
+  spelling of the other two; the policy JSON now carries `mode` instead of `normalize`,
+  and the engine still reads the old key.
 - Raw `mjData` fields as traced-graph slots: a term reading `entity.data.data.<field>`
   (mjlab's `SimData`, for what `EntityData` does not wrap — a muscle model's `act`, the
   sim `time`) now traces, with the browser serving the whole field from `mjData`.

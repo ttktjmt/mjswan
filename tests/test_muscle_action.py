@@ -133,15 +133,15 @@ class TestSerialization:
         d = cfg.to_dict()
         assert d["offset"] == -0.5
 
-    def test_normalize_false_emitted(self):
+    def test_normalize_false_emitted_as_a_mode(self):
         cfg = MuscleActivationActionCfg(actuator_names=("m1",), normalize=False)
         d = cfg.to_dict()
-        assert d["normalize"] is False
+        assert d["mode"] == "excitation"
 
     def test_normalize_true_omitted(self):
         cfg = MuscleActivationActionCfg(actuator_names=("m1",), normalize=True)
         d = cfg.to_dict()
-        assert "normalize" not in d
+        assert "mode" not in d and "normalize" not in d
 
     def test_actuator_names_tuple_serialized_as_list(self):
         cfg = MuscleActivationActionCfg(actuator_names=("a", "b", "c"))
@@ -351,7 +351,7 @@ class TestBuilderMuscleRoundTrip:
         assert data["actions"]["muscles"]["type"] == "muscle_activation"
         assert data["actions"]["muscles"]["actuator_names"] == ["m1", "m2"]
 
-    def test_normalize_false_serialized_in_policy_json(
+    def test_muscle_mode_serialized_in_policy_json(
         self, tmp_path, muscle_model, minimal_onnx
     ):
         builder = Builder()
@@ -373,4 +373,34 @@ class TestBuilderMuscleRoundTrip:
                 tmp_path / "out" / "main" / "assets" / name2id("S") / "policy.json"
             ).read_text()
         )
-        assert data["actions"]["muscles"]["normalize"] is False
+        assert data["actions"]["muscles"]["mode"] == "excitation"
+
+
+class TestMuscleActionMode:
+    """``action_mode``, which mjlab/myosuite spells the same way so the adapter copies it."""
+
+    def test_legacy_normalize_maps_onto_the_two_named_modes(self):
+        assert MuscleActivationActionCfg(actuator_names=("m1",)).mode == "sigmoid"
+        assert (
+            MuscleActivationActionCfg(actuator_names=("m1",), normalize=False).mode
+            == "excitation"
+        )
+
+    def test_action_mode_wins_over_normalize(self):
+        cfg = MuscleActivationActionCfg(
+            actuator_names=("m1",), normalize=True, action_mode="direct"
+        )
+        assert cfg.mode == "direct"
+
+    def test_only_the_default_mode_is_left_out_of_the_json(self):
+        assert "mode" not in MuscleActivationActionCfg(actuator_names=("m1",)).to_dict()
+        for mode in ("direct", "excitation"):
+            entry = MuscleActivationActionCfg(
+                actuator_names=("m1",), action_mode=mode
+            ).to_dict()
+            assert entry["mode"] == mode
+
+    def test_an_unknown_mode_is_rejected(self):
+        cfg = MuscleActivationActionCfg(actuator_names=("m1",), action_mode="clamp")
+        with pytest.raises(ValueError, match="action_mode"):
+            _ = cfg.mode
