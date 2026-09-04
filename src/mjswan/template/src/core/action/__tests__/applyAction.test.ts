@@ -42,7 +42,9 @@ function term(over: Partial<ResolvedActionTerm> = {}): ResolvedActionTerm {
     positionActuator: Array(n).fill(true),
     kp: new Float32Array(n),
     kd: new Float32Array(n),
-    muscleNormalize: true,
+    muscleMode: 'sigmoid',
+    muscleCtrlLo: new Float32Array(0),
+    muscleCtrlHi: new Float32Array(0),
     // Unbounded by default: `resolveActionClip` leaves ±Infinity for an unnamed target.
     clipLo: new Float32Array(n).fill(-Infinity),
     clipHi: new Float32Array(n).fill(Infinity),
@@ -161,7 +163,7 @@ describe('applyAction — other kinds', () => {
     const raw = fakeData(2);
     applyAction(
       raw,
-      [term({ controlType: 'muscle_activation', muscleNormalize: true })],
+      [term({ controlType: 'muscle_activation', muscleMode: 'sigmoid' })],
       Float32Array.from([0.5, 10]),
     );
     // σ(5 * (0.5 - 0.5)) = 0.5, and a large excitation saturates toward 1.
@@ -171,10 +173,31 @@ describe('applyAction — other kinds', () => {
     const clipped = fakeData(2);
     applyAction(
       clipped,
-      [term({ controlType: 'muscle_activation', muscleNormalize: false })],
+      [term({ controlType: 'muscle_activation', muscleMode: 'excitation' })],
       Float32Array.from([-3, 10]),
     );
     expect(Array.from(clipped.ctrl)).toEqual([0, 1]);
+  });
+
+  it('direct mode keeps the negative half of the actuator range', () => {
+    // A myosuite muscle model declares ctrlrange="-1 1" and a checkpoint trained
+    // against the raw control really does use the negative half; `excitation` would
+    // clamp it to zero and the policy tracks measurably worse.
+    const data = fakeData(2);
+    applyAction(
+      data,
+      [
+        term({
+          controlType: 'muscle_activation',
+          muscleMode: 'direct',
+          muscleCtrlLo: Float32Array.from([-1, -1]),
+          muscleCtrlHi: Float32Array.from([1, 1]),
+        }),
+      ],
+      Float32Array.from([-0.4, 7]),
+    );
+    expect(data.ctrl[0]).toBeCloseTo(-0.4, 6);
+    expect(data.ctrl[1]).toBeCloseTo(1, 6);
   });
 
   it('leaves ctrl at rest for a kind it does not implement', () => {
@@ -289,7 +312,7 @@ describe('applyAction — clip', () => {
       [
         term({
           controlType: 'muscle_activation',
-          muscleNormalize: false,
+          muscleMode: 'excitation',
           ctrlAdr: [0],
           actionScale: Float32Array.from([1]),
           actionOffset: new Float32Array(1),

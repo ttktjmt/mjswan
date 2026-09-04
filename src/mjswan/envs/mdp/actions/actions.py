@@ -24,7 +24,7 @@ from __future__ import annotations
 import abc
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     import mujoco
@@ -241,6 +241,11 @@ class JointEffortActionCfg(BaseActionCfg):
         return entry
 
 
+MuscleActionMode = Literal["sigmoid", "direct", "excitation"]
+"""How a muscle term maps a raw action to a control; see
+:class:`MuscleActivationActionCfg`."""
+
+
 @dataclass(kw_only=True)
 class MuscleActivationActionCfg(BaseActionCfg):
     """MyoSuite-style muscle activation control.
@@ -249,17 +254,37 @@ class MuscleActivationActionCfg(BaseActionCfg):
     actuators (``dyntype=muscle``). Both modes apply ``raw = scale * a + offset``
     first, then:
 
-    - ``normalize=True`` (default): applies the canonical MyoSuite sigmoid
-      ``σ(5 * (raw - 0.5))`` to produce excitation in ``(0, 1)``.
-    - ``normalize=False``: clips ``raw`` to ``[0, 1]`` for models that already
-      output excitation in that range.
+    - ``"sigmoid"`` (default): the canonical MyoSuite sigmoid
+      ``σ(5 * (raw - 0.5))``, producing excitation in ``(0, 1)``.
+    - ``"excitation"``: clips ``raw`` to ``[0, 1]`` for models that already output
+      excitation in that range.
+    - ``"direct"``: clips ``raw`` to each actuator's own ``ctrlrange`` and writes it
+      unchanged — checkpoint playback, where the policy was trained against the raw
+      control. A muscle model whose ``ctrlrange`` is ``[-1, 1]`` really does use the
+      negative half, so this is not the same as ``"excitation"``.
 
-    Semantics mirror myosuite4 ``MuscleActionTermCfg.normalize``; see
+    Semantics mirror myosuite4 ``MyoMuscleActivationActionCfg.action_mode``; see
     ``docs/adr/0002-muscle-action-term-aligned-with-myomuscleactivationactioncfg.md``.
     """
 
     normalize: bool = True
-    """Apply the MyoSuite sigmoid mapping. When False, clip ``raw`` to [0, 1]."""
+    """Legacy spelling of ``action_mode``: True is ``"sigmoid"``, False ``"excitation"``.
+    Ignored when ``action_mode`` is set."""
+
+    action_mode: MuscleActionMode | None = None
+    """Named after mjlab/myosuite's own field, so the adapter copies it verbatim."""
+
+    @property
+    def mode(self) -> MuscleActionMode:
+        """The mapping this term applies, with ``normalize`` as the fallback."""
+        if self.action_mode is not None:
+            if self.action_mode not in ("sigmoid", "direct", "excitation"):
+                raise ValueError(
+                    f"MuscleActivationActionCfg.action_mode must be 'sigmoid', "
+                    f"'direct' or 'excitation', got {self.action_mode!r}."
+                )
+            return self.action_mode
+        return "sigmoid" if self.normalize else "excitation"
 
     def to_dict(self) -> dict[str, Any]:
         if self.unsupported_reason is not None:
@@ -270,8 +295,8 @@ class MuscleActivationActionCfg(BaseActionCfg):
             entry["scale"] = self.scale
         if self.offset != 0.0:
             entry["offset"] = self.offset
-        if not self.normalize:
-            entry["normalize"] = False
+        if self.mode != "sigmoid":
+            entry["mode"] = self.mode
         entry["actuator_names"] = list(self.actuator_names)
         self._add_clip(entry)
         return entry
