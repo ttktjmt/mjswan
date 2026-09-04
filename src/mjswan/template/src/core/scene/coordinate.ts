@@ -7,7 +7,3 @@ export function mjcToThreeCoordinate(v: ArrayLike<number>): THREE.Vector3 {
 export function threeToMjcCoordinate(v: THREE.Vector3): THREE.Vector3 {
   return new THREE.Vector3(v.x, -v.z, v.y);
 }
-
-export function threeToMjcQuaternion(q: THREE.Quaternion): [number, number, number, number] {
-  return [q.w, q.x, -q.z, q.y];
-}

@@ -595,7 +595,7 @@ export class mjswanRuntime {
       // written before injection zero-pads the appended free joints: without this the
       // fingertips spawn at the world origin, inside the scene.
       this.handMocap?.park(this.mjData);
-      for (const bodyId of this.handMocap?.tipBodyIds() ?? []) {
+      for (const bodyId of this.handMocap?.bodyIds() ?? []) {
         if (this.bodies[bodyId]) {
           this.bodies[bodyId].userData.xrHand = true;
         }
@@ -1367,7 +1367,7 @@ export class mjswanRuntime {
     }
     // Viewer-only: mouse-drag forces and tracked hands, not part of the MDP.
     this.applyDragForces();
-    this.handMocap?.update(this.mjData);
+    this.handMocap?.update(this.mjModel, this.mjData);
 
     this.refreshActionReferences();
     stepPhysics(

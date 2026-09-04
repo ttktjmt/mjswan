@@ -124,16 +124,23 @@ keeps you on top of a slope instead of inside it.
 
 `hands=1`, or `createEngine(element, { handTracking: true })` when you drive the engine
 yourself, makes a headset's tracked hands part of the physics rather than a pair of
-floating models. On **Enter VR**, six spheres per hand (the wrist and the five fingertips)
-follow the WebXR joint poses inside the simulation, so a Quest 3 can bat a scene's objects
-around, and pinch and lift them. Each sphere is a mocap body welded to a dynamic twin,
-and that weld is what makes grasping work rather than only batting.
+floating models. On **Enter VR**, a capsule per bone follows the WebXR joint poses inside
+the simulation, so a Quest 3 can bat a scene's objects around, rest one on an open palm,
+and pick one up.
+
+A bone enters the model according to what it has to do. The palm's two edges and the five
+fingertips carry load, so each is a mocap body welded to a dynamic twin: MuJoCo takes
+contact velocity from body velocity, and a body that is teleported every step has none, so
+a bare mocap bone can push something but never hold it. The ten bones in between only ever
+push, so they stay plain mocap — no degrees of freedom, and almost no cost. Grabs are read
+from the contacts themselves: any object two of the hand's own geoms are squeezing from
+opposing sides is held, at any thickness and with any number of fingers.
 
 It is opt-in because both halves cost something: every scene the build loads gains the
-hand bodies, which is roughly a third more work per physics step, and the headset must
-grant the `hand-tracking` feature — **Meta Quest** is the recommended one, since its
-browser ships WebXR hand tracking with nothing to install. Ordinary desktop and mobile
-viewing is unaffected: untracked hands sit parked far below the scene.
+hand bodies, at about 1.6x per physics step, and the headset must grant the
+`hand-tracking` feature — **Meta Quest** is the recommended one, since its browser ships
+WebXR hand tracking with nothing to install. Ordinary desktop and mobile viewing is
+unaffected: untracked hands sit parked far above the scene.
 
 ### Passthrough AR
 
