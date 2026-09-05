@@ -16,6 +16,13 @@ export type ControlType =
   | 'torque'
   | 'muscle_activation';
 
+/**
+ * How a muscle term maps its raw action, mirroring myosuite's `action_mode`.
+ * `direct` clips to the actuator's own range instead of [0, 1] — a muscle model with
+ * `ctrlrange="-1 1"` uses the negative half, and clamping it away degrades tracking.
+ */
+export type MuscleMode = 'sigmoid' | 'direct' | 'excitation';
+
 /** One resolved action term: the build's descriptor, names already resolved to addresses. */
 export interface ResolvedActionTerm {
   controlType: string;
@@ -42,8 +49,11 @@ export interface ResolvedActionTerm {
   positionActuator: boolean[];
   kp: Float32Array;
   kd: Float32Array;
-  /** `muscle_activation` only: MyoSuite sigmoid when true, else clip to [0, 1]. */
-  muscleNormalize: boolean;
+  /** `muscle_activation` only: how a raw action becomes a control. */
+  muscleMode: MuscleMode;
+  /** `muscle_activation` with `direct`: each actuator's own `ctrlrange`, per joint. */
+  muscleCtrlLo: Float32Array;
+  muscleCtrlHi: Float32Array;
   /**
    * Per-target bounds on the *processed* action (`raw * scale + offset`), `±Infinity`
    * where unbounded. mjlab clamps there, before `joint_position` subtracts the encoder
@@ -87,7 +97,9 @@ function applyActionTerm(
     positionActuator,
     kp,
     kd,
-    muscleNormalize,
+    muscleMode,
+    muscleCtrlLo,
+    muscleCtrlHi,
   } = term;
   const numJoints = ctrlAdr.length;
   const ctrl = mjData.ctrl;
@@ -134,9 +146,10 @@ function applyActionTerm(
   }
 
   if (controlType === 'muscle_activation') {
-    // Shared pre-step: raw = scale * action + offset.
-    // normalize=true:  MyoSuite-canonical sigmoid σ(5 * (raw - 0.5)).
-    // normalize=false: clip(raw, 0, 1) for models that already output excitation.
+    // Shared pre-step: raw = scale * action + offset, then per `muscleMode`:
+    //   sigmoid:    MyoSuite-canonical σ(5 * (raw - 0.5)).
+    //   direct:     clip to the actuator's own ctrlrange, written unchanged.
+    //   excitation: clip(raw, 0, 1) for models that already output excitation.
     for (let i = 0; i < numJoints; i++) {
       const ctrlIndex = ctrlAdr[i];
       if (ctrlIndex < 0) continue;
@@ -146,9 +159,12 @@ function applyActionTerm(
         term.clipLo[i],
         term.clipHi[i],
       );
-      ctrl[ctrlIndex] = muscleNormalize
-        ? 1 / (1 + Math.exp(-5 * (raw - 0.5)))
-        : clamp01(raw);
+      ctrl[ctrlIndex] =
+        muscleMode === 'sigmoid'
+          ? 1 / (1 + Math.exp(-5 * (raw - 0.5)))
+          : muscleMode === 'direct'
+            ? clamp(raw, muscleCtrlLo[i] ?? -1, muscleCtrlHi[i] ?? 1)
+            : clamp01(raw);
     }
   }
 }

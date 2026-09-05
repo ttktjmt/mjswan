@@ -36,6 +36,7 @@ import {
   resolveActionClip,
   stepPhysics,
   type ResolvedActionTerm,
+  type MuscleMode,
 } from '../action/applyAction';
 import { applyResetTerms } from './resetChain';
 import { Observations } from '../observation/observations';
@@ -62,6 +63,15 @@ import { SeededRng } from '../rng';
 const DEFAULT_TERM_SEED = 0x5eed;
 
 const EMPTY_ACTIONS = new Float32Array(0);
+/** Only the `direct` muscle mode reads an actuator range; the rest carry none. */
+const EMPTY_CTRL_RANGE = new Float32Array(0);
+
+/** A muscle term's mode, falling back to the pre-`mode` `normalize` flag. */
+function readMuscleMode(term: Record<string, unknown>): MuscleMode {
+  const mode = term.mode;
+  if (mode === 'sigmoid' || mode === 'direct' || mode === 'excitation') return mode;
+  return term.normalize === false ? 'excitation' : 'sigmoid';
+}
 
 /** Only for a policy-less scene; a policy carries its own rate in `controlDt`. */
 const DEFAULT_VIEWER_CONTROL_DT = 0.02;
@@ -1132,7 +1142,9 @@ export class mjswanRuntime {
         positionActuator,
         kp,
         kd,
-        muscleNormalize: false,
+        muscleMode: 'sigmoid' as MuscleMode,
+        muscleCtrlLo: EMPTY_CTRL_RANGE,
+        muscleCtrlHi: EMPTY_CTRL_RANGE,
         clipLo,
         clipHi,
       };
@@ -1201,9 +1213,18 @@ export class mjswanRuntime {
           n,
           0.0
         );
-        const muscleNormalize = (actionTerm as { normalize?: boolean }).normalize ?? true;
+        const muscleMode = readMuscleMode(actionTerm as Record<string, unknown>);
+        // `direct` writes the raw action, so it needs each actuator's own range.
+        const ctrlRange = this.mjModel?.actuator_ctrlrange;
+        const ctrlLoRange = new Float32Array(n);
+        const ctrlHiRange = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+          const adr = muscleMapping.ctrlAdr[i];
+          ctrlLoRange[i] = ctrlRange?.[2 * adr] ?? -1;
+          ctrlHiRange[i] = ctrlRange?.[2 * adr + 1] ?? 1;
+        }
         console.log(
-          `[PolicyRunner] Action term "${termKey}" (muscle_activation): ${n} actuator(s), normalize=${muscleNormalize}`
+          `[PolicyRunner] Action term "${termKey}" (muscle_activation): ${n} actuator(s), mode=${muscleMode}`
         );
         results.push({
           controlType,
@@ -1218,7 +1239,9 @@ export class mjswanRuntime {
           positionActuator: new Array(n).fill(false),
           kp: new Float32Array(n),
           kd: new Float32Array(n),
-          muscleNormalize,
+          muscleMode,
+          muscleCtrlLo: ctrlLoRange,
+          muscleCtrlHi: ctrlHiRange,
           ...resolveActionClip(
             actionTerm.clip as Record<string, readonly number[]> | undefined,
             muscleMapping.ctrlAdr.map((_, i) => patterns[i] ?? ''),

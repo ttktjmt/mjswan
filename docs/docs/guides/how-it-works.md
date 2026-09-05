@@ -148,9 +148,12 @@ A graph needs the simulation state it reads. The build records that as **slots**
 ]
 ```
 
-Three slot namespaces exist: an entity `data` field (as above), a named MuJoCo sensor's
-`sensordata` window, and a live command's state field. Anything model-derived and
-therefore constant is baked into the graph instead of becoming a slot.
+Four slot namespaces exist: an entity `data` field (as above), a named MuJoCo sensor's
+`sensordata` window, a live command's state field, and a raw `mjData` field
+(`{"sim": "act"}`) for the few things mjlab's `EntityData` does not wrap — a muscle
+model's activation state, or the sim time — which a term reads off
+`entity.data.data.<field>`. Anything model-derived and therefore constant is baked into
+the graph instead of becoming a slot.
 
 A handful of values have no simulation slot at all — the previous action, a command's
 current value, a baked constant — so they arrive as **native inputs** the orchestrator
