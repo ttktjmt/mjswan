@@ -31,8 +31,10 @@ import {
   updateCameraFromData,
 } from './viewer_config';
 import {
+  advanceActionSmoothing,
   clampActions,
   readClipActions,
+  resetActionSmoothing,
   resolveActionClip,
   stepPhysics,
   type ResolvedActionTerm,
@@ -1087,7 +1089,9 @@ export class mjswanRuntime {
       configStiffness: number[] | number | Record<string, number> | undefined,
       configDamping: number[] | number | Record<string, number> | undefined,
       useDefaultOffset: boolean,
-      configClip?: Record<string, readonly number[]>
+      configClip?: Record<string, readonly number[]>,
+      configEmaAlpha?: number,
+      configWarmupTimeS?: number
     ) => {
       const n = mapping.qposAdr.length;
       const subsetJointNames = mapping.actionIndices.map((i) => jointNames[i]);
@@ -1155,6 +1159,11 @@ export class mjswanRuntime {
         muscleNormalize: false,
         clipLo,
         clipHi,
+        emaAlpha: configEmaAlpha ?? 1,
+        // Whole control steps, as mjlab's `episode_length_buf * step_dt < warmup_time_s`.
+        warmupSteps: configWarmupTimeS
+          ? Math.ceil(configWarmupTimeS / (this.controlDt ?? DEFAULT_VIEWER_CONTROL_DT))
+          : 0,
       };
     };
 
@@ -1239,6 +1248,8 @@ export class mjswanRuntime {
           kp: new Float32Array(n),
           kd: new Float32Array(n),
           muscleNormalize,
+          emaAlpha: 1,
+          warmupSteps: 0,
           ...resolveActionClip(
             actionTerm.clip as Record<string, readonly number[]> | undefined,
             muscleMapping.ctrlAdr.map((_, i) => patterns[i] ?? ''),
@@ -1284,7 +1295,9 @@ export class mjswanRuntime {
         actionTerm.stiffness as number[] | number | Record<string, number> | undefined,
         actionTerm.damping as number[] | number | Record<string, number> | undefined,
         useDefaultOffset,
-        actionTerm.clip as Record<string, readonly number[]> | undefined
+        actionTerm.clip as Record<string, readonly number[]> | undefined,
+        actionTerm.ema_alpha as number | undefined,
+        actionTerm.warmup_time_s as number | undefined
       );
       if (controlType === 'joint_position_reference') {
         this.referenceActionCommands.set(entry, String(actionTerm.command_name ?? 'motion'));
@@ -1371,6 +1384,7 @@ export class mjswanRuntime {
     }
     this.onnxTimeStep = 0;
     this.lastSimState.bodies.clear();
+    resetActionSmoothing(this.policyControl ?? []);
 
     await applyResetTerms({
       events: this.eventManager,
@@ -1397,6 +1411,10 @@ export class mjswanRuntime {
     this.handMocap?.update(this.mjModel, this.mjData);
 
     this.refreshActionReferences();
+    advanceActionSmoothing(
+      this.policyControl ?? [],
+      this.policyRunner?.getLastActions() ?? EMPTY_ACTIONS,
+    );
     stepPhysics(
       this.mujoco,
       this.mjModel,

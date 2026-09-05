@@ -81,6 +81,12 @@ export class PolicyRunner {
   private encoderBias: Float32Array;
   private numActions: number;
   private lastActions: Float32Array;
+  /**
+   * Older entries of mjlab's action window, newest first: `[prev_action,
+   * prev_prev_action]`. `lastActions` is `action`, so together they are the three
+   * `ActionManager` keeps.
+   */
+  private olderActions: Float32Array[];
   private motionCache: Map<string, Promise<ArrayBuffer | null>> = new Map();
 
   constructor(config: PolicyConfig, options: PolicyRunnerOptions = {}) {
@@ -99,6 +105,10 @@ export class PolicyRunner {
     this.policyJointNames = (config.policy_joint_names ?? []).slice();
     this.numActions = (config.policy_num_actions as number | undefined) ?? this.policyJointNames.length;
     this.lastActions = new Float32Array(this.numActions);
+    this.olderActions = [
+      new Float32Array(this.numActions),
+      new Float32Array(this.numActions),
+    ];
     this.defaultJointPos = this.normalizeArray(
       config.default_joint_pos ?? [],
       this.numActions,
@@ -119,6 +129,7 @@ export class PolicyRunner {
 
   reset(state?: PolicyState): void {
     this.lastActions.fill(0.0);
+    for (const actions of this.olderActions) actions.fill(0.0);
     this.policyModule?.reset();
     for (const obsList of Object.values(this.obsGroups)) {
       for (const obs of obsList) {
@@ -248,6 +259,17 @@ export class PolicyRunner {
     return new Float32Array(this.lastActions);
   }
 
+  /**
+   * The action `age` control steps back — 0 being the newest, as mjlab's `last_action`
+   * reads it. Ages past the window return zeros, which is what mjlab's own buffers
+   * hold before that many steps have run.
+   */
+  getActions(age: number): Float32Array {
+    if (age <= 0) return this.getLastActions();
+    const older = this.olderActions[age - 1];
+    return new Float32Array(older ?? new Float32Array(this.numActions));
+  }
+
   getConfig(): PolicyConfig {
     return this.config;
   }
@@ -265,10 +287,18 @@ export class PolicyRunner {
   }
 
   setLastActions(actions: Float32Array): void {
+    // Shift the window before overwriting the newest, as mjlab's `process_action` does.
     if (actions.length !== this.lastActions.length) {
+      // A different action width is a different policy; its history starts empty.
       this.lastActions = new Float32Array(actions);
+      this.olderActions = [
+        new Float32Array(actions.length),
+        new Float32Array(actions.length),
+      ];
       return;
     }
+    this.olderActions[1].set(this.olderActions[0]);
+    this.olderActions[0].set(this.lastActions);
     this.lastActions.set(actions);
   }
 
