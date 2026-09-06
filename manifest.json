@@ -1,0 +1,4455 @@
+{
+  "format": 1,
+  "version": "0.9.4",
+  "uses_custom_js": false,
+  "projects": [
+    {
+      "id": "mjswan_demo",
+      "name": "mjswan Demo",
+      "scenes": [
+        {
+          "id": "g1",
+          "name": "G1",
+          "scene": "scene.mjz",
+          "control_dt": 0.02,
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.7
+            ],
+            "distance": 4.3,
+            "elevation": -33.0,
+            "azimuth": -34.0,
+            "origin_type": "ASSET_BODY",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0,
+            "body_name": "torso_link"
+          },
+          "splats": [
+            {
+              "id": "street",
+              "name": "Street",
+              "scale": 3.275,
+              "x_offset": 0.0,
+              "y_offset": 0.0,
+              "z_offset": 0.708,
+              "yaw": 40,
+              "control": true,
+              "path": "assets/street.spz"
+            }
+          ],
+          "mdps": [
+            {
+              "id": "locomotion",
+              "commands": {
+                "velocity": {
+                  "name": "UiCommand",
+                  "ui": {
+                    "inputs": [
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_x",
+                        "label": "Forward Velocity",
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.05,
+                        "default": 0.5
+                      },
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_y",
+                        "label": "Lateral Velocity",
+                        "min": -0.5,
+                        "max": 0.5,
+                        "step": 0.05,
+                        "default": 0.0
+                      },
+                      {
+                        "type": "slider",
+                        "name": "ang_vel_z",
+                        "label": "Yaw Rate",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.0
+                      }
+                    ]
+                  }
+                }
+              },
+              "observations": {
+                "actor": {
+                  "fused": "mdp/locomotion/obs/actor.onnx",
+                  "input_slots": [
+                    {
+                      "entity": "robot",
+                      "field": "joint_pos",
+                      "input": "robot__joint_pos",
+                      "shape": [
+                        1,
+                        29
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "joint_vel",
+                      "input": "robot__joint_vel",
+                      "shape": [
+                        1,
+                        29
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "projected_gravity_b",
+                      "input": "robot__projected_gravity_b",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "root_link_ang_vel_b",
+                      "input": "robot__root_link_ang_vel_b",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "root_link_lin_vel_b",
+                      "input": "robot__root_link_lin_vel_b",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    }
+                  ],
+                  "native_inputs": [
+                    {
+                      "name": "last_action",
+                      "native": "prev_action",
+                      "input": "native__last_action",
+                      "size": 29
+                    },
+                    {
+                      "name": "velocity_cmd",
+                      "native": "command",
+                      "command_name": "velocity",
+                      "input": "native__velocity_cmd",
+                      "size": 3
+                    }
+                  ],
+                  "layout": [
+                    {
+                      "name": "base_lin_vel",
+                      "size": 3
+                    },
+                    {
+                      "name": "base_ang_vel",
+                      "size": 3
+                    },
+                    {
+                      "name": "projected_gravity",
+                      "size": 3
+                    },
+                    {
+                      "name": "joint_pos",
+                      "size": 29
+                    },
+                    {
+                      "name": "joint_vel",
+                      "size": 29
+                    },
+                    {
+                      "name": "last_action",
+                      "size": 29
+                    },
+                    {
+                      "name": "velocity_cmd",
+                      "size": 3
+                    }
+                  ],
+                  "size": 99
+                }
+              },
+              "actions": {
+                "joint_pos": {
+                  "type": "joint_position",
+                  "scale": {
+                    "left_hip_pitch_joint": 0.5475464629911068,
+                    "left_hip_roll_joint": 0.35066146637882434,
+                    "left_hip_yaw_joint": 0.5475464629911068,
+                    "left_knee_joint": 0.35066146637882434,
+                    "left_ankle_pitch_joint": 0.43857731392336724,
+                    "left_ankle_roll_joint": 0.43857731392336724,
+                    "right_hip_pitch_joint": 0.5475464629911068,
+                    "right_hip_roll_joint": 0.35066146637882434,
+                    "right_hip_yaw_joint": 0.5475464629911068,
+                    "right_knee_joint": 0.35066146637882434,
+                    "right_ankle_pitch_joint": 0.43857731392336724,
+                    "right_ankle_roll_joint": 0.43857731392336724,
+                    "waist_yaw_joint": 0.5475464629911068,
+                    "waist_roll_joint": 0.43857731392336724,
+                    "waist_pitch_joint": 0.43857731392336724,
+                    "left_shoulder_pitch_joint": 0.43857731392336724,
+                    "left_shoulder_roll_joint": 0.43857731392336724,
+                    "left_shoulder_yaw_joint": 0.43857731392336724,
+                    "left_elbow_joint": 0.43857731392336724,
+                    "left_wrist_roll_joint": 0.43857731392336724,
+                    "left_wrist_pitch_joint": 0.07450087032950714,
+                    "left_wrist_yaw_joint": 0.07450087032950714,
+                    "right_shoulder_pitch_joint": 0.43857731392336724,
+                    "right_shoulder_roll_joint": 0.43857731392336724,
+                    "right_shoulder_yaw_joint": 0.43857731392336724,
+                    "right_elbow_joint": 0.43857731392336724,
+                    "right_wrist_roll_joint": 0.43857731392336724,
+                    "right_wrist_pitch_joint": 0.07450087032950714,
+                    "right_wrist_yaw_joint": 0.07450087032950714
+                  },
+                  "actuator_names": [
+                    ".*"
+                  ],
+                  "use_default_offset": true,
+                  "stiffness": {
+                    "left_hip_pitch_joint": 40.17923863450712,
+                    "left_hip_roll_joint": 99.09842777666111,
+                    "left_hip_yaw_joint": 40.17923863450712,
+                    "left_knee_joint": 99.09842777666111,
+                    "left_ankle_pitch_joint": 28.50124619574858,
+                    "left_ankle_roll_joint": 28.50124619574858,
+                    "right_hip_pitch_joint": 40.17923863450712,
+                    "right_hip_roll_joint": 99.09842777666111,
+                    "right_hip_yaw_joint": 40.17923863450712,
+                    "right_knee_joint": 99.09842777666111,
+                    "right_ankle_pitch_joint": 28.50124619574858,
+                    "right_ankle_roll_joint": 28.50124619574858,
+                    "waist_yaw_joint": 40.17923863450712,
+                    "waist_roll_joint": 28.50124619574858,
+                    "waist_pitch_joint": 28.50124619574858,
+                    "left_shoulder_pitch_joint": 14.25062309787429,
+                    "left_shoulder_roll_joint": 14.25062309787429,
+                    "left_shoulder_yaw_joint": 14.25062309787429,
+                    "left_elbow_joint": 14.25062309787429,
+                    "left_wrist_roll_joint": 14.25062309787429,
+                    "left_wrist_pitch_joint": 16.77832748089279,
+                    "left_wrist_yaw_joint": 16.77832748089279,
+                    "right_shoulder_pitch_joint": 14.25062309787429,
+                    "right_shoulder_roll_joint": 14.25062309787429,
+                    "right_shoulder_yaw_joint": 14.25062309787429,
+                    "right_elbow_joint": 14.25062309787429,
+                    "right_wrist_roll_joint": 14.25062309787429,
+                    "right_wrist_pitch_joint": 16.77832748089279,
+                    "right_wrist_yaw_joint": 16.77832748089279
+                  },
+                  "damping": {
+                    "left_hip_pitch_joint": 2.557889775413375,
+                    "left_hip_roll_joint": 6.308801853496639,
+                    "left_hip_yaw_joint": 2.557889775413375,
+                    "left_knee_joint": 6.308801853496639,
+                    "left_ankle_pitch_joint": 1.814445686584846,
+                    "left_ankle_roll_joint": 1.814445686584846,
+                    "right_hip_pitch_joint": 2.557889775413375,
+                    "right_hip_roll_joint": 6.308801853496639,
+                    "right_hip_yaw_joint": 2.557889775413375,
+                    "right_knee_joint": 6.308801853496639,
+                    "right_ankle_pitch_joint": 1.814445686584846,
+                    "right_ankle_roll_joint": 1.814445686584846,
+                    "waist_yaw_joint": 2.557889775413375,
+                    "waist_roll_joint": 1.814445686584846,
+                    "waist_pitch_joint": 1.814445686584846,
+                    "left_shoulder_pitch_joint": 0.907222843292423,
+                    "left_shoulder_roll_joint": 0.907222843292423,
+                    "left_shoulder_yaw_joint": 0.907222843292423,
+                    "left_elbow_joint": 0.907222843292423,
+                    "left_wrist_roll_joint": 0.907222843292423,
+                    "left_wrist_pitch_joint": 1.06814150219,
+                    "left_wrist_yaw_joint": 1.06814150219,
+                    "right_shoulder_pitch_joint": 0.907222843292423,
+                    "right_shoulder_roll_joint": 0.907222843292423,
+                    "right_shoulder_yaw_joint": 0.907222843292423,
+                    "right_elbow_joint": 0.907222843292423,
+                    "right_wrist_roll_joint": 0.907222843292423,
+                    "right_wrist_pitch_joint": 1.06814150219,
+                    "right_wrist_yaw_joint": 1.06814150219
+                  }
+                }
+              },
+              "terminations": {
+                "__fused__": {
+                  "fused": "mdp/locomotion/term/terminations.onnx",
+                  "input_slots": [
+                    {
+                      "entity": "robot",
+                      "field": "projected_gravity_b",
+                      "input": "robot__projected_gravity_b",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "root_link_pos_w",
+                      "input": "robot__root_link_pos_w",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    }
+                  ],
+                  "lanes": [
+                    {
+                      "name": "bad_orientation",
+                      "time_out": false
+                    },
+                    {
+                      "name": "root_height_below_minimum",
+                      "time_out": false
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "balance",
+              "observations": {
+                "actor": {
+                  "fused": "mdp/balance/obs/actor.onnx",
+                  "input_slots": [
+                    {
+                      "entity": "robot",
+                      "field": "joint_pos",
+                      "input": "robot__joint_pos",
+                      "shape": [
+                        1,
+                        29
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "joint_vel",
+                      "input": "robot__joint_vel",
+                      "shape": [
+                        1,
+                        29
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "projected_gravity_b",
+                      "input": "robot__projected_gravity_b",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "root_link_ang_vel_b",
+                      "input": "robot__root_link_ang_vel_b",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    }
+                  ],
+                  "native_inputs": [
+                    {
+                      "name": "prev_actions",
+                      "native": "prev_action",
+                      "input": "native__prev_actions",
+                      "size": 29
+                    }
+                  ],
+                  "layout": [
+                    {
+                      "name": "base_ang_vel",
+                      "size": 3
+                    },
+                    {
+                      "name": "projected_gravity",
+                      "size": 3
+                    },
+                    {
+                      "name": "joint_pos",
+                      "size": 29
+                    },
+                    {
+                      "name": "joint_vel",
+                      "size": 29
+                    },
+                    {
+                      "name": "prev_actions",
+                      "size": 29
+                    }
+                  ],
+                  "size": 93
+                }
+              },
+              "actions": {
+                "joint_pos": {
+                  "type": "joint_position",
+                  "scale": {
+                    "left_hip_pitch_joint": 0.5475464629911068,
+                    "left_hip_roll_joint": 0.35066146637882434,
+                    "left_hip_yaw_joint": 0.5475464629911068,
+                    "left_knee_joint": 0.35066146637882434,
+                    "left_ankle_pitch_joint": 0.43857731392336724,
+                    "left_ankle_roll_joint": 0.43857731392336724,
+                    "right_hip_pitch_joint": 0.5475464629911068,
+                    "right_hip_roll_joint": 0.35066146637882434,
+                    "right_hip_yaw_joint": 0.5475464629911068,
+                    "right_knee_joint": 0.35066146637882434,
+                    "right_ankle_pitch_joint": 0.43857731392336724,
+                    "right_ankle_roll_joint": 0.43857731392336724,
+                    "waist_yaw_joint": 0.5475464629911068,
+                    "waist_roll_joint": 0.43857731392336724,
+                    "waist_pitch_joint": 0.43857731392336724,
+                    "left_shoulder_pitch_joint": 0.43857731392336724,
+                    "left_shoulder_roll_joint": 0.43857731392336724,
+                    "left_shoulder_yaw_joint": 0.43857731392336724,
+                    "left_elbow_joint": 0.43857731392336724,
+                    "left_wrist_roll_joint": 0.43857731392336724,
+                    "left_wrist_pitch_joint": 0.07450087032950714,
+                    "left_wrist_yaw_joint": 0.07450087032950714,
+                    "right_shoulder_pitch_joint": 0.43857731392336724,
+                    "right_shoulder_roll_joint": 0.43857731392336724,
+                    "right_shoulder_yaw_joint": 0.43857731392336724,
+                    "right_elbow_joint": 0.43857731392336724,
+                    "right_wrist_roll_joint": 0.43857731392336724,
+                    "right_wrist_pitch_joint": 0.07450087032950714,
+                    "right_wrist_yaw_joint": 0.07450087032950714
+                  },
+                  "actuator_names": [
+                    ".*"
+                  ],
+                  "use_default_offset": true,
+                  "stiffness": {
+                    "left_hip_pitch_joint": 40.17923863450712,
+                    "left_hip_roll_joint": 99.09842777666111,
+                    "left_hip_yaw_joint": 40.17923863450712,
+                    "left_knee_joint": 99.09842777666111,
+                    "left_ankle_pitch_joint": 28.50124619574858,
+                    "left_ankle_roll_joint": 28.50124619574858,
+                    "right_hip_pitch_joint": 40.17923863450712,
+                    "right_hip_roll_joint": 99.09842777666111,
+                    "right_hip_yaw_joint": 40.17923863450712,
+                    "right_knee_joint": 99.09842777666111,
+                    "right_ankle_pitch_joint": 28.50124619574858,
+                    "right_ankle_roll_joint": 28.50124619574858,
+                    "waist_yaw_joint": 40.17923863450712,
+                    "waist_roll_joint": 28.50124619574858,
+                    "waist_pitch_joint": 28.50124619574858,
+                    "left_shoulder_pitch_joint": 14.25062309787429,
+                    "left_shoulder_roll_joint": 14.25062309787429,
+                    "left_shoulder_yaw_joint": 14.25062309787429,
+                    "left_elbow_joint": 14.25062309787429,
+                    "left_wrist_roll_joint": 14.25062309787429,
+                    "left_wrist_pitch_joint": 16.77832748089279,
+                    "left_wrist_yaw_joint": 16.77832748089279,
+                    "right_shoulder_pitch_joint": 14.25062309787429,
+                    "right_shoulder_roll_joint": 14.25062309787429,
+                    "right_shoulder_yaw_joint": 14.25062309787429,
+                    "right_elbow_joint": 14.25062309787429,
+                    "right_wrist_roll_joint": 14.25062309787429,
+                    "right_wrist_pitch_joint": 16.77832748089279,
+                    "right_wrist_yaw_joint": 16.77832748089279
+                  },
+                  "damping": {
+                    "left_hip_pitch_joint": 2.557889775413375,
+                    "left_hip_roll_joint": 6.308801853496639,
+                    "left_hip_yaw_joint": 2.557889775413375,
+                    "left_knee_joint": 6.308801853496639,
+                    "left_ankle_pitch_joint": 1.814445686584846,
+                    "left_ankle_roll_joint": 1.814445686584846,
+                    "right_hip_pitch_joint": 2.557889775413375,
+                    "right_hip_roll_joint": 6.308801853496639,
+                    "right_hip_yaw_joint": 2.557889775413375,
+                    "right_knee_joint": 6.308801853496639,
+                    "right_ankle_pitch_joint": 1.814445686584846,
+                    "right_ankle_roll_joint": 1.814445686584846,
+                    "waist_yaw_joint": 2.557889775413375,
+                    "waist_roll_joint": 1.814445686584846,
+                    "waist_pitch_joint": 1.814445686584846,
+                    "left_shoulder_pitch_joint": 0.907222843292423,
+                    "left_shoulder_roll_joint": 0.907222843292423,
+                    "left_shoulder_yaw_joint": 0.907222843292423,
+                    "left_elbow_joint": 0.907222843292423,
+                    "left_wrist_roll_joint": 0.907222843292423,
+                    "left_wrist_pitch_joint": 1.06814150219,
+                    "left_wrist_yaw_joint": 1.06814150219,
+                    "right_shoulder_pitch_joint": 0.907222843292423,
+                    "right_shoulder_roll_joint": 0.907222843292423,
+                    "right_shoulder_yaw_joint": 0.907222843292423,
+                    "right_elbow_joint": 0.907222843292423,
+                    "right_wrist_roll_joint": 0.907222843292423,
+                    "right_wrist_pitch_joint": 1.06814150219,
+                    "right_wrist_yaw_joint": 1.06814150219
+                  }
+                }
+              },
+              "terminations": {
+                "__fused__": {
+                  "fused": "mdp/balance/term/terminations.onnx",
+                  "input_slots": [
+                    {
+                      "entity": "robot",
+                      "field": "projected_gravity_b",
+                      "input": "robot__projected_gravity_b",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "root_link_pos_w",
+                      "input": "robot__root_link_pos_w",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    }
+                  ],
+                  "lanes": [
+                    {
+                      "name": "bad_orientation",
+                      "time_out": false
+                    },
+                    {
+                      "name": "root_height_below_minimum",
+                      "time_out": false
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "policies": [
+            {
+              "id": "locomotion",
+              "name": "Locomotion",
+              "mdp": "locomotion",
+              "onnx": "policy/locomotion.onnx",
+              "policy_joint_names": [
+                "left_hip_pitch_joint",
+                "left_hip_roll_joint",
+                "left_hip_yaw_joint",
+                "left_knee_joint",
+                "left_ankle_pitch_joint",
+                "left_ankle_roll_joint",
+                "right_hip_pitch_joint",
+                "right_hip_roll_joint",
+                "right_hip_yaw_joint",
+                "right_knee_joint",
+                "right_ankle_pitch_joint",
+                "right_ankle_roll_joint",
+                "waist_yaw_joint",
+                "waist_roll_joint",
+                "waist_pitch_joint",
+                "left_shoulder_pitch_joint",
+                "left_shoulder_roll_joint",
+                "left_shoulder_yaw_joint",
+                "left_elbow_joint",
+                "left_wrist_roll_joint",
+                "left_wrist_pitch_joint",
+                "left_wrist_yaw_joint",
+                "right_shoulder_pitch_joint",
+                "right_shoulder_roll_joint",
+                "right_shoulder_yaw_joint",
+                "right_elbow_joint",
+                "right_wrist_roll_joint",
+                "right_wrist_pitch_joint",
+                "right_wrist_yaw_joint"
+              ],
+              "default_joint_pos": [
+                -0.312,
+                0.0,
+                0.0,
+                0.669,
+                -0.363,
+                0.0,
+                -0.312,
+                0.0,
+                0.0,
+                0.669,
+                -0.363,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.2,
+                0.2,
+                0.0,
+                0.6,
+                0.0,
+                0.0,
+                0.0,
+                0.2,
+                -0.2,
+                0.0,
+                0.6,
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "id": "balance",
+              "name": "Balance",
+              "mdp": "balance",
+              "onnx": "policy/balance.onnx",
+              "policy_joint_names": [
+                "left_hip_pitch_joint",
+                "left_hip_roll_joint",
+                "left_hip_yaw_joint",
+                "left_knee_joint",
+                "left_ankle_pitch_joint",
+                "left_ankle_roll_joint",
+                "right_hip_pitch_joint",
+                "right_hip_roll_joint",
+                "right_hip_yaw_joint",
+                "right_knee_joint",
+                "right_ankle_pitch_joint",
+                "right_ankle_roll_joint",
+                "waist_yaw_joint",
+                "waist_roll_joint",
+                "waist_pitch_joint",
+                "left_shoulder_pitch_joint",
+                "left_shoulder_roll_joint",
+                "left_shoulder_yaw_joint",
+                "left_elbow_joint",
+                "left_wrist_roll_joint",
+                "left_wrist_pitch_joint",
+                "left_wrist_yaw_joint",
+                "right_shoulder_pitch_joint",
+                "right_shoulder_roll_joint",
+                "right_shoulder_yaw_joint",
+                "right_elbow_joint",
+                "right_wrist_roll_joint",
+                "right_wrist_pitch_joint",
+                "right_wrist_yaw_joint"
+              ],
+              "default_joint_pos": [
+                -0.312,
+                0.0,
+                0.0,
+                0.669,
+                -0.363,
+                0.0,
+                -0.312,
+                0.0,
+                0.0,
+                0.669,
+                -0.363,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.2,
+                0.2,
+                0.0,
+                0.6,
+                0.0,
+                0.0,
+                0.0,
+                0.2,
+                -0.2,
+                0.0,
+                0.6,
+                0.0,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        {
+          "id": "go2",
+          "name": "Go2",
+          "scene": "scene.mjz",
+          "control_dt": 0.02,
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.7
+            ],
+            "distance": 3.8,
+            "elevation": -20.0,
+            "azimuth": 34.0,
+            "origin_type": "ASSET_BODY",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0,
+            "body_name": "base"
+          },
+          "mdps": [
+            {
+              "id": "facet",
+              "commands": {
+                "velocity": {
+                  "name": "UiCommand",
+                  "ui": {
+                    "inputs": [
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_x",
+                        "label": "Forward Velocity",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.5
+                      },
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_y",
+                        "label": "Lateral Velocity",
+                        "min": -0.5,
+                        "max": 0.5,
+                        "step": 0.05,
+                        "default": 0.0
+                      },
+                      {
+                        "type": "slider",
+                        "name": "ang_vel_z",
+                        "label": "Yaw Rate",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.0
+                      }
+                    ]
+                  }
+                }
+              },
+              "observations": {
+                "actor": [
+                  {
+                    "name": "projected_gravity",
+                    "onnx": "mdp/facet/obs/projected_gravity.onnx",
+                    "size": 3,
+                    "input_slots": [
+                      {
+                        "entity": "robot",
+                        "field": "projected_gravity_b",
+                        "input": "robot__projected_gravity_b",
+                        "shape": [
+                          1,
+                          3
+                        ]
+                      }
+                    ],
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ]
+                  },
+                  {
+                    "name": "joint_pos",
+                    "onnx": "mdp/facet/obs/joint_pos.onnx",
+                    "size": 12,
+                    "input_slots": [
+                      {
+                        "entity": "robot",
+                        "field": "joint_pos",
+                        "input": "robot__joint_pos",
+                        "shape": [
+                          1,
+                          12
+                        ]
+                      }
+                    ],
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ]
+                  },
+                  {
+                    "name": "joint_vel",
+                    "onnx": "mdp/facet/obs/joint_vel.onnx",
+                    "size": 12,
+                    "input_slots": [
+                      {
+                        "entity": "robot",
+                        "field": "joint_vel",
+                        "input": "robot__joint_vel",
+                        "shape": [
+                          1,
+                          12
+                        ]
+                      }
+                    ],
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ]
+                  },
+                  {
+                    "name": "prev_actions",
+                    "native": "prev_action",
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ],
+                    "history_interleaved": true
+                  }
+                ],
+                "command": [
+                  {
+                    "name": "impedance_cmd",
+                    "native": "constant",
+                    "value": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "size": 27
+                  }
+                ]
+              },
+              "actions": {
+                "joint_pos": {
+                  "type": "joint_position",
+                  "scale": 0.5,
+                  "actuator_names": [
+                    ".*"
+                  ],
+                  "use_default_offset": true,
+                  "stiffness": 25.0,
+                  "damping": 0.5
+                }
+              }
+            },
+            {
+              "id": "vanilla",
+              "commands": {
+                "velocity": {
+                  "name": "UiCommand",
+                  "ui": {
+                    "inputs": [
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_x",
+                        "label": "Forward Velocity",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.5
+                      },
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_y",
+                        "label": "Lateral Velocity",
+                        "min": -0.5,
+                        "max": 0.5,
+                        "step": 0.05,
+                        "default": 0.0
+                      },
+                      {
+                        "type": "slider",
+                        "name": "ang_vel_z",
+                        "label": "Yaw Rate",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.0
+                      }
+                    ]
+                  }
+                }
+              },
+              "observations": {
+                "actor": [
+                  {
+                    "name": "projected_gravity",
+                    "onnx": "mdp/vanilla/obs/projected_gravity.onnx",
+                    "size": 3,
+                    "input_slots": [
+                      {
+                        "entity": "robot",
+                        "field": "projected_gravity_b",
+                        "input": "robot__projected_gravity_b",
+                        "shape": [
+                          1,
+                          3
+                        ]
+                      }
+                    ],
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ]
+                  },
+                  {
+                    "name": "joint_pos",
+                    "onnx": "mdp/vanilla/obs/joint_pos.onnx",
+                    "size": 12,
+                    "input_slots": [
+                      {
+                        "entity": "robot",
+                        "field": "joint_pos",
+                        "input": "robot__joint_pos",
+                        "shape": [
+                          1,
+                          12
+                        ]
+                      }
+                    ],
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ]
+                  },
+                  {
+                    "name": "joint_vel",
+                    "onnx": "mdp/vanilla/obs/joint_vel.onnx",
+                    "size": 12,
+                    "input_slots": [
+                      {
+                        "entity": "robot",
+                        "field": "joint_vel",
+                        "input": "robot__joint_vel",
+                        "shape": [
+                          1,
+                          12
+                        ]
+                      }
+                    ],
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ]
+                  },
+                  {
+                    "name": "prev_actions",
+                    "native": "prev_action",
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ],
+                    "history_interleaved": true
+                  }
+                ],
+                "command_": [
+                  {
+                    "name": "velocity_cmd",
+                    "native": "command",
+                    "command_name": "velocity"
+                  },
+                  {
+                    "name": "velocity_cmd_pad",
+                    "native": "constant",
+                    "value": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "size": 13
+                  }
+                ]
+              },
+              "actions": {
+                "joint_pos": {
+                  "type": "joint_position",
+                  "scale": 0.5,
+                  "actuator_names": [
+                    ".*"
+                  ],
+                  "use_default_offset": true,
+                  "stiffness": 25.0,
+                  "damping": 0.5
+                }
+              }
+            },
+            {
+              "id": "robust",
+              "commands": {
+                "velocity": {
+                  "name": "UiCommand",
+                  "ui": {
+                    "inputs": [
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_x",
+                        "label": "Forward Velocity",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.5
+                      },
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_y",
+                        "label": "Lateral Velocity",
+                        "min": -0.5,
+                        "max": 0.5,
+                        "step": 0.05,
+                        "default": 0.0
+                      },
+                      {
+                        "type": "slider",
+                        "name": "ang_vel_z",
+                        "label": "Yaw Rate",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.0
+                      }
+                    ]
+                  }
+                }
+              },
+              "observations": {
+                "actor": [
+                  {
+                    "name": "projected_gravity",
+                    "onnx": "mdp/robust/obs/projected_gravity.onnx",
+                    "size": 3,
+                    "input_slots": [
+                      {
+                        "entity": "robot",
+                        "field": "projected_gravity_b",
+                        "input": "robot__projected_gravity_b",
+                        "shape": [
+                          1,
+                          3
+                        ]
+                      }
+                    ],
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ]
+                  },
+                  {
+                    "name": "joint_pos",
+                    "onnx": "mdp/robust/obs/joint_pos.onnx",
+                    "size": 12,
+                    "input_slots": [
+                      {
+                        "entity": "robot",
+                        "field": "joint_pos",
+                        "input": "robot__joint_pos",
+                        "shape": [
+                          1,
+                          12
+                        ]
+                      }
+                    ],
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ]
+                  },
+                  {
+                    "name": "joint_vel",
+                    "onnx": "mdp/robust/obs/joint_vel.onnx",
+                    "size": 12,
+                    "input_slots": [
+                      {
+                        "entity": "robot",
+                        "field": "joint_vel",
+                        "input": "robot__joint_vel",
+                        "shape": [
+                          1,
+                          12
+                        ]
+                      }
+                    ],
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ]
+                  },
+                  {
+                    "name": "prev_actions",
+                    "native": "prev_action",
+                    "history_offsets": [
+                      0,
+                      1,
+                      2
+                    ],
+                    "history_interleaved": true
+                  }
+                ],
+                "command_": [
+                  {
+                    "name": "velocity_cmd",
+                    "native": "command",
+                    "command_name": "velocity"
+                  },
+                  {
+                    "name": "velocity_cmd_pad",
+                    "native": "constant",
+                    "value": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "size": 13
+                  }
+                ]
+              },
+              "actions": {
+                "joint_pos": {
+                  "type": "joint_position",
+                  "scale": 0.5,
+                  "actuator_names": [
+                    ".*"
+                  ],
+                  "use_default_offset": true,
+                  "stiffness": 25.0,
+                  "damping": 0.5
+                }
+              }
+            }
+          ],
+          "policies": [
+            {
+              "id": "facet",
+              "name": "Facet",
+              "mdp": "facet",
+              "onnx": "policy/facet.onnx",
+              "policy_joint_names": [
+                "FL_hip_joint",
+                "FR_hip_joint",
+                "RL_hip_joint",
+                "RR_hip_joint",
+                "FL_thigh_joint",
+                "FR_thigh_joint",
+                "RL_thigh_joint",
+                "RR_thigh_joint",
+                "FL_calf_joint",
+                "FR_calf_joint",
+                "RL_calf_joint",
+                "RR_calf_joint"
+              ],
+              "default_joint_pos": [
+                0.10000000149011612,
+                -0.10000000149011612,
+                0.10000000149011612,
+                -0.10000000149011612,
+                0.699999988079071,
+                0.699999988079071,
+                0.800000011920929,
+                0.800000011920929,
+                -1.5,
+                -1.5,
+                -1.5,
+                -1.5
+              ],
+              "in_keys": [
+                "command",
+                "actor",
+                "is_init",
+                "adapt_hx"
+              ],
+              "out_keys": [
+                "command",
+                "policy",
+                "priv_pred",
+                "ext_pred",
+                [
+                  "info",
+                  "ext_rec"
+                ],
+                [
+                  "next",
+                  "adapt_hx"
+                ],
+                "_actor_inp",
+                "_actor_feature",
+                "loc",
+                "scale",
+                "flag",
+                "action",
+                "sample_log_prob",
+                "retro_inp",
+                "retro_feat",
+                [
+                  "info",
+                  "retro_pred"
+                ]
+              ]
+            },
+            {
+              "id": "vanilla",
+              "name": "Vanilla",
+              "mdp": "vanilla",
+              "onnx": "policy/vanilla.onnx",
+              "policy_joint_names": [
+                "FL_hip_joint",
+                "FR_hip_joint",
+                "RL_hip_joint",
+                "RR_hip_joint",
+                "FL_thigh_joint",
+                "FR_thigh_joint",
+                "RL_thigh_joint",
+                "RR_thigh_joint",
+                "FL_calf_joint",
+                "FR_calf_joint",
+                "RL_calf_joint",
+                "RR_calf_joint"
+              ],
+              "default_joint_pos": [
+                0.10000000149011612,
+                -0.10000000149011612,
+                0.10000000149011612,
+                -0.10000000149011612,
+                0.699999988079071,
+                0.699999988079071,
+                0.800000011920929,
+                0.800000011920929,
+                -1.5,
+                -1.5,
+                -1.5,
+                -1.5
+              ],
+              "in_keys": [
+                "actor",
+                "is_init",
+                "adapt_hx",
+                "command_"
+              ],
+              "out_keys": [
+                "policy",
+                "priv_pred",
+                "ext_pred",
+                [
+                  "info",
+                  "ext_rec"
+                ],
+                [
+                  "next",
+                  "adapt_hx"
+                ],
+                "_actor_inp",
+                "_actor_feature",
+                "loc",
+                "scale",
+                "flag",
+                "action",
+                "sample_log_prob",
+                "retro_inp",
+                "retro_feat",
+                [
+                  "info",
+                  "retro_pred"
+                ]
+              ]
+            },
+            {
+              "id": "robust",
+              "name": "Robust",
+              "mdp": "robust",
+              "onnx": "policy/robust.onnx",
+              "policy_joint_names": [
+                "FL_hip_joint",
+                "FR_hip_joint",
+                "RL_hip_joint",
+                "RR_hip_joint",
+                "FL_thigh_joint",
+                "FR_thigh_joint",
+                "RL_thigh_joint",
+                "RR_thigh_joint",
+                "FL_calf_joint",
+                "FR_calf_joint",
+                "RL_calf_joint",
+                "RR_calf_joint"
+              ],
+              "default_joint_pos": [
+                0.10000000149011612,
+                -0.10000000149011612,
+                0.10000000149011612,
+                -0.10000000149011612,
+                0.699999988079071,
+                0.699999988079071,
+                0.800000011920929,
+                0.800000011920929,
+                -1.5,
+                -1.5,
+                -1.5,
+                -1.5
+              ],
+              "in_keys": [
+                "actor",
+                "is_init",
+                "adapt_hx",
+                "command_"
+              ],
+              "out_keys": [
+                "policy",
+                "priv_pred",
+                "ext_pred",
+                [
+                  "info",
+                  "ext_rec"
+                ],
+                [
+                  "next",
+                  "adapt_hx"
+                ],
+                "_actor_inp",
+                "_actor_feature",
+                "loc",
+                "scale",
+                "flag",
+                "action",
+                "sample_log_prob",
+                "retro_inp",
+                "retro_feat",
+                [
+                  "info",
+                  "retro_pred"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "go1",
+          "name": "Go1",
+          "scene": "scene.mjz",
+          "control_dt": 0.02,
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.2
+            ],
+            "distance": 3.1,
+            "elevation": -25.0,
+            "azimuth": -45.0,
+            "origin_type": "ASSET_BODY",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0,
+            "body_name": "trunk"
+          },
+          "mdps": [
+            {
+              "id": "decap",
+              "commands": {
+                "velocity": {
+                  "name": "UiCommand",
+                  "ui": {
+                    "inputs": [
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_x",
+                        "label": "Forward Velocity",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.5
+                      },
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_y",
+                        "label": "Lateral Velocity",
+                        "min": -0.5,
+                        "max": 0.5,
+                        "step": 0.05,
+                        "default": 0.0
+                      },
+                      {
+                        "type": "slider",
+                        "name": "ang_vel_z",
+                        "label": "Yaw Rate",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.0
+                      }
+                    ]
+                  }
+                }
+              },
+              "observations": {
+                "actor": {
+                  "fused": "mdp/decap/obs/actor.onnx",
+                  "input_slots": [
+                    {
+                      "entity": "robot",
+                      "field": "joint_pos",
+                      "input": "robot__joint_pos",
+                      "shape": [
+                        1,
+                        12
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "joint_vel",
+                      "input": "robot__joint_vel",
+                      "shape": [
+                        1,
+                        12
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "projected_gravity_b",
+                      "input": "robot__projected_gravity_b",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    }
+                  ],
+                  "native_inputs": [
+                    {
+                      "name": "velocity_cmd",
+                      "native": "command",
+                      "command_name": "velocity",
+                      "input": "native__velocity_cmd",
+                      "size": 3
+                    },
+                    {
+                      "name": "prev_actions",
+                      "native": "prev_action",
+                      "input": "native__prev_actions",
+                      "size": 12
+                    }
+                  ],
+                  "layout": [
+                    {
+                      "name": "projected_gravity",
+                      "size": 3
+                    },
+                    {
+                      "name": "velocity_cmd",
+                      "size": 3
+                    },
+                    {
+                      "name": "joint_pos",
+                      "size": 12
+                    },
+                    {
+                      "name": "joint_vel",
+                      "size": 12
+                    },
+                    {
+                      "name": "prev_actions",
+                      "size": 12
+                    }
+                  ],
+                  "size": 42
+                }
+              },
+              "actions": {
+                "effort": {
+                  "type": "torque",
+                  "scale": 8.0,
+                  "actuator_names": [
+                    ".*"
+                  ],
+                  "stiffness": 20.0,
+                  "damping": 0.5
+                }
+              }
+            }
+          ],
+          "policies": [
+            {
+              "id": "decap",
+              "name": "Decap",
+              "mdp": "decap",
+              "onnx": "policy/decap.onnx",
+              "policy_joint_names": [
+                "FL_hip_joint",
+                "FL_thigh_joint",
+                "FL_calf_joint",
+                "FR_hip_joint",
+                "FR_thigh_joint",
+                "FR_calf_joint",
+                "RL_hip_joint",
+                "RL_thigh_joint",
+                "RL_calf_joint",
+                "RR_hip_joint",
+                "RR_thigh_joint",
+                "RR_calf_joint"
+              ],
+              "default_joint_pos": [
+                0.10000000149011612,
+                0.8,
+                -1.5,
+                -0.10000000149011612,
+                0.8,
+                -1.5,
+                0.10000000149011612,
+                1.0,
+                -1.5,
+                -0.10000000149011612,
+                1.0,
+                -1.5
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "robot_descriptions",
+      "name": "Robot Descriptions",
+      "scenes": [
+        {
+          "id": "anymal_c_velocity",
+          "name": "ANYmal C Velocity",
+          "scene": "scene.mjz",
+          "control_dt": 0.02,
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [
+            {
+              "id": "velocity_3000_iters",
+              "commands": {
+                "velocity": {
+                  "name": "UiCommand",
+                  "ui": {
+                    "inputs": [
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_x",
+                        "label": "Forward Velocity",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.5
+                      },
+                      {
+                        "type": "slider",
+                        "name": "lin_vel_y",
+                        "label": "Lateral Velocity",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "default": 0.0
+                      },
+                      {
+                        "type": "slider",
+                        "name": "ang_vel_z",
+                        "label": "Yaw Rate",
+                        "min": -0.5,
+                        "max": 0.5,
+                        "step": 0.05,
+                        "default": 0.0
+                      }
+                    ]
+                  }
+                }
+              },
+              "observations": {
+                "actor": {
+                  "fused": "mdp/velocity_3000_iters/obs/actor.onnx",
+                  "input_slots": [
+                    {
+                      "entity": "robot",
+                      "field": "joint_pos",
+                      "input": "robot__joint_pos",
+                      "shape": [
+                        1,
+                        12
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "joint_vel",
+                      "input": "robot__joint_vel",
+                      "shape": [
+                        1,
+                        12
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "projected_gravity_b",
+                      "input": "robot__projected_gravity_b",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "root_link_ang_vel_b",
+                      "input": "robot__root_link_ang_vel_b",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    },
+                    {
+                      "entity": "robot",
+                      "field": "root_link_lin_vel_b",
+                      "input": "robot__root_link_lin_vel_b",
+                      "shape": [
+                        1,
+                        3
+                      ]
+                    }
+                  ],
+                  "native_inputs": [
+                    {
+                      "name": "last_action",
+                      "native": "prev_action",
+                      "input": "native__last_action",
+                      "size": 12
+                    },
+                    {
+                      "name": "velocity_cmd",
+                      "native": "command",
+                      "command_name": "velocity",
+                      "input": "native__velocity_cmd",
+                      "size": 3
+                    }
+                  ],
+                  "layout": [
+                    {
+                      "name": "base_lin_vel",
+                      "size": 3
+                    },
+                    {
+                      "name": "base_ang_vel",
+                      "size": 3
+                    },
+                    {
+                      "name": "projected_gravity",
+                      "size": 3
+                    },
+                    {
+                      "name": "joint_pos",
+                      "size": 12
+                    },
+                    {
+                      "name": "joint_vel",
+                      "size": 12
+                    },
+                    {
+                      "name": "last_action",
+                      "size": 12
+                    },
+                    {
+                      "name": "velocity_cmd",
+                      "size": 3
+                    }
+                  ],
+                  "size": 48
+                }
+              },
+              "actions": {
+                "joint_pos": {
+                  "type": "joint_position",
+                  "scale": 1.013,
+                  "actuator_names": [
+                    ".*"
+                  ],
+                  "use_default_offset": true,
+                  "stiffness": 19.739,
+                  "damping": 1.257
+                }
+              }
+            }
+          ],
+          "policies": [
+            {
+              "id": "velocity_3000_iters",
+              "name": "velocity 3000 iters",
+              "mdp": "velocity_3000_iters",
+              "onnx": "policy/velocity_3000_iters.onnx",
+              "policy_joint_names": [
+                "robot/LF_HAA",
+                "robot/LF_HFE",
+                "robot/LF_KFE",
+                "robot/RF_HAA",
+                "robot/RF_HFE",
+                "robot/RF_KFE",
+                "robot/LH_HAA",
+                "robot/LH_HFE",
+                "robot/LH_KFE",
+                "robot/RH_HAA",
+                "robot/RH_HFE",
+                "robot/RH_KFE"
+              ],
+              "default_joint_pos": [
+                0.0,
+                0.4,
+                -0.8,
+                0.0,
+                0.4,
+                -0.8,
+                0.0,
+                -0.4,
+                0.8,
+                0.0,
+                -0.4,
+                0.8
+              ]
+            }
+          ]
+        },
+        {
+          "id": "a1",
+          "name": "A1",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "ability_hand",
+          "name": "Ability Hand",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "adam_lite",
+          "name": "Adam Lite",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "aero_hand_open",
+          "name": "Aero Hand Open",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "aliengo",
+          "name": "Aliengo",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "allegro_hand",
+          "name": "Allegro Hand",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "aloha",
+          "name": "Aloha",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "anymal_b",
+          "name": "Anymal B",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "anymal_c",
+          "name": "Anymal C",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "apollo",
+          "name": "Apollo",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "arx_l5",
+          "name": "Arx L5",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "booster_t1",
+          "name": "Booster T1",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "cassie",
+          "name": "Cassie",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "cf2",
+          "name": "Cf2",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "dynamixel_2r",
+          "name": "Dynamixel 2r",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "elf2",
+          "name": "Elf2",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "fr3",
+          "name": "Fr3",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "fr3_v2",
+          "name": "Fr3 V2",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "g1",
+          "name": "G1",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "gen3",
+          "name": "Gen3",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "go1",
+          "name": "Go1",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "go2",
+          "name": "Go2",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "h1",
+          "name": "H1",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "h1_2",
+          "name": "H1 2",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "iiwa14",
+          "name": "Iiwa14",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "jvrc",
+          "name": "Jvrc",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "leap_hand",
+          "name": "Leap Hand",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "low_cost_robot_arm",
+          "name": "Low Cost Robot Arm",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "mujoco_humanoid",
+          "name": "Mujoco Humanoid",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "n1",
+          "name": "N1",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "op3",
+          "name": "Op3",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "openarm_v1",
+          "name": "Openarm V1",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "panda",
+          "name": "Panda",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "piper",
+          "name": "Piper",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "robotiq_2f85",
+          "name": "Robotiq 2f85",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "robotiq_2f85_v4",
+          "name": "Robotiq 2f85 V4",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "rsk",
+          "name": "Rsk",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "sawyer",
+          "name": "Sawyer",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "shadow_dexee",
+          "name": "Shadow Dexee",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "shadow_hand",
+          "name": "Shadow Hand",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "skydio_x2",
+          "name": "Skydio X2",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "so_arm100",
+          "name": "So Arm100",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "so_arm101",
+          "name": "So Arm101",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "spot",
+          "name": "Spot",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "stretch",
+          "name": "Stretch",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "stretch_3",
+          "name": "Stretch 3",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "talos",
+          "name": "Talos",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "tiago",
+          "name": "Tiago++",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "toddlerbot_2xc",
+          "name": "Toddlerbot 2xc",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "toddlerbot_2xm",
+          "name": "Toddlerbot 2xm",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "ur10e",
+          "name": "Ur10e",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "ur5e",
+          "name": "Ur5e",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "viper",
+          "name": "Viper",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "widow",
+          "name": "Widow",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "xarm7",
+          "name": "Xarm7",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "yam",
+          "name": "Yam",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "z1",
+          "name": "Z1",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "mujoco_playground",
+      "name": "MuJoCo Playground",
+      "scenes": [
+        {
+          "id": "acrobotswingup",
+          "name": "AcrobotSwingup",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "ballincup",
+          "name": "BallInCup",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "cartpolebalance",
+          "name": "CartpoleBalance",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "cartpoleswingup",
+          "name": "CartpoleSwingup",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "cheetahrun",
+          "name": "CheetahRun",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "fingerspin",
+          "name": "FingerSpin",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "fingerturneasy",
+          "name": "FingerTurnEasy",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "fingerturnhard",
+          "name": "FingerTurnHard",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "fishswim",
+          "name": "FishSwim",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "hopperhop",
+          "name": "HopperHop",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "hopperstand",
+          "name": "HopperStand",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "humanoidstand",
+          "name": "HumanoidStand",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "humanoidwalk",
+          "name": "HumanoidWalk",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "humanoidrun",
+          "name": "HumanoidRun",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "pendulumswingup",
+          "name": "PendulumSwingup",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "pointmass",
+          "name": "PointMass",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "reachereasy",
+          "name": "ReacherEasy",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "reacherhard",
+          "name": "ReacherHard",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "swimmerswimmer6",
+          "name": "SwimmerSwimmer6",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "walkerrun",
+          "name": "WalkerRun",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "walkerstand",
+          "name": "WalkerStand",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "walkerwalk",
+          "name": "WalkerWalk",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "apollojoystickflatterrain",
+          "name": "ApolloJoystickFlatTerrain",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "barkourjoystick",
+          "name": "BarkourJoystick",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "berkeleyhumanoidjoystickflatterrain",
+          "name": "BerkeleyHumanoidJoystickFlatTerrain",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "berkeleyhumanoidjoystickroughterrain",
+          "name": "BerkeleyHumanoidJoystickRoughTerrain",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "g1joystickflatterrain",
+          "name": "G1JoystickFlatTerrain",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "g1joystickroughterrain",
+          "name": "G1JoystickRoughTerrain",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "go1joystickflatterrain",
+          "name": "Go1JoystickFlatTerrain",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "go1joystickroughterrain",
+          "name": "Go1JoystickRoughTerrain",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "go1getup",
+          "name": "Go1Getup",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "go1handstand",
+          "name": "Go1Handstand",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "go1footstand",
+          "name": "Go1Footstand",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "h1inplacegaittracking",
+          "name": "H1InplaceGaitTracking",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "h1joystickgaittracking",
+          "name": "H1JoystickGaitTracking",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "op3joystick",
+          "name": "Op3Joystick",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "spotflatterrainjoystick",
+          "name": "SpotFlatTerrainJoystick",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "spotgetup",
+          "name": "SpotGetup",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "spotjoystickgaittracking",
+          "name": "SpotJoystickGaitTracking",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "t1joystickflatterrain",
+          "name": "T1JoystickFlatTerrain",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "t1joystickroughterrain",
+          "name": "T1JoystickRoughTerrain",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "alohahandover",
+          "name": "AlohaHandOver",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "alohasinglepeginsertion",
+          "name": "AlohaSinglePegInsertion",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "pandapickcube",
+          "name": "PandaPickCube",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "pandapickcubeorientation",
+          "name": "PandaPickCubeOrientation",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "pandapickcubecartesian",
+          "name": "PandaPickCubeCartesian",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "pandaopencabinet",
+          "name": "PandaOpenCabinet",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "pandarobotiqpushcube",
+          "name": "PandaRobotiqPushCube",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "leapcubereorient",
+          "name": "LeapCubeReorient",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "leapcuberotatezaxis",
+          "name": "LeapCubeRotateZAxis",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "aerocuberotatezaxis",
+          "name": "AeroCubeRotateZAxis",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "distance": 4.0,
+            "elevation": -30.0,
+            "azimuth": 45.0,
+            "origin_type": "AUTO",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "myosuite",
+      "name": "MyoSuite",
+      "scenes": [
+        {
+          "id": "mc22_die_reorient",
+          "name": "mc22 Die Reorient",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              -0.1,
+              -0.5,
+              1.4
+            ],
+            "distance": 1.3,
+            "elevation": -9.0,
+            "azimuth": -61.0,
+            "origin_type": "WORLD",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "mc22_baoding",
+          "name": "mc22 Baoding",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              -0.1,
+              -0.5,
+              1.4
+            ],
+            "distance": 1.3,
+            "elevation": -9.0,
+            "azimuth": -61.0,
+            "origin_type": "WORLD",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "mc23_relocate",
+          "name": "mc23 Relocate",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              -0.1,
+              1.4
+            ],
+            "distance": 1.7,
+            "elevation": -7.0,
+            "azimuth": -90.0,
+            "origin_type": "WORLD",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "mc23_chase_tag",
+          "name": "mc23 Chase Tag",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              1.4
+            ],
+            "distance": 10.0,
+            "elevation": -15.0,
+            "azimuth": -62.0,
+            "origin_type": "WORLD",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "mc24_bimanual",
+          "name": "mc24 Bimanual",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              -0.1,
+              -0.5,
+              1.4
+            ],
+            "distance": 1.3,
+            "elevation": -9.0,
+            "azimuth": -61.0,
+            "origin_type": "WORLD",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "mc24_osl_run",
+          "name": "mc24 OSL Run",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              0.0,
+              1.4
+            ],
+            "distance": 10.0,
+            "elevation": -15.0,
+            "azimuth": -62.0,
+            "origin_type": "WORLD",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "mc25_table_tennis",
+          "name": "mc25 Table Tennis",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              -1.0,
+              1.4
+            ],
+            "distance": 3.3,
+            "elevation": -11.0,
+            "azimuth": -129.0,
+            "origin_type": "WORLD",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        },
+        {
+          "id": "mc25_soccer",
+          "name": "mc25 Soccer",
+          "scene": "scene.mjz",
+          "camera": {
+            "lookat": [
+              0.0,
+              -3.0,
+              2.0
+            ],
+            "distance": 14.7,
+            "elevation": -16.0,
+            "azimuth": -172.0,
+            "origin_type": "WORLD",
+            "enable_reflections": true,
+            "enable_shadows": true,
+            "height": 240,
+            "width": 320,
+            "fovy": 45.0
+          },
+          "mdps": [],
+          "policies": []
+        }
+      ]
+    }
+  ]
+}
