@@ -46,7 +46,11 @@ def setup_builder() -> mjswan.Builder:
     # The run supplies everything: the clip (mjlab registers `motion_file=""`, and the
     # tracing env is built from the bundled copy at build time), and every term set via
     # the scene's env config.
-    scene.add_policy_wandb(run_path)
+    #
+    # `in_keys` is the exception, because nothing else can say it: this run's export
+    # takes two inputs, the observation group and mjlab's `time_step`, and the table is
+    # positional, so the network's own input names decide nothing (ADR 0006 §5).
+    scene.add_policy_wandb(run_path, in_keys=["actor", "time_step"])
 
     return builder
 
