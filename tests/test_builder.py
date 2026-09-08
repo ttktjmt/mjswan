@@ -1231,7 +1231,9 @@ class TestSaveWebPolicyJson:
         # with `scale` folded in rather than shipped.
         group = data["observations"]["policy"]
         assert group["fused"] == "mdp/policy/obs/policy.onnx"
-        assert group["layout"] == [{"name": "joint_pos", "size": 2}]
+        assert [(r["name"], r["size"]) for r in group["layout"]] == [("joint_pos", 2)]
+        # The row also names the function it traces (#118).
+        assert group["layout"][0]["func"] == f"{__name__}:_fake_joint_pos_rel"
         assert group["size"] == 2
         assert "scale" not in group
         assert (out / "p" / "s" / group["fused"]).exists()
@@ -1370,9 +1372,9 @@ class TestSaveWebPolicyJson:
         assert native["action_offset"] == 3
         assert native["size"] == 1
         # And the group still fuses around it: the native term is a graph *input*.
-        assert group["layout"] == [
-            {"name": "joint_pos", "size": 2},
-            {"name": "gripper_action", "size": 1},
+        assert [(r["name"], r["size"]) for r in group["layout"]] == [
+            ("joint_pos", 2),
+            ("gripper_action", 1),
         ]
 
     def test_last_action_naming_no_action_term_fails_the_build(

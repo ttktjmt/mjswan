@@ -19,12 +19,43 @@ def onnx_ref(kind: str, name: str, scope: str | None = None) -> str:
     return ref if scope is None else f"{scope}/{ref}"
 
 
-def write_onnx(out_dir: Path, ref: str, onnx_bytes: bytes) -> None:
+def stamp_provenance(onnx_bytes: bytes, meta: dict[str, str]) -> bytes:
+    """Write who traced a graph into the model itself.
+
+    A `.onnx` travels alone — into Netron, into mjswan Cloud's inspector — where the
+    manifest that names it is out of reach. `producer_name`, `doc_string` and
+    `metadata_props` (`mjswan.<key>`) are the fields every ONNX viewer already shows.
+    """
+    import onnx
+
+    from . import __version__
+
+    model = onnx.load_from_string(onnx_bytes)
+    model.producer_name = "mjswan"
+    model.producer_version = __version__
+    kind, term, func = meta.get("kind"), meta.get("term"), meta.get("func")
+    model.doc_string = f"mjswan {kind} graph {term!r}" + (
+        f", traced from {func}" if func else ""
+    )
+    del model.metadata_props[:]
+    for key, value in meta.items():
+        prop = model.metadata_props.add()
+        prop.key, prop.value = f"mjswan.{key}", value
+    return model.SerializeToString()
+
+
+def write_onnx(
+    out_dir: Path, ref: str, onnx_bytes: bytes, *, meta: dict[str, str] | None = None
+) -> None:
     """Write a traced graph, refusing to replace a different graph already at *ref*.
 
     A build wipes its output first, so an existing file is this build's: identical bytes
     are one term traced twice, different bytes mean two owners resolved to one path.
+    *meta* is stamped into the model first (:func:`stamp_provenance`), so that
+    comparison sees what lands on disk.
     """
+    if meta:
+        onnx_bytes = stamp_provenance(onnx_bytes, meta)
     path = out_dir / ref
     if path.is_file() and path.read_bytes() != onnx_bytes:
         raise ValueError(
@@ -36,4 +67,4 @@ def write_onnx(out_dir: Path, ref: str, onnx_bytes: bytes) -> None:
     path.write_bytes(onnx_bytes)
 
 
-__all__ = ["onnx_ref", "write_onnx"]
+__all__ = ["onnx_ref", "stamp_provenance", "write_onnx"]

@@ -90,13 +90,15 @@ def write_command_artifact(
     debug_vis: bool = False,
     ui: dict[str, Any] | None = None,
     viz: list[dict[str, Any]] | None = None,
+    meta: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Write ``<out_dir>/[<scope>/]command/<name>.onnx`` and return its config entry.
 
-    *scope* is the owning policy's id; see :func:`mjswan._graph_io.onnx_ref`.
+    *scope* is the owning policy's id; see :func:`mjswan._graph_io.onnx_ref`. *meta*
+    is stamped into the graph (:func:`mjswan._graph_io.stamp_provenance`).
     """
     ref = _onnx_ref("command", export.name, scope)
-    _write_onnx(Path(out_dir), ref, export.onnx_bytes)
+    _write_onnx(Path(out_dir), ref, export.onnx_bytes, meta=meta)
     return command_config(
         export,
         onnx_ref=ref,

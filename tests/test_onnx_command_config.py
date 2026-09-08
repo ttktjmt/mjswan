@@ -639,11 +639,13 @@ def test_terminations_fuse_into_one_graph_with_one_lane_per_term(tmp_path):
     fused = entries[FUSED_TERMINATION_KEY]
     assert fused["fused"] == "term/terminations.onnx"
     assert (tmp_path / fused["fused"]).exists()
-    # One lane per term in graph output order, each flagged truncation or not.
-    assert fused["lanes"] == [
-        {"name": "too_low", "time_out": False},
-        {"name": "tipped", "time_out": False},
+    # One lane per term in graph output order, each flagged truncation or not, and
+    # naming the function it traces (#118).
+    assert [(lane["name"], lane["time_out"]) for lane in fused["lanes"]] == [
+        ("too_low", False),
+        ("tipped", False),
     ]
+    assert fused["lanes"][0]["func"] == f"{__name__}:_too_low"
     # Slots are the union of what the two terms read, deduplicated.
     assert sorted(s["field"] for s in fused["input_slots"]) == [
         "projected_gravity_b",
