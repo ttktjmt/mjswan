@@ -56,6 +56,7 @@ class FakeTransport(HttpTransport):
     ) -> None:
         self.posts: list[tuple[str, dict, str]] = []
         self.puts: list[tuple[str, int, str]] = []
+        self.put_headers: list[tuple[str, str, str | None]] = []
         self._sim_id = sim_id
         self._upload_id = upload_id
         self._commit_id = commit_id
@@ -72,10 +73,19 @@ class FakeTransport(HttpTransport):
                 return HttpResponse(
                     self._session_status, json.dumps(self._session_error).encode()
                 )
+            # Shaped like the real `PresignedUpload`: the server returns the exact
+            # header values it signed, and `.mjz` is octet-stream server-side even
+            # though the advisory the client sent says application/zip (#119).
             uploads = [
                 {
                     "path": entry["path"],
                     "url": f"https://r2.example.com/{entry['path']}",
+                    "contentType": (
+                        "application/json"
+                        if entry["path"].endswith(".json")
+                        else "application/octet-stream"
+                    ),
+                    "cacheControl": "public, max-age=31536000, immutable",
                 }
                 for entry in body["manifest"]
             ]
@@ -95,8 +105,15 @@ class FakeTransport(HttpTransport):
             return HttpResponse(self._commit_status, json.dumps(body_out).encode())
         raise AssertionError(f"unexpected POST {url}")
 
-    def put_bytes(self, url: str, data: bytes, content_type: str) -> HttpResponse:
+    def put_bytes(
+        self,
+        url: str,
+        data: bytes,
+        content_type: str,
+        cache_control: str | None = None,
+    ) -> HttpResponse:
         self.puts.append((url, len(data), content_type))
+        self.put_headers.append((url, content_type, cache_control))
         return HttpResponse(self._put_status, b"")
 
 
@@ -359,6 +376,51 @@ class TestPublishDist:
         put_urls = {url for url, _, _ in transport.puts}
         assert "https://r2.example.com/manifest.json" in put_urls
         assert all(".html" not in u and ".css" not in u for u in put_urls)
+
+    def test_put_sends_the_headers_the_server_signed(self, tmp_path: Path):
+        """Both are in `SignedHeaders`, so a value this side invents is a 403 (#119).
+
+        The bug this covers shipped because the fake returned neither field, so the
+        client could drop `Cache-Control` entirely and guess a `Content-Type` with
+        every test still green — while every real publish failed at the first file.
+        """
+        dist = _make_dist(tmp_path)
+        transport = FakeTransport()
+        publish_dist(dist, title="My Sim", token="tok", transport=transport)
+
+        by_url = {url: (ct, cc) for url, ct, cc in transport.put_headers}
+        assert by_url  # the loop ran at all
+        for url, (content_type, cache_control) in by_url.items():
+            assert cache_control == "public, max-age=31536000, immutable", url
+            expected = (
+                "application/json"
+                if url.endswith(".json")
+                else "application/octet-stream"
+            )
+            assert content_type == expected, url
+
+        # Specifically the disagreement the local table would have reintroduced:
+        # `_content_type_for` calls a `.mjz` application/zip, the server does not.
+        mjz = [v for u, v in by_url.items() if u.endswith(".mjz")]
+        assert mjz and all(ct == "application/octet-stream" for ct, _ in mjz)
+
+    def test_commit_re_resolves_the_token(self, tmp_path: Path, monkeypatch):
+        """A long upload can outlive the token, and the commit is what pays (#119).
+
+        Uploading a real build takes minutes, so a token resolved before the first
+        PUT can be expired by the last. Reusing it puts every byte in R2 and then
+        fails the commit with `Unauthorized`.
+        """
+        dist = _make_dist(tmp_path)
+        transport = FakeTransport()
+        tokens = iter(["token-at-upload", "token-at-commit"])
+        monkeypatch.setattr("mjswan.publish.resolve_token", lambda _t: next(tokens))
+
+        publish_dist(dist, title="T", token="ignored", transport=transport)
+
+        used = {url.rsplit("/", 1)[-1]: tok for url, _, tok in transport.posts}
+        assert used["upload-session"] == "token-at-upload"
+        assert used["commit"] == "token-at-commit"
 
     def test_authorization_header_and_body(self, tmp_path: Path):
         dist = _make_dist(tmp_path)

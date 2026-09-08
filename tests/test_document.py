@@ -140,7 +140,7 @@ class _Transport:
             )
         return HttpResponse(200, json.dumps({"id": "sim_1"}).encode())
 
-    def put_bytes(self, url, data, content_type):
+    def put_bytes(self, url, data, content_type, cache_control=None):
         self.puts.append(url.removeprefix("https://r2.example.com/"))
         return HttpResponse(200, b"")
 
