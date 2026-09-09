@@ -397,3 +397,76 @@ describe('createSlotReader — structured sensor fields', () => {
     close(read({ sensor: 'robot/imu_lin_vel' }), [1, 2, 3]);
   });
 });
+
+/**
+ * `joint_pos_target` is the one field that comes off `mjData.ctrl` rather than the
+ * state, so it is readable only where every one of the entity's joints is driven by a
+ * position actuator — the case in which mjlab's own `joint_pos_target` equals `ctrl`.
+ */
+describe('slotReader — joint_pos_target', () => {
+  function actuatedScene(biastype: number[]) {
+    const jointNames = ['arm/shoulder', 'arm/elbow'];
+    const encoder = new TextEncoder();
+    const all: number[] = [];
+    const adrOf = (names: string[]): number[] =>
+      names.map(name => {
+        const at = all.length;
+        all.push(...encoder.encode(name), 0);
+        return at;
+      });
+    const name_jntadr = adrOf(jointNames);
+    const name_bodyadr = adrOf(['world', 'arm/base']);
+    const mjModel = {
+      names: Uint8Array.from(all).buffer,
+      njnt: 2,
+      nbody: 2,
+      nsite: 0,
+      nsensor: 0,
+      name_jntadr,
+      name_bodyadr,
+      name_siteadr: [],
+      name_sensoradr: [],
+      jnt_type: [3, 3],
+      jnt_qposadr: [0, 1],
+      jnt_dofadr: [0, 1],
+      nu: 2,
+      // Deliberately not the identity: elbow's actuator comes first.
+      actuator_trntype: [0, 0],
+      actuator_trnid: [1, 0, 0, 0],
+      actuator_biastype: biastype,
+    } as unknown as Mutable;
+    const ctrl = Float64Array.from([0.7, -0.2]);
+    const mjData = { qpos: new Float64Array(2), qvel: new Float64Array(2), ctrl } as unknown as Mutable;
+    return { mjModel, mjData } as unknown as SlotReaderContext;
+  }
+
+  it('reads each joint through its own position actuator', () => {
+    const read = createSlotReader(() => actuatedScene([1, 1]));
+    // shoulder is actuator 1 (ctrl -0.2), elbow is actuator 0 (ctrl 0.7).
+    close(read({ entity: 'arm', field: 'joint_pos_target' }), [-0.2, 0.7]);
+  });
+
+  it('is the biased target mjlab stores, not the unbiased one it was built from', () => {
+    // mjlab's `joint_pos_target` is `processed - encoder_bias`, which is what `ctrl`
+    // holds; adding the bias back here would report a target no actuator was given.
+    const read = createSlotReader(() => actuatedScene([1, 1]), {
+      jointBias: name => (name === 'elbow' ? 0.25 : 0),
+    });
+    close(read({ entity: 'arm', field: 'joint_pos_target' }), [-0.2, 0.7]);
+  });
+
+  it('is unreadable when a joint is driven by a motor, whose ctrl is a force', () => {
+    const read = createSlotReader(() => actuatedScene([1, 0]));
+    expect(read({ entity: 'arm', field: 'joint_pos_target' })).toBeNull();
+  });
+
+  it('is unreadable for an entity carrying a multi-dof joint', () => {
+    // The shared fixture's robot has a ball joint: one actuator cannot address its 4 qpos.
+    const readShared = createSlotReader(() => context());
+    expect(readShared({ entity: 'robot', field: 'joint_pos_target' })).toBeNull();
+  });
+
+  it('is advertised as a readable field', () => {
+    expect(isReadableEntityField('joint_pos_target')).toBe(true);
+  });
+});

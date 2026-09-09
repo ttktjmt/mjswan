@@ -63,6 +63,7 @@ const CFG: FusedObservationConfig = {
 function fakeRunner(): PolicyRunner {
   return {
     getLastActions: () => new Float32Array([0.5, -0.5]),
+    getActions: () => new Float32Array([0.5, -0.5]),
     getContext: () => ({
       commandManager: {
         getCommand: () => new Float32Array([1, 2, 3]),
@@ -105,6 +106,7 @@ describe('FusedObservation', () => {
     const session = new FakeSession(() => new Float32Array(6));
     const runner = {
       getLastActions: () => new Float32Array([1, 2, 3, 4]), // 4, graph wants 2
+      getActions: () => new Float32Array([1, 2, 3, 4]),
       getContext: () => null,
     } as unknown as PolicyRunner;
     const term = new FusedObservation(runner, CFG, {
@@ -142,6 +144,7 @@ describe('FusedObservation', () => {
     const session = new FakeSession(() => new Float32Array(6));
     const runner = {
       getLastActions: () => Float32Array.from([1, 2, 3, 9]),
+      getActions: () => Float32Array.from([1, 2, 3, 9]),
       getContext: () => null,
     } as unknown as PolicyRunner;
     const config: FusedObservationConfig = {

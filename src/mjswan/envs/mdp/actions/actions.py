@@ -126,9 +126,27 @@ class JointPositionActionCfg(BaseActionCfg):
     mapping joint names (must match ``policy_joint_names``) to values.
     Only used by the TS runtime for motor actuators with external PD."""
 
+    ema_alpha: float | None = None
+    """Exponential-moving-average factor on the processed target, in ``(0, 1]``.
+
+    ``target = alpha * processed + (1 - alpha) * previous_target``, advanced once per
+    control step — not per physics substep. ``None`` (or ``1.0``) is no smoothing."""
+
+    warmup_time_s: float | None = None
+    """Seconds at the start of an episode during which the default pose is held.
+
+    Rounded up to whole control steps, matching mjlab's
+    ``episode_length_buf * step_dt < warmup_time_s``. ``None`` is no warmup."""
+
     def to_dict(self) -> dict[str, Any]:
         if self.unsupported_reason is not None:
             raise NotImplementedError(self.unsupported_reason)
+        if self.ema_alpha is not None and not 0.0 < self.ema_alpha <= 1.0:
+            raise ValueError(f"ema_alpha must be in (0, 1], got {self.ema_alpha}")
+        if self.warmup_time_s is not None and self.warmup_time_s < 0.0:
+            raise ValueError(
+                f"warmup_time_s must be non-negative, got {self.warmup_time_s}"
+            )
 
         entry: dict[str, Any] = {"type": "joint_position"}
         if self.scale != 1.0:
@@ -141,6 +159,10 @@ class JointPositionActionCfg(BaseActionCfg):
             entry["stiffness"] = self.stiffness
         if self.damping is not None:
             entry["damping"] = self.damping
+        if self.ema_alpha is not None and self.ema_alpha != 1.0:
+            entry["ema_alpha"] = self.ema_alpha
+        if self.warmup_time_s:
+            entry["warmup_time_s"] = self.warmup_time_s
         self._add_clip(entry)
         return entry
 

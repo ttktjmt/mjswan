@@ -34,6 +34,9 @@ _STATIC_DATA_FIELDS: frozenset[str] = frozenset(
         "soft_joint_vel_limits",
         "joint_effort_limits",
         "soft_joint_effort_limits",
+        # Randomizable in mjlab, but the browser's action layer already holds one
+        # build-time vector for it, so baking is what keeps the two agreeing.
+        "encoder_bias",
     }
 )
 
@@ -1432,6 +1435,7 @@ def trace_command_term(
 # since the runtime already holds these values every frame.
 NATIVE_OBSERVATION_FUNCS: dict[str, str] = {
     "last_action": "prev_action",
+    "action_history": "prev_action",
     "generated_commands": "command",
 }
 
@@ -1456,7 +1460,11 @@ def native_observation_entry(
     entry: dict[str, Any] = {"name": name, "native": kind}
     if kind == "command":
         entry["command_name"] = params["command_name"]
-    elif params.get("action_name") is not None:
+        return entry
+    # How far back in the action window, `last_action`'s 0 being the newest.
+    if params.get("age"):
+        entry["age"] = int(params["age"])
+    if params.get("action_name") is not None:
         entry["action_name"] = params["action_name"]
         entry["action_offset"] = action_term_offset(env, params["action_name"])
     return entry

@@ -52,6 +52,13 @@ type EntityIndex = {
   qvelAdr: number[];
   /** Encoder bias per joint, aligned to `qposAdr`. */
   jointBias: Float32Array;
+  /**
+   * `mjData.ctrl` address of each joint's position actuator, aligned to `qposAdr`;
+   * `-1` where the joint has none, or has one that commands force rather than a
+   * target. `null` if that is true of any of them, which is what makes
+   * `joint_pos_target` unreadable for the entity as a whole.
+   */
+  posCtrlAdr: number[] | null;
   /** mjlab's `root_body_id`: the entity's first non-world body. */
   rootBodyId: number;
   /** Model site ids belonging to the entity, in spec order. */
@@ -62,6 +69,8 @@ type EntityIndex = {
 const QPOS_WIDTH = [7, 4, 1, 1];
 const DOF_WIDTH = [6, 3, 1, 1];
 const MJ_JNT_FREE = 0;
+const MJ_TRN_JOINT = 0;
+const MJ_BIAS_AFFINE = 1;
 
 function decodeNames(mjModel: MjModel, count: number, adr: ArrayLike<number>): string[] {
   const bytes = new Uint8Array(mjModel.names);
@@ -111,9 +120,11 @@ function buildEntityIndex(
   // One verdict for the whole model, not per element kind.
   const prefixed = [...jointNames, ...bodyNames, ...siteNames].some(n => n.includes('/'));
 
+  const positionCtrl = positionActuatorByJoint(mjModel);
   const qposAdr: number[] = [];
   const qvelAdr: number[] = [];
   const bias: number[] = [];
+  const posCtrl: number[] = [];
   for (const j of scopedIndices(jointNames, entity, prefixed)) {
     const type = mjModel.jnt_type[j];
     if (type === MJ_JNT_FREE) continue; // mjlab keeps the free joint separate
@@ -123,6 +134,8 @@ function buildEntityIndex(
     for (let k = 0; k < qWidth; k++) {
       qposAdr.push(mjModel.jnt_qposadr[j] + k);
       bias.push(jointBias);
+      // Only a 1-qpos joint maps to one `ctrl`; a ball's actuator would be replicated.
+      posCtrl.push(qWidth === 1 ? (positionCtrl.get(j) ?? -1) : -1);
     }
     for (let k = 0; k < vWidth; k++) qvelAdr.push(mjModel.jnt_dofadr[j] + k);
   }
@@ -134,9 +147,26 @@ function buildEntityIndex(
     qposAdr,
     qvelAdr,
     jointBias: Float32Array.from(bias),
+    posCtrlAdr: posCtrl.every(adr => adr >= 0) ? posCtrl : null,
     rootBodyId: bodyIds.length > 0 ? bodyIds[0] : -1,
     siteIds: scopedIndices(siteNames, entity, prefixed),
   };
+}
+
+/**
+ * Joint id -> `ctrl` address, for position actuators only (`biastype=affine`).
+ *
+ * A motor actuator's `ctrl` is a force, so it says nothing about where the joint was
+ * told to go; only the affine ones carry mjlab's `joint_pos_target` in `ctrl`.
+ */
+function positionActuatorByJoint(mjModel: MjModel): Map<number, number> {
+  const byJoint = new Map<number, number>();
+  for (let a = 0; a < mjModel.nu; a++) {
+    if (mjModel.actuator_trntype[a] !== MJ_TRN_JOINT) continue;
+    if (mjModel.actuator_biastype[a] !== MJ_BIAS_AFFINE) continue;
+    byJoint.set(mjModel.actuator_trnid[a * 2], a);
+  }
+  return byJoint;
 }
 
 function gather(source: ArrayLike<number>, addresses: readonly number[]): Float32Array {
@@ -221,6 +251,10 @@ const FIELD_READERS: Record<string, FieldReader> = {
     return out;
   },
   joint_vel: (index, mjData) => gather(mjData.qvel, index.qvelAdr),
+  // The last target the action layer wrote. mjlab stores `processed - encoder_bias`
+  // here and writes the same value to `ctrl`, so for a position actuator `ctrl` is it.
+  joint_pos_target: (index, mjData) =>
+    index.posCtrlAdr && gather(mjData.ctrl, index.posCtrlAdr),
 
   root_link_pos_w: rootField((root, mjData) => vec3At(mjData.xpos, root)),
   root_link_quat_w: rootField((root, mjData) => quatAt(mjData.xquat, root)),

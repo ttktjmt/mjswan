@@ -2,7 +2,8 @@
  * Observation terms that are a plain read of state the orchestrator already owns, so
  * tracing them would only wrap an identity graph around a value in hand. The build
  * marks them `native`:
- * - `prev_action` — mjlab's `last_action`.
+ * - `prev_action` — mjlab's `last_action`, or an older entry of its action window
+ *   when `age` is set (mjlab's `prev_action` / `prev_prev_action`).
  * - `command` — mjlab's `generated_commands`, the named term's current value.
  * - `constant` — reads nothing from the env; its value is baked at build time.
  *
@@ -33,6 +34,8 @@ export interface NativeObservationConfig extends ObservationConfig {
   action_name?: string;
   /** `prev_action` with an `action_name`: where that term's slice starts. */
   action_offset?: number;
+  /** `prev_action` only: control steps back, 0 (the default) being the newest. */
+  age?: number;
   scale?: ObservationScale;
   clip?: ObservationClip;
 }
@@ -124,7 +127,10 @@ export class NativeObservation extends ObservationBase<NativeObservationConfig> 
       case 'constant':
         return this.constant ?? new Float32Array(0);
       case 'prev_action':
-        return sliceStoredActions(this.runner.getLastActions(), this.config);
+        return sliceStoredActions(
+          this.runner.getActions(this.config.age ?? 0),
+          this.config,
+        );
       case 'command': {
         const name = this.config.command_name;
         const manager = this.runner.getContext()?.commandManager;

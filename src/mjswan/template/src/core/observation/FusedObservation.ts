@@ -33,6 +33,8 @@ export interface FusedNativeInput {
   action_name?: string;
   /** `prev_action` with an `action_name`: where that term's slice starts. */
   action_offset?: number;
+  /** `prev_action` only: control steps back, 0 (the default) being the newest. */
+  age?: number;
 }
 
 export interface FusedObservationConfig extends ObservationConfig {
@@ -111,7 +113,7 @@ export class FusedObservation extends ObservationBase<FusedObservationConfig> {
   private readNative(native: FusedNativeInput): Float32Array {
     const raw =
       native.native === 'prev_action'
-        ? sliceStoredActions(this.runner.getLastActions(), native)
+        ? sliceStoredActions(this.runner.getActions(native.age ?? 0), native)
         : this.readCommand(native);
     // `raw` may be the runtime's own buffer, and the graph declared a fixed width.
     return conformToSize(Float32Array.from(raw), native.size);

@@ -45,6 +45,8 @@ export type ActionConfigEntry = {
   use_default_offset?: boolean;
   stiffness?: number | number[] | Record<string, number>;
   damping?: number | number[] | Record<string, number>;
+  ema_alpha?: number;
+  warmup_time_s?: number;
   actuator_names?: string[];
   [key: string]: unknown;
 };

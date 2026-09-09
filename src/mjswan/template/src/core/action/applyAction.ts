@@ -51,6 +51,80 @@ export interface ResolvedActionTerm {
    */
   clipLo: Float32Array;
   clipHi: Float32Array;
+  /**
+   * `joint_position*` only: EMA factor on the processed target, `1` for none. Applied
+   * by `advanceActionSmoothing`, so the filter advances with mjlab's `process_actions`
+   * rather than with the substeps `applyAction` runs over.
+   */
+  emaAlpha: number;
+  /** Control steps from episode start that hold the default pose; `0` for none. */
+  warmupSteps: number;
+  /** Smoothing state, `null` while neither `emaAlpha` nor `warmupSteps` is in play. */
+  smoothedTarget?: Float32Array | null;
+  /** Warmup steps left in this episode. */
+  warmupRemaining?: number;
+}
+
+/** `raw * scale + offset` off this term's base pose, clamped — mjlab's processed action. */
+function processedTarget(
+  term: ResolvedActionTerm,
+  i: number,
+  actions: Float32Array,
+): number {
+  const reference = term.referenceJointPos ?? null;
+  const index = term.actionIndices[i];
+  const base = reference ? (reference[index] ?? 0) : term.defaultJointPos[i];
+  return clamp(
+    base + term.actionOffset[i] + term.actionScale[i] * (actions[index] ?? 0),
+    term.clipLo[i],
+    term.clipHi[i],
+  );
+}
+
+/** Whether a term filters its target at all — the common case does not. */
+function isSmoothed(term: ResolvedActionTerm): boolean {
+  return term.emaAlpha < 1 || term.warmupSteps > 0;
+}
+
+/**
+ * Advance every smoothed term's target by one control step.
+ *
+ * Call once per control step, before the `decimation` substeps: the EMA is a recursion
+ * over control steps, so running it inside `applyAction` would advance it `decimation`
+ * times and shrink the effective time constant.
+ */
+export function advanceActionSmoothing(
+  terms: readonly ResolvedActionTerm[],
+  actions: Float32Array,
+): void {
+  for (const term of terms) {
+    if (!isSmoothed(term)) continue;
+    const n = term.ctrlAdr.length;
+    let smoothed = term.smoothedTarget;
+    if (!smoothed || smoothed.length !== n) {
+      smoothed = Float32Array.from(term.defaultJointPos);
+      term.smoothedTarget = smoothed;
+    }
+    const warmup = (term.warmupRemaining ?? term.warmupSteps) > 0;
+    const alpha = term.emaAlpha;
+    for (let i = 0; i < n; i++) {
+      smoothed[i] = warmup
+        ? term.defaultJointPos[i]
+        : alpha * processedTarget(term, i, actions) + (1 - alpha) * smoothed[i];
+    }
+    if (warmup) {
+      term.warmupRemaining = (term.warmupRemaining ?? term.warmupSteps) - 1;
+    }
+  }
+}
+
+/** Return every smoothed term to the default pose, as mjlab's `ActionTerm.reset` does. */
+export function resetActionSmoothing(terms: readonly ResolvedActionTerm[]): void {
+  for (const term of terms) {
+    if (!isSmoothed(term)) continue;
+    term.smoothedTarget = Float32Array.from(term.defaultJointPos);
+    term.warmupRemaining = term.warmupSteps;
+  }
 }
 
 /**
@@ -82,7 +156,6 @@ function applyActionTerm(
     actionIndices,
     actionScale,
     actionOffset,
-    defaultJointPos,
     encoderBias,
     positionActuator,
     kp,
@@ -93,18 +166,13 @@ function applyActionTerm(
   const ctrl = mjData.ctrl;
 
   if (controlType === 'joint_position' || controlType === 'joint_position_reference') {
-    const reference = term.referenceJointPos ?? null;
+    // Already advanced for this control step, so the substeps re-read one value.
+    const smoothed = isSmoothed(term) ? term.smoothedTarget : null;
     for (let i = 0; i < numJoints; i++) {
       const ctrlIndex = ctrlAdr[i];
       if (ctrlIndex < 0) continue;
-      const actionValue = actions[actionIndices[i]] ?? 0;
-      const base = reference ? (reference[actionIndices[i]] ?? 0) : defaultJointPos[i];
+      const processed = smoothed ? smoothed[i] : processedTarget(term, i, actions);
       // Un-bias the target: the policy was trained against a biased reading.
-      const processed = clamp(
-        base + actionOffset[i] + actionScale[i] * actionValue,
-        term.clipLo[i],
-        term.clipHi[i],
-      );
       const target = processed - encoderBias[i];
 
       if (positionActuator[i]) {

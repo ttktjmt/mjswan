@@ -8,8 +8,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  advanceActionSmoothing,
   applyAction,
   clampActions,
+  resetActionSmoothing,
   readClipActions,
   resolveActionClip,
   stepPhysics,
@@ -46,6 +48,8 @@ function term(over: Partial<ResolvedActionTerm> = {}): ResolvedActionTerm {
     // Unbounded by default: `resolveActionClip` leaves ±Infinity for an unnamed target.
     clipLo: new Float32Array(n).fill(-Infinity),
     clipHi: new Float32Array(n).fill(Infinity),
+    emaAlpha: 1,
+    warmupSteps: 0,
     ...over,
   };
 }
@@ -383,5 +387,71 @@ describe('readClipActions / clampActions', () => {
     expect(readClipActions(-1)).toBeNull();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe('applyAction — EMA smoothing and warmup', () => {
+  /** One control step: advance the filter, then write ctrl as the substeps would. */
+  function controlStep(t: ResolvedActionTerm, actions: number[]): number[] {
+    const data = fakeData(t.ctrlAdr.length);
+    const vector = Float32Array.from(actions);
+    advanceActionSmoothing([t], vector);
+    applyAction(data, [t], vector);
+    return Array.from(data.ctrl);
+  }
+
+  it('approaches the raw target geometrically', () => {
+    const t = term({ emaAlpha: 0.5, defaultJointPos: new Float32Array(2) });
+    expect(controlStep(t, [1, 1])).toEqual([0.5, 0.5]);
+    expect(controlStep(t, [1, 1])).toEqual([0.75, 0.75]);
+    expect(controlStep(t, [1, 1])).toEqual([0.875, 0.875]);
+  });
+
+  it('is a pass-through at alpha = 1', () => {
+    const t = term({ emaAlpha: 1 });
+    expect(controlStep(t, [0.25, -0.5])).toEqual([0.25, -0.5]);
+  });
+
+  it('holds the default pose for exactly warmupSteps control steps', () => {
+    const t = term({
+      emaAlpha: 1,
+      warmupSteps: 2,
+      defaultJointPos: Float32Array.from([0.5, 0.5]),
+    });
+    expect(controlStep(t, [1, 1])).toEqual([0.5, 0.5]);
+    expect(controlStep(t, [1, 1])).toEqual([0.5, 0.5]);
+    expect(controlStep(t, [1, 1])).toEqual([1.5, 1.5]);
+  });
+
+  it('advances once per control step, not once per substep', () => {
+    const t = term({ emaAlpha: 0.5, defaultJointPos: new Float32Array(2) });
+    const data = fakeData(2);
+    const actions = Float32Array.from([1, 1]);
+    advanceActionSmoothing([t], actions);
+    const mujoco = { mj_step: vi.fn() };
+    stepPhysics(mujoco, {} as never, data, [t], actions, 4);
+    expect(mujoco.mj_step).toHaveBeenCalledTimes(4);
+    expect(Array.from(data.ctrl)).toEqual([0.5, 0.5]);
+  });
+
+  it('returns to the default pose and re-arms warmup on reset', () => {
+    const t = term({
+      emaAlpha: 0.5,
+      warmupSteps: 1,
+      defaultJointPos: Float32Array.from([0.5, 0.5]),
+    });
+    controlStep(t, [1, 1]);
+    controlStep(t, [1, 1]);
+    resetActionSmoothing([t]);
+    expect(controlStep(t, [1, 1])).toEqual([0.5, 0.5]);
+  });
+
+  it('smooths the clamped target, so a clip bounds the filter too', () => {
+    const t = term({
+      emaAlpha: 1,
+      clipHi: Float32Array.from([0.25, 0.25]),
+      defaultJointPos: new Float32Array(2),
+    });
+    expect(controlStep(t, [1, 1])).toEqual([0.25, 0.25]);
   });
 });

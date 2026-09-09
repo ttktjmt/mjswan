@@ -41,10 +41,13 @@ class FakeSession implements OnnxSession {
  */
 function fakeRunner(overrides: Partial<{
   lastActions: Float32Array;
+  olderActions: Float32Array[];
   commands: Record<string, Float32Array>;
 }> = {}): PolicyRunner {
+  const window = [overrides.lastActions ?? new Float32Array(0), ...(overrides.olderActions ?? [])];
   return {
-    getLastActions: () => overrides.lastActions ?? new Float32Array(0),
+    getLastActions: () => window[0],
+    getActions: (age: number) => window[age] ?? new Float32Array(window[0].length),
     getContext: () => ({
       commandManager: {
         getCommand: (name: string) =>
@@ -277,5 +280,50 @@ describe('observation pipeline helpers', () => {
   it('is a no-op without scale or clip', () => {
     const values = Float32Array.from([1, -5, 3]);
     expect(Array.from(applyObservationPipeline(values, {}))).toEqual([1, -5, 3]);
+  });
+});
+
+/**
+ * `age` reaches back into mjlab's action window (`prev_action`, `prev_prev_action`),
+ * which a task observing action history reads instead of the newest entry.
+ */
+describe('NativeObservation — prev_action age', () => {
+  const window = {
+    lastActions: Float32Array.from([1, 2]),
+    olderActions: [Float32Array.from([3, 4]), Float32Array.from([5, 6])],
+  };
+
+  it('defaults to the newest action, as last_action does', () => {
+    const term = new NativeObservation(fakeRunner(window), {
+      name: 'a',
+      native: 'prev_action',
+      size: 2,
+    });
+    expect(Array.from(term.compute({} as never))).toEqual([1, 2]);
+  });
+
+  it('reads one and two steps back', () => {
+    for (const [age, expected] of [
+      [1, [3, 4]],
+      [2, [5, 6]],
+    ] as const) {
+      const term = new NativeObservation(fakeRunner(window), {
+        name: 'a',
+        native: 'prev_action',
+        size: 2,
+        age,
+      });
+      expect(Array.from(term.compute({} as never))).toEqual([...expected]);
+    }
+  });
+
+  it('reads zeros past the window, as mjlab does before that many steps', () => {
+    const term = new NativeObservation(fakeRunner(window), {
+      name: 'a',
+      native: 'prev_action',
+      size: 2,
+      age: 3,
+    });
+    expect(Array.from(term.compute({} as never))).toEqual([0, 0]);
   });
 });
