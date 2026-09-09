@@ -639,8 +639,7 @@ def test_terminations_fuse_into_one_graph_with_one_lane_per_term(tmp_path):
     fused = entries[FUSED_TERMINATION_KEY]
     assert fused["fused"] == "term/terminations.onnx"
     assert (tmp_path / fused["fused"]).exists()
-    # One lane per term in graph output order, each flagged truncation or not, and
-    # naming the function it traces (#118).
+    # One lane per term in graph output order, each flagged truncation or not.
     assert [(lane["name"], lane["time_out"]) for lane in fused["lanes"]] == [
         ("too_low", False),
         ("tipped", False),

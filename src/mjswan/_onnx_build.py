@@ -52,7 +52,7 @@ def _require_ts_src(kind: str, name: str, binding: Any) -> None:
     )
 
 
-# --- Provenance: what a term *is*, for whoever reads the document without the code ---
+# --- Provenance ---
 
 
 def _param_json(value: Any) -> Any:
@@ -63,8 +63,8 @@ def _param_json(value: Any) -> Any:
         isinstance(v, (bool, int, float, str)) for v in value
     ):
         return list(value)
-    # SceneEntityCfg (duck-typed): the entity and the name patterns it was declared
-    # with. Resolved ids are build-env indices and mean nothing to a reader.
+    # SceneEntityCfg, duck-typed. Its resolved ids are build-env indices and mean
+    # nothing to a reader, so only the declared name patterns travel.
     if isinstance(getattr(value, "name", None), str):
         out: dict[str, Any] = {"entity": value.name}
         for key in ("joint_names", "body_names", "geom_names", "site_names"):
@@ -78,11 +78,10 @@ def _param_json(value: Any) -> Any:
 
 
 def _provenance(func: Any, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    """``func`` / ``doc`` / ``params`` for a term entry (mjswan issue #118).
+    """``func`` / ``doc`` / ``params`` for a term entry.
 
-    The manifest says what a term reads and how wide it is; this says which function
-    it is, which only the build knows. Additive, so the format stays where it is; the
-    runtime ignores every one of these keys.
+    The manifest says what a term reads and how wide it is; only the build knows which
+    function it is.
     """
     out: dict[str, Any] = {}
     module = getattr(func, "__module__", None)
@@ -1163,7 +1162,7 @@ def serialize_command(
             category=RuntimeWarning,
             stacklevel=3,
         )
-    # A traced command is a class, not a function; its provenance is that class.
+    # A traced command is a class, not a function.
     entry = write_command_artifact(
         export,
         out_dir,

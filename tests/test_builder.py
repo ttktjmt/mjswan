@@ -1232,7 +1232,6 @@ class TestSaveWebPolicyJson:
         group = data["observations"]["policy"]
         assert group["fused"] == "mdp/policy/obs/policy.onnx"
         assert [(r["name"], r["size"]) for r in group["layout"]] == [("joint_pos", 2)]
-        # The row also names the function it traces (#118).
         assert group["layout"][0]["func"] == f"{__name__}:_fake_joint_pos_rel"
         assert group["size"] == 2
         assert "scale" not in group

@@ -22,9 +22,8 @@ def onnx_ref(kind: str, name: str, scope: str | None = None) -> str:
 def stamp_provenance(onnx_bytes: bytes, meta: dict[str, str]) -> bytes:
     """Write who traced a graph into the model itself.
 
-    A `.onnx` travels alone — into Netron, into mjswan Cloud's inspector — where the
-    manifest that names it is out of reach. `producer_name`, `doc_string` and
-    `metadata_props` (`mjswan.<key>`) are the fields every ONNX viewer already shows.
+    A `.onnx` travels without the manifest that names it, and these are the fields every
+    ONNX viewer shows.
     """
     import onnx
 
@@ -51,8 +50,7 @@ def write_onnx(
 
     A build wipes its output first, so an existing file is this build's: identical bytes
     are one term traced twice, different bytes mean two owners resolved to one path.
-    *meta* is stamped into the model first (:func:`stamp_provenance`), so that
-    comparison sees what lands on disk.
+    *meta* is stamped in first, so that comparison sees what lands on disk.
     """
     if meta:
         onnx_bytes = stamp_provenance(onnx_bytes, meta)

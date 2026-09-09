@@ -1,4 +1,4 @@
-"""What a document says about *which function* a term is (issue #118).
+"""What a document says about *which function* a term is.
 
 Layer: L1 (pure Python) for the manifest keys and the ONNX stamp, plus one
 torch-gated test through the real observation serializer.
