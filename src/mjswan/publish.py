@@ -169,10 +169,8 @@ class HttpTransport:
     ) -> HttpResponse:
         """PUT to a presigned URL.
 
-        Both header values are signed into the URL by the Cloud
-        (``SignedHeaders = cache-control;content-type;host``), so they are passed in
-        rather than derived here: a value this side invents is a 403, not a
-        differently-cached object.
+        Both headers are in the URL's ``SignedHeaders``, so the caller passes the
+        values the Cloud returned; one invented here is a 403.
         """
         headers = {"Content-Type": content_type, "User-Agent": USER_AGENT}
         if cache_control is not None:
@@ -436,10 +434,8 @@ def publish_dist(
                 url = upload["url"]
                 _check_presigned_url(url, path)
                 notify(f"Uploading {path} ({f.size} bytes)…")
-                # The server's own header values, never this side's: it signs both
-                # into the URL and returns them for exactly this reason. The local
-                # `_content_type_for` is the advisory sent *with* the manifest, and
-                # disagrees for `.mjz` — using it here was half of #119.
+                # The server's signed values, not this side's: `_content_type_for`
+                # is only the advisory sent with the manifest and disagrees for `.mjz`.
                 put_resp = transport.put_bytes(
                     url,
                     f.source.read_bytes(),
@@ -455,12 +451,9 @@ def publish_dist(
             commit_resp = transport.post_json(
                 f"{base}/api/simulations/commit",
                 {"upload_id": upload_id},
-                # Re-resolved, not reused: uploading a real build takes minutes
-                # (37 MB took ten), and a token resolved before the first PUT can
-                # cross its expiry before the last one. Every byte then lands in R2
-                # and the commit 401s, which reads as "not logged in" after a
-                # ten-minute wait. Cheap when the token is still good — the resolver
-                # only refreshes near expiry (#119).
+                # Re-resolved, not reused: an upload runs for minutes and can cross
+                # the token's expiry, landing every byte in R2 before the commit 401s.
+                # Near-free, since the resolver only refreshes close to expiry.
                 resolve_token(token),
             )
             _raise_for_status(commit_resp, "commit")
