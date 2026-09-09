@@ -778,10 +778,9 @@ class SceneHandle:
             terminations: Termination term configurations applied to all fetched
                 policies.
             in_keys: ONNX input slot table applied to every fetched policy; see
-                :meth:`add_policy`. Every checkpoint of a run exports the same
-                network, so one table describes them all — and a run whose export
-                takes more than one input (an observation group plus a runtime
-                tensor such as ``time_step``) cannot be added without it.
+                :meth:`add_policy`. Required for a run whose export takes more than
+                one input (an observation group plus a runtime tensor such as
+                ``time_step``).
             out_keys: ONNX output slot table applied to every fetched policy; see
                 :meth:`add_policy`.
             clip_actions: Overrides the raw-action bound that would otherwise be
