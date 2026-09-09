@@ -738,6 +738,8 @@ class SceneHandle:
         commands: Mapping[str, Any] | None = None,
         actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
         terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
+        in_keys: Sequence[str] | None = None,
+        out_keys: Sequence[str | Sequence[str]] | None = None,
         clip_actions: float | None = None,
         extras: dict[str, Any] | None = None,
     ) -> list[PolicyHandle]:
@@ -775,6 +777,12 @@ class SceneHandle:
             actions: Action term configurations applied to all fetched policies.
             terminations: Termination term configurations applied to all fetched
                 policies.
+            in_keys: ONNX input slot table applied to every fetched policy; see
+                :meth:`add_policy`. Required for a run whose export takes more than
+                one input (an observation group plus a runtime tensor such as
+                ``time_step``).
+            out_keys: ONNX output slot table applied to every fetched policy; see
+                :meth:`add_policy`.
             clip_actions: Overrides the raw-action bound that would otherwise be
                 read from the task's mjlab runner config. Only the
                 ``only_latest=True`` path needs it explicitly — that path skips
@@ -871,6 +879,8 @@ class SceneHandle:
                         env_cfg=env_cfg,
                         task_id=task_id,
                         mdp=shared_mdp,
+                        in_keys=in_keys,
+                        out_keys=out_keys,
                         clip_actions=clip_actions,
                         extras=extras,
                     )
@@ -964,6 +974,8 @@ class SceneHandle:
                                     default_joint_pos=export_context.default_joint_pos
                                     or None,
                                     encoder_bias=export_context.encoder_bias or None,
+                                    in_keys=in_keys,
+                                    out_keys=out_keys,
                                     clip_actions=clip_actions,
                                     extras=extras,
                                 )
