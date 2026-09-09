@@ -16,6 +16,15 @@ velocity-command shortcuts were removed outright, see Removed.
 
 ### Added
 
+- **Every term entry says which function it is** ([#118](https://github.com/ttktjmt/mjswan/issues/118)):
+  `func` (`<module>:<qualname>`), `doc` (the docstring's first line) and `params`
+  (JSON-safe: a `SceneEntityCfg` becomes `{entity, joint_names?, …}`) on observation
+  terms, fused-group `layout` rows, terminations and their `lanes`, events, and a
+  command's reset graph; a traced command names its class. Every written `.onnx` also
+  carries `producer_name = "mjswan"`, a `doc_string` and `metadata_props`
+  `mjswan.kind` / `mjswan.term` / `mjswan.func`, so Netron's Model Properties name the
+  source. Additive — `format` stays 1 and the runtime ignores the keys; they exist for
+  readers of the document, mjswan Cloud's inspector first.
 - **The build output is a simulation document**
   ([ADR 0006](docs/adr/0006-swn-simulation-document.md)): one `manifest.json` at the
   root — `{format, version, uses_custom_js, plugins?, projects}`, every key `snake_case`

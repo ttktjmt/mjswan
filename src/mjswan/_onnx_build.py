@@ -52,6 +52,59 @@ def _require_ts_src(kind: str, name: str, binding: Any) -> None:
     )
 
 
+# --- Provenance ---
+
+
+def _param_json(value: Any) -> Any:
+    """A term param as a viewer can read it; never the object itself."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (list, tuple)) and all(
+        isinstance(v, (bool, int, float, str)) for v in value
+    ):
+        return list(value)
+    # SceneEntityCfg, duck-typed. Its resolved ids are build-env indices and mean
+    # nothing to a reader, so only the declared name patterns travel.
+    if isinstance(getattr(value, "name", None), str):
+        out: dict[str, Any] = {"entity": value.name}
+        for key in ("joint_names", "body_names", "geom_names", "site_names"):
+            names = getattr(value, key, None)
+            if isinstance(names, str):
+                out[key] = names
+            elif isinstance(names, (list, tuple)) and names:
+                out[key] = [str(n) for n in names]
+        return out
+    return type(value).__name__
+
+
+def _provenance(func: Any, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """``func`` / ``doc`` / ``params`` for a term entry.
+
+    The manifest says what a term reads and how wide it is; only the build knows which
+    function it is.
+    """
+    out: dict[str, Any] = {}
+    module = getattr(func, "__module__", None)
+    qualname = getattr(func, "__qualname__", None) or getattr(func, "__name__", None)
+    if module and qualname:
+        out["func"] = f"{module}:{qualname}"
+    doc = inspect.getdoc(func)
+    if doc:
+        out["doc"] = doc.strip().splitlines()[0][:200]
+    if params:
+        out["params"] = {str(k): _param_json(v) for k, v in params.items()}
+    return out
+
+
+def _graph_meta(kind: str, term: str, func: Any = None) -> dict[str, str]:
+    """The ``metadata_props`` a written graph carries; see ``_graph_io.stamp_provenance``."""
+    meta = {"kind": kind, "term": term}
+    path = _provenance(func).get("func") if func is not None else None
+    if path:
+        meta["func"] = path
+    return meta
+
+
 # --- Observations ---
 
 
@@ -167,8 +220,11 @@ def serialize_observation_term(
 
     params = _resolved_params(term_cfg.params, env)
 
+    provenance = _provenance(func, params)
+
     native_entry = _native_observation_entry(name, func, params, env)
     if native_entry is not None:
+        native_entry.update(provenance)
         return _apply_observation_pipeline(native_entry, term_cfg, group_history_length)
 
     try:
@@ -186,10 +242,11 @@ def serialize_observation_term(
             "native": "constant",
             "value": values,
             "size": len(values),
+            **provenance,
         }
         return _apply_observation_pipeline(entry, term_cfg, group_history_length)
     ref = _onnx_ref("obs", name, scope)
-    _write_onnx(out_dir, ref, export.onnx_bytes)
+    _write_onnx(out_dir, ref, export.onnx_bytes, meta=_graph_meta("obs", name, func))
 
     # The runtime cannot infer `size`: inference is async, the group layout is not.
     entry = {
@@ -197,6 +254,7 @@ def serialize_observation_term(
         "onnx": ref,
         "size": _tensor_width(export.reference_output),
         "input_slots": slots_json(export),
+        **provenance,
     }
     return _apply_observation_pipeline(entry, term_cfg, group_history_length)
 
@@ -301,13 +359,20 @@ def _fused_group_entry(
     ]
     export = trace_observation_group(specs, env, name=group_name)
     ref = _onnx_ref("obs", group_name, scope)
-    _write_onnx(out_dir, ref, export.onnx_bytes)
+    _write_onnx(out_dir, ref, export.onnx_bytes, meta=_graph_meta("obs", group_name))
+    by_name = {spec.name: spec for spec in specs}
     entry: dict[str, Any] = {
         "fused": ref,
         "input_slots": slots_json(export),
         "native_inputs": export.native_inputs,
         # Per-term widths in concat order, for the runtime's group layout.
-        "layout": export.layout,
+        "layout": [
+            {
+                **row,
+                **_provenance(by_name[row["name"]].func, by_name[row["name"]].params),
+            }
+            for row in export.layout
+        ],
         "size": _tensor_width(export.reference_output),
     }
     sensors = _structured_sensor_descriptors(
@@ -494,11 +559,12 @@ def serialize_termination(
         return _native_termination_entry(name, term_cfg, env)
 
     ref = _onnx_ref("term", name, scope)
-    _write_onnx(out_dir, ref, export.onnx_bytes)
+    _write_onnx(out_dir, ref, export.onnx_bytes, meta=_graph_meta("term", name, func))
     entry: dict[str, Any] = {
         "name": name,
         "onnx": ref,
         "input_slots": slots_json(export),
+        **_provenance(func, _resolved_params(term_cfg.params, env)),
     }
     sensors = _structured_sensor_descriptors(
         export, env, owner=f"Termination term {name!r}"
@@ -519,6 +585,7 @@ def _native_termination_entry(
         "name": name,
         "native": "elapsed_s >= episode_length_s",
         "episode_length_s": float(getattr(env, "max_episode_length_s", 0.0)),
+        **_provenance(term_cfg.func, term_cfg.params),
     }
     if term_cfg.time_out:
         entry["time_out"] = True
@@ -619,13 +686,18 @@ def _fused_termination_entry(
     ]
     export = trace_termination_group(specs, env, name=group_name)
     ref = _onnx_ref("term", group_name, scope)
-    _write_onnx(out_dir, ref, export.onnx_bytes)
+    _write_onnx(out_dir, ref, export.onnx_bytes, meta=_graph_meta("term", group_name))
+    by_name = {spec.name: spec for spec in specs}
     return {
         "fused": ref,
         "input_slots": slots_json(export),
         # Lane order is the graph's; `time_out` rides along for the manager's split.
         "lanes": [
-            {"name": name, "time_out": bool(terms[name].time_out)}
+            {
+                "name": name,
+                "time_out": bool(terms[name].time_out),
+                **_provenance(by_name[name].func, by_name[name].params),
+            }
             for name in export.lanes
         ],
     }
@@ -896,6 +968,7 @@ def serialize_event(
         return term_cfg.to_dict()
 
     resolved = _resolved_params(term_cfg.params, env)
+    provenance = _provenance(func, resolved)
     try:
         export = trace_event_term(
             func,
@@ -909,7 +982,7 @@ def serialize_event(
         # from the seeded PRNG at load.
         descriptor = model_field_dr_descriptor(term_cfg, env, resolved)
         if descriptor is not None:
-            return {"name": name, "mode": term_cfg.mode, **descriptor}
+            return {"name": name, "mode": term_cfg.mode, **descriptor, **provenance}
         nothing_to_write = _event_writes_nothing_reason(term_cfg, env, resolved)
         if nothing_to_write is not None:
             return {
@@ -917,6 +990,7 @@ def serialize_event(
                 "mode": term_cfg.mode,
                 "native": True,
                 "reason": nothing_to_write,
+                **provenance,
             }
         raise ValueError(
             f"Event term {name!r} could not be traced: {exc} Emitting it as a no-op "
@@ -927,7 +1001,7 @@ def serialize_event(
         ) from exc
 
     ref = _onnx_ref("event", name, scope)
-    _write_onnx(out_dir, ref, export.onnx_bytes)
+    _write_onnx(out_dir, ref, export.onnx_bytes, meta=_graph_meta("event", name, func))
     entry: dict[str, Any] = {
         "name": name,
         "mode": term_cfg.mode,
@@ -936,6 +1010,7 @@ def serialize_event(
         "rand_ranges": export.rand_ranges,
         "input_slots": slots_json(export),
         "write_targets": export.write_targets,
+        **provenance,
     }
     if term_cfg.mode == "interval":
         entry["interval_range_s"] = (
@@ -1028,7 +1103,12 @@ def _serialize_reset_graph(
         mode="reset",
     )
     ref = _onnx_ref("command", graph_name, scope)
-    _write_onnx(out_dir, ref, export.onnx_bytes)
+    _write_onnx(
+        out_dir,
+        ref,
+        export.onnx_bytes,
+        meta=_graph_meta("command", graph_name, pending.func),
+    )
     return {
         "name": graph_name,
         "mode": "reset",
@@ -1037,6 +1117,7 @@ def _serialize_reset_graph(
         "rand_ranges": export.rand_ranges,
         "input_slots": slots_json(export),
         "write_targets": export.write_targets,
+        **_provenance(pending.func, _resolved_params(pending.params, env)),
     }
 
 
@@ -1081,7 +1162,8 @@ def serialize_command(
             category=RuntimeWarning,
             stacklevel=3,
         )
-    return write_command_artifact(
+    # A traced command is a class, not a function.
+    entry = write_command_artifact(
         export,
         out_dir,
         scope=scope,
@@ -1089,7 +1171,9 @@ def serialize_command(
         debug_vis=debug_vis,
         ui=pending.ui or _record_command_gui(term, name),
         viz=pending.viz,
+        meta=_graph_meta("command", name, type(term)),
     )
+    return {**entry, **_provenance(type(term))}
 
 
 def _record_command_gui(term: Any, name: str) -> dict[str, Any] | None:
