@@ -160,13 +160,22 @@ class HttpTransport:
         )
         return self._send(req)
 
-    def put_bytes(self, url: str, data: bytes, content_type: str) -> HttpResponse:
-        req = urllib.request.Request(
-            url,
-            data=data,
-            method="PUT",
-            headers={"Content-Type": content_type, "User-Agent": USER_AGENT},
-        )
+    def put_bytes(
+        self,
+        url: str,
+        data: bytes,
+        content_type: str,
+        cache_control: str | None = None,
+    ) -> HttpResponse:
+        """PUT to a presigned URL.
+
+        Both headers are in the URL's ``SignedHeaders``, so the caller passes the
+        values the Cloud returned; one invented here is a 403.
+        """
+        headers = {"Content-Type": content_type, "User-Agent": USER_AGENT}
+        if cache_control is not None:
+            headers["Cache-Control"] = cache_control
+        req = urllib.request.Request(url, data=data, method="PUT", headers=headers)
         return self._send(req)
 
     @staticmethod
@@ -413,19 +422,25 @@ def publish_dist(
             upload_id = session.get("upload_id")
             if not upload_id:
                 raise PublishError("upload-session response missing upload_id.")
-            uploads = {u["path"]: u["url"] for u in session.get("uploads", [])}
+            uploads = {u["path"]: u for u in session.get("uploads", [])}
 
             by_path = {f.upload_path: f for f in plan.files}
-            for path, url in uploads.items():
+            for path, upload in uploads.items():
                 f = by_path.get(path)
                 if f is None:
                     raise PublishError(
                         f"Server requested upload for unknown file: {path}", file=path
                     )
+                url = upload["url"]
                 _check_presigned_url(url, path)
                 notify(f"Uploading {path} ({f.size} bytes)…")
+                # The server's signed values, not this side's: `_content_type_for`
+                # is only the advisory sent with the manifest and disagrees for `.mjz`.
                 put_resp = transport.put_bytes(
-                    url, f.source.read_bytes(), _content_type_for(path)
+                    url,
+                    f.source.read_bytes(),
+                    upload.get("contentType") or _content_type_for(path),
+                    upload.get("cacheControl"),
                 )
                 if put_resp.status not in (200, 201, 204):
                     raise PublishError(
@@ -436,7 +451,10 @@ def publish_dist(
             commit_resp = transport.post_json(
                 f"{base}/api/simulations/commit",
                 {"upload_id": upload_id},
-                resolved_token,
+                # Re-resolved, not reused: an upload runs for minutes and can cross
+                # the token's expiry, landing every byte in R2 before the commit 401s.
+                # Near-free, since the resolver only refreshes close to expiry.
+                resolve_token(token),
             )
             _raise_for_status(commit_resp, "commit")
             commit = _parse_json(commit_resp, "commit")
