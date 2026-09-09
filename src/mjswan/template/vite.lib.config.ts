@@ -1,23 +1,17 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
+import { createHash } from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { minify } from './vite.shared';
+import { ORT_WASM_FILE } from './vite.ort';
 
 // Library build: emits a single self-contained ESM (`dist/mjswan.js`) exposing
 // `createEngine(element, options?)` (the headless engine; no React/Mantine),
 // with every dependency bundled and the MuJoCo / ONNX WASM co-located flat in
-// `dist/` so they resolve relative to the bundle on a public CDN (jsDelivr).
+// `dist/` so they resolve relative to the bundle wherever it is served from.
 // See src/engine/ and docs/adr/0004-headless-engine-core.md.
-
-function getOrtCdnBase(): string {
-  // Bake the installed ort version into the bundle so OnnxModule.ts can redirect
-  // ort's dynamic file fetches to its own CDN package (*.jsep.mjs, *.wasm, etc.).
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const ortPkg = require('./node_modules/onnxruntime-web/package.json');
-  return `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortPkg.version}/dist/`;
-}
 
 function getVersionFromPython(): string {
   const initPath = path.resolve(__dirname, '../__init__.py');
@@ -35,10 +29,16 @@ function getVersionFromPython(): string {
   return pkg.version || '0.0.0';
 }
 
+const sha256 = (buffer: Buffer): string => createHash('sha256').update(buffer).digest('hex');
+
 // Vite library mode force-inlines `new URL('x.wasm', import.meta.url)` as base64
 // `data:` URLs (ignoring assetsInlineLimit), bloating the bundle to ~70 MB. This
 // extracts each back to a co-located dist/ file resolved via `import.meta.url` so
-// it loads relative to the CDN bundle. See mjswan-cloud ADR 0001.
+// it loads relative to the bundle. See mjswan-cloud ADR 0001.
+//
+// ORT's runtime wasm is inlined the same way and comes back out with it; it is
+// recognized by content so it keeps its upstream name, which is what lets
+// src/core/onnx/ortEnv.ts point `ort.env.wasm.wasmPaths` at it (issue #123).
 function extractInlinedWasmPlugin(): Plugin {
   const B64 = '([A-Za-z0-9+/=]+)';
   // Two inlined shapes, each with a base arg re-checked below: normally quoted
@@ -55,15 +55,24 @@ function extractInlinedWasmPlugin(): Plugin {
     apply: 'build',
     enforce: 'post',
     generateBundle(_options, bundle) {
+      const ortWasmSha = sha256(
+        fs.readFileSync(path.resolve(__dirname, 'node_modules/onnxruntime-web/dist', ORT_WASM_FILE))
+      );
+      let ortWasmFound = false;
       const emitted = new Map<string, string>(); // base64 → emitted fileName
       const fileFor = (b64: string): string => {
         let fileName = emitted.get(b64);
         if (!fileName) {
-          const ref = this.emitFile({
-            type: 'asset',
-            name: 'mjswan-engine.wasm',
-            source: Buffer.from(b64, 'base64'),
-          });
+          const source = Buffer.from(b64, 'base64');
+          const isOrt = sha256(source) === ortWasmSha;
+          ortWasmFound ||= isOrt;
+          // ORT's wasm keeps its upstream name, unhashed, because `__ORT_WASM_FILE__`
+          // names it in source; a versioned CDN path already scopes dist/ per release.
+          const ref = this.emitFile(
+            isOrt
+              ? { type: 'asset', fileName: ORT_WASM_FILE, source }
+              : { type: 'asset', name: 'mjswan-engine.wasm', source }
+          );
           fileName = this.getFileName(ref);
           emitted.set(b64, fileName);
         }
@@ -105,6 +114,13 @@ function extractInlinedWasmPlugin(): Plugin {
             chunk.source = deinline(source);
           }
         }
+      }
+
+      // Without it nothing co-located answers `__ORT_WASM_FILE__` and every policy would
+      // 404 at runtime, so fail here instead. Most likely cause: an onnxruntime-web
+      // upgrade changed which build the `import` condition resolves to (vite.ort.ts).
+      if (!ortWasmFound) {
+        this.error(`${ORT_WASM_FILE} was not inlined in the bundle, so it cannot be emitted beside it`);
       }
     },
   };
@@ -161,8 +177,8 @@ export default defineConfig({
     // loaded from a CDN. Fold to "production"; other `process`/`Buffer` refs are
     // runtime-guarded (`typeof process < "u"`) Node paths that never run here.
     'process.env.NODE_ENV': JSON.stringify('production'),
-    // Lib-build only: redirect ort's dynamic fetches to its own CDN package.
-    __ORT_CDN_BASE__: JSON.stringify(getOrtCdnBase()),
+    // Lib-build only: the co-located ORT wasm `ortEnv.ts` resolves against the bundle URL.
+    __ORT_WASM_FILE__: JSON.stringify(`./${ORT_WASM_FILE}`),
   },
   resolve: {
     alias: {

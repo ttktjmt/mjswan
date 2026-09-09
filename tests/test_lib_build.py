@@ -9,12 +9,15 @@ load-bearing invariants:
   - `dist/mjswan.js` exists and exports `createEngine` (and default),
   - every dependency is bundled (no bare imports left to resolve from a CDN),
   - the MuJoCo/ONNX WASM is emitted as co-located files (NOT inlined as base64
-    data URLs) and referenced relative to the bundle.
+    data URLs) and referenced relative to the bundle,
+  - ONNX Runtime Web is pointed at the co-located copy, so a host serving `dist/`
+    from its own origin fetches nothing third-party (issue #123).
 See vite.lib.config.ts and docs/adr/0004-headless-engine-core.md.
 """
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -34,6 +37,15 @@ _IMPORT_FROM = re.compile(
 _DYNAMIC_IMPORT = re.compile(
     r"""(?:^|[;}\n=(,:?&|])\s*import\(\s*["']([^"']+)["']\s*\)"""
 )
+
+
+#: The name the library build gives ORT's runtime wasm. Part of the published file set:
+#: a consumer mirroring `dist/` serves this path, and the bundle asks for it by name.
+_ORT_WASM_FILE = "ort-wasm-simd-threaded.jsep.wasm"
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _is_bare(spec: str) -> bool:
@@ -113,6 +125,45 @@ class TestLibBuild:
                 found = True
                 break
         assert found, "no co-located `new URL('./*.wasm', import.meta.url)` reference"
+
+    def test_ort_wasm_co_located(self, lib_dist: Path):
+        """ORT's runtime wasm ships beside the bundle, byte-for-byte as installed.
+
+        `src/core/onnx/ortEnv.ts` points `ort.env.wasm.wasmPaths` at this file, which is
+        what lets a host serving `dist/` run a policy with no third-party request.
+        Comparing bytes also pins the ORT version to the one the build resolved from the
+        lockfile, rather than a range something else resolves at request time.
+        """
+        emitted = lib_dist / _ORT_WASM_FILE
+        assert emitted.is_file(), f"{_ORT_WASM_FILE} not emitted beside mjswan.js"
+        installed = (
+            TEMPLATE_DIR / "node_modules" / "onnxruntime-web" / "dist" / _ORT_WASM_FILE
+        )
+        assert _sha256(emitted) == _sha256(installed), (
+            "the co-located ORT wasm is not the installed one — the extract plugin "
+            "matched the wrong asset"
+        )
+
+    def test_ort_wasm_paths_names_the_file_never_a_prefix(self, lib_dist: Path):
+        """`wasmPaths` names the wasm; a URL prefix would be a third-party script fetch.
+
+        The distinction is the whole point: given a prefix, ORT dynamic-imports
+        `ort-wasm-simd-threaded.jsep.mjs` from it — executable code, from whatever origin
+        the prefix names, on every policy-driven scene — while naming only the wasm keeps
+        ORT on the loader already inlined in the bundle. This build set a jsDelivr prefix
+        until issue #123.
+        """
+        code = (lib_dist / "mjswan.js").read_text()
+        named = re.compile(
+            r"""wasmPaths\s*=\s*\{\s*wasm\s*:\s*new URL\(\s*["'`]\./"""
+            + re.escape(_ORT_WASM_FILE)
+        )
+        assert named.search(code), "wasmPaths does not name the co-located ORT wasm"
+        prefix = re.search(r"""wasmPaths\s*=\s*["'`](https?://[^"'`]*)""", code)
+        assert prefix is None, (
+            f"wasmPaths is set to a URL prefix ({prefix.group(1)}), which makes ORT "
+            "fetch its .mjs loader from there"
+        )
 
     def test_no_bundled_react_or_mantine(self, lib_dist: Path):
         # The engine entry drops the React/Mantine chrome; the CDN bundle must

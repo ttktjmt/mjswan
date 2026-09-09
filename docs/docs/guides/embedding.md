@@ -240,4 +240,9 @@ const { createEngine } = await import(
 );
 ```
 
+Or serve the package's `dist/` directory from your own origin — the bundle resolves its
+WebAssembly (MuJoCo's and ONNX Runtime Web's) relative to itself, so a copy of that one
+directory needs no other host and no configuration. Under a strict CSP that means a single
+`script-src` prefix, your own.
+
 See the [Engine API](../api/engine.md) for the full surface.

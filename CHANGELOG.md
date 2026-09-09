@@ -16,6 +16,11 @@ velocity-command shortcuts were removed outright, see Removed.
 
 ### Added
 
+- `createEngine({ ortWasmPaths })`: where onnxruntime-web fetches its runtime files, for a
+  consumer that wants ORT somewhere other than beside the bundle — a shared mirror, say.
+  Takes ORT's own `wasmPaths` shapes; a bare prefix string has to serve a full
+  `onnxruntime-web/dist/`, since the loader the prefix form asks for is not in this package.
+
 - **Every term entry says which function it is** ([#118](https://github.com/ttktjmt/mjswan/issues/118)):
   `func` (`<module>:<qualname>`), `doc` (the docstring's first line) and `params`
   (JSON-safe: a `SceneEntityCfg` becomes `{entity, joint_names?, …}`) on observation
@@ -148,6 +153,19 @@ velocity-command shortcuts were removed outright, see Removed.
 - The `mjlab-to-mjswan` agent skill ([skills/mjlab-to-mjswan/](skills/mjlab-to-mjswan/)), published from this repo as the `mjswan` Claude Code plugin (`/mjswan:mjlab-to-mjswan`): it ports one mjlab task from any repo into a browser app.
 
 ### Changed
+
+- **The engine bundle fetches ONNX Runtime Web's wasm from beside itself**
+  ([#123](https://github.com/ttktjmt/mjswan/issues/123)): `dist/mjswan.js` pointed
+  `ort.env.wasm.wasmPaths` at `cdn.jsdelivr.net/npm/onnxruntime-web@<version>/dist/`, so
+  every policy-driven scene loaded ORT's `.mjs` loader as script from a CDN the host does
+  not control — and a host serving `dist/` from its own origin still had to allow
+  jsDelivr in `script-src`. The build now emits ORT's wasm as
+  `dist/ort-wasm-simd-threaded.jsep.wasm` and names it in `wasmPaths`, resolved against
+  `import.meta.url`: a host that serves `dist/` needs no second origin, and no `.mjs` is
+  fetched at all, since the bundled ORT build carries its loader inlined. The ORT version
+  is still fixed at build time — it is now the bytes in the package rather than a URL. A
+  consumer serving `dist/` as published sees only the change of origin; one that mirrored
+  `onnxruntime-web` for the old URL can stop.
 
 - **Every scene carries a `camera`, and the view follows the robot by default.** The
   build used to omit the block for a scene that never called `set_viewer`, and the

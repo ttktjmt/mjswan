@@ -4,6 +4,8 @@
  */
 import * as ort from 'onnxruntime-web';
 
+// Configures ort.env before any session is created; see ortEnv.ts.
+import './ortEnv';
 import { queueOrtRun } from './runQueue';
 
 /** Minimal ORT-Web surface a command/event handler needs. */

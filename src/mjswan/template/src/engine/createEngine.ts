@@ -7,6 +7,7 @@
  * snapshot for `subscribe`. No React, no catalog, no config.json, no fetch.
  */
 import { mjswanRuntime, type ResolvedPolicy, type ResolvedScene, type ResolvedSplat } from '../core/engine/runtime';
+import { setOrtWasmPaths } from '../core/onnx/ortEnv';
 import { type Bytes, resolveBytes } from '../core/utils/bytes';
 import type { CommandDefinition, CommandEventListener } from '../core/command';
 import type { PolicyConfig } from '../core/policy/types';
@@ -247,6 +248,8 @@ export async function createEngine(
   element: HTMLElement,
   options: CreateEngineOptions = {},
 ): Promise<MjswanEngine> {
+  // Set before any session exists: ORT reads env.wasm when the first one initializes.
+  if (options.ortWasmPaths) setOrtWasmPaths(options.ortWasmPaths);
   const mujocoModule = options.multithreaded ? await import('mujoco/mt') : await import('mujoco');
   const mujoco = await mujocoModule.default();
   return new Engine(new mjswanRuntime(mujoco, element, options.termSeed, options.handTracking));
