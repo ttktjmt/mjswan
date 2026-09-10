@@ -29,15 +29,21 @@ function getVersionFromPython(): string {
   return pkg.version || '0.0.0';
 }
 
-const sha256 = (buffer: Buffer): string => createHash('sha256').update(buffer).digest('hex');
+// Where every build puts what only it references; the entry alone sits at the root.
+const ASSETS_DIR = 'assets';
 
-// A specifier for `target` (a dist-relative path) as written inside `fromFile`. Both live
-// in dist/ but at different depths — the entry at the root, its chunks under assets/ — so
+const sha256 = (source: Uint8Array | string): string =>
+  createHash('sha256').update(source).digest('hex');
+
+// A specifier for `target` (a dist-relative path) as written from `fromDir`. Files sit in
+// dist/ at different depths — the entry at the root, everything else under assets/ — so
 // the same emitted file is `./assets/x.wasm` from one and `./x.wasm` from the other.
-function specifierFrom(fromFile: string, target: string): string {
-  const relative = path.posix.relative(path.posix.dirname(fromFile), target);
+function specifierFromDir(fromDir: string, target: string): string {
+  const relative = path.posix.relative(fromDir, target);
   return relative.startsWith('.') ? relative : `./${relative}`;
 }
+const specifierFrom = (fromFile: string, target: string): string =>
+  specifierFromDir(path.posix.dirname(fromFile), target);
 
 // digest → emitted name, for the upstream WASM the SPA build names the same way. Matching
 // by content is what recovers the name: the de-inlined assets arrive as bytes with the
@@ -78,7 +84,7 @@ function extractInlinedWasmPlugin(): Plugin {
     generateBundle(_options, bundle) {
       const upstream = upstreamWasmNames();
       const emitted = new Map<string, string>(); // base64 → emitted fileName
-      const emittedFor = new Map<string, string>(); // upstream name → emitted fileName
+      let ortWasm: string | undefined; // emitted fileName of ORT_WASM_FILE
       const fileFor = (b64: string): string => {
         let fileName = emitted.get(b64);
         if (!fileName) {
@@ -87,7 +93,7 @@ function extractInlinedWasmPlugin(): Plugin {
           const name = upstream.get(sha256(source)) ?? 'mjswan-engine.wasm';
           fileName = this.getFileName(this.emitFile({ type: 'asset', name, source }));
           emitted.set(b64, fileName);
-          emittedFor.set(name, fileName);
+          if (name === ORT_WASM_FILE) ortWasm = fileName;
         }
         return fileName;
       };
@@ -109,7 +115,10 @@ function extractInlinedWasmPlugin(): Plugin {
             (m, b64: string) => {
               // Keep small active-worker wasm (Spark) inline; only extract large dormant wasm.
               if (b64.length < 1_000_000) return m;
-              return `new URL(\\"${specifierFrom(fileName, fileFor(b64))}\\", self.location.href)`;
+              // Against `self.location.href`, the worker's own URL — under ASSETS_DIR per the
+              // worker output options, whatever file this string happens to sit in.
+              const specifier = specifierFromDir(ASSETS_DIR, fileFor(b64));
+              return `new URL(\\"${specifier}\\", self.location.href)`;
             }
           );
 
@@ -135,18 +144,36 @@ function extractInlinedWasmPlugin(): Plugin {
         code.includes('data:application/wasm') ? deinline(code, fileName) : null
       );
 
-      const ortWasm = emittedFor.get(ORT_WASM_FILE);
+      if (!ortWasm) {
+        // Not inlined this time. A Vite that emits the asset itself puts it in the bundle
+        // under its own name, so look for the bytes there before giving up.
+        const ortDigest = [...upstream].find(([, name]) => name === ORT_WASM_FILE)?.[0];
+        for (const [fileName, item] of Object.entries(bundle)) {
+          if (item.type === 'asset' && fileName.endsWith('.wasm') && sha256(item.source) === ortDigest) {
+            ortWasm = fileName;
+          }
+        }
+      }
       if (!ortWasm) {
         // Without it `ortEnv.ts` has no file to name and every policy would 404 at
         // runtime, so fail here instead. Most likely cause: an onnxruntime-web upgrade
         // changed which build the `import` condition resolves to (vite.wasm.ts).
-        throw new Error(`${ORT_WASM_FILE} was not inlined in the bundle, so it cannot be emitted beside it`);
+        throw new Error(`${ORT_WASM_FILE} is in the bundle neither inlined nor emitted, so ortEnv.ts has nothing to name`);
       }
-      rewriteJs((code, fileName) =>
-        code.includes(ORT_WASM_TOKEN)
-          ? code.replaceAll(ORT_WASM_TOKEN, specifierFrom(fileName, ortWasm))
-          : null
-      );
+
+      const ortFile = ortWasm;
+      let substituted = 0;
+      rewriteJs((code, fileName) => {
+        if (!code.includes(ORT_WASM_TOKEN)) return null;
+        substituted += 1;
+        return code.replaceAll(ORT_WASM_TOKEN, specifierFrom(fileName, ortFile));
+      });
+      if (substituted === 0) {
+        // The wasm is there but nothing names it — a minifier that re-encoded the literal,
+        // a `define` that stopped applying, ortEnv.ts gone from the graph. Shipping would
+        // leave the placeholder in every consumer's URL and 404 every policy.
+        throw new Error(`${ORT_WASM_TOKEN} appears in no emitted JS, so the ORT wasm path was never written`);
+      }
     },
   };
 }
@@ -227,9 +254,9 @@ export default defineConfig({
     // over them as JS assets of the main bundle).
     rollupOptions: {
       output: {
-        entryFileNames: 'assets/[name]-[hash].js',
-        chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]',
+        entryFileNames: `${ASSETS_DIR}/[name]-[hash].js`,
+        chunkFileNames: `${ASSETS_DIR}/[name]-[hash].js`,
+        assetFileNames: `${ASSETS_DIR}/[name]-[hash][extname]`,
       },
     },
   },
@@ -263,8 +290,8 @@ export default defineConfig({
         // `new URL('./assets/x.wasm', import.meta.url)` still resolves relative to
         // the bundle wherever dist/ is served from. See vite.wasm.ts.
         entryFileNames: 'mjswan.js',
-        chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]',
+        chunkFileNames: `${ASSETS_DIR}/[name]-[hash].js`,
+        assetFileNames: `${ASSETS_DIR}/[name]-[hash][extname]`,
         minify,
       },
       onwarn(warning, warn) {

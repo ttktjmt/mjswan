@@ -56,9 +56,12 @@ def _library_js(lib_dist: Path) -> list[Path]:
     `build:lib` writes into a `dist/` that may already hold the SPA build's output, now
     under the same `assets/`, and the invariants below are the CDN bundle's alone. So
     follow `mjswan.js`'s own graph — its imports, plus the `new URL` a worker is spawned
-    from — rather than globbing the directory and judging the SPA by them.
+    from, which Emscripten writes as a bare name with no `./` — rather than globbing the
+    directory and judging the SPA by them. A string that resolves to no file is skipped.
     """
-    reference = re.compile(r"""["'`](\.{1,2}/[A-Za-z0-9._\-/]+\.js)["'`]""")
+    reference = re.compile(
+        r"""["'`]((?:\.{1,2}/)?[A-Za-z0-9._\-]+(?:/[A-Za-z0-9._\-]+)*\.js)["'`]"""
+    )
     seen: set[Path] = set()
     queue = [lib_dist / "mjswan.js"]
     while queue:
@@ -200,8 +203,11 @@ class TestLibBuild:
         until issue #123.
         """
         code = (lib_dist / "mjswan.js").read_text()
-        emitted = next(iter(lib_dist.glob(f"assets/{_ORT_WASM_GLOB}")))
-        relative = emitted.relative_to(lib_dist).as_posix()
+        emitted = list(lib_dist.glob(f"assets/{_ORT_WASM_GLOB}"))
+        assert len(emitted) == 1, (
+            f"expected one assets/{_ORT_WASM_GLOB}, found {emitted}"
+        )
+        relative = emitted[0].relative_to(lib_dist).as_posix()
         named = re.compile(
             r"""wasmPaths\s*=\s*\{\s*wasm\s*:\s*new URL\(\s*["'`]\./"""
             + re.escape(relative)
@@ -212,6 +218,20 @@ class TestLibBuild:
             f"wasmPaths is set to a URL prefix ({prefix.group(1)}), which makes ORT "
             "fetch its .mjs loader from there"
         )
+        # Naming the wasm keeps ORT on its inlined loader only while single-threaded.
+        assert re.search(r"wasm\.numThreads\s*=\s*1\b", code), (
+            "ort.env.wasm.numThreads is not 1 in the bundle; off its own origin ORT would "
+            "then fetch the .mjs loader this package does not ship"
+        )
+
+    def test_ort_wasm_name_agrees_with_vite_wasm_ts(self):
+        """The literal above mirrors vite.wasm.ts, which owns the name; catch them drifting."""
+        source = (TEMPLATE_DIR / "vite.wasm.ts").read_text()
+        owned = re.search(r"export const ORT_WASM_FILE = '([^']+)'", source)
+        assert owned is not None, (
+            "vite.wasm.ts no longer exports ORT_WASM_FILE as a literal"
+        )
+        assert owned.group(1) == _ORT_WASM_FILE
 
     def test_no_bundled_react_or_mantine(self, lib_dist: Path):
         # The engine entry drops the React/Mantine chrome; the CDN bundle must

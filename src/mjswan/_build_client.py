@@ -339,6 +339,9 @@ class ClientBuilder:
             "package.json",
             "vite.config.ts",
             "vite.lib.config.ts",
+            "vite.manifest.config.ts",
+            "vite.shared.ts",
+            "vite.wasm.ts",
             "tsconfig.json",
             "index.html",
         ):

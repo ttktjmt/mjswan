@@ -153,7 +153,9 @@ velocity-command shortcuts were removed outright, see Removed.
   else. `executionProviders: ['webgpu', 'wasm']` is the whole change: ORT initializes each
   provider in turn, drops the ones that fail with a warning naming them, and keeps the
   first that works, so no capability check of our own is involved and a machine without
-  `navigator.gpu` behaves exactly as before. The bundled ORT build already carried the
+  `navigator.gpu` behaves exactly as before. An adapter that exists but fails at session
+  creation is the one case ORT does not survive on its own; the engine retries that
+  session on wasm. The bundled ORT build already carried the
   WebGPU backend — it was registered and never selected. Traced MDP term graphs stay on
   wasm: each is small, a step runs many, and `queueOrtRun` serializes every run in the
   page, so a per-graph dispatch and readback would cost more than the arithmetic. Whether

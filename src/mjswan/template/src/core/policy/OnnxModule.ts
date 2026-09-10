@@ -44,14 +44,17 @@ export class OnnxModule {
   }
 
   async init(): Promise<void> {
-    this.session = await ort.InferenceSession.create(this.bytes, {
-      // WebGPU where the browser has it, wasm everywhere else. No capability check of our
-      // own: ORT initializes each provider in turn, drops the ones whose init fails with a
-      // console warning naming them, and keeps the first that works — so a machine without
-      // `navigator.gpu` lands on wasm by itself. Unsupported operators fall back per node.
-      executionProviders: ['webgpu', 'wasm'],
-      graphOptimizationLevel: 'all',
-    });
+    const create = (executionProviders: string[]) =>
+      ort.InferenceSession.create(this.bytes, { executionProviders, graphOptimizationLevel: 'all' });
+    try {
+      // WebGPU where the browser has it, wasm everywhere else. ORT drops a provider whose
+      // init fails on its own; what it does not survive is an adapter that exists but fails
+      // at session creation, hence the retry. See docs/docs/api/engine.md, "Where inference runs".
+      this.session = await create(['webgpu', 'wasm']);
+    } catch (error) {
+      this.session = await create(['wasm']);
+      console.warn('[OnnxModule] WebGPU session failed, running on wasm:', error);
+    }
     this.inferInputKeys();
     this.isRecurrent = this.inKeys.includes('adapt_hx');
   }

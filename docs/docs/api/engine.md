@@ -64,9 +64,11 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
     **wasm** otherwise — ONNX Runtime tries each provider and keeps the first that
     initializes, so there is nothing to configure and nothing to feature-detect. Do not
     feature-detect it yourself either: `navigator.gpu` can exist on a machine that has no
-    adapter, and ORT is the thing that finds out. Traced MDP term graphs always run on
-    wasm: they are small, a step runs many of them, and every inference in the page is
-    serialized, so a GPU round trip each would cost more than it saves.
+    adapter, and ORT is the thing that finds out. An adapter that exists but fails at
+    session creation is the one case ORT does not survive on its own, so the engine
+    retries that session on wasm. Traced MDP term graphs always run on wasm: they are
+    small, a step runs many of them, and every inference in the page is serialized, so a
+    GPU round trip each would cost more than it saves.
 
     ORT names the provider it dropped in a `console.warn`, which a release bundle strips
     along with every other `console.*`. Build with `MJSWAN_DEBUG=1` (or `Builder(debug=True)`)

@@ -8,6 +8,9 @@
 import * as ort from 'onnxruntime-web';
 
 ort.env.wasm.proxy = false;
+// Load-bearing for `wasmPaths` below, not only a preference: off the bundle's own origin,
+// ORT keeps its inlined loader only while the wasm is overridden *and* single-threaded.
+// More threads would send it after the `.mjs` this package does not ship.
 ort.env.wasm.numThreads = 1;
 
 /**

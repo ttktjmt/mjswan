@@ -8,9 +8,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import * as ort from 'onnxruntime-web';
 import { describe, expect, it } from 'vitest';
 
 import { ORT_BUNDLED_ENTRY, ORT_WASM_FILE, UPSTREAM_WASM } from '../../../../vite.wasm';
+import '../ortEnv';
 
 const ORT_PKG = join(__dirname, '../../../../node_modules/onnxruntime-web');
 
@@ -27,6 +29,14 @@ describe('onnxruntime-web runtime files', () => {
     // Named in ORT's own source, so a rename upstream lands here and not in a 404.
     const entry = readFileSync(join(ORT_PKG, ORT_BUNDLED_ENTRY), 'utf-8');
     expect(entry).toContain(ORT_WASM_FILE);
+  });
+});
+
+describe('ortEnv', () => {
+  it('keeps ORT single-threaded, which the inlined-loader path depends on', () => {
+    // Off the bundle's own origin, ORT stays on its inlined loader only while the wasm is
+    // overridden and `numThreads === 1`; more threads would fetch the `.mjs` not shipped.
+    expect(ort.env.wasm.numThreads).toBe(1);
   });
 });
 
