@@ -827,7 +827,8 @@ class Builder:
         Output structure (ADR 0006 §2):
             dist/
             ├── index.html, logo.svg, robots.txt
-            ├── assets/            (compiled js/css/wasm, plugins.js)
+            ├── assets/            (compiled js/css, plugins.js)
+            ├── *.wasm             (MuJoCo / ONNX Runtime, flat so both builds share one copy)
             ├── manifest.json      (the one descriptor; every key snake_case)
             └── <project-id>/
                 └── <scene-id>/

@@ -167,6 +167,18 @@ velocity-command shortcuts were removed outright, see Removed.
   consumer serving `dist/` as published sees only the change of origin; one that mirrored
   `onnxruntime-web` for the old URL can stop.
 
+- **`dist/` ships each WASM once, and `dist/` is 47 MiB instead of 87**
+  ([#123](https://github.com/ttktjmt/mjswan/issues/123)): the SPA and library builds write
+  into one directory and had been disagreeing about where — the SPA under `assets/`, the
+  library build renaming everything to `mjswan-engine-<hash>.wasm` — so 40 MiB of
+  byte-identical MuJoCo and ONNX Runtime WASM shipped twice: in the npm package, in the
+  wheel (`dist/` is packaged despite being gitignored), and in every built app, which
+  copies the whole directory. Both now name each file from its source basename plus a Vite
+  content hash, flat in `dist/`, so identical bytes land on one path. The moved files are
+  referenced only by the bundles' own `new URL(…, import.meta.url)`, which Vite rewrites,
+  so nothing names them from outside; a built app's WASM sits beside `index.html` rather
+  than under `assets/`.
+
 - **Every scene carries a `camera`, and the view follows the robot by default.** The
   build used to omit the block for a scene that never called `set_viewer`, and the
   browser filled the gap from defaults generated out of the Python dataclass. The two

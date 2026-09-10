@@ -39,9 +39,11 @@ _DYNAMIC_IMPORT = re.compile(
 )
 
 
-#: The name the library build gives ORT's runtime wasm. Part of the published file set:
-#: a consumer mirroring `dist/` serves this path, and the bundle asks for it by name.
+#: ORT's runtime wasm upstream, and the name both builds emit it under — its own basename
+#: plus a Vite content hash. Part of the published file set: a consumer mirroring `dist/`
+#: serves that path, and the bundle asks for it by name.
 _ORT_WASM_FILE = "ort-wasm-simd-threaded.jsep.wasm"
+_ORT_WASM_GLOB = "ort-wasm-simd-threaded.jsep-*.wasm"
 
 
 def _sha256(path: Path) -> str:
@@ -134,12 +136,12 @@ class TestLibBuild:
         Comparing bytes also pins the ORT version to the one the build resolved from the
         lockfile, rather than a range something else resolves at request time.
         """
-        emitted = lib_dist / _ORT_WASM_FILE
-        assert emitted.is_file(), f"{_ORT_WASM_FILE} not emitted beside mjswan.js"
+        emitted = list(lib_dist.glob(_ORT_WASM_GLOB))
+        assert len(emitted) == 1, f"expected one {_ORT_WASM_GLOB}, found {emitted}"
         installed = (
             TEMPLATE_DIR / "node_modules" / "onnxruntime-web" / "dist" / _ORT_WASM_FILE
         )
-        assert _sha256(emitted) == _sha256(installed), (
+        assert _sha256(emitted[0]) == _sha256(installed), (
             "the co-located ORT wasm is not the installed one — the extract plugin "
             "matched the wrong asset"
         )
@@ -154,11 +156,12 @@ class TestLibBuild:
         until issue #123.
         """
         code = (lib_dist / "mjswan.js").read_text()
+        emitted = next(iter(lib_dist.glob(_ORT_WASM_GLOB))).name
         named = re.compile(
             r"""wasmPaths\s*=\s*\{\s*wasm\s*:\s*new URL\(\s*["'`]\./"""
-            + re.escape(_ORT_WASM_FILE)
+            + re.escape(emitted)
         )
-        assert named.search(code), "wasmPaths does not name the co-located ORT wasm"
+        assert named.search(code), f"wasmPaths does not name the co-located {emitted}"
         prefix = re.search(r"""wasmPaths\s*=\s*["'`](https?://[^"'`]*)""", code)
         assert prefix is None, (
             f"wasmPaths is set to a URL prefix ({prefix.group(1)}), which makes ORT "
@@ -220,6 +223,55 @@ class TestLibBuild:
             "in vite.lib.config.ts must fold it to a literal so the CDN-loaded "
             "engine needs no host-side `process` shim."
         )
+
+
+@pytest.fixture(scope="class")
+def full_dist() -> Path:
+    """All three builds, once, into the one `dist/` they share.
+
+    `npm run build` starts with the SPA build, which empties `dist/`, so this is
+    self-cleaning where the single-target fixtures above are not.
+    """
+    builder = ClientBuilder(TEMPLATE_DIR)
+    builder.create_env()
+    builder.sync_version_from_python()
+    builder.install_dependencies()
+    builder.run_build_script("build")
+    return TEMPLATE_DIR / "dist"
+
+
+@pytest.mark.slow
+class TestDistDeduplication:
+    """The SPA and library builds share one `dist/`, and must not each ship the WASM.
+
+    Both name every WASM `<source basename>-<content hash>.wasm` flat in `dist/` so the
+    same bytes land on one path (vite.wasm.ts). Before that they disagreed — the SPA under
+    `assets/`, the library build as `mjswan-engine-<hash>.wasm` — and 40 MiB of identical
+    MuJoCo and ONNX Runtime WASM shipped twice, in the npm package, the wheel, and every
+    built app. A few sub-2 KB JS chunks are still duplicated; deduping those would mean
+    moving the SPA's whole JS layout out of `assets/`, which is not worth it.
+    """
+
+    def test_no_wasm_ships_twice(self, full_dist: Path):
+        by_digest: dict[str, list[str]] = {}
+        for wasm in full_dist.rglob("*.wasm"):
+            by_digest.setdefault(_sha256(wasm), []).append(
+                str(wasm.relative_to(full_dist))
+            )
+        duplicated = {d: paths for d, paths in by_digest.items() if len(paths) > 1}
+        assert not duplicated, (
+            "the same WASM is emitted at more than one path: "
+            f"{sorted(duplicated.values())}"
+        )
+
+    def test_wasm_sits_flat_beside_the_bundle(self, full_dist: Path):
+        """Flat in `dist/` is the shared path; under `assets/` means the SPA drifted back."""
+        nested = [
+            str(w.relative_to(full_dist))
+            for w in full_dist.rglob("*.wasm")
+            if w.parent != full_dist
+        ]
+        assert not nested, f"WASM emitted outside dist/ root: {nested}"
 
 
 @pytest.fixture(scope="class")

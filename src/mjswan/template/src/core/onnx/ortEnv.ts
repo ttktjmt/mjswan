@@ -13,7 +13,10 @@ ort.env.wasm.numThreads = 1;
 /** Where ORT fetches its runtime files: a prefix, or a URL per file. */
 export type OrtWasmPaths = NonNullable<typeof ort.env.wasm.wasmPaths>;
 
-/** The co-located wasm's name, defined only by vite.lib.config.ts (absent in the SPA). */
+/**
+ * The co-located wasm's name, content hash included, defined only by vite.lib.config.ts
+ * (absent in the SPA, which lets Vite resolve ORT's own default reference instead).
+ */
 declare const __ORT_WASM_FILE__: string | undefined;
 
 if (typeof __ORT_WASM_FILE__ !== 'undefined') {
