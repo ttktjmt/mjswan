@@ -16,11 +16,6 @@ velocity-command shortcuts were removed outright, see Removed.
 
 ### Added
 
-- `createEngine({ ortWasmPaths })`: where onnxruntime-web fetches its runtime files, for a
-  consumer that wants ORT somewhere other than beside the bundle — a shared mirror, say.
-  Takes ORT's own `wasmPaths` shapes; a bare prefix string has to serve a full
-  `onnxruntime-web/dist/`, since the loader the prefix form asks for is not in this package.
-
 - **Every term entry says which function it is** ([#118](https://github.com/ttktjmt/mjswan/issues/118)):
   `func` (`<module>:<qualname>`), `doc` (the docstring's first line) and `params`
   (JSON-safe: a `SceneEntityCfg` becomes `{entity, joint_names?, …}`) on observation

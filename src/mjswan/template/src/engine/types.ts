@@ -156,16 +156,6 @@ export interface CreateEngineOptions {
   termSeed?: number;
   /** Put WebXR-tracked hands in the simulation as mocap-driven fingertips. */
   handTracking?: boolean;
-  /**
-   * Where onnxruntime-web fetches its runtime files. Defaults to this bundle's own
-   * directory, so a host serving `dist/` needs no other origin in its CSP.
-   *
-   * A string is a prefix ORT appends every file name to, `ort-wasm-simd-threaded.jsep.mjs`
-   * included — this package does not ship that loader (the bundle carries it inlined), so
-   * a prefix has to point at a full `onnxruntime-web/dist/`. The object form names files
-   * one at a time, and giving only `wasm` keeps ORT on the inlined loader.
-   */
-  ortWasmPaths?: string | { wasm?: string | URL; mjs?: string | URL };
 }
 
 /** A headless, instance-scoped simulation engine. Create with {@link createEngine}. */

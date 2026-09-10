@@ -52,7 +52,6 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
 | `multithreaded` | `boolean` | `false` | Load the `mujoco/mt` build. Uses `SharedArrayBuffer`, so it requires [COOP/COEP headers](../guides/deployment.md#cross-origin-isolation-headers-for-multi-threading). |
 | `termSeed` | `number` | built-in default | Seed for the single PRNG every traced term's `rand` input comes from. Pass back the value read from `MjswanEngineState.termSeed` to re-run a recorded session. |
 | `handTracking` | `boolean` | `false` | Put a headset's WebXR-tracked hands in the simulation as mocap-driven capsules, so a VR viewer can push and grasp what it sees ([details](../guides/embedding.md#hand-tracking-in-vr)). Every scene loaded gains the hand bodies, at about 1.6x per physics step. |
-| `ortWasmPaths` | `string \| { wasm?, mjs? }` | beside the bundle | Where ONNX Runtime Web fetches its runtime files. Only worth setting to move ORT off the bundle's own directory — a shared mirror, say. A string is a prefix ORT appends every file name to, and the prefix form makes it ask for `ort-wasm-simd-threaded.jsep.mjs` too, which this package does not ship: point a prefix at a full `onnxruntime-web/dist/`, or use the object form. |
 
 !!! note "The one thing the engine does fetch"
     `dist/mjswan.js` resolves its own WebAssembly — MuJoCo's and ORT's — relative to

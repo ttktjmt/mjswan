@@ -10,9 +10,6 @@ import * as ort from 'onnxruntime-web';
 ort.env.wasm.proxy = false;
 ort.env.wasm.numThreads = 1;
 
-/** Where ORT fetches its runtime files: a prefix, or a URL per file. */
-export type OrtWasmPaths = NonNullable<typeof ort.env.wasm.wasmPaths>;
-
 /**
  * The co-located wasm's name, content hash included, defined only by vite.lib.config.ts
  * (absent in the SPA, which lets Vite resolve ORT's own default reference instead).
@@ -28,9 +25,4 @@ if (typeof __ORT_WASM_FILE__ !== 'undefined') {
   // as a runtime URL — wherever dist/ is served from — not a build-time asset reference.
   const bundleUrl = import.meta.url;
   ort.env.wasm.wasmPaths = { wasm: new URL(__ORT_WASM_FILE__, bundleUrl).href };
-}
-
-/** Send ORT's fetches elsewhere. See `CreateEngineOptions.ortWasmPaths`. */
-export function setOrtWasmPaths(paths: OrtWasmPaths): void {
-  ort.env.wasm.wasmPaths = paths;
 }
