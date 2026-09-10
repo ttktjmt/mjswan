@@ -54,25 +54,22 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
 | `handTracking` | `boolean` | `false` | Put a headset's WebXR-tracked hands in the simulation as mocap-driven capsules, so a VR viewer can push and grasp what it sees ([details](../guides/embedding.md#hand-tracking-in-vr)). Every scene loaded gains the hand bodies, at about 1.6x per physics step. |
 
 !!! note "The one thing the engine does fetch"
-    `dist/mjswan.js` resolves its own WebAssembly — MuJoCo's and ORT's — relative to
-    itself via `import.meta.url`, so serving the published `dist/` directory from your
-    own origin is enough: no CDN, and `script-src 'self'` covers it. Nothing else in the
-    bundle reaches a third-party origin.
+    `dist/mjswan.js` resolves its own WebAssembly — MuJoCo's and ORT's — relative to itself
+    via `import.meta.url`, so serving the published `dist/` from your own origin is enough:
+    no CDN, and `script-src 'self'` covers it.
 
 !!! note "Where inference runs"
     The policy network runs on **WebGPU** when the browser offers it and falls back to
     **wasm** otherwise — ONNX Runtime tries each provider and keeps the first that
-    initializes, so there is nothing to configure and nothing to feature-detect. Do not
-    feature-detect it yourself either: `navigator.gpu` can exist on a machine that has no
-    adapter, and ORT is the thing that finds out. An adapter that exists but fails at
-    session creation is the one case ORT does not survive on its own, so the engine
-    retries that session on wasm. Traced MDP term graphs always run on wasm: they are
-    small, a step runs many of them, and every inference in the page is serialized, so a
+    initializes. Nothing to configure, and do not feature-detect it yourself: `navigator.gpu`
+    can exist on a machine that has no adapter, and ORT is what finds out. An adapter that
+    exists but fails at session creation is the one case ORT does not survive on its own, so
+    the engine retries that session on wasm. Traced MDP term graphs always run on wasm: they
+    are small, a step runs many of them, and every inference in the page is serialized, so a
     GPU round trip each would cost more than it saves.
 
-    ORT names the provider it dropped in a `console.warn`, which a release bundle strips
-    along with every other `console.*`. Build with `MJSWAN_DEBUG=1` (or `Builder(debug=True)`)
-    to see whether a given machine fell back.
+    ORT names the provider it dropped in a `console.warn`, which a release bundle strips.
+    Build with `MJSWAN_DEBUG=1` (or `Builder(debug=True)`) to see whether a machine fell back.
 
 ### `MjswanEngine`
 

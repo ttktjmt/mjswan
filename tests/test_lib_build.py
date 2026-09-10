@@ -39,9 +39,8 @@ _DYNAMIC_IMPORT = re.compile(
 )
 
 
-#: ORT's runtime wasm upstream, and the name both builds emit it under — its own basename
-#: plus a Vite content hash. Part of the published file set: a consumer mirroring `dist/`
-#: serves that path, and the bundle asks for it by name.
+#: ORT's runtime wasm upstream, and the name both builds emit it under: its own basename
+#: plus a Vite content hash.
 _ORT_WASM_FILE = "ort-wasm-simd-threaded.jsep.wasm"
 _ORT_WASM_GLOB = "ort-wasm-simd-threaded.jsep-*.wasm"
 
@@ -53,11 +52,10 @@ def _sha256(path: Path) -> str:
 def _library_js(lib_dist: Path) -> list[Path]:
     """The JS the library build emits, reached from its entry.
 
-    `build:lib` writes into a `dist/` that may already hold the SPA build's output, now
-    under the same `assets/`, and the invariants below are the CDN bundle's alone. So
-    follow `mjswan.js`'s own graph — its imports, plus the `new URL` a worker is spawned
-    from, which Emscripten writes as a bare name with no `./` — rather than globbing the
-    directory and judging the SPA by them. A string that resolves to no file is skipped.
+    `build:lib` writes into a `dist/` that may already hold the SPA build's output, and the
+    invariants below are the CDN bundle's alone. So follow `mjswan.js`'s own graph: its
+    imports, plus the bare-name `new URL` Emscripten spawns a worker from. Strings that
+    resolve to no file are skipped.
     """
     reference = re.compile(
         r"""["'`]((?:\.{1,2}/)?[A-Za-z0-9._\-]+(?:/[A-Za-z0-9._\-]+)*\.js)["'`]"""
@@ -157,12 +155,10 @@ class TestLibBuild:
     def test_no_reference_resolves_against_the_origin_root(self, lib_dist: Path):
         """Every emitted URL is relative to the bundle, never rooted at the origin.
 
-        The engine is loaded from a versioned CDN path, so a `new URL("/x", …)` resolves
-        to the wrong origin root — `cdn.jsdelivr.net/x` instead of
-        `cdn.jsdelivr.net/npm/mjswan@<v>/dist/x`. Vite emits exactly that from its default
-        `/` base, which is why the library build sets `base: './'`; the SPA keeps the
-        absolute form on purpose, since it honours `MJSWAN_BASE_PATH`, and is not scanned
-        here. Until this landed, `mujoco/mt`'s pthread worker was spawned from such a URL.
+        The engine is loaded from a versioned CDN path, so `new URL("/x", …)` resolves to
+        `cdn.jsdelivr.net/x` instead of `cdn.jsdelivr.net/npm/mjswan@<v>/dist/x`. Vite emits
+        exactly that from its default `/` base, hence `base: './'`. The SPA keeps the
+        absolute form to honour `MJSWAN_BASE_PATH`, and is not scanned here.
         """
         rooted = re.compile(r"""new URL\(\s*["'`]/""")
         offenders = [
@@ -174,12 +170,11 @@ class TestLibBuild:
         )
 
     def test_ort_wasm_co_located(self, lib_dist: Path):
-        """ORT's runtime wasm ships beside the bundle, byte-for-byte as installed.
+        """ORT's runtime wasm ships with the bundle, byte-for-byte as installed.
 
-        `src/core/onnx/ortEnv.ts` points `ort.env.wasm.wasmPaths` at this file, which is
-        what lets a host serving `dist/` run a policy with no third-party request.
-        Comparing bytes also pins the ORT version to the one the build resolved from the
-        lockfile, rather than a range something else resolves at request time.
+        `ortEnv.ts` points `ort.env.wasm.wasmPaths` at this file, which is what lets a host
+        serving `dist/` run a policy with no third-party request. Comparing bytes also pins
+        the ORT version to the one the build resolved from the lockfile.
         """
         emitted = list(lib_dist.glob(f"assets/{_ORT_WASM_GLOB}"))
         assert len(emitted) == 1, (
@@ -196,11 +191,9 @@ class TestLibBuild:
     def test_ort_wasm_paths_names_the_file_never_a_prefix(self, lib_dist: Path):
         """`wasmPaths` names the wasm; a URL prefix would be a third-party script fetch.
 
-        The distinction is the whole point: given a prefix, ORT dynamic-imports
-        `ort-wasm-simd-threaded.jsep.mjs` from it — executable code, from whatever origin
-        the prefix names, on every policy-driven scene — while naming only the wasm keeps
-        ORT on the loader already inlined in the bundle. This build set a jsDelivr prefix
-        until issue #123.
+        Given a prefix, ORT dynamic-imports `ort-wasm-simd-threaded.jsep.mjs` from it —
+        executable code, from whatever origin the prefix names, on every policy-driven
+        scene — while naming only the wasm keeps ORT on the loader inlined in the bundle.
         """
         code = (lib_dist / "mjswan.js").read_text()
         emitted = list(lib_dist.glob(f"assets/{_ORT_WASM_GLOB}"))
@@ -310,10 +303,8 @@ class TestDistDeduplication:
     """The SPA and library builds share one `dist/`, and must not each ship the WASM.
 
     Both name every WASM `<source basename>-<content hash>.wasm` under `dist/assets/`, so
-    the same bytes land on one path (vite.wasm.ts). Before that they disagreed — the SPA
-    under `assets/`, the library build as `mjswan-engine-<hash>.wasm` beside `mjswan.js` —
-    and 40 MiB of identical MuJoCo and ONNX Runtime WASM shipped twice, in the npm package,
-    the wheel, and every built app.
+    the same bytes land on one path (vite.wasm.ts). Disagreeing costs 40 MiB of MuJoCo and
+    ONNX Runtime WASM shipped twice, in the npm package, the wheel, and every built app.
     """
 
     def test_no_wasm_ships_twice(self, full_dist: Path):
@@ -331,10 +322,9 @@ class TestDistDeduplication:
     def test_wasm_lives_under_assets(self, full_dist: Path):
         """`assets/` is where both builds put what only they reference.
 
-        The root of `dist/` is the addressed surface — `index.html`, `mjswan.js` as the npm
-        entry, `manifest.js`, `manifest.json` — and WASM is addressed by nobody: each
-        bundle reaches it through its own `new URL(…, import.meta.url)`, which Vite
-        rewrites. Sharing one directory is also what lets the two builds' copies collapse.
+        The root of `dist/` is the addressed surface — `index.html`, `mjswan.js`,
+        `manifest.js`, `manifest.json`. WASM is addressed by nobody: each bundle reaches it
+        through its own `new URL(…, import.meta.url)`, which Vite rewrites.
         """
         stray = [
             str(w.relative_to(full_dist))

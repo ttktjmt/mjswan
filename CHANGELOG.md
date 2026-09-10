@@ -151,30 +151,24 @@ velocity-command shortcuts were removed outright, see Removed.
 
 - **The policy network runs on WebGPU where the browser has it**, and on wasm everywhere
   else. `executionProviders: ['webgpu', 'wasm']` is the whole change: ORT initializes each
-  provider in turn, drops the ones that fail with a warning naming them, and keeps the
-  first that works, so no capability check of our own is involved and a machine without
-  `navigator.gpu` behaves exactly as before. An adapter that exists but fails at session
-  creation is the one case ORT does not survive on its own; the engine retries that
-  session on wasm. The bundled ORT build already carried the
-  WebGPU backend — it was registered and never selected. Traced MDP term graphs stay on
-  wasm: each is small, a step runs many, and `queueOrtRun` serializes every run in the
-  page, so a per-graph dispatch and readback would cost more than the arithmetic. Whether
-  WebGPU is *faster* for a given policy is worth measuring per network; the fallback makes
-  it safe either way. ORT's warning about the provider it dropped is stripped from a
-  release bundle with the rest of `console.*` — build with `MJSWAN_DEBUG=1` to see it.
+  provider in turn and keeps the first that works, so nothing is feature-detected and a
+  machine without `navigator.gpu` behaves exactly as before. An adapter that exists but
+  fails at session creation is the one case ORT does not survive on its own; the engine
+  retries that session on wasm. Traced MDP term graphs stay on wasm: each is small, a step
+  runs many, and `queueOrtRun` serializes every run in the page, so a per-graph dispatch
+  and readback would cost more than the arithmetic. ORT names the provider it dropped in a
+  `console.warn`, which a release bundle strips — build with `MJSWAN_DEBUG=1` to see it.
 
-- **The engine bundle fetches ONNX Runtime Web's wasm from beside itself**
+- **The engine bundle fetches ONNX Runtime Web's wasm from within its own `dist/`**
   ([#123](https://github.com/ttktjmt/mjswan/issues/123)): `dist/mjswan.js` pointed
   `ort.env.wasm.wasmPaths` at `cdn.jsdelivr.net/npm/onnxruntime-web@<version>/dist/`, so
-  every policy-driven scene loaded ORT's `.mjs` loader as script from a CDN the host does
-  not control — and a host serving `dist/` from its own origin still had to allow
-  jsDelivr in `script-src`. The build now emits ORT's wasm as
-  `dist/ort-wasm-simd-threaded.jsep.wasm` and names it in `wasmPaths`, resolved against
-  `import.meta.url`: a host that serves `dist/` needs no second origin, and no `.mjs` is
-  fetched at all, since the bundled ORT build carries its loader inlined. The ORT version
-  is still fixed at build time — it is now the bytes in the package rather than a URL. A
-  consumer serving `dist/` as published sees only the change of origin; one that mirrored
-  `onnxruntime-web` for the old URL can stop.
+  every policy-driven scene loaded ORT's `.mjs` loader as script from jsDelivr, which even
+  a host serving `dist/` from its own origin had to allow in `script-src`. The build now
+  emits ORT's wasm into `dist/assets/` and names that file in `wasmPaths`, resolved against
+  `import.meta.url`: no second origin, and no `.mjs` fetched at all, since the bundled ORT
+  build carries its loader inlined. The ORT version is still fixed at build time — now the
+  bytes in the package rather than a URL. A consumer serving `dist/` as published sees only
+  the change of origin; one that mirrored `onnxruntime-web` for the old URL can stop.
 
 - **`dist/` ships each WASM once, and `dist/` is 47 MiB instead of 87**
   ([#123](https://github.com/ttktjmt/mjswan/issues/123)): the SPA and library builds write
@@ -184,11 +178,9 @@ velocity-command shortcuts were removed outright, see Removed.
   wheel (`dist/` is packaged despite being gitignored), and in every built app, which
   copies the whole directory. Both now name each file from its source basename plus a Vite
   content hash under `dist/assets/`, so identical bytes land on one path. Only `mjswan.js`
-  and `manifest.js` stay at the root of `dist/`, where they are addressed from outside as
-  npm entries; everything else the library build generates moved into `assets/` with the
-  SPA build's, since each bundle reaches those files through its own
-  `new URL(…, import.meta.url)`, which Vite rewrites. The npm package also stops shipping
-  the E2E fixture and the frontend's test files.
+  and `manifest.js` stay at the root, where they are addressed from outside as npm
+  entries. The npm package also stops shipping the E2E fixture and the frontend's test
+  files.
 
 - **Every scene carries a `camera`, and the view follows the robot by default.** The
   build used to omit the block for a scene that never called `set_viewer`, and the

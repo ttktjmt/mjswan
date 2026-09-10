@@ -1,7 +1,6 @@
 /**
- * The provider choice in `OnnxModule.init()`: WebGPU first, and the one fallback ORT does
- * not perform itself. ORT drops a provider whose *init* fails; an adapter that exists but
- * fails at session creation rejects the whole `create`, and that case retries on wasm.
+ * The provider choice in `OnnxModule.init()`: WebGPU first, plus the session-creation
+ * fallback ORT does not perform itself.
  */
 import * as ort from 'onnxruntime-web';
 import { afterEach, describe, expect, it, vi } from 'vitest';

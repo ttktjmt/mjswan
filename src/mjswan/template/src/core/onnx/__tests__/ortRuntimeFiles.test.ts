@@ -1,9 +1,7 @@
 /**
- * The two facts the library build's ORT wiring rests on, checked against the installed
- * package rather than a published bundle — an onnxruntime-web upgrade that breaks either
- * would otherwise only show up as `no available backend found` in a released engine.
- *
- * See vite.wasm.ts and src/core/onnx/ortEnv.ts.
+ * The onnxruntime-web assumptions the library build's ORT wiring rests on; an upgrade
+ * breaking one would otherwise surface as `no available backend found` in a released
+ * engine. See vite.wasm.ts and src/core/onnx/ortEnv.ts.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -19,8 +17,7 @@ const ORT_PKG = join(__dirname, '../../../../node_modules/onnxruntime-web');
 describe('onnxruntime-web runtime files', () => {
   it('resolves to the build with its .mjs loader inlined', () => {
     const pkg = JSON.parse(readFileSync(join(ORT_PKG, 'package.json'), 'utf-8'));
-    // A build with an external loader would dynamic-import the `.mjs` from `wasmPaths`,
-    // which the engine does not ship — naming only the wasm would stop working.
+    // An external-loader build would dynamic-import a `.mjs` the engine does not ship.
     expect(pkg.exports['.'].import.default).toBe(ORT_BUNDLED_ENTRY);
   });
 
@@ -34,16 +31,13 @@ describe('onnxruntime-web runtime files', () => {
 
 describe('ortEnv', () => {
   it('keeps ORT single-threaded, which the inlined-loader path depends on', () => {
-    // Off the bundle's own origin, ORT stays on its inlined loader only while the wasm is
-    // overridden and `numThreads === 1`; more threads would fetch the `.mjs` not shipped.
     expect(ort.env.wasm.numThreads).toBe(1);
   });
 });
 
 describe('co-located WASM sources', () => {
-  // The library build matches these by content digest to recover each emitted name. A
-  // package that moves its wasm would silently send that file back to `mjswan-engine.wasm`
-  // and ship a second copy of bytes the SPA build already emitted.
+  // Matched by digest to recover each emitted name, so a moved source silently ships a
+  // second copy of bytes the SPA build already emitted.
   it.each(UPSTREAM_WASM)('%s is where the build looks for it', (source) => {
     expect(existsSync(join(__dirname, '../../../../node_modules', source))).toBe(true);
   });

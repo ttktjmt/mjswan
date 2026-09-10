@@ -186,9 +186,8 @@ called with `resample_mask = 1`.
     reset frame, which is control flow rather than randomness. Startup randomization is
     drawn synchronously and *is* fully reproducible; a command's resample schedule is
     drawn before the in-flight check and is timing-independent too. The policy network
-    adds a source of its own: it runs on WebGPU where the browser has one, and GPU
-    float32 results differ across adapters, so a session recorded on one machine drifts
-    on another in a way a wasm-only replay would not.
+    adds one more source: it runs on WebGPU where the browser has one, and GPU float32
+    differs across adapters, so a session recorded on one machine drifts on another.
 
 ## Artifact layout
 

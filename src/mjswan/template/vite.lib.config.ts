@@ -35,9 +35,8 @@ const ASSETS_DIR = 'assets';
 const sha256 = (source: Uint8Array | string): string =>
   createHash('sha256').update(source).digest('hex');
 
-// A specifier for `target` (a dist-relative path) as written from `fromDir`. Files sit in
-// dist/ at different depths — the entry at the root, everything else under assets/ — so
-// the same emitted file is `./assets/x.wasm` from one and `./x.wasm` from the other.
+// A specifier for `target` (a dist-relative path) as written from `fromDir`: the entry sits
+// at the root and everything else under assets/, so the depth differs per referrer.
 function specifierFromDir(fromDir: string, target: string): string {
   const relative = path.posix.relative(fromDir, target);
   return relative.startsWith('.') ? relative : `./${relative}`;
@@ -45,9 +44,8 @@ function specifierFromDir(fromDir: string, target: string): string {
 const specifierFrom = (fromFile: string, target: string): string =>
   specifierFromDir(path.posix.dirname(fromFile), target);
 
-// digest → emitted name, for the upstream WASM the SPA build names the same way. Matching
-// by content is what recovers the name: the de-inlined assets arrive as bytes with the
-// source file name long gone. See vite.wasm.ts.
+// digest → emitted name: de-inlined assets arrive as bytes with the source file name long
+// gone, so content is all there is to match the SPA build's naming on. See vite.wasm.ts.
 function upstreamWasmNames(): Map<string, string> {
   const names = new Map<string, string>();
   for (const source of UPSTREAM_WASM) {
@@ -63,9 +61,8 @@ function upstreamWasmNames(): Map<string, string> {
 // it loads relative to the bundle. See mjswan-cloud ADR 0001.
 //
 // Each extracted file keeps its upstream name, so the SPA build's copy of the same bytes
-// lands on the same path and ships once. ORT's is also the one src/core/onnx/ortEnv.ts
-// points `ort.env.wasm.wasmPaths` at, so its emitted name is written back into the code
-// here, where the content hash is finally known (issue #123).
+// lands on one path. ORT's is what src/core/onnx/ortEnv.ts points `wasmPaths` at, so its
+// emitted name is written back into the code here, where the content hash is known.
 function extractInlinedWasmPlugin(): Plugin {
   const B64 = '([A-Za-z0-9+/=]+)';
   // Two inlined shapes, each with a base arg re-checked below: normally quoted
@@ -115,8 +112,7 @@ function extractInlinedWasmPlugin(): Plugin {
             (m, b64: string) => {
               // Keep small active-worker wasm (Spark) inline; only extract large dormant wasm.
               if (b64.length < 1_000_000) return m;
-              // Against `self.location.href`, the worker's own URL — under ASSETS_DIR per the
-              // worker output options, whatever file this string happens to sit in.
+              // Against the worker's own URL, which the worker output options put in ASSETS_DIR.
               const specifier = specifierFromDir(ASSETS_DIR, fileFor(b64));
               return `new URL(\\"${specifier}\\", self.location.href)`;
             }
@@ -145,8 +141,7 @@ function extractInlinedWasmPlugin(): Plugin {
       );
 
       if (!ortWasm) {
-        // Not inlined this time. A Vite that emits the asset itself puts it in the bundle
-        // under its own name, so look for the bytes there before giving up.
+        // A Vite that emits the asset instead of inlining it already has the bytes here.
         const ortDigest = [...upstream].find(([, name]) => name === ORT_WASM_FILE)?.[0];
         for (const [fileName, item] of Object.entries(bundle)) {
           if (item.type === 'asset' && fileName.endsWith('.wasm') && sha256(item.source) === ortDigest) {
@@ -155,9 +150,8 @@ function extractInlinedWasmPlugin(): Plugin {
         }
       }
       if (!ortWasm) {
-        // Without it `ortEnv.ts` has no file to name and every policy would 404 at
-        // runtime, so fail here instead. Most likely cause: an onnxruntime-web upgrade
-        // changed which build the `import` condition resolves to (vite.wasm.ts).
+        // Most likely an onnxruntime-web upgrade changing which build the `import`
+        // condition resolves to (vite.wasm.ts).
         throw new Error(`${ORT_WASM_FILE} is in the bundle neither inlined nor emitted, so ortEnv.ts has nothing to name`);
       }
 
@@ -169,9 +163,8 @@ function extractInlinedWasmPlugin(): Plugin {
         return code.replaceAll(ORT_WASM_TOKEN, specifierFrom(fileName, ortFile));
       });
       if (substituted === 0) {
-        // The wasm is there but nothing names it — a minifier that re-encoded the literal,
-        // a `define` that stopped applying, ortEnv.ts gone from the graph. Shipping would
-        // leave the placeholder in every consumer's URL and 404 every policy.
+        // A minifier that re-encoded the literal, a `define` that stopped applying, or
+        // ortEnv.ts out of the graph. Shipping would 404 every policy.
         throw new Error(`${ORT_WASM_TOKEN} appears in no emitted JS, so the ORT wasm path was never written`);
       }
     },
@@ -216,9 +209,8 @@ function cssInjectedByJsPlugin(): Plugin {
 }
 
 export default defineConfig({
-  // Every emitted URL relative to the bundle, not to the serving origin's root: the
-  // engine is loaded from a versioned CDN path (`/npm/mjswan@<v>/dist/`), where Vite's
-  // default `/` base sends a worker's `new URL` to the wrong origin root entirely.
+  // The engine loads from a versioned CDN path (`/npm/mjswan@<v>/dist/`), where Vite's
+  // default `/` base would send a worker's `new URL` to the serving origin's root.
   base: './',
   plugins: [
     react(),
@@ -233,9 +225,8 @@ export default defineConfig({
     // loaded from a CDN. Fold to "production"; other `process`/`Buffer` refs are
     // runtime-guarded (`typeof process < "u"`) Node paths that never run here.
     'process.env.NODE_ENV': JSON.stringify('production'),
-    // Lib-build only: the co-located ORT wasm `ortEnv.ts` resolves against the bundle
-    // URL. A placeholder until generateBundle knows the emitted name and the depth of
-    // the chunk that ends up carrying this.
+    // The co-located ORT wasm `ortEnv.ts` resolves against the bundle URL; a placeholder
+    // until generateBundle knows the emitted name and the depth of its referrer.
     __ORT_WASM_FILE__: JSON.stringify(ORT_WASM_TOKEN),
   },
   resolve: {
@@ -284,11 +275,9 @@ export default defineConfig({
       // output would be unresolvable from jsDelivr.
       external: [],
       output: {
-        // Only the entry sits at the root of dist/, where it is addressed from
-        // outside (the npm entry, the URL Cloud pins). Everything it generates goes
-        // into assets/ with the SPA build's, so identical files share one path and
-        // `new URL('./assets/x.wasm', import.meta.url)` still resolves relative to
-        // the bundle wherever dist/ is served from. See vite.wasm.ts.
+        // Only the entry sits at the root of dist/, where it is addressed from outside
+        // (the npm entry, the URL Cloud pins). Everything it generates goes into assets/
+        // with the SPA build's, so identical files share one path. See vite.wasm.ts.
         entryFileNames: 'mjswan.js',
         chunkFileNames: `${ASSETS_DIR}/[name]-[hash].js`,
         assetFileNames: `${ASSETS_DIR}/[name]-[hash][extname]`,
