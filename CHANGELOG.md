@@ -149,6 +149,18 @@ velocity-command shortcuts were removed outright, see Removed.
 
 ### Changed
 
+- **The policy network runs on WebGPU where the browser has it**, and on wasm everywhere
+  else. `executionProviders: ['webgpu', 'wasm']` is the whole change: ORT initializes each
+  provider in turn, drops the ones that fail with a warning naming them, and keeps the
+  first that works, so no capability check of our own is involved and a machine without
+  `navigator.gpu` behaves exactly as before. The bundled ORT build already carried the
+  WebGPU backend — it was registered and never selected. Traced MDP term graphs stay on
+  wasm: each is small, a step runs many, and `queueOrtRun` serializes every run in the
+  page, so a per-graph dispatch and readback would cost more than the arithmetic. Whether
+  WebGPU is *faster* for a given policy is worth measuring per network; the fallback makes
+  it safe either way. ORT's warning about the provider it dropped is stripped from a
+  release bundle with the rest of `console.*` — build with `MJSWAN_DEBUG=1` to see it.
+
 - **The engine bundle fetches ONNX Runtime Web's wasm from beside itself**
   ([#123](https://github.com/ttktjmt/mjswan/issues/123)): `dist/mjswan.js` pointed
   `ort.env.wasm.wasmPaths` at `cdn.jsdelivr.net/npm/onnxruntime-web@<version>/dist/`, so

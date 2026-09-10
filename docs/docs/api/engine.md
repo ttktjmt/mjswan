@@ -59,6 +59,19 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
     own origin is enough: no CDN, and `script-src 'self'` covers it. Nothing else in the
     bundle reaches a third-party origin.
 
+!!! note "Where inference runs"
+    The policy network runs on **WebGPU** when the browser offers it and falls back to
+    **wasm** otherwise — ONNX Runtime tries each provider and keeps the first that
+    initializes, so there is nothing to configure and nothing to feature-detect. Do not
+    feature-detect it yourself either: `navigator.gpu` can exist on a machine that has no
+    adapter, and ORT is the thing that finds out. Traced MDP term graphs always run on
+    wasm: they are small, a step runs many of them, and every inference in the page is
+    serialized, so a GPU round trip each would cost more than it saves.
+
+    ORT names the provider it dropped in a `console.warn`, which a release bundle strips
+    along with every other `console.*`. Build with `MJSWAN_DEBUG=1` (or `Builder(debug=True)`)
+    to see whether a given machine fell back.
+
 ### `MjswanEngine`
 
 Verbs are named for their cost: `loadScene` rebuilds the model, everything else is live.

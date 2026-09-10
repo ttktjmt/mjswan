@@ -45,7 +45,11 @@ export class OnnxModule {
 
   async init(): Promise<void> {
     this.session = await ort.InferenceSession.create(this.bytes, {
-      executionProviders: ['wasm'],
+      // WebGPU where the browser has it, wasm everywhere else. No capability check of our
+      // own: ORT initializes each provider in turn, drops the ones whose init fails with a
+      // console warning naming them, and keeps the first that works — so a machine without
+      // `navigator.gpu` lands on wasm by itself. Unsupported operators fall back per node.
+      executionProviders: ['webgpu', 'wasm'],
       graphOptimizationLevel: 'all',
     });
     this.inferInputKeys();

@@ -154,6 +154,10 @@ class OrtSession implements OnnxSession {
 /** Create a real ORT-Web-backed session from graph bytes; never fetches. */
 export async function createOnnxSession(bytes: ArrayBuffer): Promise<OnnxSession> {
   const session = await ort.InferenceSession.create(bytes, {
+    // wasm, and not the WebGPU-first list the policy network gets: a term graph is small
+    // and a step runs many of them, so a dispatch and readback each would cost more than
+    // the arithmetic. `queueOrtRun` also serializes every run in the page, so one slow
+    // session delays all the others.
     executionProviders: ['wasm'],
     graphOptimizationLevel: 'all',
   });
