@@ -149,6 +149,39 @@ velocity-command shortcuts were removed outright, see Removed.
 
 ### Changed
 
+- **The policy network runs on WebGPU where the browser has it**, and on wasm everywhere
+  else. `executionProviders: ['webgpu', 'wasm']` is the whole change: ORT initializes each
+  provider in turn and keeps the first that works, so nothing is feature-detected and a
+  machine without `navigator.gpu` behaves exactly as before. An adapter that exists but
+  fails at session creation is the one case ORT does not survive on its own; the engine
+  retries that session on wasm. Traced MDP term graphs stay on wasm: each is small, a step
+  runs many, and `queueOrtRun` serializes every run in the page, so a per-graph dispatch
+  and readback would cost more than the arithmetic. ORT names the provider it dropped in a
+  `console.warn`, which a release bundle strips — build with `MJSWAN_DEBUG=1` to see it.
+
+- **The engine bundle fetches ONNX Runtime Web's wasm from within its own `dist/`**
+  ([#123](https://github.com/ttktjmt/mjswan/issues/123)): `dist/mjswan.js` pointed
+  `ort.env.wasm.wasmPaths` at `cdn.jsdelivr.net/npm/onnxruntime-web@<version>/dist/`, so
+  every policy-driven scene loaded ORT's `.mjs` loader as script from jsDelivr, which even
+  a host serving `dist/` from its own origin had to allow in `script-src`. The build now
+  emits ORT's wasm into `dist/assets/` and names that file in `wasmPaths`, resolved against
+  `import.meta.url`: no second origin, and no `.mjs` fetched at all, since the bundled ORT
+  build carries its loader inlined. The ORT version is still fixed at build time — now the
+  bytes in the package rather than a URL. A consumer serving `dist/` as published sees only
+  the change of origin; one that mirrored `onnxruntime-web` for the old URL can stop.
+
+- **`dist/` ships each WASM once, and `dist/` is 47 MiB instead of 87**
+  ([#123](https://github.com/ttktjmt/mjswan/issues/123)): the SPA and library builds write
+  into one directory and had been disagreeing about where — the SPA under `assets/`, the
+  library build renaming everything to `mjswan-engine-<hash>.wasm` — so 40 MiB of
+  byte-identical MuJoCo and ONNX Runtime WASM shipped twice: in the npm package, in the
+  wheel (`dist/` is packaged despite being gitignored), and in every built app, which
+  copies the whole directory. Both now name each file from its source basename plus a Vite
+  content hash under `dist/assets/`, so identical bytes land on one path. Only `mjswan.js`
+  and `manifest.js` stay at the root, where they are addressed from outside as npm
+  entries. The npm package also stops shipping the E2E fixture and the frontend's test
+  files.
+
 - **Every scene carries a `camera`, and the view follows the robot by default.** The
   build used to omit the block for a scene that never called `set_viewer`, and the
   browser filled the gap from defaults generated out of the Python dataclass. The two

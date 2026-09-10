@@ -8,9 +8,12 @@
   },
   "files": [
     "dist",
+    "!dist/fixtures",
     "src/core",
     "src/engine",
     "src/manifest",
+    "!src/**/__tests__",
+    "!src/**/*.test.ts",
     "lib.d.ts",
     "manifest.d.ts",
     "index.html",

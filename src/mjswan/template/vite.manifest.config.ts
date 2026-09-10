@@ -19,7 +19,7 @@ export default defineConfig({
     },
     rollupOptions: {
       external: [],
-      output: { entryFileNames: 'manifest.js', chunkFileNames: '[name]-[hash].js' },
+      output: { entryFileNames: 'manifest.js', chunkFileNames: 'assets/[name]-[hash].js' },
     },
   },
 });

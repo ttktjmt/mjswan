@@ -240,4 +240,8 @@ const { createEngine } = await import(
 );
 ```
 
+Or serve the package's `dist/` directory from your own origin: the bundle resolves its
+WebAssembly relative to itself, so that one directory needs no other host, no configuration,
+and a single `script-src` prefix under a strict CSP.
+
 See the [Engine API](../api/engine.md) for the full surface.

@@ -4,6 +4,8 @@
  */
 import * as ort from 'onnxruntime-web';
 
+// Configures ort.env before any session is created; see ortEnv.ts.
+import './ortEnv';
 import { queueOrtRun } from './runQueue';
 
 /** Minimal ORT-Web surface a command/event handler needs. */
@@ -152,6 +154,8 @@ class OrtSession implements OnnxSession {
 /** Create a real ORT-Web-backed session from graph bytes; never fetches. */
 export async function createOnnxSession(bytes: ArrayBuffer): Promise<OnnxSession> {
   const session = await ort.InferenceSession.create(bytes, {
+    // wasm, not the WebGPU-first list the policy gets: many small graphs per step through
+    // one serialized queue. See docs/docs/api/engine.md, "Where inference runs".
     executionProviders: ['wasm'],
     graphOptimizationLevel: 'all',
   });
