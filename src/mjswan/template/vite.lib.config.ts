@@ -9,9 +9,9 @@ import { ORT_WASM_FILE, ORT_WASM_TOKEN, UPSTREAM_WASM } from './vite.wasm';
 
 // Library build: emits a single self-contained ESM (`dist/mjswan.js`) exposing
 // `createEngine(element, options?)` (the headless engine; no React/Mantine),
-// with every dependency bundled and the MuJoCo / ONNX WASM co-located flat in
-// `dist/` so they resolve relative to the bundle wherever it is served from.
-// See src/engine/ and docs/adr/0004-headless-engine-core.md.
+// with every dependency bundled and the MuJoCo / ONNX WASM in `dist/assets/`
+// beside the SPA build's, resolved relative to the bundle wherever it is served
+// from. See src/engine/ and docs/adr/0004-headless-engine-core.md.
 
 function getVersionFromPython(): string {
   const initPath = path.resolve(__dirname, '../__init__.py');
@@ -30,6 +30,14 @@ function getVersionFromPython(): string {
 }
 
 const sha256 = (buffer: Buffer): string => createHash('sha256').update(buffer).digest('hex');
+
+// A specifier for `target` (a dist-relative path) as written inside `fromFile`. Both live
+// in dist/ but at different depths — the entry at the root, its chunks under assets/ — so
+// the same emitted file is `./assets/x.wasm` from one and `./x.wasm` from the other.
+function specifierFrom(fromFile: string, target: string): string {
+  const relative = path.posix.relative(path.posix.dirname(fromFile), target);
+  return relative.startsWith('.') ? relative : `./${relative}`;
+}
 
 // digest → emitted name, for the upstream WASM the SPA build names the same way. Matching
 // by content is what recovers the name: the de-inlined assets arrive as bytes with the
@@ -83,7 +91,7 @@ function extractInlinedWasmPlugin(): Plugin {
         }
         return fileName;
       };
-      const deinline = (code: string): string =>
+      const deinline = (code: string, fileName: string): string =>
         code
           .replace(
             QUOTED,
@@ -92,7 +100,8 @@ function extractInlinedWasmPlugin(): Plugin {
               // `self.location.href` base means a classic Blob worker (Spark's
               // Splat sort) where `import.meta` is a syntax error — leave inline.
               if (!/import\.meta\.url/.test(base)) return m;
-              return `new URL(${JSON.stringify('./' + fileFor(b64))}, import.meta.url)`;
+              const specifier = specifierFrom(fileName, fileFor(b64));
+              return `new URL(${JSON.stringify(specifier)}, import.meta.url)`;
             }
           )
           .replace(
@@ -100,29 +109,31 @@ function extractInlinedWasmPlugin(): Plugin {
             (m, b64: string) => {
               // Keep small active-worker wasm (Spark) inline; only extract large dormant wasm.
               if (b64.length < 1_000_000) return m;
-              return `new URL(\\"./${fileFor(b64)}\\", self.location.href)`;
+              return `new URL(\\"${specifierFrom(fileName, fileFor(b64))}\\", self.location.href)`;
             }
           );
 
       // Emitted worker modules arrive as JS assets rather than chunks; rewriting either
       // means reading and writing a different field, so both passes below go through here.
-      const rewriteJs = (visit: (code: string) => string | null): void => {
+      const rewriteJs = (visit: (code: string, fileName: string) => string | null): void => {
         for (const [fileName, chunk] of Object.entries(bundle)) {
           if (chunk.type === 'chunk') {
-            const next = visit(chunk.code);
+            const next = visit(chunk.code, fileName);
             if (next !== null) chunk.code = next;
           } else if (chunk.type === 'asset' && fileName.endsWith('.js')) {
             const source =
               typeof chunk.source === 'string'
                 ? chunk.source
                 : Buffer.from(chunk.source).toString('utf-8');
-            const next = visit(source);
+            const next = visit(source, fileName);
             if (next !== null) chunk.source = next;
           }
         }
       };
 
-      rewriteJs((code) => (code.includes('data:application/wasm') ? deinline(code) : null));
+      rewriteJs((code, fileName) =>
+        code.includes('data:application/wasm') ? deinline(code, fileName) : null
+      );
 
       const ortWasm = emittedFor.get(ORT_WASM_FILE);
       if (!ortWasm) {
@@ -131,8 +142,10 @@ function extractInlinedWasmPlugin(): Plugin {
         // changed which build the `import` condition resolves to (vite.wasm.ts).
         throw new Error(`${ORT_WASM_FILE} was not inlined in the bundle, so it cannot be emitted beside it`);
       }
-      rewriteJs((code) =>
-        code.includes(ORT_WASM_TOKEN) ? code.replaceAll(ORT_WASM_TOKEN, ortWasm) : null
+      rewriteJs((code, fileName) =>
+        code.includes(ORT_WASM_TOKEN)
+          ? code.replaceAll(ORT_WASM_TOKEN, specifierFrom(fileName, ortWasm))
+          : null
       );
     },
   };
@@ -176,6 +189,10 @@ function cssInjectedByJsPlugin(): Plugin {
 }
 
 export default defineConfig({
+  // Every emitted URL relative to the bundle, not to the serving origin's root: the
+  // engine is loaded from a versioned CDN path (`/npm/mjswan@<v>/dist/`), where Vite's
+  // default `/` base sends a worker's `new URL` to the wrong origin root entirely.
+  base: './',
   plugins: [
     react(),
     vanillaExtractPlugin(),
@@ -190,8 +207,9 @@ export default defineConfig({
     // runtime-guarded (`typeof process < "u"`) Node paths that never run here.
     'process.env.NODE_ENV': JSON.stringify('production'),
     // Lib-build only: the co-located ORT wasm `ortEnv.ts` resolves against the bundle
-    // URL. A placeholder until generateBundle knows the emitted name's content hash.
-    __ORT_WASM_FILE__: JSON.stringify(`./${ORT_WASM_TOKEN}`),
+    // URL. A placeholder until generateBundle knows the emitted name and the depth of
+    // the chunk that ends up carrying this.
+    __ORT_WASM_FILE__: JSON.stringify(ORT_WASM_TOKEN),
   },
   resolve: {
     alias: {
@@ -204,14 +222,14 @@ export default defineConfig({
   assetsInclude: ['**/*.wasm'],
   worker: {
     format: 'es',
-    // Workers are dormant single-threaded (no SharedArrayBuffer); emit them flat
-    // in dist/ so they sit alongside the extracted WASM (the extract plugin runs
+    // Workers are dormant single-threaded (no SharedArrayBuffer); emit them into
+    // assets/ with everything else the build generates (the extract plugin runs
     // over them as JS assets of the main bundle).
     rollupOptions: {
       output: {
-        entryFileNames: '[name]-[hash].js',
-        chunkFileNames: '[name]-[hash].js',
-        assetFileNames: '[name]-[hash][extname]',
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
       },
     },
   },
@@ -239,11 +257,14 @@ export default defineConfig({
       // output would be unresolvable from jsDelivr.
       external: [],
       output: {
-        // Flat layout in dist/: mjswan.js next to its chunks and *.wasm, so
-        // `new URL('./x.wasm', import.meta.url)` resolves on the CDN.
+        // Only the entry sits at the root of dist/, where it is addressed from
+        // outside (the npm entry, the URL Cloud pins). Everything it generates goes
+        // into assets/ with the SPA build's, so identical files share one path and
+        // `new URL('./assets/x.wasm', import.meta.url)` still resolves relative to
+        // the bundle wherever dist/ is served from. See vite.wasm.ts.
         entryFileNames: 'mjswan.js',
-        chunkFileNames: '[name]-[hash].js',
-        assetFileNames: '[name]-[hash][extname]',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
         minify,
       },
       onwarn(warning, warn) {

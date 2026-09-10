@@ -119,16 +119,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 11000,
     rollupOptions: {
       input: path.resolve(__dirname, 'index.html'),
-      output: {
-        minify,
-        // WASM flat in dist/ rather than under assets/: the library build co-locates the
-        // same files beside mjswan.js and both builds write into this one dist/, so
-        // matching paths means the same bytes ship once. See vite.wasm.ts.
-        assetFileNames: (asset) =>
-          [...(asset.names ?? []), asset.name ?? ''].some((name) => name.endsWith('.wasm'))
-            ? '[name]-[hash][extname]'
-            : 'assets/[name]-[hash][extname]',
-      },
+      output: { minify },
       onwarn(warning, warn) {
         // mujoco.js is an Emscripten-generated file that imports Node.js built-ins
         // (module, worker_threads) behind runtime environment checks that are never
@@ -143,12 +134,5 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
-    // The same flat-WASM rule as the main build: a worker's copy of mujoco.wasm has to
-    // land on the path the other builds already write, not a second one under assets/.
-    rollupOptions: {
-      output: {
-        assetFileNames: '[name]-[hash][extname]',
-      },
-    },
   },
 });

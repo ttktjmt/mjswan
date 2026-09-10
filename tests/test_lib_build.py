@@ -50,6 +50,29 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _library_js(lib_dist: Path) -> list[Path]:
+    """The JS the library build emits, reached from its entry.
+
+    `build:lib` writes into a `dist/` that may already hold the SPA build's output, now
+    under the same `assets/`, and the invariants below are the CDN bundle's alone. So
+    follow `mjswan.js`'s own graph — its imports, plus the `new URL` a worker is spawned
+    from — rather than globbing the directory and judging the SPA by them.
+    """
+    reference = re.compile(r"""["'`](\.{1,2}/[A-Za-z0-9._\-/]+\.js)["'`]""")
+    seen: set[Path] = set()
+    queue = [lib_dist / "mjswan.js"]
+    while queue:
+        js = queue.pop()
+        if js in seen or not js.is_file():
+            continue
+        seen.add(js)
+        for relative in reference.findall(js.read_text()):
+            target = (js.parent / relative).resolve()
+            if lib_dist.resolve() in target.parents:
+                queue.append(target)
+    return sorted(seen)
+
+
 def _is_bare(spec: str) -> bool:
     return not (
         spec.startswith("./")
@@ -85,7 +108,7 @@ class TestLibBuild:
     def test_no_bare_imports(self, lib_dist: Path):
         """No `import 'three'`-style specifiers — all resolvable from the CDN."""
         offenders: list[str] = []
-        for js in lib_dist.glob("*.js"):
+        for js in _library_js(lib_dist):
             code = js.read_text()
             specs = _IMPORT_FROM.findall(code) + _DYNAMIC_IMPORT.findall(code)
             offenders.extend(f"{js.name} -> {spec}" for spec in specs if _is_bare(spec))
@@ -102,13 +125,13 @@ class TestLibBuild:
         dormant single-threaded worker keeps its base64 WASM. So forbid only
         `import.meta.url`-based (MuJoCo/ONNX main-thread) inlining.
         """
-        wasm_files = list(lib_dist.glob("*.wasm"))
+        wasm_files = list(lib_dist.rglob("*.wasm"))
         assert wasm_files, "no co-located .wasm files emitted in dist/"
         inlined = re.compile(
             r"""new URL\(\s*(["'`])data:application/wasm;base64,"""
             r"""[A-Za-z0-9+/=]+\1\s*,\s*([^)]*)\)"""
         )
-        for js in lib_dist.glob("*.js"):
+        for js in _library_js(lib_dist):
             for m in inlined.finditer(js.read_text()):
                 base = m.group(2)
                 assert "import.meta.url" not in base, (
@@ -119,7 +142,7 @@ class TestLibBuild:
     def test_wasm_referenced_relative_to_bundle(self, lib_dist: Path):
         """WASM is fetched via `new URL('./x.wasm', import.meta.url)`."""
         found = False
-        for js in lib_dist.glob("*.js"):
+        for js in _library_js(lib_dist):
             if re.search(
                 r"""new URL\(\s*["'`]\./[^"'`]*\.wasm["'`]\s*,\s*import\.meta\.url""",
                 js.read_text(),
@@ -127,6 +150,25 @@ class TestLibBuild:
                 found = True
                 break
         assert found, "no co-located `new URL('./*.wasm', import.meta.url)` reference"
+
+    def test_no_reference_resolves_against_the_origin_root(self, lib_dist: Path):
+        """Every emitted URL is relative to the bundle, never rooted at the origin.
+
+        The engine is loaded from a versioned CDN path, so a `new URL("/x", …)` resolves
+        to the wrong origin root — `cdn.jsdelivr.net/x` instead of
+        `cdn.jsdelivr.net/npm/mjswan@<v>/dist/x`. Vite emits exactly that from its default
+        `/` base, which is why the library build sets `base: './'`; the SPA keeps the
+        absolute form on purpose, since it honours `MJSWAN_BASE_PATH`, and is not scanned
+        here. Until this landed, `mujoco/mt`'s pthread worker was spawned from such a URL.
+        """
+        rooted = re.compile(r"""new URL\(\s*["'`]/""")
+        offenders = [
+            js.name for js in _library_js(lib_dist) if rooted.search(js.read_text())
+        ]
+        assert not offenders, (
+            f"origin-rooted `new URL('/…')` in {offenders}; it cannot resolve when the "
+            "bundle is served from a path"
+        )
 
     def test_ort_wasm_co_located(self, lib_dist: Path):
         """ORT's runtime wasm ships beside the bundle, byte-for-byte as installed.
@@ -136,8 +178,10 @@ class TestLibBuild:
         Comparing bytes also pins the ORT version to the one the build resolved from the
         lockfile, rather than a range something else resolves at request time.
         """
-        emitted = list(lib_dist.glob(_ORT_WASM_GLOB))
-        assert len(emitted) == 1, f"expected one {_ORT_WASM_GLOB}, found {emitted}"
+        emitted = list(lib_dist.glob(f"assets/{_ORT_WASM_GLOB}"))
+        assert len(emitted) == 1, (
+            f"expected one assets/{_ORT_WASM_GLOB}, found {emitted}"
+        )
         installed = (
             TEMPLATE_DIR / "node_modules" / "onnxruntime-web" / "dist" / _ORT_WASM_FILE
         )
@@ -156,12 +200,13 @@ class TestLibBuild:
         until issue #123.
         """
         code = (lib_dist / "mjswan.js").read_text()
-        emitted = next(iter(lib_dist.glob(_ORT_WASM_GLOB))).name
+        emitted = next(iter(lib_dist.glob(f"assets/{_ORT_WASM_GLOB}")))
+        relative = emitted.relative_to(lib_dist).as_posix()
         named = re.compile(
             r"""wasmPaths\s*=\s*\{\s*wasm\s*:\s*new URL\(\s*["'`]\./"""
-            + re.escape(emitted)
+            + re.escape(relative)
         )
-        assert named.search(code), f"wasmPaths does not name the co-located {emitted}"
+        assert named.search(code), f"wasmPaths does not name the co-located {relative}"
         prefix = re.search(r"""wasmPaths\s*=\s*["'`](https?://[^"'`]*)""", code)
         assert prefix is None, (
             f"wasmPaths is set to a URL prefix ({prefix.group(1)}), which makes ORT "
@@ -215,7 +260,7 @@ class TestLibBuild:
         """
         offenders = [
             js.name
-            for js in lib_dist.glob("*.js")
+            for js in _library_js(lib_dist)
             if "process.env.NODE_ENV" in js.read_text()
         ]
         assert not offenders, (
@@ -244,12 +289,11 @@ def full_dist() -> Path:
 class TestDistDeduplication:
     """The SPA and library builds share one `dist/`, and must not each ship the WASM.
 
-    Both name every WASM `<source basename>-<content hash>.wasm` flat in `dist/` so the
-    same bytes land on one path (vite.wasm.ts). Before that they disagreed — the SPA under
-    `assets/`, the library build as `mjswan-engine-<hash>.wasm` — and 40 MiB of identical
-    MuJoCo and ONNX Runtime WASM shipped twice, in the npm package, the wheel, and every
-    built app. A few sub-2 KB JS chunks are still duplicated; deduping those would mean
-    moving the SPA's whole JS layout out of `assets/`, which is not worth it.
+    Both name every WASM `<source basename>-<content hash>.wasm` under `dist/assets/`, so
+    the same bytes land on one path (vite.wasm.ts). Before that they disagreed — the SPA
+    under `assets/`, the library build as `mjswan-engine-<hash>.wasm` beside `mjswan.js` —
+    and 40 MiB of identical MuJoCo and ONNX Runtime WASM shipped twice, in the npm package,
+    the wheel, and every built app.
     """
 
     def test_no_wasm_ships_twice(self, full_dist: Path):
@@ -264,14 +308,20 @@ class TestDistDeduplication:
             f"{sorted(duplicated.values())}"
         )
 
-    def test_wasm_sits_flat_beside_the_bundle(self, full_dist: Path):
-        """Flat in `dist/` is the shared path; under `assets/` means the SPA drifted back."""
-        nested = [
+    def test_wasm_lives_under_assets(self, full_dist: Path):
+        """`assets/` is where both builds put what only they reference.
+
+        The root of `dist/` is the addressed surface — `index.html`, `mjswan.js` as the npm
+        entry, `manifest.js`, `manifest.json` — and WASM is addressed by nobody: each
+        bundle reaches it through its own `new URL(…, import.meta.url)`, which Vite
+        rewrites. Sharing one directory is also what lets the two builds' copies collapse.
+        """
+        stray = [
             str(w.relative_to(full_dist))
             for w in full_dist.rglob("*.wasm")
-            if w.parent != full_dist
+            if w.parent != full_dist / "assets"
         ]
-        assert not nested, f"WASM emitted outside dist/ root: {nested}"
+        assert not stray, f"WASM emitted outside dist/assets/: {stray}"
 
 
 @pytest.fixture(scope="class")

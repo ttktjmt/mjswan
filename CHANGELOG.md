@@ -169,10 +169,12 @@ velocity-command shortcuts were removed outright, see Removed.
   byte-identical MuJoCo and ONNX Runtime WASM shipped twice: in the npm package, in the
   wheel (`dist/` is packaged despite being gitignored), and in every built app, which
   copies the whole directory. Both now name each file from its source basename plus a Vite
-  content hash, flat in `dist/`, so identical bytes land on one path. The moved files are
-  referenced only by the bundles' own `new URL(…, import.meta.url)`, which Vite rewrites,
-  so nothing names them from outside; a built app's WASM sits beside `index.html` rather
-  than under `assets/`.
+  content hash under `dist/assets/`, so identical bytes land on one path. Only `mjswan.js`
+  and `manifest.js` stay at the root of `dist/`, where they are addressed from outside as
+  npm entries; everything else the library build generates moved into `assets/` with the
+  SPA build's, since each bundle reaches those files through its own
+  `new URL(…, import.meta.url)`, which Vite rewrites. The npm package also stops shipping
+  the E2E fixture and the frontend's test files.
 
 - **Every scene carries a `camera`, and the view follows the robot by default.** The
   build used to omit the block for a scene that never called `set_viewer`, and the
