@@ -1,0 +1,16 @@
+mjswan0.9.42_mjswan obs graph 'projected_gravity', traced from mjlab.envs.mdp.observations:projected_gravity:˜
+9
+robot__projected_gravity_bvalue
+Identity_0"Identity
+main_graphZ1
+robot__projected_gravity_b
+
+batch
+b
+value
+
+batch
+Br
+mjswan.kindobsr 
+mjswan.termprojected_gravityr<
+mjswan.func-mjlab.envs.mdp.observations:projected_gravity

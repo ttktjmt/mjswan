@@ -1,0 +1,16 @@
+mjswan0.9.42@mjswan obs graph 'joint_pos', traced from __main__:joint_pos_abs:„
+/
+robot__joint_posvalue
+Identity_0"Identity
+main_graphZ'
+robot__joint_pos
+
+batch
+b
+value
+
+batch
+Br
+mjswan.kindobsr
+mjswan.term	joint_posr%
+mjswan.func__main__:joint_pos_abs
