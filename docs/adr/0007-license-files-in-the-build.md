@@ -5,7 +5,7 @@
 > file the manifest does not name is not a break, since §7's reader rule is about
 > keys, and these are files no engine opens. Gives `publish` a second local UX
 > gate beside `uses_custom_js` ([ADR 0003](0003-declarative-mdp-terms-alongside-custom-js.md)).
-> The platform half is mjswan Cloud ADR 0013; the naming rule in §1 is the
+> The platform half is mjswan Cloud ADR 0014; the naming rule in §1 is the
 > contract between the two. Implemented in `mjswan/licenses/`, `publish.py`,
 > `project.py`, `scene.py`, `builder.py` and `_cli.py`, with `tests/test_licenses.py`.
 

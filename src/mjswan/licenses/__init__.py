@@ -49,7 +49,10 @@ _RESTRICTED_PREFIXES = ("CC-BY-NC", "CC-BY-SA", "CC-BY-ND", "GPL-", "LGPL-", "AG
 
 _BASENAME = re.compile(r"^(LICENSE|NOTICE)(?:\.([A-Za-z0-9_-]{1,64}))?$")
 _COMPONENT = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-_TAG = re.compile(r"^\s*SPDX-License-Identifier:\s*([A-Za-z0-9.+-]+)")
+# An identifier is at most 64 characters; a longer run is not a tag (same as Cloud).
+_TAG = re.compile(
+    r"^\s*SPDX-License-Identifier:\s*([A-Za-z0-9.+-]{1,64})(?![A-Za-z0-9.+-])"
+)
 _SPDX_ID = re.compile(r"^[A-Za-z0-9.+-]+$")
 
 Kind = Literal["LICENSE", "NOTICE"]

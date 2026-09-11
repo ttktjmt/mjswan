@@ -113,6 +113,13 @@ class TestIdentification:
             != "GPL-3.0-only"
         )
 
+    def test_a_tag_is_at_most_64_characters(self):
+        ok = "LicenseRef-" + "a" * 53
+        assert identify_license(f"SPDX-License-Identifier: {ok}\n").spdx == ok
+        # A longer run is not a tag, and is not truncated into one.
+        too_long = identify_license(f"SPDX-License-Identifier: {'a' * 65}\n")
+        assert too_long.spdx == CUSTOM
+
     def test_creative_commons_variants(self):
         cc = "Attribution-NonCommercial-NoDerivatives 4.0 International Public License"
         assert identify_license(cc).spdx == "CC-BY-NC-ND-4.0"
