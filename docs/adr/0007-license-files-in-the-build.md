@@ -5,7 +5,7 @@
 > file the manifest does not name is not a break, since §7's reader rule is about
 > keys, and these are files no engine opens. Gives `publish` a second local UX
 > gate beside `uses_custom_js` ([ADR 0003](0003-declarative-mdp-terms-alongside-custom-js.md)).
-> The platform half is mjswan Cloud ADR 0013 (second draft); the naming rule in
+> The platform half is mjswan Cloud ADR 0013 (third draft); the naming rule in
 > §1 is the contract between the two.
 
 ## Context
@@ -136,17 +136,24 @@ them at 64 KiB) and:
   author did not see;
 - **warns** for a *restricted* license (the CC NC / SA / ND family, the GPL
   family), naming the file and the clause, before any network call;
-- **refuses** a *blocked* license (`LicenseRef-AMASS`, `LicenseRef-SMPL`,
-  `LicenseRef-UR-Graphical-Documentation`: sources whose terms forbid making the
-  data available to third parties), as a `PublishError` on that file, before any
-  network call. The platform refuses the same file at commit; this is the fast
-  local copy of that gate, exactly as `uses_custom_js` is.
+- **refuses** a *blocked* license — one the platform recognises as forbidding
+  redistribution: the Max Planck "non-commercial scientific research purposes"
+  text that SMPL, AMASS and their siblings carry
+  (`LicenseRef-MPG-NonCommercial`), Universal Robots' "Terms for Graphical
+  Documentation" (`LicenseRef-UR-Graphical-Documentation`), or a file tagged
+  `LicenseRef-AMASS` / `LicenseRef-SMPL` — as a `PublishError` on that file,
+  before any network call. The platform refuses the same file at commit; this
+  is the fast local copy of that gate, exactly as `uses_custom_js` is;
+- **says nothing** about a custom text it cannot classify (`LicenseRef-custom`).
+  It is uploaded and shown; the platform cannot know what it permits.
 
 Identification is the SPDX tag on line one when present, else a header match
-for the standard texts, else `LicenseRef-custom`. The detector and the tier
-table live in `mjswan/licenses.py` with the same contents as the platform's
+for the standard texts, else a fingerprint for the recognised non-redistributable
+licenses above, else `LicenseRef-custom`. The identifier and the tier table live
+in `mjswan/licenses.py` with the same contents as the platform's
 `lib/licenses.ts`, kept in step by hand like `name2id_cases.json`; the
-platform's copy is authoritative for what a publish is accepted with.
+platform's copy is authoritative for what a publish is accepted with. The
+warning is a warning: there is no acknowledgement flag to pass.
 
 ### 4. `mjswan info` lists the files
 
