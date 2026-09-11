@@ -1,12 +1,13 @@
 # License files in the build — `LICENSE` / `NOTICE` per project and per scene component
 
-> Status: **Proposed** — adds two file kinds to the `format: 1` layout of
+> Status: **Accepted** — adds two file kinds to the `format: 1` layout of
 > [ADR 0006](0006-swn-simulation-document.md) without touching the manifest: a
 > file the manifest does not name is not a break, since §7's reader rule is about
 > keys, and these are files no engine opens. Gives `publish` a second local UX
 > gate beside `uses_custom_js` ([ADR 0003](0003-declarative-mdp-terms-alongside-custom-js.md)).
-> The platform half is mjswan Cloud ADR 0013 (third draft); the naming rule in
-> §1 is the contract between the two.
+> The platform half is mjswan Cloud ADR 0013; the naming rule in §1 is the
+> contract between the two. Implemented in `mjswan/licenses/`, `publish.py`,
+> `project.py`, `scene.py`, `builder.py` and `_cli.py`, with `tests/test_licenses.py`.
 
 ## Context
 
@@ -95,23 +96,27 @@ directory is created:
 
 1. **Files beside the model.** Candidate directories are `spec.modelfiledir` and
    the directories the spec's meshes, textures, hfields and skins resolve to
-   (the resolution `collect_spec_assets` performs), each with up to two
-   parents. In each, `LICENSE*`, `COPYING*` and `NOTICE*` are taken verbatim
+   (the resolution `collect_spec_assets` performs). Each is searched, then its
+   parents up to two levels, and the **nearest level that has any** `LICENSE*`,
+   `COPYING*` or `NOTICE*` wins for that directory: the files are taken verbatim
    and become `LICENSE.<dirname>` / `NOTICE.<dirname>`, de-duplicated by
    content. This finds menagerie's per-model `LICENSE` whether the model was
    opened directly, via `robot_descriptions` (`PACKAGE_PATH` *is* the model
    directory) or via `mujoco_playground` (the XML lives in playground; the
    meshes resolve into `external_deps/mujoco_menagerie/<model>/assets/`, one
-   level below the `LICENSE`). Two parents, not more: a third reaches a
-   repository root and copies the wrong license — the demo's failure mode.
-2. **A table of known assets** (`mjswan/licenses.py`): `{component, spdx,
-   copyright, url}` keyed by menagerie directory name, `spec.modelname` and
-   mjlab task id, for the models mjswan is actually used with. When no file was
-   found but the table knows the model, mjswan generates `LICENSE.<component>`
-   from the license template with the holder's line and the SPDX tag. This
-   covers mjlab's asset zoo, whose robot XMLs ship with no license file beside
-   them, and it is what the CLI *recommends* when it recognises a model that
-   carries no declaration.
+   level below the `LICENSE`, and the search stops there rather than climbing
+   on to the repository's Apache-2.0). Two parents, not more: a third reaches a
+   repository root and copies the wrong license — the demo's failure mode. A
+   spec parsed from a string has no directory and is not searched: resolving
+   its asset paths against the working directory would find whatever happens
+   to be there.
+2. **A table of known assets** (`mjswan/licenses/`): `{component, spdx,
+   holder, url}` matched by the tokens of a menagerie directory name,
+   `spec.modelname` or mjlab task id (`Mjlab-Velocity-Flat-Unitree-G1`), for the
+   models mjswan is actually used with. When no file was found but the table
+   knows the model, mjswan generates `LICENSE.<component>` from the license
+   template with the holder's line and the SPDX tag. This covers mjlab's asset
+   zoo, whose robot XMLs ship with no license file beside them.
 3. **The author.** `SceneHandle.add_attribution(component, *, license=<spdx or
    path>, notice=<path or text>, copyright=None)` and
    `SceneHandle.clear_attributions()` for a detection that is wrong. Motion clips
@@ -150,10 +155,12 @@ them at 64 KiB) and:
 Identification is the SPDX tag on line one when present, else a header match
 for the standard texts, else a fingerprint for the recognised non-redistributable
 licenses above, else `LicenseRef-custom`. The identifier and the tier table live
-in `mjswan/licenses.py` with the same contents as the platform's
-`lib/licenses.ts`, kept in step by hand like `name2id_cases.json`; the
+in `mjswan/licenses/` with the same contents as the platform's
+`@mjswan/licenses` package, kept in step by hand like `name2id_cases.json`; the
 platform's copy is authoritative for what a publish is accepted with. The
-warning is a warning: there is no acknowledgement flag to pass.
+warning is a warning: there is no acknowledgement flag to pass. A build with no
+license files publishes as before, and `publish` says nothing about their
+absence: the platform shows nothing for it either, and nobody is nudged.
 
 ### 4. `mjswan info` lists the files
 
@@ -176,10 +183,12 @@ obligation the platform has), and it is out of scope here.
 
 ## Consequences
 
-- A build from a menagerie, `robot_descriptions` or `mujoco_playground` model
-  carries the model's `LICENSE` verbatim in its scene directory with no author
-  action; an mjlab build carries a generated one from the table; a build from
-  an unknown model carries nothing and `publish` says so.
+- A build from a menagerie or `robot_descriptions` model carries the model's
+  `LICENSE` verbatim in its scene directory with no author action; an mjlab
+  build carries a generated one from the table; a `mujoco_playground` scene
+  built from an XML string with in-memory assets has no directory to search and
+  gets a generated file only when its model name is a known one; a build from
+  an unknown model carries nothing, silently.
 - `manifest.json` and `format` are untouched. `.swn` carries the files already;
   self-hosted `dist/` trees carry them for a future SPA that renders them.
 - `examples/demo/main.py::_copy_licenses` is retired: detection copies the
@@ -188,13 +197,14 @@ obligation the platform has), and it is out of scope here.
   on what the build declares, and that is its job.
 - The root `dist/LICENSE` keeps meaning what it means today, and stays out of
   every publish.
-- `docs/getting-started/core-concepts.md` (output structure),
+- `docs/getting-started/core-concepts.md` (output structure, Licenses),
   `docs/guides/publishing.md` (what is uploaded, the warning and refusal),
-  the CHANGELOG under Unreleased, and `mjswan/licenses.py` change with it.
+  `docs/api/core.md`, the CHANGELOG under Unreleased, and `mjswan/licenses/`
+  (the module, with the six SPDX texts as package data) change with it.
 
 ## Phased execution plan
 
-1. `mjswan/licenses.py`: naming rule, SPDX header matcher and tag reader, tier
+1. `mjswan/licenses/`: naming rule, SPDX header matcher and tag reader, tier
    table, license templates, known-assets table; unit tests with fixture texts.
 2. `publish.py`: admit the names (project-relative only), advisory content type,
    print / warn / refuse; tests beside `TestPlanPublish`.
@@ -209,22 +219,22 @@ obligation the platform has), and it is out of scope here.
 
 ## Acceptance criteria
 
-- [ ] A scene loaded from a directory holding a BSD-3-Clause `LICENSE` gets
+- [x] A scene loaded from a directory holding a BSD-3-Clause `LICENSE` gets
       `<project>/<scene>/LICENSE.<dirname>` byte-identical to it, and nothing
       else.
-- [ ] A model whose XML lives outside the menagerie checkout but whose meshes
+- [x] A model whose XML lives outside the menagerie checkout but whose meshes
       resolve into it (playground layout) gets the model's file, not the
       repository's.
-- [ ] A directory two levels above a repository root contributes no file.
-- [ ] `add_scene_mjlab` for a Unitree G1 task writes a generated
+- [x] A directory two levels above a repository root contributes no file.
+- [x] `add_scene_mjlab` for a Unitree G1 task writes a generated
       `LICENSE.unitree_g1` whose first line is
       `SPDX-License-Identifier: BSD-3-Clause`.
-- [ ] `Builder(license="Apache-2.0", copyright="2026 Example")` writes
+- [x] `Builder(license="Apache-2.0", copyright="2026 Example")` writes
       `<project>/LICENSE` from the template with the tag and the holder.
-- [ ] `plan_publish` uploads `<project>/LICENSE` and
+- [x] `plan_publish` uploads `<project>/LICENSE` and
       `<project>/<scene>/LICENSE.x` with `text/plain`, never the root `LICENSE`.
-- [ ] `plan_publish` refuses a file tagged `LicenseRef-AMASS` before any
+- [x] `plan_publish` refuses a file tagged `LicenseRef-AMASS` before any
       network call, naming it, and warns for one identified as
       `CC-BY-NC-ND-4.0`.
-- [ ] `manifest.json` is byte-identical with and without license files;
+- [x] `manifest.json` is byte-identical with and without license files;
       `format` is 1; a `.swn` round-trips the files.

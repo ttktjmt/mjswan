@@ -207,9 +207,10 @@ dist/
         │   └── event/
         │       ├── reset_base.onnx
         │       └── reset_robot_joints.onnx
-        └── policy/
-            ├── model_1000.onnx          # the trained network, one per checkpoint
-            └── …
+        ├── policy/
+        │   ├── model_1000.onnx          # the trained network, one per checkpoint
+        │   └── …
+        └── LICENSE.unitree_g1           # the robot's BSD-3-Clause, from the known-assets table (ADR 0007)
 ```
 
 The manifest's scene entry lists the MDPs and the policies; each policy entry names its

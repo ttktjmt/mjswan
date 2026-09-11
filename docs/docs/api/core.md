@@ -17,6 +17,9 @@ class mjswan.Builder(
     gtm_id: str | None = None,
     mt: bool = False,
     debug: bool = False,
+    *,
+    license: str | os.PathLike[str] | None = None,
+    copyright: str | None = None,
 )
 ```
 
@@ -30,6 +33,8 @@ Top-level builder that orchestrates projects, scenes, policies, and splats and p
 | `gtm_id` | `str \| None` | `None` | Google Tag Manager container ID (e.g. `"GTM-XXXXXXX"`). When provided, the GTM snippet is injected into the built HTML. |
 | `mt` | `bool` | `False` | Enable multi-threaded MuJoCo WASM. Requires Cross-Origin Isolation; mjswan emits a `_headers` file (Netlify / Cloudflare Pages / Vercel) and a `coi-serviceworker.js` (required for GitHub Pages, which cannot set response headers). |
 | `debug` | `bool` | `False` | Keep browser console messages in the built application. Defaults to stripping them from the production bundle. |
+| `license` | `str \| PathLike \| None` | `None` | The work's license for every project that does not set its own, written as `<project-id>/LICENSE` ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)). A generatable SPDX id (`"Apache-2.0"`, `"MIT"`, `"BSD-3-Clause"`, `"BSD-2-Clause"`, `"CC-BY-4.0"`, `"CC0-1.0"`) writes the standard text with an `SPDX-License-Identifier` tag on its first line; a path copies the file verbatim. A bad id or a missing file fails here, not at build. |
+| `copyright` | `str \| None` | `None` | The holder's line for a generated license text, e.g. `"2026 Example Lab"`. |
 
 ### Builder.from_mjlab
 
@@ -77,7 +82,13 @@ Add a project pre-configured with a single mjlab task (project + mjlab scene + o
 ### Builder.add_project
 
 ```python
-def add_project(name: str, *, default: bool = False) -> ProjectHandle
+def add_project(
+    name: str,
+    *,
+    default: bool = False,
+    license: str | os.PathLike[str] | None = None,
+    copyright: str | None = None,
+) -> ProjectHandle
 ```
 
 Add a project to the application. Its id — the directory it is written to and its
@@ -91,6 +102,8 @@ projects whose names sanitize alike get `<id>` and `<id>_1`, with a warning.
 |---|---|---|---|
 | `name` | `str` | — | Display name shown in the UI; the id derives from it. |
 | `default` | `bool` | `False` | Open on this project when the URL names none. At most one project may set it — two fail the build — and when none does, the first added is the default. |
+| `license` | `str \| PathLike \| None` | `None` | This project's license, overriding the builder's; same forms as `Builder(license=)`. |
+| `copyright` | `str \| None` | `None` | The holder's line for a generated text. |
 
 **Returns** — `ProjectHandle`
 
@@ -185,6 +198,26 @@ Load an mjlab task's MuJoCo spec from the task registry and add it as a scene. R
 **Returns** — `SceneHandle`
 
 **Raises** — `ImportError` if `mjlab` is not installed.
+
+### ProjectHandle.set_license
+
+```python
+def set_license(license: str | os.PathLike[str], *, copyright: str | None = None) -> ProjectHandle
+```
+
+Set the work's license, written as `<project-id>/LICENSE`: a generatable SPDX id for the
+standard text (tagged), or the path to a license text, copied verbatim. Returns `self` for
+chaining. **Raises** — `ValueError` for an id with no bundled text or a path that does not
+exist.
+
+### ProjectHandle.set_notice
+
+```python
+def set_notice(notice: str | os.PathLike[str]) -> ProjectHandle
+```
+
+Set the work's notice, written as `<project-id>/NOTICE`: the path to a file, copied
+verbatim, or the text itself. Returns `self` for chaining.
 
 ### ProjectHandle properties
 
@@ -383,6 +416,50 @@ it declares none of its own, and a scene with events but no policy writes none.
 
 Equivalent to `add_scene(events=...)`.
 
+Returns `self` for chaining.
+
+### SceneHandle.add_attribution
+
+```python
+def add_attribution(
+    component: str,
+    *,
+    license: str | os.PathLike[str] | None = None,
+    notice: str | os.PathLike[str] | None = None,
+    copyright: str | None = None,
+) -> SceneHandle
+```
+
+Declare a third-party component this scene contains
+([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)).
+Written to the scene directory as `LICENSE.<component>` and `NOTICE.<component>`, and shown
+on mjswan Cloud beside the work's own license. `add_scene(spec=...)` fills these in itself
+for a model whose `LICENSE` sits beside it on disk (or beside the directories its meshes
+resolve to); `add_scene_mjlab` falls back to a known-assets table by task id. Motion clips
+and policy weights have no file to find and are only ever declared here. A component
+already declared — by detection or an earlier call — is replaced.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `component` | `str` | — | Label for the component, e.g. `"lafan1"`; 1–64 letters, digits, `_`, `-`. It names the file. |
+| `license` | `str \| PathLike \| None` | `None` | Its license: a path to the text, copied verbatim, or a generatable SPDX id for the standard text, tagged. |
+| `notice` | `str \| PathLike \| None` | `None` | Its notice: a path, copied verbatim, or the text itself. |
+| `copyright` | `str \| None` | `None` | The holder's line for a generated license text. |
+
+**Returns** — `SceneHandle` (self, for chaining)
+
+**Raises** — `ValueError` when neither `license` nor `notice` is given, for a component
+name outside the rule, or for a license id with no bundled text.
+
+### SceneHandle.clear_attributions
+
+```python
+def clear_attributions() -> SceneHandle
+```
+
+Drop every attribution on the scene, detected or declared — for when a detection is wrong.
 Returns `self` for chaining.
 
 ### SceneHandle.set_trace_env
@@ -1026,9 +1103,12 @@ dist/
 ├── robots.txt
 ├── manifest.json            ← the document's one descriptor: format, version, projects
 ├── assets/                  ← compiled JS / CSS / WASM — the engine, never uploaded
+├── LICENSE                  ← the engine's Apache-2.0, never the work's; never uploaded
 ├── _headers                 ← only when Builder(mt=True)
 ├── coi-serviceworker.js     ← only when Builder(mt=True)
 └── <project-id>/            ← name2id(project name), e.g. my_robots/
+    ├── LICENSE                ← the work's license, when declared (Builder / add_project / set_license)
+    ├── NOTICE                 ← the work's notice, when declared (set_notice)
     └── <scene-id>/          ← name2id(scene name)
         ├── scene.mjz              ← or scene.mjb (depending on add_scene argument)
         ├── mdp/<mdp-id>/          ← one per MdpConfig: its name, its policy's id, or mdp_0, mdp_1, …
@@ -1037,12 +1117,16 @@ dist/
         │   ├── command/<name>.onnx
         │   └── event/<name>.onnx      ← the MDP's events
         ├── policy/<policy-id>.onnx    ← the trained network, one per policy
-        └── assets/
-            ├── <motion-id>.npz        ← one per distinct clip, shared by the scene's policies
-            └── <splat-id>.spz         ← only when source= is used
+        ├── assets/
+        │   ├── <motion-id>.npz        ← one per distinct clip, shared by the scene's policies
+        │   └── <splat-id>.spz         ← only when source= is used
+        ├── LICENSE.<component>        ← a third-party component's license (detected or add_attribution)
+        └── NOTICE.<component>         ← its notice
 ```
 
 Copy `dist/` to any static host (GitHub Pages, Netlify, S3, …) and it works without a server.
+The license files are files, not manifest keys ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)):
+`manifest.json` is the same with and without them.
 
 Every key in `manifest.json` is `snake_case`, and every path under a scene entry resolves
 against that scene's directory, so a policy entry reads `"onnx": "policy/walk.onnx"` and

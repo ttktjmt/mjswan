@@ -40,7 +40,6 @@ from mjswan.managers.observation_manager import (  # noqa: E402
 )
 from mjswan.managers.termination_manager import TerminationTermCfg  # noqa: E402
 from mjswan.trace_env import build_single_entity_trace_env  # noqa: E402
-from mjswan.utils import name2id  # noqa: E402
 
 # --- Demo-specific observations. These scenes have no mjlab task, so each supplies its
 # own trace env via SceneHandle.set_trace_env, and the terms below are written against
@@ -656,7 +655,14 @@ def setup_builder() -> mjswan.Builder:
     # Ensure asset-relative paths resolve regardless of current working directory.
     os.chdir(Path(__file__).resolve().parent)
     base_path = os.getenv("MJSWAN_BASE_PATH", "/")
-    builder = mjswan.Builder(base_path=base_path, gtm_id="GTM-W79HQ38W")
+    # The demo's own work is Apache-2.0 like the repository; each scene's third-party
+    # model license is detected from the file beside the model (ADR 0007 §2).
+    builder = mjswan.Builder(
+        base_path=base_path,
+        gtm_id="GTM-W79HQ38W",
+        license="Apache-2.0",
+        copyright="mjswan Developers",
+    )
 
     _add_mjswan_demo_project(builder)
     _add_robot_descriptions_project(builder)
@@ -664,60 +670,6 @@ def setup_builder() -> mjswan.Builder:
     _add_myosuite_project(builder)
 
     return builder
-
-
-def _copy_licenses(output_dir: Path) -> None:
-    """Copy LICENSE and NOTICE files into the built output.
-
-    - robot_descriptions: copies per scene from each repo's REPOSITORY_PATH, into the
-      scene's own directory (`<project-id>/<scene-id>/`, ADR 0006 §2).
-    - myosuite / mujoco_playground: copies to the project directory from the dist-info
-      licenses/.
-    """
-    import importlib.metadata
-    import shutil
-    from importlib import import_module
-
-    # Per-scene for robot_descriptions
-    robotdesc_dir = output_dir / name2id(ROBOT_DESCRIPTIONS_PROJECT)
-    if robotdesc_dir.exists():
-        for module, desc in DESCRIPTIONS.items():
-            if not desc.has_mjcf:
-                continue
-            scene_dir = robotdesc_dir / name2id(_robot_description_scene_name(module))
-            if not scene_dir.exists():
-                continue
-            mod = import_module(f"robot_descriptions.{module}")
-            if not hasattr(mod, "REPOSITORY_PATH"):
-                continue
-            for fname in ["LICENSE", "NOTICE"]:
-                src = Path(mod.REPOSITORY_PATH) / fname
-                if src.exists():
-                    shutil.copy2(src, scene_dir / fname)
-
-    # Project-level for myosuite and mujoco_playground
-    for project_name, pkg_name in [
-        (MYOSUITE_PROJECT, "myosuite"),
-        (PLAYGROUND_PROJECT, "playground"),
-    ]:
-        project_dir = output_dir / name2id(project_name)
-        if not project_dir.exists():
-            continue
-        try:
-            dist = importlib.metadata.Distribution.from_name(pkg_name)
-        except importlib.metadata.PackageNotFoundError:
-            continue
-        for fname in ["LICENSE", "NOTICE"]:
-            matches = [
-                f
-                for f in (dist.files or [])
-                if Path(str(f)).name == fname and "dist-info" in str(f)
-            ]
-            for f in matches:
-                src = Path(str(dist.locate_file(f)))
-                if src.exists():
-                    shutil.copy2(src, project_dir / fname)
-                    break
 
 
 def main():
@@ -734,7 +686,6 @@ def main():
     else:
         builder = setup_builder()
         app = builder.build()
-        _copy_licenses(dist_dir)
     if os.getenv("MJSWAN_NO_LAUNCH") != "1":
         app.launch()
 

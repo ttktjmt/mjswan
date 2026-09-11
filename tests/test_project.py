@@ -83,6 +83,88 @@ def _install_fake_mjlab(monkeypatch, minimal_spec) -> tuple[list[tuple], _FakeEn
 
 
 # ===========================================================================
+# License files (ADR 0007 §2): detection and the known-assets table
+# ===========================================================================
+class TestSceneAttributions:
+    def test_a_license_beside_the_model_is_detected_at_add_scene(
+        self, tmp_path, minimal_spec
+    ):
+        # `minimal_spec` was loaded from tmp_path/model.xml, so a file there sits
+        # beside the model.
+        (tmp_path / "LICENSE").write_text(
+            "MIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\n"
+        )
+        scene = Builder().add_project(name="P").add_scene(name="S", spec=minimal_spec)
+        found = scene._config.attributions
+        assert len(found) == 1
+        assert found[0].spdx == "MIT"
+        assert found[0].origin == str(tmp_path / "LICENSE")
+
+    def test_a_model_without_a_file_or_a_known_name_gets_nothing(self, minimal_spec):
+        scene = Builder().add_project(name="P").add_scene(name="S", spec=minimal_spec)
+        assert scene._config.attributions == []
+
+    def test_a_known_model_name_gets_a_generated_file(self, tmp_path):
+        xml = tmp_path / "go2.xml"
+        xml.write_text(
+            '<mujoco model="go2 scene"><worldbody><geom type="sphere" size="0.1"/></worldbody></mujoco>'
+        )
+        spec = mujoco.MjSpec.from_file(str(xml))
+        scene = Builder().add_project(name="P").add_scene(name="S", spec=spec)
+        (found,) = scene._config.attributions
+        assert found.component == "unitree_go2"
+        assert found.spdx == "BSD-3-Clause"
+        assert found.origin.startswith("known asset")
+
+    def test_a_model_given_as_mjmodel_has_no_directory_to_search(self, minimal_model):
+        scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
+        assert scene._config.attributions == []
+
+    def test_add_scene_mjlab_falls_back_to_the_task_id(self, monkeypatch, minimal_spec):
+        _install_fake_mjlab(monkeypatch, minimal_spec)
+        scene = (
+            Builder()
+            .add_project(name="P")
+            .add_scene_mjlab("Mjlab-Velocity-Flat-Unitree-G1")
+        )
+        (found,) = scene._config.attributions
+        assert found.component == "unitree_g1"
+        assert found.license is not None
+        assert found.license.split(b"\n")[0] == b"SPDX-License-Identifier: BSD-3-Clause"
+
+    def test_add_scene_mjlab_prefers_a_file_beside_an_entity_spec(
+        self, monkeypatch, minimal_spec, tmp_path
+    ):
+        _, env_cfg = _install_fake_mjlab(monkeypatch, minimal_spec)
+        robot_dir = tmp_path / "asset_zoo" / "robots" / "some_robot"
+        robot_dir.mkdir(parents=True)
+        (robot_dir / "robot.xml").write_text(
+            '<mujoco model="r"><worldbody><geom type="sphere" size="0.1"/></worldbody></mujoco>'
+        )
+        (robot_dir / "LICENSE").write_text("Use it however you like.\n")
+        robot_spec = mujoco.MjSpec.from_file(str(robot_dir / "robot.xml"))
+        env_cfg.scene.entities = {
+            "robot": type("E", (), {"spec_fn": staticmethod(lambda: robot_spec)})()
+        }
+
+        scene = (
+            Builder()
+            .add_project(name="P")
+            .add_scene_mjlab("Mjlab-Velocity-Flat-Unitree-G1")
+        )
+        (found,) = scene._config.attributions
+        assert found.component == "some_robot"
+        assert found.license == b"Use it however you like.\n"
+
+    def test_an_unknown_task_with_no_files_gets_nothing(
+        self, monkeypatch, minimal_spec
+    ):
+        _install_fake_mjlab(monkeypatch, minimal_spec)
+        scene = Builder().add_project(name="P").add_scene_mjlab("Mjlab-Cartpole")
+        assert scene._config.attributions == []
+
+
+# ===========================================================================
 # SceneConfig — scene_filename property
 # ===========================================================================
 class TestSceneConfig:

@@ -276,6 +276,45 @@ policy.add_motion_wandb(
 
 `anchor_body_name` and `body_names` are required — they tell the browser-side tracker which bodies in the MuJoCo model correspond to the dataset. `default=True` marks the motion as the one selected on load; when multiple motions are attached the viewer shows a selector. See the API reference for the full parameter list.
 
+## Licenses
+
+A build carries its license files as files, beside the data they cover
+([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)).
+There are two kinds, and `manifest.json` never mentions either:
+
+- **The work's own** — `<project-id>/LICENSE` and `NOTICE`. Declare them once on the
+  builder, or per project:
+
+  ```python
+  builder = mjswan.Builder(license="Apache-2.0", copyright="2026 Example Lab")
+  project = builder.add_project("My Robots", license="MIT", copyright="2026 Example Lab")
+  project.set_notice("Includes the Go2 model by Unitree Robotics.")
+  ```
+
+  A generatable SPDX id — `Apache-2.0`, `MIT`, `BSD-3-Clause`, `BSD-2-Clause`,
+  `CC-BY-4.0`, `CC0-1.0` — writes the standard text with an `SPDX-License-Identifier`
+  tag on its first line; a path copies your own file verbatim.
+
+- **Third-party components** — `<project-id>/<scene-id>/LICENSE.<component>` and
+  `NOTICE.<component>`, one per robot model, motion clip or other asset the scene
+  contains. `add_scene(spec=...)` detects them: any `LICENSE*` / `COPYING*` / `NOTICE*`
+  beside the model file, or beside the directories its meshes and textures resolve to
+  (up to two parents), is copied verbatim and named after that directory — a menagerie
+  model yields `LICENSE.unitree_go2`. When nothing is found but the model is one mjswan
+  knows (`add_scene_mjlab` also tries the task id), a generated file with the upstream
+  holder is written. Anything else — a motion clip, policy weights — is declared:
+
+  ```python
+  scene.add_attribution("lafan1", license="CC-BY-4.0", copyright="Ubisoft")
+  scene.add_attribution("clip", notice="Retargeted from ...")
+  scene.clear_attributions()  # when a detection is wrong
+  ```
+
+The root `dist/LICENSE` is the engine's own Apache-2.0 and stays out of every publish.
+`mjswan info` lists the files it finds with the license each one is; `mjswan publish`
+prints them, warns for a restricted license (CC NC / SA / ND, the GPL family) and refuses
+one whose terms forbid redistribution. See [Publishing](../guides/publishing.md).
+
 ## Output structure
 
 `builder.build()` writes the engine plus the **simulation document**: one `manifest.json`
@@ -291,7 +330,10 @@ dist/
 ├── assets/                  ← compiled JS / CSS / WASM — the engine
 ├── _headers                 ← only when Builder(mt=True)
 ├── coi-serviceworker.js     ← only when Builder(mt=True)
+├── LICENSE                  ← the engine's Apache-2.0; never the work's
 └── <project-id>/            ← name2id(project name), e.g. my_robots/
+    ├── LICENSE                ← the work's license, when declared (see Licenses)
+    ├── NOTICE                 ← the work's notice, when declared
     └── <scene-id>/          ← name2id(scene name)
         ├── scene.mjz              ← or scene.mjb
         ├── mdp/<mdp-id>/          ← one per MdpConfig: mdp_0, mdp_1, … or its name
@@ -300,9 +342,11 @@ dist/
         │   ├── command/<name>.onnx
         │   └── event/<name>.onnx      ← the MDP's events
         ├── policy/<policy-id>.onnx    ← the trained network, one per policy
-        └── assets/
-            ├── <motion-id>.npz        ← one per distinct clip, shared by the scene's policies
-            └── <splat-id>.spz         ← only when source= is used
+        ├── assets/
+        │   ├── <motion-id>.npz        ← one per distinct clip, shared by the scene's policies
+        │   └── <splat-id>.spz         ← only when source= is used
+        ├── LICENSE.<component>        ← one third-party component this scene contains
+        └── NOTICE.<component>         ← its notice, if it has one
 ```
 
 The result is a fully static site: copy `dist/` to any static host (GitHub Pages, Netlify, S3, …) and it works without a server.

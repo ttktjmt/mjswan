@@ -24,12 +24,25 @@ simulation with its own pinned copy of the engine, loaded from a CDN.
 | `policy/<policy-id>.onnx` | `_headers`, `coi-serviceworker.js` |
 | traced graphs (`mdp/<mdp-id>/{obs,term,command,event}/`) | |
 | `assets/<motion-id>.npz`, `assets/<splat-id>.spz`, `.ply` colliders | |
+| `<project-id>/LICENSE`, `NOTICE` and each scene's `LICENSE.<component>`, `NOTICE.<component>` (up to 64 KB each) | the root `LICENSE` — the engine's own |
 
 What travels is exactly the [simulation document](../getting-started/core-concepts.md#output-structure),
 so a `.swn` written by `app.save_document()` publishes the same file set as the directory
 it came from: `mjswan publish sim.swn`.
 
 Limits: 50 MB per file, 200 MB total, 64 files.
+
+Before the first byte moves, `publish` prints every license file it is about to carry with
+the license it identifies — `demo/LICENSE (Apache-2.0)`,
+`demo/go2/LICENSE.unitree_go2 (BSD-3-Clause)` — so nothing travels unseen. A file under a
+*restricted* license (Creative Commons NC / SA / ND, the GPL family) earns a warning naming
+the clause; the publish goes ahead, and the responsibility is yours. A file the platform
+recognises as forbidding redistribution — the Max Planck research license behind SMPL and
+AMASS, Universal Robots' graphical-documentation terms, or one tagged `LicenseRef-AMASS` /
+`LicenseRef-SMPL` — is refused locally, naming the file, exactly as a custom-JS build is; the
+platform refuses the same file at commit. A custom text it cannot classify is carried and
+shown without comment. See [Licenses](../getting-started/core-concepts.md#licenses) for how
+the files get into the build.
 
 !!! warning "Custom-JavaScript builds are rejected"
     A build whose `manifest.json` carries `uses_custom_js: true` — one using a

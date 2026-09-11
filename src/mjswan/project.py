@@ -6,7 +6,8 @@ managing projects containing multiple scenes.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import os
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +15,13 @@ import mujoco
 
 from .adapters import apply_mjlab_sim_options, ensure_mjlab_extensions
 from .envs.mdp.events import apply_terrain_spawn
+from .licenses import (
+    detect_attributions,
+    known_attribution,
+    resolve_license,
+    resolve_notice,
+    spec_asset_directories,
+)
 from .scene import SceneConfig, SceneHandle, _env_cfg_control_dt
 from .utils import assign_id, collect_spec_assets, name2id
 from .viewer import ViewerConfig
@@ -41,6 +49,13 @@ class ProjectConfig:
     """Open the app on this project. At most one project may set it; when none does,
     the first added is the default."""
 
+    license: bytes | None = field(default=None, repr=False)
+    """The work's ``LICENSE``, written to the project directory (ADR 0007 §1). Set from
+    ``Builder(license=…)``, ``add_project(license=…)`` or :meth:`ProjectHandle.set_license`."""
+
+    notice: bytes | None = field(default=None, repr=False)
+    """The work's ``NOTICE``, beside it. Set by :meth:`ProjectHandle.set_notice`."""
+
     def __post_init__(self) -> None:
         if not self.id:
             self.id = name2id(self.name)
@@ -66,6 +81,30 @@ class ProjectHandle:
     def id(self) -> str:
         """The project's id: its directory in the build and its ``?project=`` value."""
         return self._config.id
+
+    def set_license(
+        self, license: str | os.PathLike[str], *, copyright: str | None = None
+    ) -> ProjectHandle:
+        """Set the work's license, written as ``<project-id>/LICENSE`` (ADR 0007 §1).
+
+        Args:
+            license: A generatable SPDX id (``"Apache-2.0"``, ``"MIT"``,
+                ``"BSD-3-Clause"``, ``"BSD-2-Clause"``, ``"CC-BY-4.0"``, ``"CC0-1.0"``)
+                for the standard text with the SPDX tag on its first line, or the path
+                to a license text, copied verbatim.
+            copyright: The holder's line for a generated text, e.g. ``"2026 Example"``.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._config.license = resolve_license(license, copyright=copyright)
+        return self
+
+    def set_notice(self, notice: str | os.PathLike[str]) -> ProjectHandle:
+        """Set the work's notice, written as ``<project-id>/NOTICE``: the path to a
+        file, copied verbatim, or the text itself. Returns self for method chaining."""
+        self._config.notice = resolve_notice(notice)
+        return self
 
     def add_scene(
         self,
@@ -109,6 +148,14 @@ class ProjectHandle:
         Returns:
             SceneHandle for adding policies and further configuration.
 
+        A scene built from a ``spec`` loaded from disk has its third-party license
+        files detected: ``LICENSE*`` / ``NOTICE*`` beside the model file, or beside the
+        directories its meshes and textures resolve to, are copied verbatim into the
+        scene directory as ``LICENSE.<component>`` (ADR 0007 §2). A model the
+        known-assets table lists gets a generated file when none was found. See
+        :meth:`~mjswan.scene.SceneHandle.add_attribution` to add or replace one, and
+        :meth:`~mjswan.scene.SceneHandle.clear_attributions` when a detection is wrong.
+
         Example:
             ```
             # Fast loading (larger files):
@@ -142,6 +189,14 @@ class ProjectHandle:
             metadata=metadata,
             control_dt=None if control_dt is None else float(control_dt),
         )
+        if spec is not None:
+            scene_config.attributions = detect_attributions(
+                spec_asset_directories(spec)
+            )
+            if not scene_config.attributions:
+                known = known_attribution(spec.modelname)
+                if known is not None:
+                    scene_config.attributions.append(known)
         self._config.scenes.append(scene_config)
         handle = SceneHandle(scene_config, self)
         if events:
@@ -222,6 +277,18 @@ class ProjectHandle:
         # the scene (and its tracing env) was built from.
         handle._config.mjlab_env_cfg = env_cfg
         handle._config.mjlab_task_id = task_id
+        # The composed scene spec has no directory; the entities' specs do, and the
+        # task id names the robot when nothing sits beside them (ADR 0007 §2).
+        if not handle._config.attributions:
+            handle._config.attributions = detect_attributions(
+                d
+                for entity_spec in _mjlab_entity_specs(env_cfg.scene)
+                for d in spec_asset_directories(entity_spec)
+            )
+        if not handle._config.attributions:
+            known = known_attribution(task_id)
+            if known is not None:
+                handle._config.attributions.append(known)
 
         # The trace env comes later, from `builder._scene_trace_env`: a tracking task
         # cannot build one until its clip has been written into the bundle.
@@ -291,10 +358,8 @@ def _extract_terrain_data(scene: Any) -> dict[str, Any] | None:
     return None
 
 
-def _collect_mjlab_scene_assets(scene_cfg: Any) -> dict[str, bytes]:
-    """Collect assets from mjlab scene component specs before they are flattened."""
-    assets: dict[str, bytes] = {}
-
+def _mjlab_entity_specs(scene_cfg: Any) -> Iterator[mujoco.MjSpec]:
+    """The terrain's and each entity's own spec, before the scene flattens them."""
     spec_cfgs = [getattr(scene_cfg, "terrain", None)]
     entities = getattr(scene_cfg, "entities", {})
     if isinstance(entities, dict):
@@ -305,10 +370,15 @@ def _collect_mjlab_scene_assets(scene_cfg: Any) -> dict[str, bytes]:
         if not callable(spec_fn):
             continue
         spec = spec_fn()
-        if not isinstance(spec, mujoco.MjSpec):
-            continue
-        assets.update(collect_spec_assets(spec))
+        if isinstance(spec, mujoco.MjSpec):
+            yield spec
 
+
+def _collect_mjlab_scene_assets(scene_cfg: Any) -> dict[str, bytes]:
+    """Collect assets from mjlab scene component specs before they are flattened."""
+    assets: dict[str, bytes] = {}
+    for spec in _mjlab_entity_specs(scene_cfg):
+        assets.update(collect_spec_assets(spec))
     return assets
 
 
