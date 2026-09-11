@@ -34,7 +34,7 @@ Top-level builder that orchestrates projects, scenes, policies, and splats and p
 | `mt` | `bool` | `False` | Enable multi-threaded MuJoCo WASM. Requires Cross-Origin Isolation; mjswan emits a `_headers` file (Netlify / Cloudflare Pages / Vercel) and a `coi-serviceworker.js` (required for GitHub Pages, which cannot set response headers). |
 | `debug` | `bool` | `False` | Keep browser console messages in the built application. Defaults to stripping them from the production bundle. |
 | `license` | `str \| PathLike \| None` | `None` | The work's license for every project that does not set its own, written as `<project-id>/LICENSE` ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)). A generatable SPDX id (`"Apache-2.0"`, `"MIT"`, `"BSD-3-Clause"`, `"BSD-2-Clause"`, `"CC-BY-4.0"`, `"CC0-1.0"`) writes the standard text with an `SPDX-License-Identifier` tag on its first line; a path copies the file verbatim. A bad id or a missing file fails here, not at build. |
-| `copyright` | `str \| None` | `None` | The holder's line for a generated license text, e.g. `"2026 Example Lab"`. |
+| `copyright` | `str \| None` | `None` | The holder line of a generated license text, e.g. `"2026 Example Lab"`. |
 
 ### Builder.from_mjlab
 
@@ -103,7 +103,7 @@ projects whose names sanitize alike get `<id>` and `<id>_1`, with a warning.
 | `name` | `str` | — | Display name shown in the UI; the id derives from it. |
 | `default` | `bool` | `False` | Open on this project when the URL names none. At most one project may set it — two fail the build — and when none does, the first added is the default. |
 | `license` | `str \| PathLike \| None` | `None` | This project's license, overriding the builder's; same forms as `Builder(license=)`. |
-| `copyright` | `str \| None` | `None` | The holder's line for a generated text. |
+| `copyright` | `str \| None` | `None` | The holder line of a generated text. |
 
 **Returns** — `ProjectHandle`
 
@@ -433,11 +433,11 @@ def add_attribution(
 Declare a third-party component this scene contains
 ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)).
 Written to the scene directory as `LICENSE.<component>` and `NOTICE.<component>`, and shown
-on mjswan Cloud beside the work's own license. `add_scene(spec=...)` fills these in itself
-for a model whose `LICENSE` sits beside it on disk (or beside the directories its meshes
-resolve to); `add_scene_mjlab` falls back to a known-assets table by task id. Motion clips
-and policy weights have no file to find and are only ever declared here. A component
-already declared — by detection or an earlier call — is replaced.
+on mjswan Cloud beside the work's own license. `add_scene(spec=...)` detects these for a
+model with a `LICENSE` beside it or its meshes on disk; `add_scene_mjlab` falls back to a
+known-assets table by task id. Motion clips and policy weights have no file to detect and
+are only ever declared here. A component already declared, by detection or an earlier
+call, is replaced.
 
 **Parameters**
 
@@ -446,7 +446,7 @@ already declared — by detection or an earlier call — is replaced.
 | `component` | `str` | — | Label for the component, e.g. `"lafan1"`; 1–64 letters, digits, `_`, `-`. It names the file. |
 | `license` | `str \| PathLike \| None` | `None` | Its license: a path to the text, copied verbatim, or a generatable SPDX id for the standard text, tagged. |
 | `notice` | `str \| PathLike \| None` | `None` | Its notice: a path, copied verbatim, or the text itself. |
-| `copyright` | `str \| None` | `None` | The holder's line for a generated license text. |
+| `copyright` | `str \| None` | `None` | The holder line of a generated license text. |
 
 **Returns** — `SceneHandle` (self, for chaining)
 
@@ -459,8 +459,7 @@ name outside the rule, or for a license id with no bundled text.
 def clear_attributions() -> SceneHandle
 ```
 
-Drop every attribution on the scene, detected or declared — for when a detection is wrong.
-Returns `self` for chaining.
+Drop every attribution on the scene, detected or declared. Returns `self` for chaining.
 
 ### SceneHandle.set_trace_env
 
@@ -1125,7 +1124,7 @@ dist/
 ```
 
 Copy `dist/` to any static host (GitHub Pages, Netlify, S3, …) and it works without a server.
-The license files are files, not manifest keys ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)):
+License files are not manifest keys ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)):
 `manifest.json` is the same with and without them.
 
 Every key in `manifest.json` is `snake_case`, and every path under a scene entry resolves

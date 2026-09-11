@@ -235,9 +235,7 @@ class SceneConfig:
 
     attributions: list[Attribution] = field(default_factory=list, repr=False)
     """The third-party components this scene contains, each written to the scene
-    directory as ``LICENSE.<component>`` / ``NOTICE.<component>`` (ADR 0007 §2).
-    Filled by detection at :meth:`ProjectHandle.add_scene`, from the known-assets table
-    at :meth:`ProjectHandle.add_scene_mjlab`, and by :meth:`SceneHandle.add_attribution`."""
+    directory as ``LICENSE.<component>`` / ``NOTICE.<component>`` (ADR 0007 §2)."""
 
     splats: list[SplatConfig] = field(default_factory=list)
     """Gaussian Splat backgrounds available for this scene."""
@@ -1215,17 +1213,16 @@ class SceneHandle:
         Written to the scene directory as ``LICENSE.<component>`` and
         ``NOTICE.<component>``, and shown on mjswan Cloud beside the work's own license.
         Motion clips and policy weights are only ever declared this way: there is no
-        file on disk to find them by. A component already declared — by detection or
-        by an earlier call — is replaced.
+        file on disk to detect them from. A component already declared, by detection or
+        an earlier call, is replaced.
 
         Args:
             component: Label for the component, e.g. ``"lafan1"``; letters, digits,
                 ``_`` and ``-``.
-            license: The component's license: a path to its text, copied verbatim, or
-                a generatable SPDX id (``"BSD-3-Clause"``, ``"CC-BY-4.0"``, …) that
-                produces the standard text, tagged.
-            notice: Its notice: a path, copied verbatim, or the text itself.
-            copyright: The holder's line for a generated license text.
+            license: A path to the license text, copied verbatim, or a generatable SPDX
+                id (``"BSD-3-Clause"``, ``"CC-BY-4.0"``, …) for the standard text.
+            notice: A path to the notice, copied verbatim, or the text itself.
+            copyright: The holder line of a generated license text.
 
         Returns:
             Self for method chaining.
@@ -1255,8 +1252,8 @@ class SceneHandle:
         return self
 
     def clear_attributions(self) -> SceneHandle:
-        """Drop every attribution on this scene, detected or declared, for when a
-        detection is wrong. Returns self for method chaining."""
+        """Drop every attribution on this scene, detected or declared. Returns self for
+        method chaining."""
         self._config.attributions.clear()
         return self
 

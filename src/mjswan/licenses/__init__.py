@@ -1,19 +1,18 @@
 """License files in a build (ADR 0007): where they sit, what they say, and what
 ``publish`` does about them.
 
-The layout has two file kinds under a project directory and nothing at the root,
-which is the engine's own ``LICENSE``:
+Files sit under a project directory, never at the build root, whose ``LICENSE`` is the
+engine's:
 
-- ``<project-id>/LICENSE`` and ``<project-id>/NOTICE`` — the work's;
-- ``<project-id>/<scene-id>/LICENSE.<component>`` / ``NOTICE.<component>`` — one
-  third-party component the scene contains (a bare ``LICENSE`` at scene level is
-  labelled with the scene id).
+- ``<project-id>/LICENSE`` and ``NOTICE``: the work's;
+- ``<project-id>/<scene-id>/LICENSE.<component>`` / ``NOTICE.<component>``: one
+  third-party component the scene contains (a bare scene-level ``LICENSE`` is labelled
+  with the scene id).
 
-The naming rule, the identifier and the tier table here have the same contents as
-mjswan Cloud's ``@mjswan/licenses`` and are kept in step by hand, like
-``name2id_cases.json``; the platform's copy is authoritative for what a publish is
-accepted with. Nothing here verifies a claim: it reads a file, says which license the
-text is when it can tell, and leaves alone what it cannot classify.
+The naming rule, identifier and tier table mirror mjswan Cloud's ``@mjswan/licenses``
+and are kept in step by hand; the platform's copy decides what a publish is accepted
+with. Nothing here verifies a claim: a text is classified when it can be and otherwise
+left alone.
 """
 
 from __future__ import annotations
@@ -26,10 +25,10 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
-#: One license or notice file may be at most this large; the platform refuses bigger.
+#: The platform refuses a license or notice file larger than this.
 LICENSE_FILE_MAX_BYTES: int = 64 * 1024
 
-#: The advisory Content-Type a license file is uploaded with.
+#: The Content-Type a license file is uploaded with.
 LICENSE_CONTENT_TYPE: str = "text/plain; charset=utf-8"
 
 #: The identifier given to a text that cannot be classified.
@@ -38,9 +37,8 @@ CUSTOM: str = "LicenseRef-custom"
 _MPG_NONCOMMERCIAL = "LicenseRef-MPG-NonCommercial"
 _UR_GRAPHICAL = "LicenseRef-UR-Graphical-Documentation"
 
-#: Licenses whose terms forbid making the data available to third parties at all. The
-#: first two are recognised from their text; the tags are what a known asset that ships
-#: no file is written with.
+#: Licenses whose terms forbid redistribution. The first two are recognised from their
+#: text, the last two only from an SPDX tag.
 BLOCKED: frozenset[str] = frozenset(
     {_MPG_NONCOMMERCIAL, _UR_GRAPHICAL, "LicenseRef-AMASS", "LicenseRef-SMPL"}
 )
@@ -49,7 +47,7 @@ _RESTRICTED_PREFIXES = ("CC-BY-NC", "CC-BY-SA", "CC-BY-ND", "GPL-", "LGPL-", "AG
 
 _BASENAME = re.compile(r"^(LICENSE|NOTICE)(?:\.([A-Za-z0-9_-]{1,64}))?$")
 _COMPONENT = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-# An identifier is at most 64 characters; a longer run is not a tag (same as Cloud).
+# An identifier is at most 64 characters; a longer run is not a tag.
 _TAG = re.compile(
     r"^\s*SPDX-License-Identifier:\s*([A-Za-z0-9.+-]{1,64})(?![A-Za-z0-9.+-])"
 )
@@ -76,12 +74,8 @@ class LicenseLocation:
 
 
 def parse_license_path(path: str) -> LicenseLocation | None:
-    """The location a build-relative POSIX path names, or ``None``.
-
-    ``None`` for a basename that is not a license file's, and for one somewhere the
-    platform does not read: the root, a third level, a suffixed name at project level.
-    :func:`license_path_problem` says which.
-    """
+    """The location a build-relative POSIX path names, or ``None`` when it is not a
+    license file where the platform reads one (:func:`license_path_problem` says why)."""
     segments = path.split("/")
     m = _BASENAME.match(segments[-1])
     if m is None:
@@ -125,7 +119,7 @@ def license_path_problem(path: str) -> str | None:
 
 
 def is_license_file_path(path: str) -> bool:
-    """A license file wherever the platform reads one."""
+    """Whether ``path`` is a license file where the platform reads one."""
     return parse_license_path(path) is not None
 
 
@@ -153,11 +147,10 @@ def tier_of(spdx: str) -> Tier:
 
 
 def identify_license(text: str) -> Identification:
-    """Which license a ``LICENSE`` file's text is.
+    """Which license a ``LICENSE`` text is.
 
-    The SPDX tag on the first line wins; otherwise the standard texts are recognised by
-    the lines only they contain, then the non-redistributable licenses the platform
-    refuses, and the rest is :data:`CUSTOM`.
+    An SPDX tag on the first line wins; otherwise the text is matched on phrases only
+    one license contains, and what nothing matches is :data:`CUSTOM`.
     """
     first_line = text.split("\n", 1)[0]
     tagged = _TAG.match(first_line)
@@ -232,8 +225,7 @@ def _identify_text(t: str) -> str:
     if gpl:
         return f"GPL-{gpl.group(1)}.0-only"
 
-    # The Max Planck license behind SMPL, AMASS and their siblings: research use only,
-    # and no redistribution.
+    # Max Planck's license behind SMPL and AMASS: research use only, no redistribution.
     if _search(r"non-commercial scientific research purposes", t):
         return _MPG_NONCOMMERCIAL
     if _search(r"Universal Robots", t) and _search(r"Graphical Documentation", t):
@@ -249,7 +241,7 @@ def display_name(spdx: str) -> str:
 
 
 def restriction_label(spdx: str) -> str | None:
-    """The one-word label a restricted license earns, or ``None``."""
+    """A short label for a restricted license, or ``None``."""
     if tier_of(spdx) != "restricted":
         return None
     if "-NC" in spdx:
@@ -288,7 +280,7 @@ def _describe_blocked(spdx: str) -> str:
 
 
 def blocked_refusal(path: str, spdx: str) -> str:
-    """The refusal a blocked file earns, worded like the custom-JS one."""
+    """The publish refusal for a blocked file."""
     return (
         f"{path} is {_describe_blocked(spdx)}, whose terms do not permit "
         "redistribution; it cannot be published to mjswan Cloud"
@@ -324,12 +316,11 @@ def license_template(spdx: str) -> str:
 
 
 def generate_license_text(spdx: str, holder: str = "", year: int | None = None) -> str:
-    """The standard text of a generatable license with the holder filled in, headed by
-    the SPDX tag the identifier reads first.
+    """The standard text of a generatable license, SPDX tag first, holder filled in.
 
-    ``holder`` is what follows ``Copyright (c)`` — the author's whole line, year
-    included, unless ``year`` is passed separately. The MIT and BSD texts carry their
-    own copyright line; the others get one prepended when a holder is given.
+    ``holder`` is everything after ``Copyright (c)``, year included unless ``year`` is
+    passed. The MIT and BSD texts carry their own copyright line; the others get one
+    prepended when a holder is given.
     """
     template = license_template(spdx)
     name = holder.strip()
@@ -345,16 +336,16 @@ def generate_license_text(spdx: str, holder: str = "", year: int | None = None) 
 def _is_file_reference(value: str | os.PathLike[str]) -> bool:
     if isinstance(value, os.PathLike):
         return True
-    # A one-line string that names a file on disk; a license id or a text never does.
+    # A multi-line string is a text, never a path.
     return "\n" not in value and Path(value).expanduser().is_file()
 
 
 def resolve_license(
     license: str | os.PathLike[str], *, copyright: str | None = None
 ) -> bytes:
-    """The bytes of a ``LICENSE`` from what an author passed: a path is copied verbatim,
-    a generatable SPDX id becomes the standard text with ``copyright`` as the line after
-    ``Copyright (c)`` (``"2026 Example Lab"``)."""
+    """The bytes of a ``LICENSE``: a path is copied verbatim; a generatable SPDX id
+    becomes the standard text, with ``copyright`` (``"2026 Example Lab"``) as its
+    holder line."""
     if _is_file_reference(license):
         return Path(license).expanduser().read_bytes()
     text = str(license)
@@ -398,7 +389,7 @@ class Attribution:
         return identify_license(self.license.decode("utf-8", "replace")).spdx
 
     def files(self) -> dict[str, bytes]:
-        """Basename → bytes of what the scene directory gets."""
+        """What the scene directory gets, by basename."""
         out: dict[str, bytes] = {}
         if self.license is not None:
             out[f"LICENSE.{self.component}"] = self.license
@@ -412,7 +403,7 @@ class Attribution:
 
 @dataclass(frozen=True)
 class KnownAsset:
-    """A model mjswan is used with, for the case where no file was found beside it."""
+    """A model whose license is known, for when no file is found beside it."""
 
     component: str
     spdx: str
@@ -431,8 +422,8 @@ _MENAGERIE = "https://github.com/google-deepmind/mujoco_menagerie/tree/main/"
 
 
 def _unitree(model: str, *, bare: bool = False) -> KnownAsset:
-    """``bare`` lets the model's own name match on its own (``go2``, ``g1_29dof``),
-    for the flagship names nothing else is called."""
+    """``bare``: the model name alone matches too (``go2``, ``g1_29dof``), for names
+    nothing else is called."""
     tokens = [frozenset({"unitree", model})]
     if bare:
         tokens.append(frozenset({model}))
@@ -445,9 +436,8 @@ def _unitree(model: str, *, bare: bool = False) -> KnownAsset:
     )
 
 
-#: The models mjswan is used with whose upstream file is known, keyed by the tokens of
-#: their menagerie directory (``unitree_g1``), model name and mjlab task id
-#: (``Mjlab-Velocity-Flat-Unitree-G1``). Extend it when a model is added to an example.
+#: Matched on the tokens of a menagerie directory (``unitree_g1``), model name or mjlab
+#: task id (``Mjlab-Velocity-Flat-Unitree-G1``). Extend when an example adds a model.
 KNOWN_ASSETS: tuple[KnownAsset, ...] = (
     _unitree("a1"),
     _unitree("go1", bare=True),
@@ -477,7 +467,7 @@ def _tokens(name: str) -> set[str]:
 
 
 def known_asset(*names: str | None) -> KnownAsset | None:
-    """The known asset every token of which appears in one of ``names``, or ``None``."""
+    """The first known asset one of ``names`` matches, or ``None``."""
     for name in names:
         if not name:
             continue
@@ -515,12 +505,11 @@ def _matching(directory: Path, names: re.Pattern[str]) -> list[Path]:
 
 
 def spec_asset_directories(spec: Any) -> list[Path]:
-    """The directories a spec's files live in: the model's own, then the ones its
-    meshes, textures, heightfields and skins resolve to — the resolution
-    :func:`mjswan.utils.collect_spec_assets` performs.
+    """The model's own directory, then those its meshes, textures, heightfields and
+    skins resolve to (as :func:`mjswan.utils.collect_spec_assets` resolves them).
 
-    Empty for a spec parsed from a string: it has no directory, and resolving its
-    asset paths against the working directory would find whatever happens to be there.
+    Empty for a spec parsed from a string: resolving its asset paths against the
+    working directory would find whatever happens to be there.
     """
     base = spec.modelfiledir or ""
     if not base:
@@ -553,12 +542,11 @@ def detect_attributions(
 ) -> list[Attribution]:
     """The license and notice files found beside a model, copied verbatim.
 
-    Each directory is searched, then its parents up to ``max_parents`` levels, and the
-    nearest level that has any ``LICENSE*`` / ``COPYING*`` / ``NOTICE*`` wins for that
-    directory: for a menagerie model that is the model's own directory, for meshes under
-    its ``assets/`` it is one level up. Two parents, not more, because a third reaches a
-    repository root and copies the repository's license instead of the model's. Files
-    are de-duplicated by content, and the component is the directory's name.
+    For each directory, the nearest level (itself, then up to ``max_parents`` parents)
+    holding any ``LICENSE*`` / ``COPYING*`` / ``NOTICE*`` wins. Two parents reach a
+    model's directory from its ``assets/``; a third would reach the repository root and
+    take the repository's license instead. Files are de-duplicated by content, and the
+    component is the directory's name.
     """
     attributions: list[Attribution] = []
     seen_dirs: set[Path] = set()

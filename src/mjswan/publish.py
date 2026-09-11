@@ -49,8 +49,8 @@ from .licenses import (
 #: File extensions uploaded as simulation *data*. Everything else in ``dist/``
 #: (``.html`` / ``.js`` / ``.css`` / ``.wasm`` / fonts / images) is the engine
 #: shell and is never sent — the platform loads a pinned engine from its CDN.
-#: ``LICENSE`` / ``NOTICE`` files are admitted by name beside these, in the project
-#: and scene directories only (ADR 0007 §1; ``mjswan.licenses``).
+#: ``LICENSE`` / ``NOTICE`` files are admitted by name instead, in the project and
+#: scene directories only (ADR 0007 §1).
 DATA_EXTENSIONS: frozenset[str] = frozenset(
     {".json", ".mjz", ".onnx", ".npz", ".ply", ".spz"}
 )
@@ -267,8 +267,8 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
 
     Raises :class:`PublishError` on any client-side constraint violation:
     missing/invalid config, custom-JS build, too many/too-large files, a
-    path that escapes the upload root, or a license file the platform refuses
-    (one whose terms forbid redistribution — ADR 0007 §3).
+    path that escapes the upload root, or a license file whose terms forbid
+    redistribution (ADR 0007 §3).
     """
     dist_dir = Path(dist_dir).expanduser().resolve()
     if not dist_dir.is_dir():
@@ -299,8 +299,7 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
         if path.parent == dist_dir / "assets":
             continue  # the SPA's own directory: bundle metadata, not the document
         rel = path.relative_to(dist_dir).as_posix()
-        # By name, in the project and scene directories only: the root `LICENSE` is
-        # the engine's, and is not a statement about the work.
+        # The root LICENSE is the engine's, not the work's, and is not admitted.
         if is_license_file_path(rel):
             _check_safe_path(rel)
             size = path.stat().st_size
@@ -428,8 +427,7 @@ def publish_dist(
         on_progress: Optional callback invoked with human-readable status lines,
             among them one per license file the build declares.
         on_warning: Optional callback for the warning a restricted license earns
-            (ADR 0007 §3). Defaults to :func:`warnings.warn`; nothing is asked of the
-            author, and nothing stops the publish.
+            (ADR 0007 §3); defaults to :func:`warnings.warn`. The publish proceeds.
 
     Returns:
         :class:`PublishResult` with the published simulation id.
@@ -452,7 +450,7 @@ def publish_dist(
     try:
         with as_directory(Path(dist_dir)) as tree:
             plan = plan_publish(tree)
-            # Every license file, before any byte moves: a publish never carries one
+            # Declared before any byte moves: a publish never carries a license file
             # the author did not see.
             for declaration in plan.licenses:
                 notify(f"License file: {declaration.describe()}")

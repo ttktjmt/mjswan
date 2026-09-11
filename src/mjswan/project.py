@@ -50,11 +50,10 @@ class ProjectConfig:
     the first added is the default."""
 
     license: bytes | None = field(default=None, repr=False)
-    """The work's ``LICENSE``, written to the project directory (ADR 0007 §1). Set from
-    ``Builder(license=…)``, ``add_project(license=…)`` or :meth:`ProjectHandle.set_license`."""
+    """The work's ``LICENSE``, written to the project directory (ADR 0007 §1)."""
 
     notice: bytes | None = field(default=None, repr=False)
-    """The work's ``NOTICE``, beside it. Set by :meth:`ProjectHandle.set_notice`."""
+    """The work's ``NOTICE``, beside it."""
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -88,11 +87,10 @@ class ProjectHandle:
         """Set the work's license, written as ``<project-id>/LICENSE`` (ADR 0007 §1).
 
         Args:
-            license: A generatable SPDX id (``"Apache-2.0"``, ``"MIT"``,
-                ``"BSD-3-Clause"``, ``"BSD-2-Clause"``, ``"CC-BY-4.0"``, ``"CC0-1.0"``)
-                for the standard text with the SPDX tag on its first line, or the path
-                to a license text, copied verbatim.
-            copyright: The holder's line for a generated text, e.g. ``"2026 Example"``.
+            license: A generatable SPDX id (one of
+                :data:`mjswan.licenses.GENERATABLE_LICENSES`) for the standard text, or
+                the path to a license text, copied verbatim.
+            copyright: The holder line of a generated text, e.g. ``"2026 Example"``.
 
         Returns:
             Self for method chaining.
@@ -148,13 +146,12 @@ class ProjectHandle:
         Returns:
             SceneHandle for adding policies and further configuration.
 
-        A scene built from a ``spec`` loaded from disk has its third-party license
-        files detected: ``LICENSE*`` / ``NOTICE*`` beside the model file, or beside the
-        directories its meshes and textures resolve to, are copied verbatim into the
-        scene directory as ``LICENSE.<component>`` (ADR 0007 §2). A model the
-        known-assets table lists gets a generated file when none was found. See
-        :meth:`~mjswan.scene.SceneHandle.add_attribution` to add or replace one, and
-        :meth:`~mjswan.scene.SceneHandle.clear_attributions` when a detection is wrong.
+        For a ``spec`` loaded from disk, ``LICENSE*`` / ``NOTICE*`` files beside the
+        model or its meshes and textures are copied verbatim into the scene directory as
+        ``LICENSE.<component>`` (ADR 0007 §2); a model in the known-assets table gets a
+        generated file when none is found. Adjust with
+        :meth:`~mjswan.scene.SceneHandle.add_attribution` and
+        :meth:`~mjswan.scene.SceneHandle.clear_attributions`.
 
         Example:
             ```

@@ -655,8 +655,8 @@ def setup_builder() -> mjswan.Builder:
     # Ensure asset-relative paths resolve regardless of current working directory.
     os.chdir(Path(__file__).resolve().parent)
     base_path = os.getenv("MJSWAN_BASE_PATH", "/")
-    # The demo's own work is Apache-2.0 like the repository; each scene's third-party
-    # model license is detected from the file beside the model (ADR 0007 §2).
+    # Apache-2.0 like the repository; third-party model licenses are detected beside
+    # each model (ADR 0007 §2).
     builder = mjswan.Builder(
         base_path=base_path,
         gtm_id="GTM-W79HQ38W",

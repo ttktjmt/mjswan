@@ -1,16 +1,14 @@
 """License files in the build (ADR 0007).
 
-L1 — the naming rule, the identifier and the tier table (kept in step with mjswan
-Cloud's ``@mjswan/licenses``), detection beside a model on disk, the author API, and
-the files ``_save_web`` writes. No network; the Node build and the SPA copy are mocked
-by the shared ``build_manifest`` fixture.
+L1 — the naming rule, identifier and tier table, detection beside a model on disk, the
+author API, and the files ``_save_web`` writes. No network; the Node build and the SPA
+copy are mocked by ``build_manifest``.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import mujoco
 import pytest
@@ -494,8 +492,8 @@ class TestBuildOutput:
 
         written = tmp_path / "licensed" / "demo" / "s" / "LICENSE.unitree_go2"
         assert written.read_bytes() == _BSD
-        # The scene asset differs (.mjb vs .mjz); everything else in the manifest is
-        # the same with and without license files — they are not manifest keys.
+        # The scene asset differs (.mjb vs .mjz); license files are not manifest keys,
+        # so everything else is the same.
         for m in (plain_manifest, licensed_manifest):
             m["projects"][0]["scenes"][0].pop("scene")
         assert plain_manifest == licensed_manifest
@@ -563,17 +561,3 @@ class TestInfoCli:
 def test_the_size_cap_matches_the_platform():
     assert LICENSE_FILE_MAX_BYTES == 64 * 1024
     assert Attribution("x", license=b"a").files() == {"LICENSE.x": b"a"}
-
-
-@pytest.fixture
-def build_manifest(monkeypatch):
-    """A local copy of conftest's, so this module reads on its own: run `_save_web`
-    with the Node build and SPA copy mocked and return the manifest written."""
-
-    def build(builder, out: Path) -> dict:
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
-        builder._save_web(out)
-        return json.loads((out / "manifest.json").read_text())
-
-    return build

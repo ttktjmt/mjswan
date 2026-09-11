@@ -154,7 +154,6 @@ def _point_env_cfg_at_bundled_motion(
 
 
 def _write_license_files(directory: Path, files: dict[str, bytes]) -> None:
-    """Write license files by basename, verbatim (ADR 0007 §1)."""
     for name, data in files.items():
         (directory / name).write_bytes(data)
 
@@ -291,12 +290,12 @@ class Builder:
                 service worker (required for GitHub Pages hosting). Defaults to False.
             debug: Keep browser console messages in the built app. Defaults to False
                 (console messages are stripped from the production bundle).
-            license: The work's license for every project that does not set its own,
-                written as ``<project-id>/LICENSE`` (ADR 0007 §1): a generatable SPDX
-                id (``"Apache-2.0"``, ``"MIT"``, ``"BSD-3-Clause"``, ``"BSD-2-Clause"``,
-                ``"CC-BY-4.0"``, ``"CC0-1.0"``) for the standard text, or the path to
-                a license text, copied verbatim.
-            copyright: The holder's line for a generated license text, e.g.
+            license: The work's license, written as ``<project-id>/LICENSE`` for every
+                project that does not set its own (ADR 0007 §1): a generatable SPDX id
+                (``"Apache-2.0"``, ``"MIT"``, ``"BSD-3-Clause"``, ``"BSD-2-Clause"``,
+                ``"CC-BY-4.0"``, ``"CC0-1.0"``) for the standard text, or the path to a
+                license text, copied verbatim.
+            copyright: The holder line of a generated license text, e.g.
                 ``"2026 Example Lab"``.
         """
         self._projects: list[ProjectConfig] = []
@@ -442,7 +441,7 @@ class Builder:
             license: This project's license, overriding the builder's: a generatable
                 SPDX id or the path to a license text. See
                 :meth:`~mjswan.project.ProjectHandle.set_license`.
-            copyright: The holder's line for a generated license text.
+            copyright: The holder line of a generated license text.
 
         Returns:
             ProjectHandle for adding scenes and further configuration.

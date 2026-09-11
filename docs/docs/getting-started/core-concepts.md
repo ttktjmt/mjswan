@@ -282,7 +282,7 @@ A build carries its license files as files, beside the data they cover
 ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)).
 There are two kinds, and `manifest.json` never mentions either:
 
-- **The work's own** — `<project-id>/LICENSE` and `NOTICE`. Declare them once on the
+- **The work's own**: `<project-id>/LICENSE` and `NOTICE`. Declare them once on the
   builder, or per project:
 
   ```python
@@ -291,18 +291,18 @@ There are two kinds, and `manifest.json` never mentions either:
   project.set_notice("Includes the Go2 model by Unitree Robotics.")
   ```
 
-  A generatable SPDX id — `Apache-2.0`, `MIT`, `BSD-3-Clause`, `BSD-2-Clause`,
-  `CC-BY-4.0`, `CC0-1.0` — writes the standard text with an `SPDX-License-Identifier`
+  A generatable SPDX id (`Apache-2.0`, `MIT`, `BSD-3-Clause`, `BSD-2-Clause`,
+  `CC-BY-4.0`, `CC0-1.0`) writes the standard text with an `SPDX-License-Identifier`
   tag on its first line; a path copies your own file verbatim.
 
-- **Third-party components** — `<project-id>/<scene-id>/LICENSE.<component>` and
+- **Third-party components**: `<project-id>/<scene-id>/LICENSE.<component>` and
   `NOTICE.<component>`, one per robot model, motion clip or other asset the scene
   contains. `add_scene(spec=...)` detects them: any `LICENSE*` / `COPYING*` / `NOTICE*`
-  beside the model file, or beside the directories its meshes and textures resolve to
-  (up to two parents), is copied verbatim and named after that directory — a menagerie
-  model yields `LICENSE.unitree_go2`. When nothing is found but the model is one mjswan
-  knows (`add_scene_mjlab` also tries the task id), a generated file with the upstream
-  holder is written. Anything else — a motion clip, policy weights — is declared:
+  beside the model file or the directories its meshes resolve to (up to two parents) is
+  copied verbatim and named after that directory, so a menagerie model yields
+  `LICENSE.unitree_go2`. A model mjswan knows but finds no file for (`add_scene_mjlab`
+  also tries the task id) gets a generated file with the upstream holder. Anything else,
+  a motion clip or policy weights, is declared:
 
   ```python
   scene.add_attribution("lafan1", license="CC-BY-4.0", copyright="Ubisoft")

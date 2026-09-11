@@ -210,7 +210,7 @@ dist/
         ├── policy/
         │   ├── model_1000.onnx          # the trained network, one per checkpoint
         │   └── …
-        └── LICENSE.unitree_g1           # the robot's BSD-3-Clause, from the known-assets table (ADR 0007)
+        └── LICENSE.unitree_g1           # the robot's license (ADR 0007)
 ```
 
 The manifest's scene entry lists the MDPs and the policies; each policy entry names its
