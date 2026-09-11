@@ -10,6 +10,7 @@ import gc
 import hashlib
 import inspect
 import json
+import os
 import shutil
 import warnings
 from pathlib import Path
@@ -33,6 +34,7 @@ from .envs.mdp.actions.actions import (
     MuscleActivationActionCfg,
     validate_muscle_actuators,
 )
+from .licenses import resolve_license
 from .policy import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS, RUNTIME_INPUT_SLOTS
 from .project import ProjectConfig, ProjectHandle
 from .scene import SceneConfig
@@ -149,6 +151,11 @@ def _point_env_cfg_at_bundled_motion(
             continue
         term.motion_file = str(scene_dir / next(iter(motion_files.values())))
         return
+
+
+def _write_license_files(directory: Path, files: dict[str, bytes]) -> None:
+    for name, data in files.items():
+        (directory / name).write_bytes(data)
 
 
 def _require_control_dt(scene: Any) -> float:
@@ -269,6 +276,9 @@ class Builder:
         gtm_id: str | None = None,
         mt: bool = False,
         debug: bool = False,
+        *,
+        license: str | os.PathLike[str] | None = None,
+        copyright: str | None = None,
     ) -> None:
         """Initialize a new Builder instance.
 
@@ -280,12 +290,23 @@ class Builder:
                 service worker (required for GitHub Pages hosting). Defaults to False.
             debug: Keep browser console messages in the built app. Defaults to False
                 (console messages are stripped from the production bundle).
+            license: The work's license, written as ``<project-id>/LICENSE`` for every
+                project that does not set its own (ADR 0007 §1): a generatable SPDX id
+                (``"Apache-2.0"``, ``"MIT"``, ``"BSD-3-Clause"``, ``"BSD-2-Clause"``,
+                ``"CC-BY-4.0"``, ``"CC0-1.0"``) for the standard text, or the path to a
+                license text, copied verbatim.
+            copyright: The holder line of a generated license text, e.g.
+                ``"2026 Example Lab"``.
         """
         self._projects: list[ProjectConfig] = []
         self._base_path = base_path
         self._gtm_id = gtm_id
         self._mt = mt
         self._debug = debug
+        # Resolved now so a bad id or a missing file fails here rather than at build.
+        self._license = (
+            None if license is None else resolve_license(license, copyright=copyright)
+        )
 
     @classmethod
     def from_mjlab(
@@ -399,7 +420,14 @@ class Builder:
             scene.add_policy_wandb(run_path, task_id=task_id)
         return project
 
-    def add_project(self, name: str, *, default: bool = False) -> ProjectHandle:
+    def add_project(
+        self,
+        name: str,
+        *,
+        default: bool = False,
+        license: str | os.PathLike[str] | None = None,
+        copyright: str | None = None,
+    ) -> ProjectHandle:
         """Add a new project to the builder.
 
         The project's id (its directory in the build and its ``?project=`` value) is
@@ -410,6 +438,10 @@ class Builder:
             name: Name for the project (displayed in the UI).
             default: Open the app on this project. At most one project may set it;
                 when none does, the first added is the default.
+            license: This project's license, overriding the builder's: a generatable
+                SPDX id or the path to a license text. See
+                :meth:`~mjswan.project.ProjectHandle.set_license`.
+            copyright: The holder line of a generated license text.
 
         Returns:
             ProjectHandle for adding scenes and further configuration.
@@ -425,6 +457,11 @@ class Builder:
             name=name,
             id=assign_id(name, {p.id for p in self._projects}, kind="project"),
             default=default,
+            license=(
+                self._license
+                if license is None
+                else resolve_license(license, copyright=copyright)
+            ),
         )
         self._projects.append(project)
         return ProjectHandle(project, self)
@@ -824,17 +861,20 @@ class Builder:
     def _save_web(self, output_path: Path, build_frontend: bool | None = None) -> None:
         """Save as a complete web application.
 
-        Output structure (ADR 0006 §2):
+        Output structure (ADR 0006 §2, license files ADR 0007 §1):
             dist/
             ├── index.html, logo.svg, robots.txt
+            ├── LICENSE            (the engine's, from the SPA; never the work's)
             ├── assets/            (compiled js/css/wasm, plugins.js)
             ├── manifest.json      (the one descriptor; every key snake_case)
             └── <project-id>/
+                ├── LICENSE, NOTICE            (the work's, when declared)
                 └── <scene-id>/
                     ├── scene.mjz | scene.mjb
                     ├── mdp/<mdp-id>/{obs,term,command,event}/<name>.onnx
                     ├── policy/<policy-id>.onnx
-                    └── assets/    (<motion>.npz, <splat>.spz)
+                    ├── assets/    (<motion>.npz, <splat>.spz)
+                    └── LICENSE.<component>, NOTICE.<component>  (third-party)
         """
         self._check_defaults()
         if output_path.exists():
@@ -899,12 +939,27 @@ class Builder:
                     total=len(project.scenes),
                     scene="",
                 )
+                project_dir = output_path / project.id
+                project_dir.mkdir(parents=True, exist_ok=True)
+                _write_license_files(
+                    project_dir,
+                    {
+                        name: data
+                        for name, data in (
+                            ("LICENSE", project.license),
+                            ("NOTICE", project.notice),
+                        )
+                        if data is not None
+                    },
+                )
                 steps = _SceneSteps(progress)
                 for scene in project.scenes:
                     progress.update(task, scene=scene.name)
-                    scene_dir = output_path / project.id / scene.id
+                    scene_dir = project_dir / scene.id
                     scene_dir.mkdir(parents=True, exist_ok=True)
                     scene_path = scene_dir / scene.scene_filename
+                    for attribution in scene.attributions:
+                        _write_license_files(scene_dir, attribution.files())
 
                     # First: the conversion is what creates this scene's policies (and
                     # hands over its export env as the trace env).

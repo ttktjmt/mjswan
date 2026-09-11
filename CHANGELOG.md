@@ -16,6 +16,19 @@ velocity-command shortcuts were removed outright, see Removed.
 
 ### Added
 
+- **License files travel with the build**
+  ([ADR 0007](docs/adr/0007-license-files-in-the-build.md)): `<project-id>/LICENSE` /
+  `NOTICE` for the work, via `Builder(license=, copyright=)`, `add_project(license=…)` or
+  `ProjectHandle.set_license()` / `set_notice()` (an SPDX id generates the standard text
+  with its tag, a path is copied verbatim), and `<project-id>/<scene-id>/LICENSE.<component>`
+  / `NOTICE.<component>` per third-party component. `add_scene(spec=…)` detects the latter
+  beside the model and its meshes, `add_scene_mjlab` falls back to a known-assets table by
+  task id, and `SceneHandle.add_attribution()` / `clear_attributions()` declare what has no
+  file (motion clips, weights). `mjswan publish` uploads them as `text/plain`, prints each
+  with its identified license, warns for a restricted one (CC NC / SA / ND, GPL family) and
+  refuses one that forbids redistribution before any network call; `mjswan info` lists
+  them. `manifest.json` and `format` are unchanged; the root `dist/LICENSE` stays the
+  engine's and is never published.
 - **Every term entry says which function it is** ([#118](https://github.com/ttktjmt/mjswan/issues/118)):
   `func` (`<module>:<qualname>`), `doc` (the docstring's first line) and `params`
   (JSON-safe: a `SceneEntityCfg` becomes `{entity, joint_names?, …}`) on observation

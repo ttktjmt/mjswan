@@ -7,6 +7,7 @@ managing MuJoCo scenes and their associated policies.
 from __future__ import annotations
 
 import copy
+import os
 import re
 import tempfile
 import warnings
@@ -28,6 +29,7 @@ from .adapters import (
     resolve_pd_gains,
     resolve_runner_defaults,
 )
+from .licenses import Attribution, resolve_license, resolve_notice
 from .mdp import MdpConfig
 from .motion import MotionConfig
 from .policy import PolicyConfig, PolicyHandle
@@ -231,6 +233,10 @@ class SceneConfig:
     metadata: dict[str, Any] = field(default_factory=dict)
     """Additional metadata for the scene."""
 
+    attributions: list[Attribution] = field(default_factory=list, repr=False)
+    """The third-party components this scene contains, each written to the scene
+    directory as ``LICENSE.<component>`` / ``NOTICE.<component>`` (ADR 0007 §2)."""
+
     splats: list[SplatConfig] = field(default_factory=list)
     """Gaussian Splat backgrounds available for this scene."""
 
@@ -408,6 +414,9 @@ def _check_slot_tables(
                 "so the two must have the same length."
             )
     return checked_in, checked_out
+
+
+_COMPONENT = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 class SceneHandle:
@@ -1189,6 +1198,63 @@ class SceneHandle:
             Self for method chaining.
         """
         self._config.mjlab_env = env
+        return self
+
+    def add_attribution(
+        self,
+        component: str,
+        *,
+        license: str | os.PathLike[str] | None = None,
+        notice: str | os.PathLike[str] | None = None,
+        copyright: str | None = None,
+    ) -> SceneHandle:
+        """Declare a third-party component this scene contains (ADR 0007 §2).
+
+        Written to the scene directory as ``LICENSE.<component>`` and
+        ``NOTICE.<component>``, and shown on mjswan Cloud beside the work's own license.
+        Motion clips and policy weights are only ever declared this way: there is no
+        file on disk to detect them from. A component already declared, by detection or
+        an earlier call, is replaced.
+
+        Args:
+            component: Label for the component, e.g. ``"lafan1"``; letters, digits,
+                ``_`` and ``-``.
+            license: A path to the license text, copied verbatim, or a generatable SPDX
+                id (``"BSD-3-Clause"``, ``"CC-BY-4.0"``, …) for the standard text.
+            notice: A path to the notice, copied verbatim, or the text itself.
+            copyright: The holder line of a generated license text.
+
+        Returns:
+            Self for method chaining.
+        """
+        if license is None and notice is None:
+            raise ValueError(
+                f"Attribution {component!r} needs a license, a notice, or both."
+            )
+        if not _COMPONENT.match(component):
+            raise ValueError(
+                f"Component {component!r} must be 1-64 letters, digits, '_' or '-'; "
+                "it names the file (LICENSE.<component>)."
+            )
+        attribution = Attribution(
+            component=component,
+            license=(
+                None
+                if license is None
+                else resolve_license(license, copyright=copyright)
+            ),
+            notice=None if notice is None else resolve_notice(notice),
+            origin="author",
+        )
+        self._config.attributions = [
+            a for a in self._config.attributions if a.component != component
+        ] + [attribution]
+        return self
+
+    def clear_attributions(self) -> SceneHandle:
+        """Drop every attribution on this scene, detected or declared. Returns self for
+        method chaining."""
+        self._config.attributions.clear()
         return self
 
     def set_metadata(self, key: str, value: Any) -> SceneHandle:

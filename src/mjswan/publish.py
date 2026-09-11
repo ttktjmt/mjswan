@@ -29,15 +29,28 @@ import json
 import os
 import urllib.error
 import urllib.request
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
+
+from .licenses import (
+    LICENSE_CONTENT_TYPE,
+    LICENSE_FILE_MAX_BYTES,
+    LicenseDeclaration,
+    blocked_refusal,
+    declare,
+    is_license_file_path,
+    restricted_warning,
+)
 
 # ── Client-side constraints (mirror the server's; fail fast and locally) ──────
 
 #: File extensions uploaded as simulation *data*. Everything else in ``dist/``
 #: (``.html`` / ``.js`` / ``.css`` / ``.wasm`` / fonts / images) is the engine
 #: shell and is never sent — the platform loads a pinned engine from its CDN.
+#: ``LICENSE`` / ``NOTICE`` files are admitted by name instead, in the project and
+#: scene directories only (ADR 0007 §1).
 DATA_EXTENSIONS: frozenset[str] = frozenset(
     {".json", ".mjz", ".onnx", ".npz", ".ply", ".spz"}
 )
@@ -110,6 +123,8 @@ _CONTENT_TYPES: dict[str, str] = {
 
 
 def _content_type_for(path: str) -> str:
+    if is_license_file_path(path):
+        return LICENSE_CONTENT_TYPE
     return _CONTENT_TYPES.get(Path(path).suffix.lower(), "application/octet-stream")
 
 
@@ -209,10 +224,20 @@ class PublishPlan:
     dist_dir: Path
     config: dict
     files: list[_DistFile] = field(default_factory=list)
+    #: The license files among ``files`` and what each says, in path order.
+    licenses: list[LicenseDeclaration] = field(default_factory=list)
 
     @property
     def total_bytes(self) -> int:
         return sum(f.size for f in self.files)
+
+    def license_warnings(self) -> list[str]:
+        """One line per restricted license, for the author to read before the upload."""
+        return [
+            restricted_warning(d.path, d.spdx)
+            for d in self.licenses
+            if d.tier == "restricted" and d.spdx
+        ]
 
     def manifest(self) -> list[dict]:
         return [
@@ -241,8 +266,9 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
     """Validate ``dist_dir`` and build the upload plan without any network I/O.
 
     Raises :class:`PublishError` on any client-side constraint violation:
-    missing/invalid config, custom-JS build, too many/too-large files, or a
-    path that escapes the upload root.
+    missing/invalid config, custom-JS build, too many/too-large files, a
+    path that escapes the upload root, or a license file whose terms forbid
+    redistribution (ADR 0007 §3).
     """
     dist_dir = Path(dist_dir).expanduser().resolve()
     if not dist_dir.is_dir():
@@ -270,11 +296,30 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
     for path in sorted(dist_dir.rglob("*")):
         if not path.is_file():
             continue
-        if path.suffix.lower() not in DATA_EXTENSIONS:
-            continue
         if path.parent == dist_dir / "assets":
             continue  # the SPA's own directory: bundle metadata, not the document
         rel = path.relative_to(dist_dir).as_posix()
+        # The root LICENSE is the engine's, not the work's, and is not admitted.
+        if is_license_file_path(rel):
+            _check_safe_path(rel)
+            size = path.stat().st_size
+            if size > LICENSE_FILE_MAX_BYTES:
+                raise PublishError(
+                    f"License file exceeds the {LICENSE_FILE_MAX_BYTES // 1024} KiB "
+                    f"limit: {rel} ({size} bytes)",
+                    file=rel,
+                )
+            declaration = declare(rel, path.read_bytes())
+            if declaration is not None:
+                if declaration.tier == "blocked" and declaration.spdx:
+                    raise PublishError(
+                        blocked_refusal(rel, declaration.spdx) + ".", file=rel
+                    )
+                plan.licenses.append(declaration)
+            plan.files.append(_DistFile(upload_path=rel, source=path, size=size))
+            continue
+        if path.suffix.lower() not in DATA_EXTENSIONS:
+            continue
         _check_safe_path(rel)
         size = path.stat().st_size
         if size > MAX_FILE_BYTES:
@@ -365,6 +410,7 @@ def publish_dist(
     api_base: str | None = None,
     transport: HttpTransport | None = None,
     on_progress: Callable[[str], None] | None = None,
+    on_warning: Callable[[str], None] | None = None,
 ) -> PublishResult:
     """Publish a built ``dist/`` directory, or a ``.swn`` document, to mjswan Cloud.
 
@@ -378,7 +424,10 @@ def publish_dist(
         api_base: Cloud API base URL. Falls back to ``$MJSWAN_API_BASE``, then
             ``https://api.mjswan.com``.
         transport: HTTP transport (injectable for tests).
-        on_progress: Optional callback invoked with human-readable status lines.
+        on_progress: Optional callback invoked with human-readable status lines,
+            among them one per license file the build declares.
+        on_warning: Optional callback for the warning a restricted license earns
+            (ADR 0007 §3); defaults to :func:`warnings.warn`. The publish proceeds.
 
     Returns:
         :class:`PublishResult` with the published simulation id.
@@ -391,6 +440,9 @@ def publish_dist(
     transport = transport or HttpTransport()
     base = resolve_api_base(api_base)
     notify = on_progress or (lambda _msg: None)
+    warn = on_warning or (
+        lambda msg: warnings.warn(msg, category=RuntimeWarning, stacklevel=3)
+    )
 
     # A document uploads exactly the file set its directory would, so the server never
     # needs to know it existed (ADR 0006 §8). The upload runs inside the context: a
@@ -398,6 +450,12 @@ def publish_dist(
     try:
         with as_directory(Path(dist_dir)) as tree:
             plan = plan_publish(tree)
+            # Declared before any byte moves: a publish never carries a license file
+            # the author did not see.
+            for declaration in plan.licenses:
+                notify(f"License file: {declaration.describe()}")
+            for message in plan.license_warnings():
+                warn(message)
             resolved_token = resolve_token(token)
 
             resolved_title = title or _default_title(plan.config)

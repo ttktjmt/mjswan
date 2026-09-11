@@ -172,6 +172,7 @@ def publish_cmd(
             token=token,
             api_base=api_base,
             on_progress=lambda msg: console.print(f"[dim]{msg}[/dim]"),
+            on_warning=lambda msg: console.print(f"[yellow]Warning:[/yellow] {msg}"),
         )
     except PublishError as exc:
         location = f" [dim]({exc.file})[/dim]" if exc.file else ""
@@ -462,6 +463,21 @@ def info_cmd(
     console.print(tree)
 
 
+def _describe_licenses(node, root: Path, directory: Path) -> None:
+    """One line per license file in ``directory`` (ADR 0007 §4), identifier included."""
+    from mjswan.licenses import declare
+
+    for path in sorted(directory.iterdir()) if directory.is_dir() else []:
+        if not path.is_file():
+            continue
+        declaration = declare(path.relative_to(root).as_posix(), path.read_bytes())
+        if declaration is None:
+            continue
+        label = "License" if declaration.location.kind == "LICENSE" else "Notice"
+        what = f": [blue]{declaration.spdx}[/blue]" if declaration.spdx else ""
+        node.add(f"{label}{what}  [dim]{declaration.path}[/dim]")
+
+
 def _describe_projects(tree, root: Path, manifest: dict) -> int:
     """Add one node per project/scene/MDP/policy under ``tree``; return the asset bytes."""
     total_bytes = 0
@@ -469,6 +485,7 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
         p_node = tree.add(
             f"[cyan]{project['name']}[/cyan]  [dim][{project['id']}][/dim]"
         )
+        _describe_licenses(p_node, root, root / project["id"])
         for scene in project.get("scenes", []):
             scene_dir = root / project["id"] / scene["id"]
             scene_path = scene_dir / scene.get("scene", "")
@@ -479,6 +496,7 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
                 f"[dim]{scene['id']}/{scene.get('scene', '')}  "
                 f"({_fmt_size(scene_size)})[/dim]"
             )
+            _describe_licenses(s_node, root, scene_dir)
             for mdp in scene.get("mdps", []):
                 graphs = list((scene_dir / "mdp" / mdp["id"]).rglob("*.onnx"))
                 s_node.add(

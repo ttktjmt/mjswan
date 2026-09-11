@@ -292,6 +292,165 @@ class TestPlanPublish:
         )
 
 
+# ── license files (ADR 0007 §3) ──────────────────────────────────────────────
+
+
+def _with_licenses(dist: Path, files: dict[str, str | bytes]) -> Path:
+    for rel, content in files.items():
+        target = dist / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, str):
+            target.write_text(content)
+        else:
+            target.write_bytes(content)
+    return dist
+
+
+class TestLicenseFiles:
+    def test_admits_project_and_scene_files_as_text_never_the_root(self, tmp_path):
+        from mjswan.licenses import license_template
+
+        dist = _with_licenses(
+            _make_dist(tmp_path),
+            {
+                "LICENSE": "the engine's Apache-2.0",
+                "demo/LICENSE": license_template("Apache-2.0"),
+                "demo/NOTICE": "Built with mjswan.\n",
+                "demo/humanoid/LICENSE.unitree_go2": license_template("BSD-3-Clause"),
+                "demo/humanoid/NOTICE": "a notice for the scene itself\n",
+                "demo/humanoid/mdp/LICENSE": "too deep to count\n",
+            },
+        )
+        plan = plan_publish(dist)
+        paths = {f.upload_path for f in plan.files}
+        assert {
+            "demo/LICENSE",
+            "demo/NOTICE",
+            "demo/humanoid/LICENSE.unitree_go2",
+            "demo/humanoid/NOTICE",
+        } <= paths
+        assert "LICENSE" not in paths
+        assert "demo/humanoid/mdp/LICENSE" not in paths
+        manifest = {e["path"]: e for e in plan.manifest()}
+        assert manifest["demo/LICENSE"]["contentType"] == "text/plain; charset=utf-8"
+        assert (
+            manifest["demo/humanoid/NOTICE"]["contentType"]
+            == "text/plain; charset=utf-8"
+        )
+        assert [d.describe() for d in plan.licenses] == [
+            "demo/LICENSE (Apache-2.0)",
+            "demo/NOTICE",
+            "demo/humanoid/LICENSE.unitree_go2 (BSD-3-Clause)",
+            "demo/humanoid/NOTICE",
+        ]
+        assert plan.license_warnings() == []
+
+    def test_the_declaration_is_printed_before_the_upload(self, tmp_path):
+        from mjswan.licenses import license_template
+
+        dist = _with_licenses(
+            _make_dist(tmp_path), {"demo/LICENSE": license_template("MIT")}
+        )
+        messages: list[str] = []
+        transport = FakeTransport()
+        publish_dist(
+            dist, token="tok", transport=transport, on_progress=messages.append
+        )
+        assert messages[0] == "License file: demo/LICENSE (MIT)"
+        assert any(u.endswith("demo/LICENSE") for u, _, _ in transport.puts)
+
+    def test_a_restricted_license_warns_and_still_publishes(self, tmp_path):
+        dist = _with_licenses(
+            _make_dist(tmp_path),
+            {
+                "demo/humanoid/LICENSE.lafan1": "Attribution-NonCommercial-NoDerivatives "
+                "4.0 International Public License\n..."
+            },
+        )
+        warnings_seen: list[str] = []
+        transport = FakeTransport()
+        result = publish_dist(
+            dist, token="tok", transport=transport, on_warning=warnings_seen.append
+        )
+        assert result.id == "abc1234"
+        assert len(warnings_seen) == 1
+        assert warnings_seen[0].startswith(
+            "demo/humanoid/LICENSE.lafan1 is CC-BY-NC-ND-4.0 (non-commercial use only"
+        )
+
+    def test_a_restricted_license_warns_through_warnings_by_default(self, tmp_path):
+        dist = _with_licenses(
+            _make_dist(tmp_path),
+            {"demo/LICENSE": "GNU GENERAL PUBLIC LICENSE\n Version 3, 29 June 2007\n"},
+        )
+        with pytest.warns(RuntimeWarning, match="demo/LICENSE is GPL-3.0-only"):
+            publish_dist(dist, token="tok", transport=FakeTransport())
+
+    def test_a_blocked_license_is_refused_before_any_network_call(self, tmp_path):
+        dist = _with_licenses(
+            _make_dist(tmp_path),
+            {
+                "demo/humanoid/LICENSE.amass": "SPDX-License-Identifier: LicenseRef-AMASS\n"
+            },
+        )
+        transport = FakeTransport()
+        with pytest.raises(PublishError) as exc:
+            publish_dist(dist, token="tok", transport=transport)
+        assert exc.value.file == "demo/humanoid/LICENSE.amass"
+        assert "the AMASS license" in str(exc.value)
+        assert "cannot be published" in str(exc.value)
+        assert transport.posts == []
+
+    def test_the_max_planck_text_is_recognised_without_a_tag(self, tmp_path):
+        dist = _with_licenses(
+            _make_dist(tmp_path),
+            {
+                "demo/humanoid/LICENSE.smpl": "Software Copyright License for "
+                "non-commercial scientific research purposes\n"
+            },
+        )
+        with pytest.raises(PublishError, match="Max Planck non-commercial"):
+            plan_publish(dist)
+
+    def test_a_custom_text_is_carried_without_comment(self, tmp_path):
+        dist = _with_licenses(
+            _make_dist(tmp_path), {"demo/LICENSE": "Use it however you like.\n"}
+        )
+        plan = plan_publish(dist)
+        assert [d.describe() for d in plan.licenses] == ["demo/LICENSE (Custom)"]
+        assert plan.license_warnings() == []
+
+    def test_an_oversized_license_file_is_refused(self, tmp_path):
+        from mjswan.licenses import LICENSE_FILE_MAX_BYTES
+
+        dist = _with_licenses(
+            _make_dist(tmp_path), {"demo/LICENSE": b"x" * (LICENSE_FILE_MAX_BYTES + 1)}
+        )
+        with pytest.raises(
+            PublishError, match="License file exceeds the 64 KiB limit"
+        ) as exc:
+            plan_publish(dist)
+        assert exc.value.file == "demo/LICENSE"
+
+    def test_the_cli_prints_the_warning(self, tmp_path, monkeypatch):
+        from typer.testing import CliRunner
+
+        from mjswan._cli import app
+        from mjswan.publish import PublishResult
+
+        def fake_publish_dist(dist_dir, **kwargs):
+            kwargs["on_warning"]("demo/LICENSE is GPL-3.0-only (copyleft).")
+            return PublishResult(id="s1", sim_id="s1", upload_id="u")
+
+        monkeypatch.setattr("mjswan.publish.publish_dist", fake_publish_dist)
+        result = CliRunner().invoke(
+            app, ["publish", str(_make_dist(tmp_path)), "--token", "tok"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Warning:" in result.output
+        assert "GPL-3.0-only" in result.output
+
+
 # ── token resolution ─────────────────────────────────────────────────────────
 
 
