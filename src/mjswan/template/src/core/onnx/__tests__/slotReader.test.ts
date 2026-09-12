@@ -485,6 +485,21 @@ describe('createSlotReader — sim slots', () => {
     const read = createSlotReader(() => context());
     expect(read({ sim: 'no_such_field' })).toBeNull();
   });
+
+  it('serves only the rows a narrowed slot names, each as wide as the traced shape says', () => {
+    // The build narrowed cvel to bodies 1 and 3: the graph takes those two 6-wide rows,
+    // in that order, and nothing else of the 4-body array.
+    const { mjModel, mjData } = fakeScene();
+    (mjData.cvel as Float64Array).set([7, 8, 9, 10, 11, 12], 18);
+    const read = createSlotReader(() => ({ mjModel, mjData }) as unknown as SlotReaderContext);
+    close(read({ sim: 'cvel', rows: [1, 3], shape: [1, 2, 6] }), [
+      0.1, 0.2, 0.3, 1, 0, 0, 7, 8, 9, 10, 11, 12,
+    ]);
+    // A rank-2 field is one value per row.
+    close(read({ sim: 'qpos', rows: [11, 12], shape: [1, 2] }), [1.25, -0.75]);
+    // Rows come back in the order the graph expects, not ascending.
+    close(read({ sim: 'qpos', rows: [12, 11], shape: [1, 2] }), [-0.75, 1.25]);
+  });
 });
 
 describe('slotDims', () => {

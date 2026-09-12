@@ -150,8 +150,18 @@ manifest's MDP entry, and the browser's slot reader serves each one from `mjMode
 ```
 
 Four slot namespaces exist: an entity `data` field (as above), a named MuJoCo sensor's
-`sensordata` window, a live command's state field, and a raw `mjData` field
-(`{"sim": "cvel", "input": "sim__cvel", "shape": [1, 102, 6]}`).
+`sensordata` window, a live command's state field, and a raw `mjData` field:
+
+```json
+{ "sim": "cvel", "input": "sim__cvel", "shape": [1, 17, 6], "rows": [1, 4, 7] }
+```
+
+A raw field is served whole unless the build could tell which rows the term indexes —
+`rows` then names them, in the order the graph takes them, and the graph gathers
+nothing: `site_xmat` on a 2038-site model is 18,342 floats a step read whole, 153 for
+the 17 sites a term uses. A read the build cannot pin down statically (an index computed
+from data, a boolean mask) ships the whole field; narrowing is per slot, not
+all-or-nothing.
 
 Raw `mjData` is the foundation. A term reading `entity.data.data.<field>` — a muscle
 model's activation state, the sim time — gets a `sim` slot directly, and an `EntityData`

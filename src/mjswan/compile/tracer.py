@@ -18,10 +18,11 @@ import io
 import re
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable, Collection, Sequence
+from typing import Any, Callable, Collection, Sequence, cast
 
 import torch
 from torch import nn
+from torch.utils._pytree import tree_leaves, tree_map
 
 from .rng import DrawRecorder, ReplayRng
 
@@ -53,7 +54,8 @@ def _is_dynamic_field(field_name: str) -> bool:
 #   (entity_name, data_field)        -> env.scene[entity].data.<field>
 #   (_SENSOR_NS, sensor_name)        -> env.scene[sensor].data (a whole BuiltinSensor)
 #   (_COMMAND_NS, "cmd.attr")        -> env.command_manager.get_term(cmd).<attr>
-#   (_SIM_NS, field)                 -> env.scene[entity].data.data.<field> (raw sim data)
+#   (_SIM_NS, field)                 -> env.sim.data.<field> (raw sim data; maybe narrowed
+#                                        to the rows the term indexes, see SimRows)
 SlotKey = tuple[str, str]
 
 # A tagged key identifies one value an event/command body reads off ``env``. Wider than
@@ -215,25 +217,213 @@ def _is_sensor(scene: Any, name: str) -> bool:
 # --- Recording proxy: discovers which env fields a term reads. ---
 
 
+def _index_rows(index: Any, size: int | None) -> list[int] | None:
+    """The rows of axis 1 an ``x[:, sel, ...]`` read touches, or ``None`` when that
+    cannot be told statically: a batch-axis index, a boolean mask, a field with no
+    element axis, an index computed from data."""
+    parts = cast("tuple[Any, ...]", index) if isinstance(index, tuple) else ()
+    if size is None or len(parts) < 2:
+        return None
+    lead, sel = parts[0], parts[1]
+    if not (isinstance(lead, slice) and lead == slice(None)):
+        return None
+    if isinstance(sel, bool):
+        return None
+    if isinstance(sel, int):
+        return [sel % size]
+    if isinstance(sel, slice):
+        return list(range(*sel.indices(size)))
+    if isinstance(sel, torch.Tensor):
+        if sel.dtype == torch.bool or sel.dim() > 1:
+            return None
+        return [int(v) % size for v in sel.reshape(-1).tolist()]
+    if isinstance(sel, (list, tuple)) and all(
+        isinstance(v, int) and not isinstance(v, bool) for v in sel
+    ):
+        return [v % size for v in sel]
+    return None
+
+
+class _RowRecord:
+    """Which rows of one raw field a term's reads touch.
+
+    ``None`` once any read cannot be narrowed — the whole field used as a value, or an
+    index that cannot be told statically — after which the slot ships whole.
+    """
+
+    def __init__(self, size: int | None):
+        self.size = size
+        self.rows: set[int] | None = set()
+
+    def note(self, index: Any) -> None:
+        if self.rows is None:
+            return
+        rows = _index_rows(index, self.size)
+        if rows is None:
+            self.rows = None
+        else:
+            self.rows.update(rows)
+
+    def whole(self) -> None:
+        self.rows = None
+
+
+class _FieldProxy(torch.Tensor):
+    """A raw sim field with ``__getitem__`` in the tracer's hands; every other torch
+    function sees the plain tensor. Never constructed directly: ``as_subclass``."""
+
+
+def _plain(value: Any) -> Any:
+    return value.as_subclass(torch.Tensor) if isinstance(value, _FieldProxy) else value
+
+
+# Attribute reads and shape queries on a raw field say nothing about which of its values
+# a term uses, so they neither narrow nor widen it.
+_SHAPE_QUERIES = frozenset({"__get__", "size", "dim", "ndimension", "numel", "__len__"})
+
+
+class _RecordingField(_FieldProxy):
+    """A raw sim field during discovery, noting the rows each ``[:, sel]`` read touches.
+
+    The read's result is a plain tensor, so only indexing *into the field* is noted; any
+    other use of the field is the whole of it.
+    """
+
+    _record: _RowRecord
+
+    @classmethod
+    def __torch_function__(
+        cls,
+        func: Any,
+        types: Any,
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> Any:
+        kwargs = kwargs or {}
+        if func is torch.Tensor.__getitem__ and isinstance(args[0], cls):
+            args[0]._record.note(args[1])
+        elif getattr(func, "__name__", None) not in _SHAPE_QUERIES:
+            for leaf in tree_leaves((args, kwargs)):
+                if isinstance(leaf, cls):
+                    leaf._record.whole()
+        return func(*tree_map(_plain, args), **tree_map(_plain, kwargs))
+
+
+class _NarrowedField(_FieldProxy):
+    """A raw field the graph takes already narrowed to ``rows``.
+
+    The term still indexes it by the field's own ids; those are remapped here to
+    positions in the input. A read of exactly the rows, in order, is the input itself —
+    no Gather enters the graph.
+    """
+
+    _rows: list[int]
+    _size: int
+
+    @classmethod
+    def __torch_function__(
+        cls,
+        func: Any,
+        types: Any,
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> Any:
+        kwargs = kwargs or {}
+        if func is torch.Tensor.__getitem__ and isinstance(args[0], cls):
+            return args[0]._remapped(args[1])
+        return func(*tree_map(_plain, args), **tree_map(_plain, kwargs))
+
+    def _remapped(self, index: Any) -> torch.Tensor:
+        with warnings.catch_warnings():
+            # The index is a model constant (`indexing.body_ids`), the same one
+            # discovery read; the tracer cannot know that and warns on `tolist()`.
+            warnings.filterwarnings(
+                "ignore", message="Converting a tensor to a Python list"
+            )
+            rows = _index_rows(index, self._size)
+        lookup = {row: at for at, row in enumerate(self._rows)}
+        if rows is None or any(row not in lookup for row in rows):
+            raise ValueError(
+                f"A term indexed a narrowed sim field by rows the discovery pass did "
+                f"not see ({index!r}); the index depends on the input, which is not "
+                "traceable."
+            )
+        positions = [lookup[row] for row in rows]
+        parts = cast("tuple[Any, ...]", index)
+        sel = parts[1]
+        new: Any
+        if isinstance(sel, int) or (isinstance(sel, torch.Tensor) and sel.dim() == 0):
+            new = positions[0]
+        elif positions == list(range(len(self._rows))):
+            new = slice(None)
+        else:
+            new = torch.tensor(positions, dtype=torch.long)
+        return _plain(self)[(parts[0], new, *parts[2:])]
+
+
+def _narrowed_field(tensor: torch.Tensor, rows: list[int], size: int) -> _NarrowedField:
+    field = tensor.as_subclass(_NarrowedField)
+    field._rows = rows
+    field._size = size
+    return field
+
+
+#: Per narrowed sim slot: the rows the input carries, and the field's full row count.
+SimRows = dict[SlotKey, tuple[list[int], int]]
+
+
 class _RecordingSimData:
-    """Wraps the raw ``SimData`` behind ``Entity.data.data``, logging each field read.
+    """Wraps the raw ``SimData`` behind ``env.sim.data`` — the object every
+    ``Entity.data.data`` is — logging each field read and the rows the reads touch.
 
     Reached two ways: a term reading the sim directly (a muscle model's ``act``, or
     ``time`` — what ``EntityData`` does not wrap), and an ``EntityData`` property traced
     through it. The sim is one object shared by every entity, hence its own namespace
     rather than the entity's. Fields are warp-backed ``TorchArray`` proxies; the tensor
-    view is what gets logged and returned, since the tracer only follows real tensors.
+    view is what gets logged, and the term gets it as a :class:`_RecordingField`.
     """
 
-    def __init__(self, real: Any, log: list[tuple[SlotKey, Any]]):
-        object.__setattr__(self, "_real", real)
+    def __init__(self, env: Any, log: list[tuple[SlotKey, Any]]):
+        object.__setattr__(self, "_env", env)
         object.__setattr__(self, "_log", log)
+        object.__setattr__(self, "_records", {})
 
     def __getattr__(self, name: str) -> Any:
-        value = _sim_tensor(getattr(self._real, name))
-        if isinstance(value, torch.Tensor):
-            self._log.append(((_SIM_NS, name), value))
-        return value
+        value = _sim_tensor(getattr(self._env.sim.data, name))
+        if not isinstance(value, torch.Tensor):
+            return value
+        self._log.append(((_SIM_NS, name), value))
+        record = self._records.get(name)
+        if record is None:
+            # Only an element axis can be narrowed; `time` is `(nworld,)`.
+            record = _RowRecord(int(value.shape[1]) if value.dim() > 1 else None)
+            self._records[name] = record
+        field = value.as_subclass(_RecordingField)
+        field._record = record
+        return field
+
+
+def _merge_narrowing(sims: Sequence[_RecordingSimData]) -> SimRows:
+    """The rows each sim field can be narrowed to, across every term that read it.
+
+    Terms index one field by different sets — ``cvel`` by the root body in one, by every
+    site's body in another — so the union is taken and the input carries it once. A
+    field any term used whole, or indexed in a way that cannot be told statically, ships
+    whole: narrowing is per slot, not all-or-nothing.
+    """
+    merged: dict[str, tuple[set[int] | None, int | None]] = {}
+    for sim in sims:
+        for name, record in sim._records.items():  # noqa: SLF001 — internal proxy
+            rows, size = merged.get(name, (set(), record.size))
+            if rows is None or not record.rows:
+                merged[name] = (None, size)
+            else:
+                merged[name] = (rows | record.rows, size)
+    return {
+        (_SIM_NS, name): (sorted(rows), size)
+        for name, (rows, size) in merged.items()
+        if rows and size is not None
+    }
 
 
 def _sim_tensor(value: Any) -> Any:
@@ -259,24 +449,25 @@ class _RecordingData:
         entity: str,
         log: list[tuple[SlotKey, Any]],
         reader_fields: Collection[str],
+        sim: _RecordingSimData,
     ):
         object.__setattr__(self, "_real", real)
         object.__setattr__(self, "_entity", entity)
         object.__setattr__(self, "_log", log)
         object.__setattr__(self, "_reader_fields", reader_fields)
+        object.__setattr__(self, "_sim", sim)
         object.__setattr__(self, "_traced", None)
 
     def _through(self) -> Any:
         """The copy a traced-through property runs against, built on first use — a
         stand-in ``Entity.data`` with no sim behind it never needs one."""
         if self._traced is None:
-            sim = _RecordingSimData(self._real.data, self._log)
-            object.__setattr__(self, "_traced", _with_sim_data(self._real, sim))
+            object.__setattr__(self, "_traced", _with_sim_data(self._real, self._sim))
         return self._traced
 
     def __getattr__(self, name: str) -> Any:
         if name == "data":
-            return self._through().data
+            return self._sim
         if _traces_through(self._real, name, self._reader_fields):
             return getattr(self._through(), name)
         value = getattr(self._real, name)
@@ -291,9 +482,10 @@ class _RecordingEntity:
         name: str,
         log: list[tuple[SlotKey, Any]],
         reader_fields: Collection[str],
+        sim: _RecordingSimData,
     ):
         self._real = real
-        self.data = _RecordingData(real.data, name, log, reader_fields)
+        self.data = _RecordingData(real.data, name, log, reader_fields, sim)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._real, name)
@@ -306,11 +498,13 @@ class _RecordingScene:
         log: list[tuple[SlotKey, Any]],
         sensors: dict[str, Any],
         reader_fields: Collection[str],
+        sim: _RecordingSimData,
     ):
         self._real = real
         self._log = log
         self._sensors = sensors
         self._reader_fields = reader_fields
+        self._sim = sim
 
     def __getitem__(self, name: str) -> Any:
         real = self._real[name]
@@ -318,7 +512,7 @@ class _RecordingScene:
             # Keep the real sensor so the replay pass can subclass its class.
             self._sensors[name] = real
             return _sensor_proxy(real, lambda: self._read_sensor(name, real))
-        return _RecordingEntity(real, name, self._log, self._reader_fields)
+        return _RecordingEntity(real, name, self._log, self._reader_fields, self._sim)
 
     def _read_sensor(self, name: str, real: Any) -> Any:
         value = real.data
@@ -388,10 +582,13 @@ class _RecordingEnv:
         object.__setattr__(self, "_log", [])
         object.__setattr__(self, "_sensors", {})
         object.__setattr__(self, "_commands", {})
+        object.__setattr__(self, "_sim", _RecordingSimData(real, self._log))
         object.__setattr__(
             self,
             "scene",
-            _RecordingScene(real.scene, self._log, self._sensors, reader_fields),
+            _RecordingScene(
+                real.scene, self._log, self._sensors, reader_fields, self._sim
+            ),
         )
 
     def __getattr__(self, name: str) -> Any:
@@ -406,7 +603,11 @@ class _RecordingEnv:
 
 
 class _ReplaySimData:
-    """Serves recorded raw ``SimData`` fields during the replay pass."""
+    """Serves recorded raw ``SimData`` fields during the replay pass.
+
+    A narrowed one arrives as a :class:`_NarrowedField`, which remaps the term's
+    indexing to the rows the input carries.
+    """
 
     def __init__(self, slots: dict[SlotKey, torch.Tensor]):
         object.__setattr__(self, "_slots", slots)
@@ -615,6 +816,30 @@ def _export_onnx(
     return buffer.getvalue()
 
 
+def _narrow_slots(slots: dict[SlotKey, torch.Tensor], sim_rows: SimRows) -> None:
+    """Hand the replay the narrowed sim inputs as fields that remap the term's ids."""
+    for key, (rows, size) in sim_rows.items():
+        slots[key] = _narrowed_field(slots[key], rows, size)
+
+
+def _narrow_inputs(
+    dynamic: dict[SlotKey, torch.Tensor], sims: Sequence[_RecordingSimData]
+) -> SimRows:
+    """Narrow each sim example input to the rows the reads touched; see
+    :func:`_merge_narrowing`. Returns what was narrowed, for the module and the export."""
+    sim_rows = _merge_narrowing(sims)
+    for key, (rows, _size) in sim_rows.items():
+        dynamic[key] = dynamic[key][:, rows]
+    return sim_rows
+
+
+def _input_rows(
+    dynamic_keys: Sequence[SlotKey], sim_rows: SimRows
+) -> list[list[int] | None]:
+    """Per input slot, the rows it carries, or None for a whole field."""
+    return [sim_rows[k][0] if k in sim_rows else None for k in dynamic_keys]
+
+
 def _classify_slots(
     log: list[tuple[SlotKey, Any]],
     dynamic: dict[SlotKey, torch.Tensor],
@@ -684,6 +909,7 @@ class _TermModule(nn.Module):
         commands: dict[str, Any] | None = None,
         real_env: Any,
         reader_fields: Collection[str] = READER_FIELDS,
+        sim_rows: SimRows | None = None,
     ):
         super().__init__()
         self._func = func
@@ -693,10 +919,12 @@ class _TermModule(nn.Module):
         self._commands = commands or {}
         self._real_env = real_env
         self._reader_fields = reader_fields
+        self._sim_rows = sim_rows or {}
         self._const_buffers = _register_consts(self, constants)
 
     def forward(self, *dynamic: torch.Tensor) -> torch.Tensor:
         slots: dict[SlotKey, torch.Tensor] = dict(zip(self._dynamic_keys, dynamic))
+        _narrow_slots(slots, self._sim_rows)
         slots.update(_const_values(self, self._const_buffers))
         env = _ReplayEnv(
             slots,
@@ -767,6 +995,8 @@ class TermExport:
     constant_slots: list[SlotKey] = field(default_factory=list)
     input_shapes: list[list[int]] = field(default_factory=list)
     """Traced shape of each input slot, parallel to ``input_slots`` (see :func:`slots_json`)."""
+    input_rows: list[list[int] | None] = field(default_factory=list)
+    """Per input slot, the rows of the raw field it carries; None for a whole field."""
 
 
 def _slot_input_name(key: SlotKey) -> str:
@@ -797,15 +1027,21 @@ def slot_label(key: SlotKey) -> str:
     return f"{namespace}.{name_part}"
 
 
-def slot_to_json(key: SlotKey, shape: Sequence[int] | None = None) -> dict[str, Any]:
-    """Serialize one input slot for ``policy.json`` / ``config.json``.
+def slot_to_json(
+    key: SlotKey,
+    shape: Sequence[int] | None = None,
+    rows: Sequence[int] | None = None,
+) -> dict[str, Any]:
+    """Serialize one input slot for the manifest's MDP entry.
 
     Four shapes, told apart by which keys are present: ``{"entity", "field"}``,
-    ``{"sensor"}``, ``{"command", "field"}``, or ``{"sim"}`` (a whole raw ``mjData``
-    field). All carry ``input`` (the graph input name) and ``shape`` — the runtime
-    feeds a flat array and cannot recover the rank without it.
+    ``{"sensor"}``, ``{"command", "field"}``, or ``{"sim"}`` (a raw ``mjData`` field —
+    whole, or the ``rows`` of its element axis the graph takes, in order). All carry
+    ``input`` (the graph input name) and ``shape`` — the runtime feeds a flat array and
+    cannot recover the rank without it.
     """
     namespace, name_part = key
+    entry: dict[str, Any]
     if namespace == _SENSOR_NS:
         sensor_name, dot, sensor_field = name_part.partition(".")
         entry = {"sensor": sensor_name, "input": _slot_input_name(key)}
@@ -822,6 +1058,8 @@ def slot_to_json(key: SlotKey, shape: Sequence[int] | None = None) -> dict[str, 
         }
     elif namespace == _SIM_NS:
         entry = {"sim": name_part, "input": _slot_input_name(key)}
+        if rows is not None:
+            entry["rows"] = [int(r) for r in rows]
     else:
         entry = {
             "entity": namespace,
@@ -841,8 +1079,13 @@ def slots_json(export: Any) -> list[dict[str, Any]]:
     is not a graph input.
     """
     shapes = getattr(export, "input_shapes", None) or []
+    rows = getattr(export, "input_rows", None) or []
     entries = [
-        slot_to_json(key, shapes[i] if i < len(shapes) else None)
+        slot_to_json(
+            key,
+            shapes[i] if i < len(shapes) else None,
+            rows[i] if i < len(rows) else None,
+        )
         for i, key in enumerate(export.input_slots)
     ]
     graph_inputs = _graph_input_names(getattr(export, "onnx_bytes", None))
@@ -919,6 +1162,7 @@ def trace_term(
             "term (e.g. time_out) or bake its value (ADR 0005)."
         )
 
+    sim_rows = _narrow_inputs(dynamic, [recorder._sim])  # noqa: SLF001
     dynamic_keys = sorted(dynamic)
     input_names = [_slot_input_name(k) for k in dynamic_keys]
     example_inputs = tuple(dynamic[k] for k in dynamic_keys)
@@ -935,6 +1179,7 @@ def trace_term(
         commands=commands,
         real_env=env,
         reader_fields=readers,
+        sim_rows=sim_rows,
     ).eval()
     output_name = "value"
     onnx_bytes = _export_onnx(
@@ -955,11 +1200,14 @@ def trace_term(
         reference_output=recorded.detach(),
         constant_slots=sorted(constants),
         input_shapes=[list(t.shape) for t in example_inputs],
+        input_rows=_input_rows(dynamic_keys, sim_rows),
     )
 
 
-def read_slot(env: Any, key: SlotKey) -> torch.Tensor:
-    """Read an input slot's current value from ``env``."""
+def read_slot(
+    env: Any, key: SlotKey, rows: Sequence[int] | None = None
+) -> torch.Tensor:
+    """Read an input slot's current value from ``env``; a sim slot narrowed to ``rows``."""
     namespace, name_part = key
     if namespace == _SENSOR_NS:
         sensor_name, dot, sensor_field = name_part.partition(".")
@@ -969,7 +1217,8 @@ def read_slot(env: Any, key: SlotKey) -> torch.Tensor:
         command_name, _, attr = name_part.partition(".")
         return getattr(env.command_manager.get_term(command_name), attr)
     if namespace == _SIM_NS:
-        return _sim_tensor(getattr(env.sim.data, name_part))
+        value = _sim_tensor(getattr(env.sim.data, name_part))
+        return value if rows is None else value[:, list(rows)]
     return getattr(env.scene[namespace].data, name_part)
 
 
@@ -1773,6 +2022,7 @@ class GroupExport:
     output_name: str
     reference_output: torch.Tensor
     constant_slots: list[SlotKey] = field(default_factory=list)
+    input_rows: list[list[int] | None] = field(default_factory=list)
 
 
 class _GroupModule(nn.Module):
@@ -1795,6 +2045,7 @@ class _GroupModule(nn.Module):
         baked: dict[str, torch.Tensor],
         real_env: Any,
         reader_fields: Collection[str] = READER_FIELDS,
+        sim_rows: SimRows | None = None,
     ):
         super().__init__()
         self._terms = terms
@@ -1804,6 +2055,7 @@ class _GroupModule(nn.Module):
         self._native_names = native_names
         self._real_env = real_env
         self._reader_fields = reader_fields
+        self._sim_rows = sim_rows or {}
         self._const_buffers = _register_consts(self, constants)
         # A term reading no dynamic state is a value, not a function — bake it.
         self._baked_buffers = _register_consts(self, baked, prefix="_baked")
@@ -1811,6 +2063,7 @@ class _GroupModule(nn.Module):
     def forward(self, *args: torch.Tensor) -> torch.Tensor:
         split = len(self._dynamic_keys)
         slots: dict[SlotKey, torch.Tensor] = dict(zip(self._dynamic_keys, args[:split]))
+        _narrow_slots(slots, self._sim_rows)
         slots.update(_const_values(self, self._const_buffers))
         native = dict(zip(self._native_names, args[split:]))
         env = _ReplayEnv(
@@ -1897,6 +2150,7 @@ def trace_observation_group(
     native_examples: list[torch.Tensor] = []
     baked: dict[str, torch.Tensor] = {}
     layout: list[dict[str, Any]] = []
+    sims: list[_RecordingSimData] = []
     readers = _reader_fields(reader_fields)
 
     for term in terms:
@@ -1920,6 +2174,7 @@ def trace_observation_group(
         term_dynamic = _classify_slots(recorder._log, dynamic, constants)  # noqa: SLF001
         sensors.update(recorder._sensors)  # noqa: SLF001 — internal proxy
         commands.update(recorder._commands)  # noqa: SLF001 — internal proxy
+        sims.append(recorder._sim)  # noqa: SLF001 — internal proxy
         if not term_dynamic:
             # Nothing read means a constant; unfollowable reads mean live state.
             if recorder._log:  # noqa: SLF001 — internal proxy
@@ -1940,6 +2195,7 @@ def trace_observation_group(
 
     # 2. Fuse and export. Slots sorted for determinism, then natives in declaration
     #    order.
+    sim_rows = _narrow_inputs(dynamic, sims)
     dynamic_keys = sorted(dynamic)
     slot_names = [_slot_input_name(k) for k in dynamic_keys]
     native_names = [entry["name"] for entry in native_inputs]
@@ -1956,6 +2212,7 @@ def trace_observation_group(
         baked=baked,
         real_env=env,
         reader_fields=readers,
+        sim_rows=sim_rows,
     ).eval()
     output_name = "obs"
     with torch.no_grad():
@@ -1980,6 +2237,7 @@ def trace_observation_group(
         output_name=output_name,
         reference_output=reference,
         constant_slots=sorted(constants),
+        input_rows=_input_rows(dynamic_keys, sim_rows),
     )
 
 
@@ -2000,6 +2258,7 @@ class TerminationGroupExport:
     output_name: str
     reference_output: torch.Tensor
     constant_slots: list[SlotKey] = field(default_factory=list)
+    input_rows: list[list[int] | None] = field(default_factory=list)
 
 
 class _TerminationGroupModule(nn.Module):
@@ -2018,6 +2277,7 @@ class _TerminationGroupModule(nn.Module):
         commands: dict[str, Any],
         real_env: Any,
         reader_fields: Collection[str] = READER_FIELDS,
+        sim_rows: SimRows | None = None,
     ):
         super().__init__()
         self._terms = terms
@@ -2026,10 +2286,12 @@ class _TerminationGroupModule(nn.Module):
         self._commands = commands
         self._real_env = real_env
         self._reader_fields = reader_fields
+        self._sim_rows = sim_rows or {}
         self._const_buffers = _register_consts(self, constants)
 
     def forward(self, *dynamic: torch.Tensor) -> torch.Tensor:
         slots: dict[SlotKey, torch.Tensor] = dict(zip(self._dynamic_keys, dynamic))
+        _narrow_slots(slots, self._sim_rows)
         slots.update(_const_values(self, self._const_buffers))
         env = _ReplayEnv(
             slots,
@@ -2060,6 +2322,7 @@ def trace_termination_group(
     constants: dict[SlotKey, torch.Tensor] = {}
     sensors: dict[str, Any] = {}
     commands: dict[str, Any] = {}
+    sims: list[_RecordingSimData] = []
     readers = _reader_fields(reader_fields)
 
     for term in terms:
@@ -2073,6 +2336,7 @@ def trace_termination_group(
         term_dynamic = _classify_slots(recorder._log, dynamic, constants)  # noqa: SLF001
         sensors.update(recorder._sensors)  # noqa: SLF001 — internal proxy
         commands.update(recorder._commands)  # noqa: SLF001 — internal proxy
+        sims.append(recorder._sim)  # noqa: SLF001 — internal proxy
         if not term_dynamic:
             # Never baked: a termination blind to state never fires or always does.
             raise UntraceableTerm(
@@ -2086,6 +2350,7 @@ def trace_termination_group(
             "should be native (e.g. time_out)."
         )
 
+    sim_rows = _narrow_inputs(dynamic, sims)
     dynamic_keys = sorted(dynamic)
     input_names = [_slot_input_name(k) for k in dynamic_keys]
     example_inputs = tuple(dynamic[k] for k in dynamic_keys)
@@ -2098,6 +2363,7 @@ def trace_termination_group(
         commands=commands,
         real_env=env,
         reader_fields=readers,
+        sim_rows=sim_rows,
     ).eval()
     output_name = "done"
     with torch.no_grad():
@@ -2121,4 +2387,5 @@ def trace_termination_group(
         output_name=output_name,
         reference_output=reference,
         constant_slots=sorted(constants),
+        input_rows=_input_rows(dynamic_keys, sim_rows),
     )

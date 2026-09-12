@@ -6,8 +6,9 @@
  * indexing), in mjlab's element order (MJCF spec order, i.e. ascending model id within
  * an entity, free joint excluded), as float32.
  *
- * A `sim` slot is a raw `mjData` field read whole: mjlab's `SimData` is the entire sim
- * too, so the graph carries whatever indexing the term did. That is the foundation — an
+ * A `sim` slot is a raw `mjData` field — whole, or narrowed to the `rows` the term
+ * indexes, which the build worked out so the graph need not gather them. That is the
+ * foundation — an
  * `EntityData` property with no reader here is traced through to the `sim` fields it
  * reads, with mjlab's math in the graph — and the entity readers (`fields/`) are a
  * shortcut over it, one input in place of that math, reproducing mjlab's `EntityData`
@@ -58,14 +59,29 @@ export function isReadableEntityField(field: string): boolean {
   return field in FIELD_READERS;
 }
 
-/** A whole raw `mjData` field as float32, or null when `mjData` has no such array. */
-export function readSimField(mjData: MjData, field: string): Float32Array | null {
+/**
+ * A raw `mjData` field as float32 — whole, or the `rows` of its element axis the graph
+ * takes, each row `shape[2:]` wide (`cvel` is 6 per body) — or null when `mjData` has no
+ * such array.
+ */
+export function readSimField(
+  mjData: MjData,
+  field: string,
+  rows?: readonly number[],
+  shape?: readonly number[],
+): Float32Array | null {
   const value = (mjData as unknown as Record<string, unknown>)[field];
   if (typeof value === 'number') return new Float32Array([value]);
-  if (value && typeof (value as ArrayLike<number>).length === 'number') {
-    return Float32Array.from(value as ArrayLike<number>);
+  if (!value || typeof (value as ArrayLike<number>).length !== 'number') return null;
+  const array = value as ArrayLike<number>;
+  if (!rows) return Float32Array.from(array);
+  const width = (shape ?? []).slice(2).reduce((a, b) => a * b, 1);
+  const out = new Float32Array(rows.length * width);
+  for (let i = 0; i < rows.length; i++) {
+    const base = rows[i] * width;
+    for (let k = 0; k < width; k++) out[i * width + k] = array[base + k] ?? 0;
   }
-  return null;
+  return out;
 }
 
 /**
@@ -168,7 +184,7 @@ export function createSlotReader(
     const { mjModel, mjData } = context;
     if (!mjModel || !mjData) return null;
 
-    if (slot.sim) return readSimField(mjData, slot.sim);
+    if (slot.sim) return readSimField(mjData, slot.sim, slot.rows, slot.shape);
 
     if (slot.sensor) {
       if (slot.field) {

@@ -23,13 +23,15 @@ torch = pytest.importorskip("torch")
 
 import mujoco  # noqa: E402
 import numpy as np  # noqa: E402
+import onnx  # noqa: E402
 import onnxruntime as ort  # noqa: E402
 
 from mjswan.compile.tracer import (  # noqa: E402
     READER_FIELDS,
-    TermExport,
+    GroupTermSpec,
     read_slot,
     slots_json,
+    trace_observation_group,
     trace_term,
 )
 from mjswan.trace_env import build_single_entity_trace_env  # noqa: E402
@@ -67,19 +69,24 @@ def env():
     return build_single_entity_trace_env(_spec)
 
 
-def _run(export: TermExport, env) -> np.ndarray:
+def _run(export, env) -> np.ndarray:
     """The graph's output on the env's current state, fed through ``read_slot``."""
     session = ort.InferenceSession(
         export.onnx_bytes, providers=["CPUExecutionProvider"]
     )
     declared = {i.name for i in session.get_inputs()}
+    rows = export.input_rows or [None] * len(export.input_slots)
     feeds = {
-        name: read_slot(env, slot).detach().cpu().numpy().astype(np.float32)
-        for name, slot in zip(export.input_names, export.input_slots)
+        name: read_slot(env, slot, row).detach().cpu().numpy().astype(np.float32)
+        for name, slot, row in zip(export.input_names, export.input_slots, rows)
         if name in declared
     }
     (out,) = session.run([export.output_name], feeds)
     return out
+
+
+def _ops(export) -> list[str]:
+    return [n.op_type for n in onnx.load_from_string(export.onnx_bytes).graph.node]
 
 
 def _move(env, seed: int) -> None:
@@ -115,6 +122,35 @@ def _body_link_vel(env):
 
 def _joint_torques(env):
     return env.scene["robot"].data.joint_torques
+
+
+def _body_pos(env):
+    return env.scene["robot"].data.body_link_pos_w.reshape(1, -1)
+
+
+def _root_ang_vel(env):
+    return env.scene["robot"].data.root_link_ang_vel_w
+
+
+def _body_ang_vel(env):
+    return env.scene["robot"].data.body_link_ang_vel_w.reshape(1, -1)
+
+
+def _cvel_twice(env):
+    """One field, two index sets: the root body alone, then bodies 1 and 2."""
+    cvel = env.scene["robot"].data.data.cvel
+    return torch.cat([cvel[:, 1].reshape(1, -1), cvel[:, [1, 2]].reshape(1, -1)], -1)
+
+
+def _qvel_whole(env):
+    return (env.scene["robot"].data.data.qvel * 2.0)[:, 0:1]
+
+
+def _qpos_masked(env):
+    qpos = env.scene["robot"].data.data.qpos
+    mask = torch.zeros(qpos.shape[1], dtype=torch.bool)
+    mask[0] = True
+    return qpos[:, mask]
 
 
 def test_raw_sim_fields_become_sim_slots(env):
@@ -201,3 +237,74 @@ class TestShortcut:
 
         properties = {n for n, v in vars(EntityData).items() if isinstance(v, property)}
         assert READER_FIELDS == (properties - {"joint_torques"}) | {"gravity_vec_w"}
+
+
+class TestNarrowing:
+    """A sim slot carries only the rows the term indexes (§3): the manifest says which,
+    the graph gathers nothing, and the browser reads those rows."""
+
+    def test_indexed_reads_narrow_the_slot_to_their_rows(self, env):
+        indexing = env.scene["robot"].indexing
+        export = trace_term(_body_link_vel, {}, env, name="v", reader_fields=())
+        entries = {e["sim"]: e for e in slots_json(export)}
+        body_ids = [int(b) for b in indexing.body_ids.tolist()]
+        assert entries["xpos"]["rows"] == body_ids
+        assert entries["xpos"]["shape"] == [1, len(body_ids), 3]
+        assert entries["cvel"]["rows"] == body_ids
+        assert entries["subtree_com"]["rows"] == [indexing.root_body_id]
+
+    def test_a_read_of_exactly_the_rows_gathers_nothing(self, env):
+        # `body_link_pos_w` indexes xpos and xquat by every body: the input already is
+        # those rows, in order, so the graph is a Concat and a Slice, no Gather.
+        export = trace_term(_body_pos, {}, env, name="p", reader_fields=())
+        assert "Gather" not in _ops(export)
+        _move(env, 4)
+        np.testing.assert_allclose(
+            _run(export, env), _body_pos(env).detach().numpy(), rtol=1e-6
+        )
+
+    def test_a_narrowed_slot_feeds_the_same_numbers_as_the_whole_field(self, env):
+        export = trace_term(_body_link_vel, {}, env, name="v", reader_fields=())
+        _move(env, 5)
+        for slot, rows in zip(export.input_slots, export.input_rows):
+            assert rows is not None
+            whole = read_slot(env, slot)
+            torch.testing.assert_close(read_slot(env, slot, rows), whole[:, rows])
+        np.testing.assert_allclose(
+            _run(export, env),
+            _body_link_vel(env).detach().numpy(),
+            rtol=1e-5,
+            atol=1e-6,
+        )
+
+    def test_reads_by_different_index_sets_take_the_union(self, env):
+        export = trace_term(_cvel_twice, {}, env, name="c")
+        assert export.input_rows == [[1, 2]]
+        _move(env, 6)
+        np.testing.assert_allclose(
+            _run(export, env), _cvel_twice(env).detach().numpy(), rtol=1e-6
+        )
+
+    def test_a_group_unions_across_its_terms(self, env):
+        indexing = env.scene["robot"].indexing
+        export = trace_observation_group(
+            [
+                GroupTermSpec(name="root", func=_root_ang_vel, params={}),
+                GroupTermSpec(name="bodies", func=_body_ang_vel, params={}),
+            ],
+            env,
+            name="g",
+            reader_fields=(),
+        )
+        assert export.input_slots == [("__sim__", "cvel")]
+        assert export.input_rows == [[int(b) for b in indexing.body_ids.tolist()]]
+
+    def test_a_field_used_whole_or_by_a_mask_ships_whole(self, env):
+        for term in (_qvel_whole, _qpos_masked):
+            export = trace_term(term, {}, env, name=term.__name__)
+            assert export.input_rows == [None]
+            assert "rows" not in slots_json(export)[0]
+            _move(env, 7)
+            np.testing.assert_allclose(
+                _run(export, env), term(env).detach().numpy(), rtol=1e-6
+            )

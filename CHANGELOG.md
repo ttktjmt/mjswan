@@ -93,7 +93,10 @@ velocity-command shortcuts were removed outright, see Removed.
   value slot with no math in the graph, and every `EntityData` property now has one —
   55 readers where there were 15, `core/onnx/slotReader/fields/` mirroring the sections
   of mjlab's `entity/data.py`, each checked against mjlab by `slotReaderParity.test.ts`.
-  A property that cannot be traced now fails the build.
+  A property that cannot be traced now fails the build. A `sim` slot carries only the
+  `rows` the term indexes when the build can tell which (unioned across a group's
+  terms; whole otherwise), so the graph gathers nothing and a 2038-site model's
+  `site_xmat` costs 17 rows a step rather than all of them.
   Replay proxies also forward `physics_dt` / `step_dt` / `cfg` from the real env,
   and `add_policy` fills `policy_num_actions` from the ONNX output width when a policy
   has no joint names (muscle policies).

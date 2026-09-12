@@ -91,6 +91,15 @@ def _declared_feeds(
     return {name: value for name, value in feeds.items() if name in declared}
 
 
+def _inputs(export: Any) -> list[tuple[str, Any, list[int] | None]]:
+    """``(input name, slot, rows)`` per graph input; rows is None for a whole field."""
+    rows = getattr(export, "input_rows", None) or []
+    return [
+        (name, slot, rows[i] if i < len(rows) else None)
+        for i, (name, slot) in enumerate(zip(export.input_names, export.input_slots))
+    ]
+
+
 def _to_numpy(t: torch.Tensor) -> np.ndarray:
     return t.detach().cpu().numpy().astype(np.float32)
 
@@ -223,8 +232,8 @@ def run_parity(
             feeds = _declared_feeds(
                 session,
                 {
-                    in_name: _to_numpy(read_slot(env, slot))
-                    for in_name, slot in zip(export.input_names, export.input_slots)
+                    in_name: _to_numpy(read_slot(env, slot, rows))
+                    for in_name, slot, rows in _inputs(export)
                 },
             )
             (onnx_out,) = session.run([export.output_name], feeds)
