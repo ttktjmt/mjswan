@@ -4,15 +4,21 @@ A term is ``func(env, **params)`` reading a few fields off ``env``. Each is run 
 against a recording proxy to discover those reads, classified into time-varying state
 (a graph input) or a model-derived constant (baked in), then exported as an
 ``nn.Module`` whose ``forward`` takes the dynamic tensors.
+
+Raw ``mjData`` is what a slot is. An ``EntityData`` property the browser reads natively
+(:data:`READER_FIELDS`) is threaded as its own value slot — a shortcut that keeps mjlab's
+property math out of the graph. Any other property is *traced through*: it runs against
+the raw sim proxy, so its reads become ``sim`` slots and its math enters the graph.
 """
 
 from __future__ import annotations
 
+import copy
 import io
 import re
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Collection, Sequence
 
 import torch
 from torch import nn
@@ -65,6 +71,54 @@ _SIM_NS = "__sim__"
 #: may read for shapes or rates. Anything else raises rather than reading a stand-in.
 _FORWARDED_ENV_ATTRS = ("num_envs", "device", "physics_dt", "step_dt", "cfg")
 
+#: ``EntityData`` fields the browser's slot reader serves natively
+#: (``core/onnx/slotReader.ts``). A term reading one gets a value slot — the shortcut,
+#: one graph input in place of the property's math. Any other ``EntityData`` property
+#: is traced through to the raw ``sim`` fields it reads. Kept in step by hand with
+#: ``FIELD_READERS``; ``tests/dump_slot_fixture.py`` dumps exactly this set.
+READER_FIELDS: frozenset[str] = frozenset(
+    {
+        "joint_pos",
+        "joint_pos_biased",
+        "joint_vel",
+        "root_link_pos_w",
+        "root_link_quat_w",
+        "root_link_pose_w",
+        "root_link_vel_w",
+        "root_link_lin_vel_w",
+        "root_link_ang_vel_w",
+        "root_link_lin_vel_b",
+        "root_link_ang_vel_b",
+        "gravity_vec_w",
+        "projected_gravity_b",
+        "heading_w",
+        "site_pos_w",
+    }
+)
+
+
+def _traces_through(data: Any, name: str, reader_fields: Collection[str]) -> bool:
+    """Whether ``data.<name>`` is a property to run against the sim proxy.
+
+    Only properties can be: a plain tensor field has no math to trace, so it stays a
+    slot of its own (dynamic or constant by :func:`_is_dynamic_field`).
+    """
+    if name in reader_fields:
+        return False
+    return isinstance(getattr(type(data), name, None), property)
+
+
+def _with_sim_data(data: Any, sim: Any) -> Any:
+    """A shallow copy of a real ``EntityData`` with ``data`` swapped for ``sim``.
+
+    ``EntityData`` is a plain dataclass and ``data`` an ordinary field, so its
+    properties run unchanged against the proxy; ``indexing``, ``model`` and the tensor
+    fields (``encoder_bias``, ``gravity_vec_w``) stay real and bake as constants.
+    """
+    replay = copy.copy(data)
+    object.__setattr__(replay, "data", sim)
+    return replay
+
 
 def _class_proxy(real: Any, overrides: dict[str, Any]) -> Any:
     """A stand-in for a live mjlab object that still satisfies ``isinstance`` checks.
@@ -113,11 +167,11 @@ def _is_sensor(scene: Any, name: str) -> bool:
 class _RecordingSimData:
     """Wraps the raw ``SimData`` behind ``Entity.data.data``, logging each field read.
 
-    mjlab's ``EntityData`` wraps most of the sim but not all of it — a muscle model's
-    ``act``, or ``time`` — so a term reads those straight off the sim. The sim is one
-    object shared by every entity, hence its own namespace rather than the entity's.
-    Fields are warp-backed ``TorchArray`` proxies; the tensor view is what gets logged
-    and returned, since the tracer only follows real tensors.
+    Reached two ways: a term reading the sim directly (a muscle model's ``act``, or
+    ``time`` — what ``EntityData`` does not wrap), and an ``EntityData`` property traced
+    through it. The sim is one object shared by every entity, hence its own namespace
+    rather than the entity's. Fields are warp-backed ``TorchArray`` proxies; the tensor
+    view is what gets logged and returned, since the tracer only follows real tensors.
     """
 
     def __init__(self, real: Any, log: list[tuple[SlotKey, Any]]):
@@ -141,25 +195,54 @@ def _sim_tensor(value: Any) -> Any:
 
 
 class _RecordingData:
-    """Wraps a real ``Entity.data``, logging every field access."""
+    """Wraps a real ``Entity.data``, logging every field access.
 
-    def __init__(self, real: Any, entity: str, log: list[tuple[SlotKey, Any]]):
+    A reader-served field is logged as one slot, value and all. Any other property
+    runs against a copy whose ``data`` is the recording sim proxy, so what gets logged
+    is the raw fields it reads and its math lands in the graph.
+    """
+
+    def __init__(
+        self,
+        real: Any,
+        entity: str,
+        log: list[tuple[SlotKey, Any]],
+        reader_fields: Collection[str],
+    ):
         object.__setattr__(self, "_real", real)
         object.__setattr__(self, "_entity", entity)
         object.__setattr__(self, "_log", log)
+        object.__setattr__(self, "_reader_fields", reader_fields)
+        object.__setattr__(self, "_traced", None)
+
+    def _through(self) -> Any:
+        """The copy a traced-through property runs against, built on first use — a
+        stand-in ``Entity.data`` with no sim behind it never needs one."""
+        if self._traced is None:
+            sim = _RecordingSimData(self._real.data, self._log)
+            object.__setattr__(self, "_traced", _with_sim_data(self._real, sim))
+        return self._traced
 
     def __getattr__(self, name: str) -> Any:
-        value = getattr(self._real, name)
         if name == "data":
-            return _RecordingSimData(value, self._log)
+            return self._through().data
+        if _traces_through(self._real, name, self._reader_fields):
+            return getattr(self._through(), name)
+        value = getattr(self._real, name)
         self._log.append(((self._entity, name), value))
         return value
 
 
 class _RecordingEntity:
-    def __init__(self, real: Any, name: str, log: list[tuple[SlotKey, Any]]):
+    def __init__(
+        self,
+        real: Any,
+        name: str,
+        log: list[tuple[SlotKey, Any]],
+        reader_fields: Collection[str],
+    ):
         self._real = real
-        self.data = _RecordingData(real.data, name, log)
+        self.data = _RecordingData(real.data, name, log, reader_fields)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._real, name)
@@ -171,10 +254,12 @@ class _RecordingScene:
         real: Any,
         log: list[tuple[SlotKey, Any]],
         sensors: dict[str, Any],
+        reader_fields: Collection[str],
     ):
         self._real = real
         self._log = log
         self._sensors = sensors
+        self._reader_fields = reader_fields
 
     def __getitem__(self, name: str) -> Any:
         real = self._real[name]
@@ -182,7 +267,7 @@ class _RecordingScene:
             # Keep the real sensor so the replay pass can subclass its class.
             self._sensors[name] = real
             return _sensor_proxy(real, lambda: self._read_sensor(name, real))
-        return _RecordingEntity(real, name, self._log)
+        return _RecordingEntity(real, name, self._log, self._reader_fields)
 
     def _read_sensor(self, name: str, real: Any) -> Any:
         value = real.data
@@ -247,13 +332,15 @@ class _RecordingEnv:
     """Proxy env recording the reads a term makes (entity data, sim data, sensors,
     commands)."""
 
-    def __init__(self, real: Any):
+    def __init__(self, real: Any, reader_fields: Collection[str] = READER_FIELDS):
         object.__setattr__(self, "_real", real)
         object.__setattr__(self, "_log", [])
         object.__setattr__(self, "_sensors", {})
         object.__setattr__(self, "_commands", {})
         object.__setattr__(
-            self, "scene", _RecordingScene(real.scene, self._log, self._sensors)
+            self,
+            "scene",
+            _RecordingScene(real.scene, self._log, self._sensors, reader_fields),
         )
 
     def __getattr__(self, name: str) -> Any:
@@ -283,27 +370,57 @@ class _ReplaySimData:
 
 
 class _ReplayData:
-    def __init__(self, entity: str, slots: dict[SlotKey, torch.Tensor]):
+    """Serves recorded slots; a traced-through property recomputes off the sim proxy."""
+
+    def __init__(
+        self,
+        entity: str,
+        slots: dict[SlotKey, torch.Tensor],
+        real_env: Any,
+        reader_fields: Collection[str],
+    ):
         object.__setattr__(self, "_entity", entity)
         object.__setattr__(self, "_slots", slots)
+        object.__setattr__(self, "_real_env", real_env)
+        object.__setattr__(self, "_reader_fields", reader_fields)
+        object.__setattr__(self, "_traced", None)
+
+    def _through(self) -> Any:
+        """A copy of the live ``EntityData`` — its indexing and constants — over the
+        replay sim proxy, built on first use."""
+        if self._traced is None:
+            real = self._real_env.scene[self._entity].data
+            object.__setattr__(
+                self, "_traced", _with_sim_data(real, _ReplaySimData(self._slots))
+            )
+        return self._traced
 
     def __getattr__(self, name: str) -> Any:
         if name == "data":
-            return _ReplaySimData(self._slots)
+            return self._through().data
         key = (self._entity, name)
-        try:
+        if key in self._slots:
             return self._slots[key]
-        except KeyError:
-            raise AttributeError(
-                f"Term read undeclared slot {key!r} during tracing. This field "
-                "was not seen in the discovery pass — the term's control flow is "
-                "input-dependent, which is not traceable (ADR 0005 §Consequences)."
-            ) from None
+        if _traces_through(
+            self._real_env.scene[self._entity].data, name, self._reader_fields
+        ):
+            return getattr(self._through(), name)
+        raise AttributeError(
+            f"Term read undeclared slot {key!r} during tracing. This field "
+            "was not seen in the discovery pass — the term's control flow is "
+            "input-dependent, which is not traceable (ADR 0005 §Consequences)."
+        )
 
 
 class _ReplayEntity:
-    def __init__(self, entity: str, slots: dict[SlotKey, torch.Tensor]):
-        self.data = _ReplayData(entity, slots)
+    def __init__(
+        self,
+        entity: str,
+        slots: dict[SlotKey, torch.Tensor],
+        real_env: Any,
+        reader_fields: Collection[str],
+    ):
+        self.data = _ReplayData(entity, slots, real_env, reader_fields)
 
 
 class _ReplaySensorData:
@@ -327,9 +444,14 @@ class _ReplayScene:
         self,
         slots: dict[SlotKey, torch.Tensor],
         sensors: dict[str, Any] | None = None,
+        *,
+        real_env: Any,
+        reader_fields: Collection[str],
     ):
         self._slots = slots
         self._sensors = sensors or {}
+        self._real_env = real_env
+        self._reader_fields = reader_fields
 
     def __getitem__(self, name: str) -> Any:
         real = self._sensors.get(name)
@@ -339,7 +461,7 @@ class _ReplayScene:
                 return _sensor_proxy(real, lambda: self._slots[whole])
             # Structured sensor: the discovery pass recorded its fields separately.
             return _sensor_proxy(real, lambda: _ReplaySensorData(name, self._slots))
-        return _ReplayEntity(name, self._slots)
+        return _ReplayEntity(name, self._slots, self._real_env, self._reader_fields)
 
 
 class _ReplayCommandManager:
@@ -373,8 +495,11 @@ class _ReplayEnv:
         commands: dict[str, Any] | None = None,
         *,
         real_env: Any,
+        reader_fields: Collection[str] = READER_FIELDS,
     ):
-        self.scene = _ReplayScene(slots, sensors)
+        self.scene = _ReplayScene(
+            slots, sensors, real_env=real_env, reader_fields=reader_fields
+        )
         self.command_manager = _ReplayCommandManager(slots, commands or {})
         self._real_env = real_env
 
@@ -507,6 +632,7 @@ class _TermModule(nn.Module):
         sensors: dict[str, Any] | None = None,
         commands: dict[str, Any] | None = None,
         real_env: Any,
+        reader_fields: Collection[str] = READER_FIELDS,
     ):
         super().__init__()
         self._func = func
@@ -515,12 +641,19 @@ class _TermModule(nn.Module):
         self._sensors = sensors or {}
         self._commands = commands or {}
         self._real_env = real_env
+        self._reader_fields = reader_fields
         self._const_buffers = _register_consts(self, constants)
 
     def forward(self, *dynamic: torch.Tensor) -> torch.Tensor:
         slots: dict[SlotKey, torch.Tensor] = dict(zip(self._dynamic_keys, dynamic))
         slots.update(_const_values(self, self._const_buffers))
-        env = _ReplayEnv(slots, self._sensors, self._commands, real_env=self._real_env)
+        env = _ReplayEnv(
+            slots,
+            self._sensors,
+            self._commands,
+            real_env=self._real_env,
+            reader_fields=self._reader_fields,
+        )
         return self._func(env, **self._params)
 
 
@@ -684,6 +817,12 @@ def _graph_input_names(onnx_bytes: bytes | None) -> set[str] | None:
     return {i.name for i in model.graph.input}
 
 
+def _reader_fields(fields: Collection[str] | None) -> frozenset[str]:
+    """``None`` means the browser's readers; an explicit set overrides them (tests
+    pass an empty one to force every property through the traced path)."""
+    return READER_FIELDS if fields is None else frozenset(fields)
+
+
 def trace_term(
     func: Callable[..., torch.Tensor],
     params: dict[str, Any],
@@ -691,18 +830,21 @@ def trace_term(
     *,
     name: str,
     opset: int = 17,
+    reader_fields: Collection[str] | None = None,
 ) -> TermExport:
     """Trace a value-returning mjlab term body to ONNX against a live ``env``.
 
     ``params`` come from the env's own manager (``asset_cfg`` already resolved to
-    static indices) and ``env`` must be post-reset.
+    static indices) and ``env`` must be post-reset. ``reader_fields`` names the
+    ``EntityData`` fields served as value slots; see :data:`READER_FIELDS`.
 
     Raises:
         ConstantTerm: the term reads no simulation state (handle it as native).
         UntraceableTerm: the term reads state the tracer cannot follow.
     """
+    readers = _reader_fields(reader_fields)
     # 1. Discovery: run once against the recording env.
-    recorder = _RecordingEnv(env)
+    recorder = _RecordingEnv(env, readers)
     recorded = func(recorder, **params)
     if not isinstance(recorded, torch.Tensor):
         raise ValueError(
@@ -741,6 +883,7 @@ def trace_term(
         sensors=sensors,
         commands=commands,
         real_env=env,
+        reader_fields=readers,
     ).eval()
     output_name = "value"
     onnx_bytes = _export_onnx(
@@ -1600,6 +1743,7 @@ class _GroupModule(nn.Module):
         native_names: list[str],
         baked: dict[str, torch.Tensor],
         real_env: Any,
+        reader_fields: Collection[str] = READER_FIELDS,
     ):
         super().__init__()
         self._terms = terms
@@ -1608,6 +1752,7 @@ class _GroupModule(nn.Module):
         self._commands = commands
         self._native_names = native_names
         self._real_env = real_env
+        self._reader_fields = reader_fields
         self._const_buffers = _register_consts(self, constants)
         # A term reading no dynamic state is a value, not a function — bake it.
         self._baked_buffers = _register_consts(self, baked, prefix="_baked")
@@ -1617,7 +1762,13 @@ class _GroupModule(nn.Module):
         slots: dict[SlotKey, torch.Tensor] = dict(zip(self._dynamic_keys, args[:split]))
         slots.update(_const_values(self, self._const_buffers))
         native = dict(zip(self._native_names, args[split:]))
-        env = _ReplayEnv(slots, self._sensors, self._commands, real_env=self._real_env)
+        env = _ReplayEnv(
+            slots,
+            self._sensors,
+            self._commands,
+            real_env=self._real_env,
+            reader_fields=self._reader_fields,
+        )
 
         pieces: list[torch.Tensor] = []
         for term in self._terms:
@@ -1675,6 +1826,7 @@ def trace_observation_group(
     *,
     name: str,
     opset: int = 17,
+    reader_fields: Collection[str] | None = None,
 ) -> GroupExport:
     """Fuse an observation group's terms into one ONNX graph.
 
@@ -1694,6 +1846,7 @@ def trace_observation_group(
     native_examples: list[torch.Tensor] = []
     baked: dict[str, torch.Tensor] = {}
     layout: list[dict[str, Any]] = []
+    readers = _reader_fields(reader_fields)
 
     for term in terms:
         entry = native_observation_entry(term.name, term.func, term.params, env)
@@ -1706,7 +1859,7 @@ def trace_observation_group(
             layout.append({"name": term.name, "size": entry["size"]})
             continue
 
-        recorder = _RecordingEnv(env)
+        recorder = _RecordingEnv(env, readers)
         recorded = term.func(recorder, **term.params)
         if not isinstance(recorded, torch.Tensor):
             raise ValueError(
@@ -1751,6 +1904,7 @@ def trace_observation_group(
         native_names=native_names,
         baked=baked,
         real_env=env,
+        reader_fields=readers,
     ).eval()
     output_name = "obs"
     with torch.no_grad():
@@ -1812,6 +1966,7 @@ class _TerminationGroupModule(nn.Module):
         sensors: dict[str, Any],
         commands: dict[str, Any],
         real_env: Any,
+        reader_fields: Collection[str] = READER_FIELDS,
     ):
         super().__init__()
         self._terms = terms
@@ -1819,12 +1974,19 @@ class _TerminationGroupModule(nn.Module):
         self._sensors = sensors
         self._commands = commands
         self._real_env = real_env
+        self._reader_fields = reader_fields
         self._const_buffers = _register_consts(self, constants)
 
     def forward(self, *dynamic: torch.Tensor) -> torch.Tensor:
         slots: dict[SlotKey, torch.Tensor] = dict(zip(self._dynamic_keys, dynamic))
         slots.update(_const_values(self, self._const_buffers))
-        env = _ReplayEnv(slots, self._sensors, self._commands, real_env=self._real_env)
+        env = _ReplayEnv(
+            slots,
+            self._sensors,
+            self._commands,
+            real_env=self._real_env,
+            reader_fields=self._reader_fields,
+        )
         lanes = [term.func(env, **term.params).reshape(-1, 1) for term in self._terms]
         return torch.cat(lanes, dim=-1)
 
@@ -1835,6 +1997,7 @@ def trace_termination_group(
     *,
     name: str,
     opset: int = 17,
+    reader_fields: Collection[str] | None = None,
 ) -> TerminationGroupExport:
     """Fuse termination terms into one graph, one bool lane each.
 
@@ -1846,9 +2009,10 @@ def trace_termination_group(
     constants: dict[SlotKey, torch.Tensor] = {}
     sensors: dict[str, Any] = {}
     commands: dict[str, Any] = {}
+    readers = _reader_fields(reader_fields)
 
     for term in terms:
-        recorder = _RecordingEnv(env)
+        recorder = _RecordingEnv(env, readers)
         recorded = term.func(recorder, **term.params)
         if not isinstance(recorded, torch.Tensor):
             raise ValueError(
@@ -1876,7 +2040,13 @@ def trace_termination_group(
     example_inputs = tuple(dynamic[k] for k in dynamic_keys)
 
     module = _TerminationGroupModule(
-        terms, dynamic_keys, constants, sensors=sensors, commands=commands, real_env=env
+        terms,
+        dynamic_keys,
+        constants,
+        sensors=sensors,
+        commands=commands,
+        real_env=env,
+        reader_fields=readers,
     ).eval()
     output_name = "done"
     with torch.no_grad():

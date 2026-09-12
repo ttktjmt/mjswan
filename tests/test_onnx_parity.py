@@ -149,6 +149,61 @@ def test_no_term_is_silently_unchecked(sweep_report):
 
 
 # ---------------------------------------------------------------------------
+# The traced path: every `EntityData` property recomputed in the graph from the raw sim
+# fields it reads, mjlab's own math included. The shortcut — value slots the browser's
+# reader fills — is checked against mjlab by `slotReaderParity.test.ts`; this is the
+# other half, so a property with no reader is proven the same way.
+# ---------------------------------------------------------------------------
+
+_TRACED_TASKS = [
+    # Site-indexed reads and a command; `root_link_*` through `compute_velocity_from_cvel`.
+    pytest.param("Mjlab-Lift-Cube-Yam", id="lift-cube-yam-traced"),
+    # `joint_pos_biased` (encoder bias baked), `projected_gravity_b`, builtin sensors.
+    pytest.param("Mjlab-Velocity-Flat-Unitree-G1", id="velocity-flat-g1-traced"),
+]
+
+
+@pytest.fixture(scope="module")
+def traced_report(request):
+    from mjlab.envs import ManagerBasedRlEnv
+    from mjlab.tasks.registry import load_env_cfg
+
+    from mjswan.compile import run_parity
+
+    cfg = load_env_cfg(request.param, play=True)
+    cfg.scene.num_envs = 1
+    env = ManagerBasedRlEnv(cfg, device="cpu")
+    try:
+        yield run_parity(env, obs_group="actor", n_steps=8, seed=0, reader_fields=())
+    finally:
+        env.close()
+
+
+@pytest.mark.parametrize("traced_report", _TRACED_TASKS, indirect=True)
+def test_every_property_traced_through_matches_mjlab(traced_report):
+    from mjlab.entity.data import EntityData
+
+    assert traced_report.passed, "\n" + traced_report.summary()
+    properties = {n for n, v in vars(EntityData).items() if isinstance(v, property)}
+    graphs = [
+        t
+        for t in traced_report.terms
+        if t.representation == "onnx" and t.kind == "observation"
+    ]
+    assert graphs, "no observation term traced to a graph"
+    for term in graphs:
+        assert term.steps_checked == traced_report.n_steps
+        assert term.max_abs_diff <= traced_report.atol
+        # No property survives as a value slot: each was recomputed from `sim:*`.
+        entity_fields = [
+            label.split(".", 1)[1]
+            for label in term.input_slots
+            if not label.startswith(("sensor:", "command:", "sim:"))
+        ]
+        assert not (set(entity_fields) & properties), term.input_slots
+
+
+# ---------------------------------------------------------------------------
 # `push_robot`: the interval-mode event, which the sweep above cannot reach.
 #
 # mjlab's play configs pop it (`go1/env_cfgs.py`: `cfg.events.pop("push_robot")`), and

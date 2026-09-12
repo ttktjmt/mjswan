@@ -11,9 +11,12 @@
  * falls back to the whole model, which is correct because such a scene is
  * single-entity. An unknown field returns null and the caller holds its previous value.
  *
- * A `sim` slot is a raw `mjData` field mjlab's `EntityData` does not wrap (`act`,
- * `time`), read whole: mjlab's `SimData` is the entire sim too, so the graph carries
- * whatever indexing the term did.
+ * A `sim` slot is a raw `mjData` field read whole: mjlab's `SimData` is the entire sim
+ * too, so the graph carries whatever indexing the term did. That is the foundation — an
+ * `EntityData` property with no reader here is traced through to the `sim` fields it
+ * reads, with mjlab's math in the graph — and the entity readers are a shortcut over it,
+ * one input in place of that math. The build emits a value slot only for the fields
+ * `READER_FIELDS` (compile/tracer.py) lists, kept in step with `FIELD_READERS` by hand.
  */
 
 import { quatApply, quatApplyInv } from '../observation/math';

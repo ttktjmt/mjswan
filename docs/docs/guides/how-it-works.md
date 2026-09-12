@@ -151,10 +151,17 @@ manifest's MDP entry, and the browser's slot reader serves each one from `mjMode
 
 Four slot namespaces exist: an entity `data` field (as above), a named MuJoCo sensor's
 `sensordata` window, a live command's state field, and a raw `mjData` field
-(`{"sim": "act"}`) for the few things mjlab's `EntityData` does not wrap — a muscle
-model's activation state, or the sim time — which a term reads off
-`entity.data.data.<field>`. Anything model-derived and therefore constant is baked into
-the graph instead of becoming a slot.
+(`{"sim": "cvel", "input": "sim__cvel", "shape": [1, 102, 6]}`).
+
+Raw `mjData` is the foundation. A term reading `entity.data.data.<field>` — a muscle
+model's activation state, the sim time — gets a `sim` slot directly, and an `EntityData`
+property the browser has no native reader for is *traced through*: mjlab's own property
+math enters the graph and the raw fields it reads become `sim` slots. The entity `data`
+slots above are a shortcut over that foundation: for the properties the browser's slot
+reader reproduces in TypeScript, the build emits the property's value as one input and
+keeps the math out of the graph. Anything model-derived and therefore constant — an
+entity's indices, `default_joint_pos`, `encoder_bias` — is baked into the graph instead
+of becoming a slot.
 
 A handful of values have no simulation slot at all — the previous action, a command's
 current value, a baked constant — so they arrive as **native inputs** the orchestrator

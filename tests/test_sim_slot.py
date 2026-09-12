@@ -1,11 +1,12 @@
-"""Raw ``SimData`` fields as traced-graph slots.
+"""Raw ``SimData`` fields as traced-graph slots, and ``EntityData`` traced through them.
 
 Layer: L3 (builds a real mjlab env from a spec).
 
-mjlab's ``EntityData`` wraps most of the sim, but not a muscle model's activation state
-(``act``) or the sim ``time``; a task that needs them reads ``entity.data.data.<field>``
-(myosuite's mimic terms do exactly this). Those fields must become graph inputs in
-their own ``sim`` namespace, served whole by the browser from ``mjData``.
+Raw ``mjData`` is what a slot is. A term reading ``entity.data.data.<field>`` directly
+(myosuite's mimic terms read ``act`` and ``time`` this way) gets a ``sim`` slot; a term
+reading an ``EntityData`` property gets either a value slot — when the browser has a
+reader for it, the shortcut — or, for any other property, the raw fields the property
+reads, with mjlab's math traced into the graph.
 """
 
 from __future__ import annotations
@@ -25,6 +26,8 @@ import numpy as np  # noqa: E402
 import onnxruntime as ort  # noqa: E402
 
 from mjswan.compile.tracer import (  # noqa: E402
+    READER_FIELDS,
+    TermExport,
     read_slot,
     slots_json,
     trace_term,
@@ -64,6 +67,34 @@ def env():
     return build_single_entity_trace_env(_spec)
 
 
+def _run(export: TermExport, env) -> np.ndarray:
+    """The graph's output on the env's current state, fed through ``read_slot``."""
+    session = ort.InferenceSession(
+        export.onnx_bytes, providers=["CPUExecutionProvider"]
+    )
+    declared = {i.name for i in session.get_inputs()}
+    feeds = {
+        name: read_slot(env, slot).detach().cpu().numpy().astype(np.float32)
+        for name, slot in zip(export.input_names, export.input_slots)
+        if name in declared
+    }
+    (out,) = session.run([export.output_name], feeds)
+    return out
+
+
+def _move(env, seed: int) -> None:
+    """Put the sim somewhere a value baked at trace time would not follow."""
+    gen = torch.Generator().manual_seed(seed)
+    data = env.scene["robot"].data
+    quat = torch.rand(1, 4, generator=gen) - 0.5
+    quat = quat / quat.norm()
+    data.write_root_pose(torch.cat([torch.rand(1, 3, generator=gen), quat], dim=-1))
+    data.write_root_velocity(torch.rand(1, 6, generator=gen) - 0.5)
+    data.write_joint_position(torch.rand(1, 1, generator=gen) - 0.5)
+    data.write_joint_velocity(torch.rand(1, 1, generator=gen) - 0.5)
+    env.sim.forward()
+
+
 def _act_scaled_by_step(env):
     """A myosuite-shaped term: raw ``act`` scaled by the control rate."""
     data = env.scene["robot"].data.data
@@ -72,6 +103,18 @@ def _act_scaled_by_step(env):
 
 def _time(env):
     return torch.as_tensor(env.scene["robot"].data.data.time).reshape(-1, 1)
+
+
+def _joint_pos(env):
+    return env.scene["robot"].data.joint_pos
+
+
+def _body_link_vel(env):
+    return env.scene["robot"].data.body_link_vel_w.reshape(1, -1)
+
+
+def _joint_torques(env):
+    return env.scene["robot"].data.joint_torques
 
 
 def test_raw_sim_fields_become_sim_slots(env):
@@ -98,3 +141,58 @@ def test_graph_matches_the_live_term_on_a_fresh_value(env):
 def test_sim_time_is_a_dynamic_slot(env):
     export = trace_term(_time, {}, env, name="time")
     assert export.input_slots == [("__sim__", "time")]
+
+
+class TestTraceThrough:
+    """An ``EntityData`` property the browser has no reader for."""
+
+    def test_reads_become_the_raw_fields_the_property_reads(self, env):
+        assert "body_link_vel_w" not in READER_FIELDS
+        export = trace_term(_body_link_vel, {}, env, name="body_vel")
+        # mjlab's `compute_velocity_from_cvel(xpos, subtree_com, cvel)`, nothing else.
+        assert export.input_slots == [
+            ("__sim__", "cvel"),
+            ("__sim__", "subtree_com"),
+            ("__sim__", "xpos"),
+        ]
+        assert all(entry["sim"] for entry in slots_json(export))
+
+    def test_graph_reproduces_the_property_over_moved_state(self, env):
+        export = trace_term(_body_link_vel, {}, env, name="body_vel")
+        for seed in (1, 2):
+            _move(env, seed)
+            live = _body_link_vel(env).detach().numpy()
+            assert np.abs(live).max() > 0.05, "state did not move"
+            np.testing.assert_allclose(_run(export, env), live, rtol=1e-5, atol=1e-6)
+
+    def test_a_property_that_raises_fails_the_build(self, env):
+        # `joint_torques` raises in mjlab itself; used to build fine and freeze.
+        with pytest.raises(NotImplementedError):
+            trace_term(_joint_torques, {}, env, name="torques")
+
+
+class TestShortcut:
+    """A property the browser reads natively stays one value slot."""
+
+    def test_reader_field_is_a_value_slot(self, env):
+        export = trace_term(_joint_pos, {}, env, name="jp")
+        assert export.input_slots == [("robot", "joint_pos")]
+
+    def test_shortcut_and_traced_path_agree(self, env):
+        # Both paths for one property: the value slot the reader fills, and the
+        # raw `qpos` slot with mjlab's indexing traced in. Same numbers either way.
+        shortcut = trace_term(_joint_pos, {}, env, name="jp")
+        traced = trace_term(_joint_pos, {}, env, name="jp", reader_fields=())
+        assert shortcut.input_slots == [("robot", "joint_pos")]
+        assert traced.input_slots == [("__sim__", "qpos")]
+        _move(env, 3)
+        live = _joint_pos(env).detach().numpy()
+        np.testing.assert_allclose(_run(shortcut, env), live, rtol=1e-6)
+        np.testing.assert_allclose(_run(traced, env), live, rtol=1e-6)
+
+    def test_reader_fields_exist_on_entity_data(self):
+        # A name here that mjlab dropped would be a slot the build emits for nothing.
+        from mjlab.entity.data import EntityData
+
+        members = set(vars(EntityData)) | set(EntityData.__dataclass_fields__)
+        assert READER_FIELDS <= members

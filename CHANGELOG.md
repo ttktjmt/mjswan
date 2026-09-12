@@ -83,12 +83,17 @@ velocity-command shortcuts were removed outright, see Removed.
   negative half, which `excitation` would clamp to zero. `normalize` stays as the legacy
   spelling of the other two; the policy JSON now carries `mode` instead of `normalize`,
   and the engine still reads the old key.
-- Raw `mjData` fields as traced-graph slots: a term reading `entity.data.data.<field>`
-  (mjlab's `SimData`, for what `EntityData` does not wrap — a muscle model's `act`, the
-  sim `time`) now traces, with the browser serving the whole field from `mjData`.
-  Replay proxies also forward `physics_dt` / `step_dt` / `cfg` from the real env, and
-  `add_policy` fills `policy_num_actions` from the ONNX output width when a policy has
-  no joint names (muscle policies).
+- **Raw `mjData` is what a slot is.** A term reading `entity.data.data.<field>` (mjlab's
+  `SimData` — a muscle model's `act`, the sim `time`) traces to a `sim` slot the browser
+  serves from `mjData`, and every `EntityData` property is traceable: one the browser has
+  no native reader for is traced *through* — mjlab's own property math enters the graph
+  and the raw fields it reads become `sim` slots — where before it built fine and then
+  froze the observation group at its previous value. The TypeScript readers stay as a
+  shortcut over that foundation (`READER_FIELDS`): a property they serve is still one
+  value slot with no math in the graph. A property that cannot be traced now fails the
+  build. Replay proxies also forward `physics_dt` / `step_dt` / `cfg` from the real env,
+  and `add_policy` fills `policy_num_actions` from the ONNX output width when a policy
+  has no joint names (muscle policies).
 - **MDP term bodies are traced to ONNX at build time and run by ONNX Runtime Web**
   ([ADR 0005](docs/adr/0005-onnx-traced-terms-superseding-the-declarative-dsl.md)),
   replacing the hand-written TypeScript DSL (see Removed). mjlab's real

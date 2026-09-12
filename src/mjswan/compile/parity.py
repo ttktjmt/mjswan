@@ -8,7 +8,7 @@ term must match at every step. Run headless with ``MUJOCO_GL=disable``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Collection
 
 import numpy as np
 import torch
@@ -141,12 +141,17 @@ def run_parity(
     event_modes: tuple[str, ...] = ("reset",),
     n_event_draws: int = 16,
     include_obs: bool = True,
+    reader_fields: Collection[str] | None = None,
 ) -> ParityReport:
     """Trace a task's terms and assert live-vs-ONNX parity over ``n_steps``.
 
     ``env`` must be a freshly constructed mjlab env; this function resets it.
     Observation terms are checked every step; ``reset``-mode Event terms are
     checked by replaying ``n_event_draws`` fresh recorded RNG draws (§2b).
+
+    ``reader_fields`` is passed to :func:`trace_term`: an empty set traces every
+    ``EntityData`` property through to raw sim slots, which puts mjlab's property math
+    itself under this harness rather than only the browser reader's fixture.
     """
     import onnxruntime as ort
 
@@ -162,7 +167,9 @@ def run_parity(
     obs_terms = _iter_obs_terms(env, obs_group) if include_obs else []
     for term_name, func, params in obs_terms:
         try:
-            export = trace_term(func, params, env, name=term_name)
+            export = trace_term(
+                func, params, env, name=term_name, reader_fields=reader_fields
+            )
         except ValueError as exc:
             report.terms.append(
                 TermReport(
