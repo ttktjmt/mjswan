@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseManifest, sanitizeName, type Manifest, type ByteSource } from './index';
+import { MAX_DOCUMENT_FORMAT, parseManifest, sanitizeName, type Manifest, type ByteSource } from './index';
 import NAME2ID_CASES from './name2id_cases.json';
 
 /** Records every requested path; returns tagged bytes for each. */
@@ -198,8 +198,10 @@ describe('parseManifest', () => {
 });
 
 describe('document format', () => {
-  it('accepts the current format', () => {
-    expect(() => parseManifest({ ...MANIFEST, format: 1 }, fakeSource().source)).not.toThrow();
+  it('accepts the current format and every earlier one', () => {
+    for (let format = 1; format <= MAX_DOCUMENT_FORMAT; format++) {
+      expect(() => parseManifest({ ...MANIFEST, format }, fakeSource().source)).not.toThrow();
+    }
   });
 
   it('refuses a document with no format as one that predates the layout', () => {
@@ -212,7 +214,7 @@ describe('document format', () => {
 
   it('refuses a newer format, naming both numbers and the writing version', () => {
     expect(() => parseManifest({ ...MANIFEST, format: 99, version: '9.9.9' }, fakeSource().source)).toThrow(
-      /format 99 .*9\.9\.9.*up to format 1/,
+      new RegExp(`format 99 .*9\\.9\\.9.*up to format ${MAX_DOCUMENT_FORMAT}`),
     );
   });
 

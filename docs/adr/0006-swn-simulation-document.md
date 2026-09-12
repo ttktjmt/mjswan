@@ -346,7 +346,9 @@ structurally impossible within a scene.
   knows. **An absent `format` means the pre-0006 layout** (root
   `assets/config.json`, per-policy JSONs); this ADR's layout is `format: 1`.
   The phases below land in one release, so no document is ever published at an
-  intermediate value. It is the guard for the cases where engine selection is not available:
+  intermediate value. `format: 2` (#127) added raw-`mjData` input slots
+  (`{"sim": ...}` with `rows`), which a format-1 engine accepts and then cannot
+  serve; the layout is otherwise this ADR's. It is the guard for the cases where engine selection is not available:
   a document opened by whatever engine is already present, and third-party
   tooling reading the tree.
 

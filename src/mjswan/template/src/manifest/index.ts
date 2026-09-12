@@ -177,8 +177,11 @@ export function sanitizeName(name: string): string {
     .replace(/^_+|_+$/g, '');
 }
 
-/** The newest document format this reader understands (ADR 0006 §7). */
-export const MAX_DOCUMENT_FORMAT = 1;
+/**
+ * The newest document format this reader understands (ADR 0006 §7). A ceiling: every
+ * earlier format still parses. 2 added `sim` input slots and their `rows`.
+ */
+export const MAX_DOCUMENT_FORMAT = 2;
 
 /**
  * Refuse a document this reader cannot read: one without a `format`, or one newer than it

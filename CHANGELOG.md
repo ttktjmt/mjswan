@@ -83,6 +83,13 @@ velocity-command shortcuts were removed outright, see Removed.
   negative half, which `excitation` would clamp to zero. `normalize` stays as the legacy
   spelling of the other two; the policy JSON now carries `mode` instead of `normalize`,
   and the engine still reads the old key.
+- **Document format 2.** `input_slots` may now carry a raw `mjData` field (`{"sim": ...}`,
+  with `rows`); an engine reading format 1 accepts the entry and then cannot serve it,
+  freezing the observation group at its previous value — the misread `format` exists to
+  refuse. `DOCUMENT_FORMAT` and the engine's `MAX_DOCUMENT_FORMAT` are 2; the guard is a
+  ceiling, so the new engine still reads a format-1 document. mjswan Cloud's
+  `ENGINE_DOCUMENT_FORMAT` table, which matches one format per engine version exactly,
+  needs its own decision before this engine is offered there.
 - **Raw `mjData` is what a slot is.** A term reading `entity.data.data.<field>` (mjlab's
   `SimData` — a muscle model's `act`, the sim `time`) traces to a `sim` slot the browser
   serves from `mjData`, and every `EntityData` property is traceable: one the browser has
