@@ -121,3 +121,38 @@ export function clampFutureIndices(
     return idx;
   });
 }
+
+/** `sqrt(max(0, x))` — mjlab's `_sqrt_positive_part`. */
+function sqrtPositivePart(x: number): number {
+  return x > 0 ? Math.sqrt(x) : 0;
+}
+
+/**
+ * A rotation matrix (row-major, 9 values) as a quaternion (w, x, y, z) — mjlab's
+ * `quat_from_matrix`, pytorch3d's algorithm: four candidates, the best-conditioned one
+ * kept, so the sign convention is mjlab's and not merely equivalent up to sign.
+ */
+export function quatFromMatrix(matrix: ArrayLike<number>): number[] {
+  const m = (i: number): number => matrix[i] ?? 0;
+  const [m00, m01, m02, m10, m11, m12, m20, m21, m22] = [
+    m(0), m(1), m(2), m(3), m(4), m(5), m(6), m(7), m(8),
+  ];
+  const qAbs = [
+    sqrtPositivePart(1 + m00 + m11 + m22),
+    sqrtPositivePart(1 + m00 - m11 - m22),
+    sqrtPositivePart(1 - m00 + m11 - m22),
+    sqrtPositivePart(1 - m00 - m11 + m22),
+  ];
+  const candidates = [
+    [qAbs[0] * qAbs[0], m21 - m12, m02 - m20, m10 - m01],
+    [m21 - m12, qAbs[1] * qAbs[1], m10 + m01, m02 + m20],
+    [m02 - m20, m10 + m01, qAbs[2] * qAbs[2], m12 + m21],
+    [m10 - m01, m20 + m02, m21 + m12, qAbs[3] * qAbs[3]],
+  ];
+  // The first of equal maxima, as `torch.argmax` picks.
+  let best = 0;
+  for (let i = 1; i < 4; i++) if (qAbs[i] > qAbs[best]) best = i;
+  // Floor of 0.1 keeps the divisor away from zero for the candidates not chosen.
+  const scale = 2 * Math.max(qAbs[best], 0.1);
+  return candidates[best].map(v => v / scale);
+}

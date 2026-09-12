@@ -9,6 +9,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createSlotReader, isReadableEntityField, type SlotReaderContext } from '../slotReader';
+import { FIELD_READERS } from '../slotReader/fields';
 import { slotDims } from '../session';
 
 type Mutable = Record<string, unknown>;
@@ -16,13 +17,17 @@ type Mutable = Record<string, unknown>;
 /**
  * A two-entity scene, mjlab-style: names prefixed, `robot` attached first with a free
  * joint (excluded from `joint_pos`), a ball and two hinges, so its qpos and qvel
- * addresses differ. `cube` follows, shifting `robot` off a naive 0-based guess.
+ * addresses differ. `cube` follows, shifting `robot` off a naive 0-based guess. One
+ * geom is unnamed, as visual meshes are, and belongs to `robot` by its body alone.
  */
 function fakeScene() {
   const jointNames = ['robot/floating_base', 'robot/shoulder', 'robot/elbow', 'robot/wrist', 'cube/free'];
   const bodyNames = ['world', 'robot/pelvis', 'robot/arm', 'cube/body'];
   const siteNames = ['robot/imu', 'robot/grasp', 'cube/center'];
   const sensorNames = ['robot/imu_lin_vel', 'robot/imu_ang_vel'];
+  const geomNames = ['robot/pelvis_geom', '', 'cube/geom'];
+  const tendonNames = ['robot/t0', 'cube/t1'];
+  const actuatorNames = ['robot/m0', 'robot/m1', 'cube/m2'];
 
   // One shared NUL-separated name table, as MuJoCo has; each adr array indexes it.
   const encoder = new TextEncoder();
@@ -37,17 +42,36 @@ function fakeScene() {
   const name_bodyadr = adrOf(bodyNames);
   const name_siteadr = adrOf(siteNames);
   const name_sensoradr = adrOf(sensorNames);
+  const name_geomadr = adrOf(geomNames);
+  const name_tendonadr = adrOf(tendonNames);
+  const name_actuatoradr = adrOf(actuatorNames);
+
+  // robot/pelvis carries its inertial frame yawed 90 deg; the others are aligned.
+  const s = Math.SQRT1_2;
+  const body_iquat = [1, 0, 0, 0, s, 0, 0, s, 1, 0, 0, 0, 1, 0, 0, 0];
 
   const mjModel = {
     names: Uint8Array.from(all).buffer,
+    nq: 20,
+    nv: 17,
+    nu: actuatorNames.length,
     njnt: jointNames.length,
     nbody: bodyNames.length,
+    ngeom: geomNames.length,
     nsite: siteNames.length,
+    ntendon: tendonNames.length,
     nsensor: sensorNames.length,
     name_jntadr,
     name_bodyadr,
+    name_geomadr,
     name_siteadr,
+    name_tendonadr,
+    name_actuatoradr,
     name_sensoradr,
+    // pelvis, arm, cube/body — the unnamed geom 1 sits on robot/arm.
+    geom_bodyid: [1, 2, 3],
+    site_bodyid: [1, 2, 3],
+    body_iquat,
     //              free  ball  hinge hinge  free
     jnt_type: [0, 1, 3, 3, 0],
     // free 7 | ball 4 | hinge 1 | hinge 1 | free 7  -> 20 qpos
@@ -60,6 +84,7 @@ function fakeScene() {
 
   const qpos = new Float64Array(20);
   const qvel = new Float64Array(17);
+  const qacc = new Float64Array(17);
   // robot's non-free joints: ball at qpos 7..10, hinges at 11 and 12.
   qpos.set([0.5, 0.5, 0.5, 0.5], 7);
   qpos[11] = 1.25;
@@ -68,34 +93,72 @@ function fakeScene() {
   qvel.set([0.1, 0.2, 0.3], 6);
   qvel[9] = -1.5;
   qvel[10] = 2.5;
+  qacc[9] = 4;
+  qacc[10] = 5;
 
   const xpos = new Float64Array(bodyNames.length * 3);
   const xquat = new Float64Array(bodyNames.length * 4);
+  const xipos = new Float64Array(bodyNames.length * 3);
   const cvel = new Float64Array(bodyNames.length * 6);
   const subtree_com = new Float64Array(bodyNames.length * 3);
+  const xfrc_applied = new Float64Array(bodyNames.length * 6);
   const site_xpos = new Float64Array(siteNames.length * 3);
+  const site_xmat = new Float64Array(siteNames.length * 9);
+  const geom_xpos = new Float64Array(geomNames.length * 3);
+  const geom_xmat = new Float64Array(geomNames.length * 9);
   const sensordata = new Float64Array(6);
 
   // robot/pelvis (body 1) is the entity root.
   xpos.set([1, 2, 3], 3);
   // 90 deg about +z: heading = pi/2, and gravity projects onto -y in body frame.
-  const s = Math.SQRT1_2;
+  for (let b = 0; b < bodyNames.length; b++) xquat.set([1, 0, 0, 0], b * 4);
   xquat.set([s, 0, 0, s], 4);
+  // Its COM sits 0.5 m above the body origin.
+  xipos.set([1, 2, 3.5], 3);
   // angular (0.1, 0.2, 0.3), linear-about-COM (1, 0, 0).
   cvel.set([0.1, 0.2, 0.3, 1, 0, 0], 6);
   subtree_com.set([1, 2, 4], 3); // 1 m above the body origin in z
+  xfrc_applied.set([1, 2, 3, 4, 5, 6], 6);
   site_xpos.set([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 9, 9, 9]);
+  const identity = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  for (let i = 0; i < siteNames.length; i++) site_xmat.set(identity, i * 9);
+  // robot/imu's frame is yawed 90 deg.
+  site_xmat.set([0, -1, 0, 1, 0, 0, 0, 0, 1], 0);
+  geom_xpos.set([0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.3, 0.3, 0.3]);
+  for (let i = 0; i < geomNames.length; i++) geom_xmat.set(identity, i * 9);
   sensordata.set([1, 2, 3, 4, 5, 6]);
+
+  // Generalized forces on dof 9 (the shoulder hinge... the elbow), chosen so the
+  // qfrc_external identity has something to recover: 10 - 1 - 2 - 3 + 4 = 8.
+  const dofForce = (value: number): Float64Array => {
+    const out = new Float64Array(17);
+    out[9] = value;
+    return out;
+  };
 
   const mjData = {
     qpos,
     qvel,
+    qacc,
     xpos,
     xquat,
+    xipos,
     cvel,
     subtree_com,
+    xfrc_applied,
     site_xpos,
+    site_xmat,
+    geom_xpos,
+    geom_xmat,
     sensordata,
+    ten_length: Float64Array.from([0.5, 0.7]),
+    ten_velocity: Float64Array.from([-0.1, 0.2]),
+    actuator_force: Float64Array.from([1, 2, 3]),
+    qfrc_smooth: dofForce(10),
+    qfrc_actuator: dofForce(1),
+    qfrc_applied: dofForce(2),
+    qfrc_passive: dofForce(3),
+    qfrc_bias: dofForce(4),
   } as unknown as Mutable;
 
   return { mjModel, mjData };
@@ -227,9 +290,10 @@ describe('createSlotReader — entity data fields', () => {
   });
 
   it('returns null for a field it does not implement', () => {
-    // Loud (the caller warns and holds) rather than an approximation.
-    expect(read({ entity: 'robot', field: 'joint_acc' })).toBeNull();
-    expect(isReadableEntityField('joint_acc')).toBe(false);
+    // Loud (the caller warns and holds) rather than an approximation. `joint_torques`
+    // is the one EntityData property with no reader: mjlab raises on it too.
+    expect(read({ entity: 'robot', field: 'joint_torques' })).toBeNull();
+    expect(isReadableEntityField('joint_torques')).toBe(false);
     expect(isReadableEntityField('joint_pos')).toBe(true);
   });
 
@@ -259,6 +323,88 @@ describe('createSlotReader — entity data fields', () => {
     );
     current = next;
     close(reader({ entity: 'robot', field: 'joint_pos' }), [0.13, 0.14, 0.15, 0.16, 0.17, 0.18]);
+  });
+});
+
+describe('createSlotReader — the rest of EntityData', () => {
+  const read = createSlotReader(() => context());
+  const s = Math.SQRT1_2;
+
+  it('root COM pose composes the body quaternion with its inertial frame', () => {
+    close(read({ entity: 'robot', field: 'root_com_pos_w' }), [1, 2, 3.5]);
+    // xquat and body_iquat are both a 90 deg yaw, so the COM frame is yawed 180 deg.
+    close(read({ entity: 'robot', field: 'root_com_quat_w' }), [0, 0, 0, 1]);
+    close(read({ entity: 'robot', field: 'root_com_pose_w' }), [1, 2, 3.5, 0, 0, 0, 1]);
+  });
+
+  it('root COM velocity moves the cvel linear part to the COM, not the body origin', () => {
+    // offset = subtree_com - xipos = (0, 0, 0.5): lin = (1,0,0) - ang x offset = (0.9, 0.05, 0)
+    close(read({ entity: 'robot', field: 'root_com_lin_vel_w' }), [0.9, 0.05, 0]);
+    close(read({ entity: 'robot', field: 'root_com_vel_w' }), [0.9, 0.05, 0, 0.1, 0.2, 0.3]);
+    close(read({ entity: 'robot', field: 'root_com_ang_vel_w' }), [0.1, 0.2, 0.3]);
+    // Body frame, by the *link* quaternion as mjlab does: world x -> body -y.
+    close(read({ entity: 'robot', field: 'root_com_lin_vel_b' }), [0.05, -0.9, 0]);
+    close(read({ entity: 'robot', field: 'root_com_ang_vel_b' }), [0.2, -0.1, 0.3]);
+  });
+
+  it('body fields give one row per entity body, world excluded', () => {
+    // robot's bodies are pelvis (1) and arm (2); arm is at rest at the origin.
+    close(read({ entity: 'robot', field: 'body_link_pos_w' }), [1, 2, 3, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'body_link_quat_w' }), [s, 0, 0, s, 1, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'body_link_pose_w' }), [1, 2, 3, s, 0, 0, s, 0, 0, 0, 1, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'body_link_vel_w' }), [0.8, 0.1, 0, 0.1, 0.2, 0.3, 0, 0, 0, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'body_link_lin_vel_w' }), [0.8, 0.1, 0, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'body_link_ang_vel_w' }), [0.1, 0.2, 0.3, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'body_com_pos_w' }), [1, 2, 3.5, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'body_com_quat_w' }), [0, 0, 0, 1, 1, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'body_com_lin_vel_w' }), [0.9, 0.05, 0, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'body_external_wrench' }), [1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'body_external_force' }), [1, 2, 3, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'body_external_torque' }), [4, 5, 6, 0, 0, 0]);
+    close(read({ entity: 'cube', field: 'body_link_pos_w' }), [0, 0, 0]);
+  });
+
+  it('an unnamed geom belongs to the entity whose body it sits on', () => {
+    // geom 1 has no name but sits on robot/arm; geom 2 is the cube's.
+    close(read({ entity: 'robot', field: 'geom_pos_w' }), [0.1, 0.1, 0.1, 0.2, 0.2, 0.2]);
+    close(read({ entity: 'cube', field: 'geom_pos_w' }), [0.3, 0.3, 0.3]);
+    close(read({ entity: 'robot', field: 'geom_quat_w' }), [1, 0, 0, 0, 1, 0, 0, 0]);
+    // geom 0 on pelvis: offset = (0.9, 1.9, 3.9), ang x offset = (0.21, -0.12, 0.01).
+    close(read({ entity: 'robot', field: 'geom_lin_vel_w' }), [0.79, 0.12, -0.01, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'geom_ang_vel_w' }), [0.1, 0.2, 0.3, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'geom_vel_w' }), [0.79, 0.12, -0.01, 0.1, 0.2, 0.3, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it('site quaternions come from site_xmat as mjlab converts them', () => {
+    // robot/imu's frame is the 90 deg yaw matrix [[0,-1,0],[1,0,0],[0,0,1]].
+    close(read({ entity: 'robot', field: 'site_quat_w' }), [s, 0, 0, s, 1, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'site_pose_w' }), [0.1, 0.2, 0.3, s, 0, 0, s, 0.4, 0.5, 0.6, 1, 0, 0, 0]);
+    // robot/imu on pelvis: offset = (0.9, 1.8, 3.7), ang x offset = (0.2, -0.1, 0).
+    close(read({ entity: 'robot', field: 'site_lin_vel_w' }), [0.8, 0.1, 0, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'site_ang_vel_w' }), [0.1, 0.2, 0.3, 0, 0, 0]);
+    close(read({ entity: 'robot', field: 'site_vel_w' }), [0.8, 0.1, 0, 0.1, 0.2, 0.3, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it('joint_acc follows the dof addresses', () => {
+    close(read({ entity: 'robot', field: 'joint_acc' }), [0, 0, 0, 4, 5]);
+  });
+
+  it('generalized forces: actuators by entity, qfrc_external off the smooth-force identity', () => {
+    close(read({ entity: 'robot', field: 'actuator_force' }), [1, 2]);
+    close(read({ entity: 'cube', field: 'actuator_force' }), [3]);
+    close(read({ entity: 'robot', field: 'qfrc_actuator' }), [0, 0, 0, 1, 0]);
+    // dof 9: smooth 10 - actuator 1 - applied 2 - passive 3 + bias 4.
+    close(read({ entity: 'robot', field: 'qfrc_external' }), [0, 0, 0, 8, 0]);
+  });
+
+  it('tendons scope by prefix', () => {
+    close(read({ entity: 'robot', field: 'tendon_len' }), [0.5]);
+    close(read({ entity: 'cube', field: 'tendon_vel' }), [0.2]);
+  });
+
+  it('implements every EntityData property but joint_torques', () => {
+    expect(Object.keys(FIELD_READERS)).toHaveLength(55);
+    expect(isReadableEntityField('joint_torques')).toBe(false);
   });
 });
 

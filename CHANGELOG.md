@@ -90,8 +90,11 @@ velocity-command shortcuts were removed outright, see Removed.
   and the raw fields it reads become `sim` slots — where before it built fine and then
   froze the observation group at its previous value. The TypeScript readers stay as a
   shortcut over that foundation (`READER_FIELDS`): a property they serve is still one
-  value slot with no math in the graph. A property that cannot be traced now fails the
-  build. Replay proxies also forward `physics_dt` / `step_dt` / `cfg` from the real env,
+  value slot with no math in the graph, and every `EntityData` property now has one —
+  55 readers where there were 15, `core/onnx/slotReader/fields/` mirroring the sections
+  of mjlab's `entity/data.py`, each checked against mjlab by `slotReaderParity.test.ts`.
+  A property that cannot be traced now fails the build.
+  Replay proxies also forward `physics_dt` / `step_dt` / `cfg` from the real env,
   and `add_policy` fills `policy_num_actions` from the ONNX output width when a policy
   has no joint names (muscle policies).
 - **MDP term bodies are traced to ONNX at build time and run by ONNX Runtime Web**

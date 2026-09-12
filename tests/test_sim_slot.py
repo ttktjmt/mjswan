@@ -144,11 +144,14 @@ def test_sim_time_is_a_dynamic_slot(env):
 
 
 class TestTraceThrough:
-    """An ``EntityData`` property the browser has no reader for."""
+    """An ``EntityData`` property the browser has no reader for.
+
+    Every property has one now, so the tests force the path with an empty
+    ``reader_fields`` — what a property mjlab adds tomorrow gets by default.
+    """
 
     def test_reads_become_the_raw_fields_the_property_reads(self, env):
-        assert "body_link_vel_w" not in READER_FIELDS
-        export = trace_term(_body_link_vel, {}, env, name="body_vel")
+        export = trace_term(_body_link_vel, {}, env, name="body_vel", reader_fields=())
         # mjlab's `compute_velocity_from_cvel(xpos, subtree_com, cvel)`, nothing else.
         assert export.input_slots == [
             ("__sim__", "cvel"),
@@ -158,7 +161,7 @@ class TestTraceThrough:
         assert all(entry["sim"] for entry in slots_json(export))
 
     def test_graph_reproduces_the_property_over_moved_state(self, env):
-        export = trace_term(_body_link_vel, {}, env, name="body_vel")
+        export = trace_term(_body_link_vel, {}, env, name="body_vel", reader_fields=())
         for seed in (1, 2):
             _move(env, seed)
             live = _body_link_vel(env).detach().numpy()
@@ -190,9 +193,11 @@ class TestShortcut:
         np.testing.assert_allclose(_run(shortcut, env), live, rtol=1e-6)
         np.testing.assert_allclose(_run(traced, env), live, rtol=1e-6)
 
-    def test_reader_fields_exist_on_entity_data(self):
-        # A name here that mjlab dropped would be a slot the build emits for nothing.
+    def test_reader_fields_are_every_property_but_joint_torques(self):
+        # A name here that mjlab dropped would be a slot the build emits for nothing; a
+        # property mjlab added and this list lacks is traced through, which works but
+        # deserves a reader.
         from mjlab.entity.data import EntityData
 
-        members = set(vars(EntityData)) | set(EntityData.__dataclass_fields__)
-        assert READER_FIELDS <= members
+        properties = {n for n, v in vars(EntityData).items() if isinstance(v, property)}
+        assert READER_FIELDS == (properties - {"joint_torques"}) | {"gravity_vec_w"}
