@@ -370,6 +370,13 @@ function AppContent() {
             onEventArmedChange={(name, armed) => engineRef.current?.events.setArmed(name, armed)}
             debugVis={engineState?.debugVis ? [...engineState.debugVis] : []}
             onDebugVisChange={(term, enabled) => engineRef.current?.debugVis.set(term, enabled)}
+            interactions={engineState?.interactions ? [...engineState.interactions] : []}
+            interactionMode={engineState?.interactionMode ?? 'pull'}
+            interactionParams={engineState?.interactionParams ?? {}}
+            onInteractionModeChange={(mode) => engineRef.current?.interaction.setMode(mode)}
+            onInteractionParamChange={(mode, name, value) =>
+              engineRef.current?.interaction.setParam(mode, name, value)
+            }
             onReset={() => engineRef.current?.reset()}
           />
         )}

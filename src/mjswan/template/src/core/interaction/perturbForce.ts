@@ -50,3 +50,62 @@ export function applyDragPull(
   perturb.refselpos.set(pull.targetPoint);
   mujoco.mjv_applyPerturbForce(mjModel, mjData, perturb);
 }
+
+/** Row layout of `xfrc_applied`: force then torque, both in the world frame. */
+const WRENCH_STRIDE = 6;
+const IDENTITY_ROTATION = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+
+/**
+ * Write a world-frame force acting at `worldPoint` into `mjData.xfrc_applied`, replacing
+ * that body's row.
+ *
+ * The moment goes through `mju_transformSpatial` rather than a hand-rolled cross product,
+ * so the point a wrench is referred to stays MuJoCo's business. Two conventions have to
+ * be bridged: `mju_transformSpatial` reads and writes **(rotational, linear)**, while
+ * `xfrc_applied` stores **(force, torque)** — hence the swap on the way out.
+ */
+export function applyPointForce(
+  mujoco: MainModule,
+  mjData: MjData,
+  bodyId: number,
+  worldPoint: readonly [number, number, number],
+  force: readonly [number, number, number],
+): void {
+  const at = bodyId * WRENCH_STRIDE;
+  const row = mjData.xfrc_applied.subarray(at, at + WRENCH_STRIDE);
+  const com = [0, 1, 2].map((i) => mjData.xipos[bodyId * 3 + i]);
+  mujoco.mju_transformSpatial(
+    row,
+    [0, 0, 0, force[0], force[1], force[2]],
+    1,
+    com,
+    [worldPoint[0], worldPoint[1], worldPoint[2]],
+    IDENTITY_ROTATION,
+  );
+  for (let i = 0; i < 3; i++) {
+    const torque = row[i];
+    row[i] = row[i + 3];
+    row[i + 3] = torque;
+  }
+}
+
+/**
+ * Hold a body's wrench to `maxForce` newtons, scaling the torque with it so the line of
+ * action is unchanged. Returns whether the clamp bit.
+ */
+export function clampWrench(mjData: MjData, bodyId: number, maxForce: number): boolean {
+  const at = bodyId * WRENCH_STRIDE;
+  const row = mjData.xfrc_applied;
+  const magnitude = Math.hypot(row[at], row[at + 1], row[at + 2]);
+  if (!(magnitude > maxForce)) return false;
+  const scale = maxForce / magnitude;
+  for (let i = 0; i < WRENCH_STRIDE; i++) row[at + i] *= scale;
+  return true;
+}
+
+/** Zero one body's row, for a mode that has stopped writing it. */
+export function clearWrench(mjData: MjData, bodyId: number): void {
+  const at = bodyId * WRENCH_STRIDE;
+  if (at + WRENCH_STRIDE > mjData.xfrc_applied.length) return;
+  for (let i = 0; i < WRENCH_STRIDE; i++) mjData.xfrc_applied[at + i] = 0;
+}

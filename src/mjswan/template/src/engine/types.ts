@@ -130,6 +130,48 @@ export interface EventControls {
   setArmed(name: string, armed: boolean): void;
 }
 
+/** Which pointer gesture the viewer is in. The set is closed: there is no plugin path in. */
+export type InteractionModeId = 'pull' | 'push' | 'weld' | 'spawn';
+
+/** One number a mode exposes, with everything a generic control needs to draw it. */
+export interface InteractionParamDescriptor {
+  /** The id {@link InteractionControls.setParam} takes. */
+  name: string;
+  label: string;
+  /** Printed beside the value; '' for a dimensionless one. */
+  unit: string;
+  min: number;
+  max: number;
+  step: number;
+  default: number;
+}
+
+export interface InteractionModeDescriptor {
+  id: InteractionModeId;
+  label: string;
+  /** One line describing the gesture. */
+  hint: string;
+  /** False when the loaded scene cannot run this mode; `reason` says why. */
+  available: boolean;
+  reason?: string;
+  params: ReadonlyArray<InteractionParamDescriptor>;
+}
+
+/**
+ * Which pointer mode is live, and its numbers. Input *bindings* are deliberately not here:
+ * a press that hits a geom belongs to the mode and a press that misses belongs to the
+ * camera, always, so there is nothing to configure.
+ */
+export interface InteractionControls {
+  setMode(id: InteractionModeId): void;
+  getMode(): InteractionModeId;
+  /** Out-of-range values are clamped to the descriptor, not refused. */
+  setParam(mode: InteractionModeId, name: string, value: number): void;
+  getParams(mode: InteractionModeId): Readonly<Record<string, number>>;
+  /** Drop whatever is held — for a host that is about to take the pointer away. */
+  cancel(): void;
+}
+
 /** Immutable snapshot pushed to {@link MjswanEngine.subscribe} listeners. */
 export interface MjswanEngineState {
   phase: 'running' | 'paused';
@@ -142,6 +184,11 @@ export interface MjswanEngineState {
   debugVis: ReadonlyArray<DebugVisDescriptor>;
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
+  /** Every pointer mode, with whether this scene can run it. */
+  interactions: ReadonlyArray<InteractionModeDescriptor>;
+  interactionMode: InteractionModeId;
+  /** Current parameter values, per mode. */
+  interactionParams: Readonly<Record<InteractionModeId, Readonly<Record<string, number>>>>;
   /** Reported so an app recording a session can persist it rather than guess. */
   termSeed: number;
 }
@@ -156,6 +203,12 @@ export interface CreateEngineOptions {
   termSeed?: number;
   /** Put WebXR-tracked hands in the simulation as mocap-driven fingertips. */
   handTracking?: boolean;
+  /**
+   * How many throwable boxes a scene compiles in for the `spawn` mode. They are declared
+   * with the model and parked out of sight, so this is fixed for the life of a scene; 0
+   * turns the mode off. A scene's own `viewer.spawnPool` overrides this.
+   */
+  spawnPool?: number;
 }
 
 /** A headless, instance-scoped simulation engine. Create with {@link createEngine}. */
@@ -179,6 +232,7 @@ export interface MjswanEngine {
   readonly commands: CommandControls;
   readonly debugVis: DebugVisControls;
   readonly events: EventControls;
+  readonly interaction: InteractionControls;
 
   // state
   getState(): MjswanEngineState;

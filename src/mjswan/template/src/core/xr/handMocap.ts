@@ -21,7 +21,8 @@ import * as THREE from 'three';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 
 import { threeToMjcCoordinate } from '../scene/coordinate';
-import { quatApplyInv, quatInverse, quatMultiply } from '../observation/math';
+import { appendToMjcf, rewriteMjcfFile } from '../scene/mjcfInject';
+import type { WeldHold } from '../grab/weldHold';
 
 type Quat = readonly [number, number, number, number];
 
@@ -150,6 +151,11 @@ function weldName(hand: number): string {
   return `mjswan_xr${hand}_grab`;
 }
 
+/** The weld slots a hand-tracking scene carries, for `WeldHold.bind`. */
+export function handWeldNames(): string[] {
+  return Array.from({ length: HAND_COUNT }, (_, hand) => weldName(hand));
+}
+
 /** Derived from the indices in both places, so the XML and the writes agree. */
 function parkedPosition(hand: number, index: number): THREE.Vector3 {
   return new THREE.Vector3((hand * HAND_SEGMENTS.length + index) * PARKED_SPACING, 0, PARKED_Z);
@@ -210,17 +216,12 @@ export function injectHandMocapXml(xml: string): string {
     `  <worldbody>\n${bodies.join('\n')}\n  </worldbody>\n` +
     `  <equality>\n${equalities.join('\n')}\n  </equality>\n`;
 
-  const close = xml.lastIndexOf('</mujoco>');
-  if (close < 0) {
-    throw new Error('injectHandMocapXml: scene XML has no closing </mujoco>');
-  }
-  return `${xml.slice(0, close)}${block}${xml.slice(close)}`;
+  return appendToMjcf(xml, block);
 }
 
 /** Rewrite a scene XML in the Emscripten VFS in place, ahead of `mj_loadXML`. */
 export function injectHandMocapFile(mujoco: MainModule, path: string): void {
-  const xml = new TextDecoder().decode(mujoco.FS.readFile(path));
-  mujoco.FS.writeFile(path, injectHandMocapXml(xml));
+  rewriteMjcfFile(mujoco, path, injectHandMocapXml);
 }
 
 type BoundSegment = {
@@ -240,8 +241,8 @@ type BoundHand = {
   segments: BoundSegment[];
   /** The frame a grabbed object is held in; null if the model lacks the palm. */
   palm: BoundSegment | null;
-  weldId: number;
-  grabbed: boolean;
+  /** This hand's slot in the shared {@link WeldHold}. */
+  weld: string;
 };
 
 export class HandMocap {
@@ -249,12 +250,14 @@ export class HandMocap {
   private bound: BoundHand[] = [];
   /** Every hand geom, so a contact can be attributed and a grab never targets the hand. */
   private handOfGeom = new Map<number, number>();
-  private neqData = 11;
+  private readonly weld: WeldHold;
   private readonly from = new THREE.Vector3();
   private readonly to = new THREE.Vector3();
 
-  constructor(hands: THREE.XRHandSpace[]) {
+  /** The hold is shared with the pointer's grab (`core/grab/weldHold`); the trigger is not. */
+  constructor(hands: THREE.XRHandSpace[], weld: WeldHold) {
     this.hands = hands;
+    this.weld = weld;
   }
 
   /** Every body a bone occupies, so the viewer can keep parked hands out of its bounds. */
@@ -264,8 +267,6 @@ export class HandMocap {
 
   bind(mujoco: MainModule, mjModel: MjModel): void {
     const body = mujoco.mjtObj.mjOBJ_BODY.value;
-    const equality = mujoco.mjtObj.mjOBJ_EQUALITY.value;
-    this.neqData = mujoco.mjNEQDATA;
     this.bound = [];
     this.handOfGeom = new Map();
     const handOfBody = new Map<number, number>();
@@ -296,8 +297,7 @@ export class HandMocap {
       this.bound.push({
         segments,
         palm: segments.find((s) => s.segment === HAND_SEGMENTS[0]) ?? null,
-        weldId: mujoco.mj_name2id(mjModel, equality, weldName(hand)),
-        grabbed: false,
+        weld: weldName(hand),
       });
     }
     for (let g = 0; g < mjModel.ngeom; g++) {
@@ -356,7 +356,7 @@ export class HandMocap {
   park(mjData: MjData): void {
     for (const hand of this.bound) {
       for (const bound of hand.segments) this.parkSegment(mjData, bound);
-      this.release(mjData, hand);
+      this.weld.release(mjData, hand.weld);
     }
   }
 
@@ -394,16 +394,17 @@ export class HandMocap {
   private settleGrabs(mjModel: MjModel, mjData: MjData): void {
     const touched = this.touchedBodies(mjModel, mjData);
     for (const [hand, boundHand] of this.bound.entries()) {
-      if (boundHand.weldId < 0) continue;
+      if (!this.weld.has(boundHand.weld)) continue;
+      const holding = this.weld.heldBy(boundHand.weld) !== null;
       if (!this.hands[hand]?.inputState.pinching) {
-        if (boundHand.grabbed) this.release(mjData, boundHand);
+        if (holding) this.weld.release(mjData, boundHand.weld);
         continue;
       }
       const target = touched.get(hand);
       // The weld holds the object in the palm's frame, so a parked palm would drag it
       // out of the scene.
-      if (boundHand.grabbed || target === undefined || !boundHand.palm?.tracked) continue;
-      this.grab(mjModel, mjData, boundHand, boundHand.palm.bodyId, target);
+      if (holding || target === undefined || !boundHand.palm?.tracked) continue;
+      this.weld.hold(mjModel, mjData, boundHand.weld, boundHand.palm.bodyId, target);
     }
   }
 
@@ -440,35 +441,4 @@ export class HandMocap {
     );
   }
 
-  /**
-   * Weld the pinched body to the palm at the pose it is already in, so activating the
-   * constraint holds it rather than snapping it. `eq_data` for a weld is
-   * `[anchor(3), relpose pos(3), relpose quat(4), torquescale(1)]`, and its relpose is
-   * body2 expressed in body1's frame — the opposite of the obvious reading.
-   */
-  private grab(mjModel: MjModel, mjData: MjData, hand: BoundHand, palm: number, target: number): void {
-    const palmQuat = [0, 1, 2, 3].map((i) => mjData.xquat[palm * 4 + i]);
-    const relPos = quatApplyInv(
-      palmQuat,
-      [0, 1, 2].map((i) => mjData.xpos[target * 3 + i] - mjData.xpos[palm * 3 + i]),
-    );
-    const relQuat = quatMultiply(
-      quatInverse(palmQuat),
-      [0, 1, 2, 3].map((i) => mjData.xquat[target * 4 + i]),
-    );
-    const at = hand.weldId * this.neqData;
-    for (let i = 0; i < 3; i++) mjModel.eq_data[at + i] = 0;
-    for (let i = 0; i < 3; i++) mjModel.eq_data[at + 3 + i] = relPos[i];
-    for (let i = 0; i < 4; i++) mjModel.eq_data[at + 6 + i] = relQuat[i];
-    mjModel.eq_data[at + 10] = 1;
-    mjModel.eq_obj1id[hand.weldId] = palm;
-    mjModel.eq_obj2id[hand.weldId] = target;
-    mjData.eq_active[hand.weldId] = 1;
-    hand.grabbed = true;
-  }
-
-  private release(mjData: MjData, hand: BoundHand): void {
-    if (hand.weldId >= 0) mjData.eq_active[hand.weldId] = 0;
-    hand.grabbed = false;
-  }
 }
