@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import type { MjvPerturb } from 'mujoco';
 
-import { DragArrow, PushRing } from './gizmos';
+import { DragArrow, PushRing, SpawnGhost } from './gizmos';
 import {
   DEFAULT_INTERACTION_MODE,
   INTERACTION_MODES,
@@ -25,6 +25,8 @@ import type { InteractionMode, InteractionSim, ModeContext } from './modes/mode'
 import { PullMode } from './modes/pull';
 import { PushMode } from './modes/push';
 import { WeldMode } from './modes/weld';
+import { SpawnMode } from './modes/spawn';
+import type { SpawnPool } from './spawnPool';
 import type { WeldHold } from '../grab/weldHold';
 
 export type { InteractionSim } from './modes/mode';
@@ -48,15 +50,19 @@ export interface InteractionManagerOptions {
   sim: () => InteractionSim;
   /** Shared with the XR hand, so one body is never held by two constraints. */
   weld: WeldHold;
+  /** Owned by the runtime, which parks it on reset and redraws it as it changes. */
+  pool: SpawnPool;
 }
 
 export class InteractionManager {
   private readonly pointer: PointerTracker;
   private readonly arrow: DragArrow;
   private readonly ring: PushRing;
+  private readonly ghost: SpawnGhost;
   private readonly wrench = new InteractionWrench();
   private readonly readSim: () => InteractionSim;
   private readonly weld: WeldHold;
+  private readonly pool: SpawnPool;
   private readonly modes = new Map<InteractionModeId, InteractionMode>();
   private readonly values = defaultParams();
   private active: InteractionModeId = DEFAULT_INTERACTION_MODE;
@@ -65,9 +71,11 @@ export class InteractionManager {
   constructor(options: InteractionManagerOptions) {
     this.readSim = options.sim;
     this.weld = options.weld;
+    this.pool = options.pool;
     this.arrow = new DragArrow(options.scene);
     this.ring = new PushRing(options.scene);
-    for (const mode of [new PullMode(), new PushMode(), new WeldMode()]) {
+    this.ghost = new SpawnGhost(options.scene);
+    for (const mode of [new PullMode(), new PushMode(), new WeldMode(), new SpawnMode()]) {
       this.modes.set(mode.id, mode);
     }
 
@@ -164,6 +172,8 @@ export class InteractionManager {
     const sim = this.readSim();
     if (!sim.mjData) return;
     this.wrench.begin(sim.mjData);
+    // Every step, not just in `spawn`: a parked box has a free joint and would fall.
+    this.pool.holdIdle(sim.mjData);
     this.current()?.preStep(this.pointer.current(), this.context());
   }
 
@@ -171,6 +181,7 @@ export class InteractionManager {
     this.pointer.dispose();
     this.arrow.dispose();
     this.ring.dispose();
+    this.ghost.dispose();
     // An embind handle, not a view: it has to be released or the WASM heap grows.
     this.perturbHandle?.delete();
     this.perturbHandle = null;
@@ -198,7 +209,9 @@ export class InteractionManager {
       perturb: () => this.getPerturb(),
       arrow: this.arrow,
       ring: this.ring,
+      ghost: this.ghost,
       weld: this.weld,
+      pool: this.pool,
     };
   }
 

@@ -32,6 +32,7 @@ export interface ManifestCamera {
   enable_shadows?: boolean;
   height?: number;
   width?: number;
+  spawn_pool?: number;
 }
 export interface ManifestSplat {
   id: string;
@@ -237,6 +238,7 @@ function toViewerConfig(camera: ManifestCamera | undefined): ViewerConfig | unde
   if (camera.enable_shadows !== undefined) view.enableShadows = camera.enable_shadows;
   if (camera.height !== undefined) view.height = camera.height;
   if (camera.width !== undefined) view.width = camera.width;
+  if (camera.spawn_pool !== undefined) view.spawnPool = camera.spawn_pool;
   return view;
 }
 

@@ -193,6 +193,21 @@ class TestSceneCamera:
         # AUTO is what makes the view follow the robot rather than watch it leave.
         assert camera["origin_type"] == "AUTO"
 
+    def test_the_throwable_box_count_is_omitted_until_a_scene_asks(
+        self, tmp_path, minimal_model, build_manifest
+    ):
+        """Unset means "whatever the viewer defaults to", which only the viewer knows."""
+        project = Builder().add_project(name="P")
+        project.add_scene(name="S", model=minimal_model)
+        project.add_scene(name="T", model=minimal_model).set_viewer(
+            ViewerConfig(spawn_pool=0)
+        )
+        scenes = build_manifest(project._builder, tmp_path / "out")["projects"][0]["scenes"]
+
+        assert "spawn_pool" not in scenes[0]["camera"]
+        # Zero is a choice — turn the mode off — not an absence.
+        assert scenes[1]["camera"]["spawn_pool"] == 0
+
     def test_an_explicit_viewer_wins(self, tmp_path, minimal_model, build_manifest):
         project = Builder().add_project(name="P")
         project.add_scene(name="S", model=minimal_model).set_viewer(

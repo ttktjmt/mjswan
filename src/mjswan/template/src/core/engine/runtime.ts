@@ -22,6 +22,7 @@ import { HandMocap, handWeldNames, injectHandMocapXml } from '../xr/handMocap';
 import { WeldHold } from '../grab/weldHold';
 import { isEntityPrefixed, readMjcfFile } from '../scene/mjcfInject';
 import { POINTER_WELD, injectPointerGrabXml } from '../interaction/grabInject';
+import { DEFAULT_SPAWN_POOL, MAX_SPAWN_POOL, SpawnPool, injectSpawnPoolXml } from '../interaction/spawnPool';
 import { updateXrLocomotion } from '../xr/locomotion';
 import { updateRigGrounding } from '../xr/grounding';
 import { createArButton } from '../xr/arButton';
@@ -65,6 +66,12 @@ import { SeededRng } from '../rng';
 /** Fixed rather than time-derived, so a plain page load replays identically. */
 const DEFAULT_TERM_SEED = 0x5eed;
 
+
+/** Clamped rather than refused: an out-of-range count is a typo, not a reason to fail a load. */
+function clampPoolSize(count: number): number {
+  if (!Number.isFinite(count)) return DEFAULT_SPAWN_POOL;
+  return Math.max(0, Math.min(MAX_SPAWN_POOL, Math.floor(count)));
+}
 
 const EMPTY_ACTIONS = new Float32Array(0);
 /** Only the `direct` muscle mode reads an actuator range; the rest carry none. */
@@ -233,6 +240,11 @@ export class mjswanRuntime {
   private grabInjected = false;
   /** Set before the model is built, which is when the injection is decided. */
   private sceneHasPolicy = false;
+  /** Throwable boxes, declared with the model and parked until something throws one. */
+  private readonly spawnPool = new SpawnPool();
+  /** How many this scene asked for: its own `viewer.spawnPool`, else the engine's default. */
+  private spawnPoolSize: number;
+  private readonly defaultSpawnPool: number;
   private policyRunner: PolicyRunner | null;
   private policyStateBuilder: PolicyStateBuilder | null;
   private initialQpos: number[] | null;
@@ -297,8 +309,10 @@ export class mjswanRuntime {
     container: HTMLElement,
     termSeed = DEFAULT_TERM_SEED,
     handTracking = false,
+    spawnPool = DEFAULT_SPAWN_POOL,
   ) {
     this.mujoco = mujoco;
+    this.defaultSpawnPool = clampPoolSize(spawnPool);
     this.container = container;
     this.termSeed = termSeed;
     this.commandManager = new CommandManager();
@@ -412,6 +426,7 @@ export class mjswanRuntime {
       controls: this.controls,
       sim: () => this.interactionSim(),
       weld: this.weldHold,
+      pool: this.spawnPool,
     });
 
     this.passthrough = new Passthrough(this.scene);
@@ -446,6 +461,7 @@ export class mjswanRuntime {
     this.decimation = 1;
     this.controlDt = null;
     this.loadingScene = null;
+    this.spawnPoolSize = this.defaultSpawnPool;
     this.policyRunner = null;
     this.policyStateBuilder = null;
     this.initialQpos = null;
@@ -470,8 +486,9 @@ export class mjswanRuntime {
     await this.stop();
     this.scenePlugins = scene.plugins ?? {};
     this.terrainData = scene.terrainData ?? null;
-    // Read before the model is built: it decides what gets injected into the MJCF.
+    // Read before the model is built: they decide what gets injected into the MJCF.
     this.sceneHasPolicy = !!scene.policy;
+    this.spawnPoolSize = clampPoolSize(scene.viewer?.spawnPool ?? this.defaultSpawnPool);
     // Needed before `buildSceneFromMjz`, which derives `decimation` from it.
     this.controlDt = scene.controlDt && scene.controlDt > 0 ? scene.controlDt : null;
     // Reseed so two loads of the same scene draw the same randomness.
@@ -617,6 +634,7 @@ export class mjswanRuntime {
       this.syncStaticBodiesFromData();
 
       this.handMocap?.bind(this.mujoco, this.mjModel);
+      this.spawnPool.bind(this.mujoco, this.mjModel);
       this.weldHold.bind(this.mujoco, this.mjModel, [
         ...(this.grabInjected ? [POINTER_WELD] : []),
         ...(this.handMocap ? handWeldNames() : []),
@@ -627,9 +645,9 @@ export class mjswanRuntime {
       this.handMocap?.park(this.mjData);
       // Tagged so `frameCamera` can leave them out: a parked hand waits 100 m up, and
       // with DEBUG_DRAW_BONES on it is drawn there.
-      for (const bodyId of this.handMocap?.bodyIds() ?? []) {
+      for (const bodyId of [...(this.handMocap?.bodyIds() ?? []), ...this.spawnPool.bodyIds()]) {
         if (this.bodies[bodyId]) {
-          this.bodies[bodyId].userData.xrHand = true;
+          this.bodies[bodyId].userData.injected = true;
         }
       }
 
@@ -684,10 +702,11 @@ export class mjswanRuntime {
     this.grabInjected = isEntityPrefixed(xml) || !this.sceneHasPolicy;
     if (this.grabInjected) {
       injected = injectPointerGrabXml(injected);
+      injected = injectSpawnPoolXml(injected, this.spawnPoolSize);
     } else {
       console.warn(
-        '[mjswan] grab is off for this scene: a policy is loaded and the model is not ' +
-          'entity-prefixed, so an extra body would change a traced graph\'s input width.',
+        '[mjswan] grab and throw are off for this scene: a policy is loaded and the model ' +
+          'is not entity-prefixed, so extra bodies would change a traced graph\'s input width.',
       );
     }
     if (injected !== xml) this.mujoco.FS.writeFile(path, injected);
@@ -869,7 +888,7 @@ export class mjswanRuntime {
     }
     const box = new THREE.Box3();
     for (const child of this.mujocoRoot.children) {
-      if (!child.userData.xrHand) {
+      if (!child.userData.injected) {
         box.expandByObject(child);
       }
     }
@@ -1471,6 +1490,9 @@ export class mjswanRuntime {
     }
     // After the qpos writes above, which do not cover the injected hand bodies.
     this.handMocap?.park(this.mjData);
+    // A keyframe written before injection is zero-padded, so the pool would spawn at the
+    // world origin rather than stay parked.
+    this.spawnPool.park(this.mjData);
     // `mj_resetData` puts `eq_active` back but leaves the retargeting on the model.
     this.interaction.onReset();
     // With the sim state, as mjlab does: a force from before the reset would otherwise
@@ -1799,6 +1821,7 @@ export class mjswanRuntime {
       }
 
       this.resizeHandBoneMeshes();
+    this.spawnPool.syncMeshes(this.mjModel, this.bodies);
       updateLightsFromData(this.mujoco, this.mjData, this.lights);
 
       if (this.mujocoRoot && this.mujocoRoot.cylinders) {
