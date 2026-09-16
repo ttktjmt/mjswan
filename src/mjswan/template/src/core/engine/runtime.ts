@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
-import type { MainModule, MjData, MjModel } from 'mujoco';
+import type { MainModule, MjData, MjModel, MjvPerturb } from 'mujoco';
 import {
   getPosition,
   getQuaternion,
@@ -14,6 +14,7 @@ import type { EnginePlugins } from '../plugins';
 import { type SplatTransform, type SplatMesh, loadSplat, disposeSplat, applySplatTransform } from '../scene/splat';
 import { loadCollider, disposeCollider } from '../scene/collider';
 import { DragStateManager } from '../utils/dragStateManager';
+import { applyDragPull } from '../interaction/perturbForce';
 import { createTendonState, updateTendonGeometry, updateTendonRendering } from '../scene/tendons';
 import { updateHeadlightFromCamera, updateLightsFromData } from '../scene/lights';
 import { mjcToThreeCoordinate, threeToMjcCoordinate } from '../scene/coordinate';
@@ -60,6 +61,7 @@ import { SeededRng } from '../rng';
 
 /** Fixed rather than time-derived, so a plain page load replays identically. */
 const DEFAULT_TERM_SEED = 0x5eed;
+
 
 const EMPTY_ACTIONS = new Float32Array(0);
 /** Only the `direct` muscle mode reads an actuator range; the rest carry none. */
@@ -218,6 +220,8 @@ export class mjswanRuntime {
   private resizeObserver: ResizeObserver | null;
   private dragStateManager: DragStateManager | null;
   private dragForceScale: number;
+  /** MuJoCo's own mouse-perturbation state, built on first drag. */
+  private perturb: MjvPerturb | null = null;
   private policyRunner: PolicyRunner | null;
   private policyStateBuilder: PolicyStateBuilder | null;
   private initialQpos: number[] | null;
@@ -1523,6 +1527,7 @@ export class mjswanRuntime {
     }
   }
 
+  /** Viewer-only drag; the wrench itself is MuJoCo's (see `interaction/perturbForce`). */
   private applyDragForces(): void {
     if (!this.dragStateManager || !this.mjModel || !this.mjData || !this.bodies) {
       return;
@@ -1555,39 +1560,24 @@ export class mjswanRuntime {
     // Update offset
     this.dragStateManager.update();
 
-    // Calculate force (Three.js coordinate system → MuJoCo coordinate system)
-    const forceThree = this.dragStateManager.offset
-      .clone()
-      .multiplyScalar(this.dragForceScale);
-    const force = threeToMjcCoordinate(forceThree);
+    // The grab point is stored in the three.js body's local frame, which is the MuJoCo
+    // body frame under the same swizzle the world uses.
+    const grab = threeToMjcCoordinate(this.dragStateManager.localHit);
+    const target = threeToMjcCoordinate(this.dragStateManager.currentWorld);
+    applyDragPull(this.mujoco, this.mjModel, this.mjData, this.getPerturb(), {
+      bodyId,
+      localPoint: [grab.x, grab.y, grab.z],
+      targetPoint: [target.x, target.y, target.z],
+      forceScale: this.dragForceScale,
+    });
+  }
 
-    // Point where force is applied (world coordinates)
-    const pointThree = this.dragStateManager.worldHit.clone();
-    const point = threeToMjcCoordinate(pointThree);
-    // Body position
-    const bodyPos = new THREE.Vector3(
-      this.mjData.xpos[bodyId * 3 + 0],
-      this.mjData.xpos[bodyId * 3 + 1],
-      this.mjData.xpos[bodyId * 3 + 2]
-    );
-
-    // Calculate torque: τ = r × F
-    const r = new THREE.Vector3(
-      point.x - bodyPos.x,
-      point.y - bodyPos.y,
-      point.z - bodyPos.z
-    );
-    const f = new THREE.Vector3(force.x, force.y, force.z);
-    const torque = new THREE.Vector3().crossVectors(r, f);
-
-    // Set xfrc_applied xfrc_applied: (nbody, 6) = [fx, fy, fz, tx, ty, tz] for each body
-    const offset = bodyId * 6;
-    this.mjData.xfrc_applied[offset + 0] = force.x;
-    this.mjData.xfrc_applied[offset + 1] = force.y;
-    this.mjData.xfrc_applied[offset + 2] = force.z;
-    this.mjData.xfrc_applied[offset + 3] = torque.x;
-    this.mjData.xfrc_applied[offset + 4] = torque.y;
-    this.mjData.xfrc_applied[offset + 5] = torque.z;
+  /** Lazily built: an embind handle, so it is released in `dispose`. */
+  private getPerturb(): MjvPerturb {
+    if (!this.perturb) {
+      this.perturb = new this.mujoco.MjvPerturb();
+    }
+    return this.perturb;
   }
 
   private updateCachedState(): void {
@@ -1872,6 +1862,9 @@ export class mjswanRuntime {
       this.dragStateManager.dispose();
       this.dragStateManager = null;
     }
+    // An embind handle, not a view: it has to be released or the WASM heap grows.
+    this.perturb?.delete();
+    this.perturb = null;
 
     this.mjData = null;
     this.mjModel = null;
