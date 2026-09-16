@@ -8,4 +8,8 @@ interface Window {
     nonBlank?: boolean;
     luminanceRange?: [number, number];
   };
+  /** Published by src/harness/interaction-entry.ts for the pointer-mode spec. */
+  __engine?: unknown;
+  __ready?: boolean;
+  __pool?: () => { poolZ: number[]; thrown: number };
 }
