@@ -184,7 +184,7 @@ Deprecated pre-0.8 aliases, imported for its side effects by `__init__.py`. Meth
 
 TypeScript + React + Vite + three.js. Built by `Builder.build()` via `_build_client.py`. The browser client:
 - Loads the MuJoCo WASM module and steps physics on the main thread, yielding to the browser each control step (`engine/yieldToBrowser.ts`).
-- Runs the policy **and every traced MDP term body** via onnxruntime-web — the policy on WebGPU where the browser has it (ORT falls back to wasm itself), term graphs always on wasm since each is small and a step runs many.
+- Runs the policy **and every traced MDP term body** via onnxruntime-web, all on wasm. The engine carries ORT's CPU-only build (`onnxruntime-web/wasm`): the one that also holds the WebGPU backend passed 25 MiB in ORT 1.29, which is Cloudflare Pages' per-file limit, so it never reached the deployment and every fetch of it came back as the host's `index.html` (`vite.wasm.ts`). Term graphs would have stayed on wasm regardless — each is small and a step runs many.
 - Renders via three.js (reflections, shadows, Gaussian Splat background).
 - Supports WebXR (VR), including tracked hands as bodies inside the sim (opt-in).
 - Reads `manifest.json` to discover projects/scenes/MDPs/policies at runtime; `?project=` / `?scene=` / `?policy=` take ids (`sanitizeName` = `name2id`, pinned by a shared case table).

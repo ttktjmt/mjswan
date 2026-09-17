@@ -4,8 +4,11 @@
  * The library build points ORT at the runtime wasm it emits into `dist/assets/`, so a host
  * serving `dist/` from its own origin executes and fetches nothing it did not serve (issue
  * #123). The SPA build leaves the default alone: Vite resolves ORT's assets for it.
+ *
+ * Every import is `onnxruntime-web/wasm`, the CPU-only build — see vite.wasm.ts for why the
+ * one that also carries WebGPU cannot be shipped.
  */
-import * as ort from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web/wasm';
 
 ort.env.wasm.proxy = false;
 // Load-bearing for `wasmPaths` below, not a preference: ORT keeps its inlined loader only

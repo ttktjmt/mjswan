@@ -332,6 +332,17 @@ All kept as aliases via `_compat.py`, removed in 0.9:
 
 ### Fixed
 
+- **Inference runs on ORT's CPU-only build, so the wasm it fetches fits on Cloudflare
+  Pages**. `onnxruntime-web` 1.29 grew `ort-wasm-simd-threaded.jsep.wasm` — the build
+  carrying the WebGPU backend — from 20.4 MiB to 26.5 MiB, past Cloudflare Pages' 25 MiB
+  per-file limit. The file was dropped from the deployment and every request for it
+  answered with the SPA's `index.html`, which the engine then tried to compile as
+  WebAssembly: `expected magic word 00 61 73 6d, found 3c 21 64 6f` (`<!do`), thrown from
+  the first `setPolicy`. Every import is now `onnxruntime-web/wasm` (13.3 MiB), which is
+  also what every visitor downloads whether or not their machine has a GPU adapter. The
+  policy network no longer asks for the WebGPU provider; traced term graphs were always on
+  wasm.
+
 - **A term reading `env.sim.data` is traced, and a termination that reads nothing fails
   instead of becoming the `time_out` rule**
   ([#129](https://github.com/ttktjmt/mjswan/issues/129)). `env.sim.data.<field>` and

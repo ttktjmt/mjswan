@@ -2,7 +2,7 @@
  * The one place that talks to `onnxruntime-web`, kept minimal so a term handler stays
  * testable with a fake — no ORT, browser or WASM.
  */
-import * as ort from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web/wasm';
 
 // Configures ort.env before any session is created; see ortEnv.ts.
 import './ortEnv';

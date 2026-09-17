@@ -59,14 +59,16 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
     no CDN, and `script-src 'self'` covers it.
 
 !!! note "Where inference runs"
-    The policy network runs on **WebGPU** when the browser offers it and falls back to
-    **wasm** otherwise — ONNX Runtime tries each provider and keeps the first that
-    initializes. Nothing to configure, and do not feature-detect it yourself: `navigator.gpu`
-    can exist on a machine that has no adapter, and ORT is what finds out. An adapter that
-    exists but fails at session creation is the one case ORT does not survive on its own, so
-    the engine retries that session on wasm. Traced MDP term graphs always run on wasm: they
-    are small, a step runs many of them, and every inference in the page is serialized, so a
-    GPU round trip each would cost more than it saves.
+    Everything runs on **wasm** — the policy network and every traced MDP term graph alike.
+    The engine carries ONNX Runtime's CPU-only build: the one that also holds the WebGPU
+    backend passed 25 MiB in onnxruntime-web 1.29, which is Cloudflare Pages' per-file
+    limit, so it was silently dropped from deployments and every request for it answered
+    with the host's `index.html`. The CPU build is half the size, and it is what every
+    visitor downloads whether or not their machine has an adapter. Nothing to configure.
+
+    Term graphs would have stayed on wasm regardless: they are small, a step runs many of
+    them, and every inference in the page is serialized, so a GPU round trip each would
+    cost more than it saves.
 
     ORT names the provider it dropped in a `console.warn`, which a release bundle strips.
     Build with `MJSWAN_DEBUG=1` (or `Builder(debug=True)`) to see whether a machine fell back.

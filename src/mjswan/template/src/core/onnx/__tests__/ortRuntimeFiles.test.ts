@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import * as ort from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web/wasm';
 import { describe, expect, it } from 'vitest';
 
 import { ORT_BUNDLED_ENTRY, ORT_WASM_FILE, UPSTREAM_WASM } from '../../../../vite.wasm';
@@ -18,7 +18,7 @@ describe('onnxruntime-web runtime files', () => {
   it('resolves to the build with its .mjs loader inlined', () => {
     const pkg = JSON.parse(readFileSync(join(ORT_PKG, 'package.json'), 'utf-8'));
     // An external-loader build would dynamic-import a `.mjs` the engine does not ship.
-    expect(pkg.exports['.'].import.default).toBe(ORT_BUNDLED_ENTRY);
+    expect(pkg.exports['./wasm'].import.default).toBe(ORT_BUNDLED_ENTRY);
   });
 
   it('still ships the wasm the bundle emits beside itself', () => {

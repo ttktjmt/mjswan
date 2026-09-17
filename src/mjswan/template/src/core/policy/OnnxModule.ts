@@ -1,4 +1,4 @@
-import * as ort from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web/wasm';
 
 // Configures ort.env before any session is created; see ortEnv.ts.
 import '../onnx/ortEnv';
@@ -44,16 +44,13 @@ export class OnnxModule {
   }
 
   async init(): Promise<void> {
-    const create = (executionProviders: string[]) =>
-      ort.InferenceSession.create(this.bytes, { executionProviders, graphOptimizationLevel: 'all' });
-    try {
-      // ORT drops a provider whose init fails, but not an adapter that exists and then
-      // fails at session creation, hence the retry. See docs/docs/api/engine.md.
-      this.session = await create(['webgpu', 'wasm']);
-    } catch (error) {
-      this.session = await create(['wasm']);
-      console.warn('[OnnxModule] WebGPU session failed, running on wasm:', error);
-    }
+    // Wasm, like every other graph in the page: the engine carries ORT's CPU-only build,
+    // whose wasm is half the size of the one that also holds the WebGPU backend. See
+    // vite.wasm.ts for why that size is load-bearing.
+    this.session = await ort.InferenceSession.create(this.bytes, {
+      executionProviders: ['wasm'],
+      graphOptimizationLevel: 'all',
+    });
     this.inferInputKeys();
     this.isRecurrent = this.inKeys.includes('adapt_hx');
   }
