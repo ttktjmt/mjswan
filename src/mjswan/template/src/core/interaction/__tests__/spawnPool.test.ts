@@ -9,7 +9,7 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { DEFAULT_SPAWN_POOL, SpawnPool, injectSpawnPoolXml } from '../spawnPool';
+import { DEFAULT_SPAWN_POOL, PARK_Z, SpawnPool, injectSpawnPoolXml } from '../spawnPool';
 import { buildEntityIndex } from '../../onnx/slotReader/indexing';
 
 type MainModule = import('mujoco').MainModule;
@@ -117,6 +117,32 @@ describe('SpawnPool against the real WASM', () => {
     expect(mjData.qacc[dof + 2]).toBeCloseTo(9.81, 2);
   });
 
+  it('gives a resized box a collider that stops at its own surface', () => {
+    // `geom_rbound` is compiled from the size and recomputed by nothing — not even
+    // `mj_setConst`. A box that grew and kept its compiled bound has every contact culled
+    // until the floor reaches the *old* radius, which is well inside it.
+    const size = 0.3;
+    const mjModel = compile(injectSpawnPoolXml(scene(true), POOL));
+    const mjData = dataFor(mjModel);
+    const pool = new SpawnPool();
+    pool.bind(mujoco, mjModel);
+    pool.park(mjData);
+
+    const bodyId = pool.materialize(
+      mujoco,
+      mjModel,
+      mjData,
+      { size, density: 400 },
+      // Clear of the robot, high enough to be in free fall at the start.
+      { position: [4, 0, 2], velocity: [0, 0, 0] },
+    );
+    for (let i = 0; i < 4000; i++) mujoco.mj_step(mjModel, mjData);
+
+    // A cube resting on a plane sits with its centre one half-extent up.
+    expect(mjData.xpos[bodyId * 3 + 2], 'resting height').toBeCloseTo(size, 2);
+    expect(mjData.ncon, 'touching the floor').toBeGreaterThan(0);
+  });
+
   it('does not disturb the rest of the sim when it re-masses a box', () => {
     const mjModel = compile(injectSpawnPoolXml(scene(true), POOL));
     const mjData = dataFor(mjModel);
@@ -166,14 +192,14 @@ describe('SpawnPool against the real WASM', () => {
     }
     for (const bodyId of pool.bodyIds()) {
       if (bodyId === thrown) continue;
-      expect(mjData.xpos[bodyId * 3 + 2], `parked body ${bodyId}`).toBeCloseTo(100, 6);
+      expect(mjData.xpos[bodyId * 3 + 2], `parked body ${bodyId}`).toBeCloseTo(PARK_Z, 6);
     }
     expect(mjData.xpos[thrown * 3 + 2], 'thrown').toBeLessThan(1);
 
     pool.park(mjData);
     mujoco.mj_forward(mjModel, mjData);
     for (const bodyId of pool.bodyIds()) {
-      expect(mjData.xpos[bodyId * 3 + 2], `reset body ${bodyId}`).toBeCloseTo(100, 9);
+      expect(mjData.xpos[bodyId * 3 + 2], `reset body ${bodyId}`).toBeCloseTo(PARK_Z, 9);
     }
   });
 

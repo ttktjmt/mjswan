@@ -14,13 +14,16 @@
  * - **Mass only takes effect through `mj_setConst`.** Writing `body_mass` alone changes
  *   nothing the dynamics read. And `mj_setConst` puts `qpos` back to `qpos0` — it would
  *   teleport the whole scene — so the state is saved across it.
- * - **`geom_size` moves the collider, not the drawing.** Meshes are built once at load, so
- *   a resized box needs its geometry rebuilt; {@link SpawnPool.syncMeshes} does that, and
- *   hides the slots that are parked.
+ * - **`geom_size` moves the collider, not the drawing, and not the collider's bound.**
+ *   Meshes are built once at load, so a resized box needs its geometry rebuilt
+ *   ({@link SpawnPool.syncMeshes}, which also hides the parked slots); and `geom_rbound` is
+ *   compiled from the size and revisited by nothing, `mj_setConst` included, so it has to
+ *   be written too or a grown box stops colliding at its own surface.
  */
 import * as THREE from 'three';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 
+import { GEOM_BOX, writeGeomBounds } from '../scene/geomBounds';
 import { appendToMjcf } from '../scene/mjcfInject';
 
 /** Flat, like every injected name: a `/` would change how the whole model is indexed. */
@@ -28,8 +31,13 @@ const SPAWN_BODY = (index: number): string => `mjswan_spawn${index}`;
 
 export const DEFAULT_SPAWN_POOL = 8;
 export const MAX_SPAWN_POOL = 32;
-/** Above any scene, and clear of a floor plane, which is solid all the way down. */
-const PARK_Z = 100;
+/**
+ * Above any scene, and clear of a floor plane, which is solid all the way down. Twenty
+ * metres above the hand bones' own parking row rather than level with it: those start at
+ * the same origin and spread only 1.6 m, so one altitude parks the first box inside a
+ * knuckle, where the solver works a permanent penetration for the life of the session.
+ */
+export const PARK_Z = 120;
 /** Wider than two boxes at the largest size, so parked slots never touch each other. */
 const PARK_SPACING = 2;
 
@@ -77,8 +85,6 @@ interface Slot {
   dofAdr: number;
   parked: [number, number, number];
   live: boolean;
-  /** What the model currently carries for this slot, so a throw only rebuilds on change. */
-  size: number;
   /** Half-extent the drawn mesh was last built for. */
   drawnSize: number;
 }
@@ -108,7 +114,6 @@ export class SpawnPool {
         dofAdr: mjModel.jnt_dofadr[jointAdr],
         parked: [i * PARK_SPACING, 0, PARK_Z],
         live: false,
-        size: mjModel.geom_size[mjModel.body_geomadr[bodyId] * 3],
         drawnSize: mjModel.geom_size[mjModel.body_geomadr[bodyId] * 3],
       });
     }
@@ -156,7 +161,10 @@ export class SpawnPool {
     const slot = this.slots[this.next % this.slots.length];
     this.next = (this.next + 1) % this.slots.length;
 
-    if (slot.size !== spec.size || massOf(mjModel, slot) !== massFor(spec)) {
+    // Read back rather than cached: a policy switch restores every model field a startup
+    // randomization touched, which can put `geom_size` and `body_mass` back to compiled
+    // under us. Comparing against the model means the next throw notices and rewrites.
+    if (sizeOf(mjModel, slot) !== spec.size || massOf(mjModel, slot) !== massFor(spec)) {
       this.reshape(mujoco, mjModel, mjData, slot, spec);
     }
     slot.live = true;
@@ -166,7 +174,7 @@ export class SpawnPool {
 
   /**
    * Bring the drawing in line with the model: rebuild a box whose collider was resized,
-   * and hide the slots that are parked rather than leaving them visible 100 m up.
+   * and hide the slots that are parked rather than leaving them visible overhead.
    */
   syncMeshes(mjModel: MjModel, bodies: Record<number, THREE.Group> | null): void {
     if (!bodies) return;
@@ -174,15 +182,14 @@ export class SpawnPool {
       const group = bodies[slot.bodyId];
       if (!group) continue;
       group.visible = slot.live;
-      if (!slot.live || slot.drawnSize === slot.size) continue;
+      const size = sizeOf(mjModel, slot);
+      if (!slot.live || slot.drawnSize === size) continue;
       const mesh = group.children[0] as THREE.Mesh | undefined;
       if (!mesh) continue;
-      slot.drawnSize = slot.size;
+      slot.drawnSize = size;
       mesh.geometry.dispose();
-      // The scene builder's own box: full extents, with MuJoCo's y/z swizzle.
-      const full = slot.size * 2;
-      mesh.geometry = new THREE.BoxGeometry(full, full, full);
-      void mjModel;
+      // The scene builder's own box: full extents, and a cube needs no y/z swizzle.
+      mesh.geometry = new THREE.BoxGeometry(size * 2, size * 2, size * 2);
     }
   }
 
@@ -202,12 +209,14 @@ export class SpawnPool {
     spec: SpawnSpec,
   ): void {
     for (let i = 0; i < 3; i++) mjModel.geom_size[slot.geomId * 3 + i] = spec.size;
+    // Nothing else recomputes these — `mj_setConst` included — and a box holding its
+    // compiled bound has contacts culled until the other surface is deep inside it.
+    writeGeomBounds(mjModel, slot.geomId, GEOM_BOX);
     const mass = massFor(spec);
     mjModel.body_mass[slot.bodyId] = mass;
     // A cube's principal moments, all equal: m/12 * ((2s)^2 + (2s)^2).
     const inertia = (2 / 3) * mass * spec.size * spec.size;
     for (let i = 0; i < 3; i++) mjModel.body_inertia[slot.bodyId * 3 + i] = inertia;
-    slot.size = spec.size;
 
     const qpos = Array.from(mjData.qpos.slice(0, mjModel.nq) as ArrayLike<number>);
     const qvel = Array.from(mjData.qvel.slice(0, mjModel.nv) as ArrayLike<number>);
@@ -240,4 +249,8 @@ function massFor(spec: SpawnSpec): number {
 
 function massOf(mjModel: MjModel, slot: Slot): number {
   return mjModel.body_mass[slot.bodyId];
+}
+
+function sizeOf(mjModel: MjModel, slot: Slot): number {
+  return mjModel.geom_size[slot.geomId * 3];
 }

@@ -156,11 +156,18 @@ export class InteractionManager {
     this.arrow.hide();
   }
 
-  /** A new model: body ids from the old one mean nothing now. */
+  /**
+   * A new model: body ids from the old one mean nothing now.
+   *
+   * The mode is cancelled rather than just released, because a gesture can outlive the
+   * scene it started in — a queued shove fired on the new scene's first step would land
+   * `impulse / controlDt` newtons on whatever body inherited that id.
+   */
   onSceneLoaded(): void {
     this.pointer.release();
-    this.arrow.hide();
+    this.current()?.onCancel(this.context());
     this.wrench.forget();
+    this.arrow.hide();
     this.refreshPickable();
   }
 
@@ -189,7 +196,13 @@ export class InteractionManager {
 
   private onDown(gesture: PointerGesture): PointerClaim {
     const mode = this.current();
-    return mode ? mode.onDown(gesture, this.context()) : 'none';
+    if (!mode) return 'none';
+    const context = this.context();
+    // A mode the scene cannot run stays selected — the panel shows it greyed with its
+    // reason — but it must not keep taking presses, or the camera stops orbiting in a
+    // scene where the mode does nothing at all.
+    if (mode.unavailable?.(context)) return 'none';
+    return mode.onDown(gesture, context);
   }
 
   private current(): InteractionMode | undefined {

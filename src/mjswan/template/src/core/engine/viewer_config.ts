@@ -94,7 +94,9 @@ export function applyViewerConfig(
   camera: THREE.PerspectiveCamera,
   controls: OrbitControls,
   mjModel: MjModel | null,
-  mjData: MjData | null
+  mjData: MjData | null,
+  /** Bodies the viewer put in the model itself; never what a scene means by "the robot". */
+  injected: ReadonlySet<number> = new Set()
 ): ViewerState {
   const state: ViewerState = { trackBodyId: null, prevBodyPos: null };
   controls.enabled = true;
@@ -139,9 +141,16 @@ export function applyViewerConfig(
     if (state.trackBodyId === null) {
       console.warn(`[Camera] bodyName: body "${config.bodyName}" not found.`);
     }
-  } else if ((originType === 'AUTO' || originType === 'ASSET_ROOT') && mjModel && mjModel.nbody > 1) {
-    // Track the first non-world body (body 1 is typically the floating base).
-    state.trackBodyId = 1;
+  } else if ((originType === 'AUTO' || originType === 'ASSET_ROOT') && mjModel) {
+    // The first non-world body the *scene* owns (typically its floating base). Injected
+    // bodies are appended, so this is body 1 for every scene that has one of its own — and
+    // for a scene that has none, tracking the viewer's own parked crate 120 m up would
+    // carry the camera off with it.
+    for (let bodyId = 1; bodyId < mjModel.nbody; bodyId++) {
+      if (injected.has(bodyId)) continue;
+      state.trackBodyId = bodyId;
+      break;
+    }
   }
   // WORLD: no tracking.
 

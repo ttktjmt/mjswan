@@ -111,6 +111,12 @@ export class PushRing {
     this.mesh.visible = true;
   }
 
+  /** For a mode switch or a pause, which stop the clock that would have faded it out. */
+  hide(): void {
+    this.age = PushRing.LIFETIME;
+    this.mesh.visible = false;
+  }
+
   update(dt: number): void {
     if (this.age >= PushRing.LIFETIME) return;
     this.age = Math.min(PushRing.LIFETIME, this.age + dt);

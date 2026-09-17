@@ -47,8 +47,10 @@ export class PushMode implements InteractionMode {
     ctx.ring.fire(hit.point, hit.normal);
   }
 
-  onCancel(): void {
+  onCancel(ctx: ModeContext): void {
     this.pending = null;
+    // Nothing steps once this mode is off, and the ring fades on the step clock.
+    ctx.ring.hide();
   }
 
   preStep(_gesture: PointerGesture | null, ctx: ModeContext): void {

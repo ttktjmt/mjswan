@@ -183,6 +183,9 @@ export class PointerTracker {
 
   private onPointerDown = (event: PointerEvent): void => {
     if (this.pointerId !== null || !this.handlers) return;
+    // A right- or middle-press is the camera's (pan and dolly), and taking it would also
+    // leave `controls.enabled` false under the context menu the browser then opens.
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
     this.updateNdc(event.clientX, event.clientY);
     const hit = this.pick();
     if (!hit) return; // A miss is the camera's press.

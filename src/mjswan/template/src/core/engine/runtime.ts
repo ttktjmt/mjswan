@@ -21,7 +21,11 @@ import { mjcToThreeCoordinate, threeToMjcCoordinate } from '../scene/coordinate'
 import { HandMocap, handWeldNames, injectHandMocapXml } from '../xr/handMocap';
 import { WeldHold } from '../grab/weldHold';
 import { isEntityPrefixed, readMjcfFile } from '../scene/mjcfInject';
-import { POINTER_WELD, injectPointerGrabXml } from '../interaction/grabInject';
+import {
+  POINTER_ANCHOR_BODY,
+  POINTER_WELD,
+  injectPointerGrabXml,
+} from '../interaction/grabInject';
 import { DEFAULT_SPAWN_POOL, MAX_SPAWN_POOL, SpawnPool, injectSpawnPoolXml } from '../interaction/spawnPool';
 import { updateXrLocomotion } from '../xr/locomotion';
 import { updateRigGrounding } from '../xr/grounding';
@@ -66,6 +70,20 @@ import { SeededRng } from '../rng';
 /** Fixed rather than time-derived, so a plain page load replays identically. */
 const DEFAULT_TERM_SEED = 0x5eed;
 
+
+/**
+ * The scene's own drawn bounds, skipping the viewer's injected bodies.
+ *
+ * Walked by hand rather than filtered on `mujocoRoot.children`: the scene builder parents
+ * every body under body 0, so the root has one child and a per-body flag on it never
+ * matches. `expandByObject` would then take the parked rows in with everything else and
+ * frame a scene 120 m tall.
+ */
+function expandSceneBounds(box: THREE.Box3, object: THREE.Object3D): void {
+  if (object.userData.injected) return;
+  if ((object as THREE.Mesh).isMesh) box.expandByObject(object);
+  for (const child of object.children) expandSceneBounds(box, child);
+}
 
 /** Clamped rather than refused: an out-of-range count is a typo, not a reason to fail a load. */
 function clampPoolSize(count: number): number {
@@ -238,6 +256,14 @@ export class mjswanRuntime {
    * model as the entity's, so one more body changes the width of a traced graph's input.
    */
   private grabInjected = false;
+  /**
+   * Injected because the scene arrived without a policy, into a model whose elements are
+   * not entity-prefixed — the one combination where a later `setPolicy` would disagree
+   * with the traced graphs about how wide the entity is.
+   */
+  private injectedWithoutPolicy = false;
+  /** Every body the viewer added: never part of the scene's own bounds or camera target. */
+  private injectedBodyIds: ReadonlySet<number> = new Set();
   /** Set before the model is built, which is when the injection is decided. */
   private sceneHasPolicy = false;
   /** Throwable boxes, declared with the model and parked until something throws one. */
@@ -645,7 +671,8 @@ export class mjswanRuntime {
       this.handMocap?.park(this.mjData);
       // Tagged so `frameCamera` can leave them out: a parked hand waits 100 m up, and
       // with DEBUG_DRAW_BONES on it is drawn there.
-      for (const bodyId of [...(this.handMocap?.bodyIds() ?? []), ...this.spawnPool.bodyIds()]) {
+      this.injectedBodyIds = this.collectInjectedBodyIds();
+      for (const bodyId of this.injectedBodyIds) {
         if (this.bodies[bodyId]) {
           this.bodies[bodyId].userData.injected = true;
         }
@@ -699,7 +726,9 @@ export class mjswanRuntime {
     let injected = xml;
     // Not gated: hand tracking is opt-in per engine and has always injected unconditionally.
     if (this.handMocap) injected = injectHandMocapXml(injected);
-    this.grabInjected = isEntityPrefixed(xml) || !this.sceneHasPolicy;
+    const prefixed = isEntityPrefixed(xml);
+    this.grabInjected = prefixed || !this.sceneHasPolicy;
+    this.injectedWithoutPolicy = this.grabInjected && !prefixed;
     if (this.grabInjected) {
       injected = injectPointerGrabXml(injected);
       injected = injectSpawnPoolXml(injected, this.spawnPoolSize);
@@ -887,11 +916,7 @@ export class mjswanRuntime {
       return;
     }
     const box = new THREE.Box3();
-    for (const child of this.mujocoRoot.children) {
-      if (!child.userData.injected) {
-        box.expandByObject(child);
-      }
-    }
+    expandSceneBounds(box, this.mujocoRoot);
     if (box.isEmpty()) {
       return;
     }
@@ -1031,6 +1056,20 @@ export class mjswanRuntime {
       // A caller-ordering mistake, not a bad bundle — unreachable from the app.
       console.warn('Policy config loaded before MuJoCo model is ready.');
       return;
+    }
+
+    if (this.injectedWithoutPolicy) {
+      // The gate in `injectViewerBodies` runs before the model is compiled and can only
+      // see the policy this scene was *loaded* with. `setPolicy` can bring one later, and
+      // by then the extra bodies are in the model: on a model whose elements carry no
+      // entity prefix, `buildEntityIndex` counts them as the entity's, so any traced graph
+      // indexed by body, geom or site is about to be fed a row too many.
+      console.warn(
+        '[mjswan] this scene was loaded without a policy, so the viewer added its grab ' +
+          'anchor and throwable boxes to a model that does not namespace its elements. ' +
+          'A traced graph indexed by body or geom will be fed the wrong width. Load the ' +
+          'scene with the policy selected to get the model without them.',
+      );
     }
 
     try {
@@ -1664,7 +1703,31 @@ export class mjswanRuntime {
   }
 
   private applyViewerConfig(config: ViewerConfig | null): void {
-    this.cameraState = applyViewerConfig(config, this.camera, this.controls, this.mjModel, this.mjData);
+    this.cameraState = applyViewerConfig(
+      config,
+      this.camera,
+      this.controls,
+      this.mjModel,
+      this.mjData,
+      this.injectedBodyIds,
+    );
+  }
+
+  /** Hand bones, the pointer's grab anchor and the throwable boxes, once the model is built. */
+  private collectInjectedBodyIds(): Set<number> {
+    const ids = new Set<number>([
+      ...(this.handMocap?.bodyIds() ?? []),
+      ...this.spawnPool.bodyIds(),
+    ]);
+    if (this.mjModel && this.grabInjected) {
+      const anchor = this.mujoco.mj_name2id(
+        this.mjModel,
+        this.mujoco.mjtObj.mjOBJ_BODY.value,
+        POINTER_ANCHOR_BODY,
+      );
+      if (anchor > 0) ids.add(anchor);
+    }
+    return ids;
   }
 
   private computeDynamicBodyIds(mjModel: MjModel): Set<number> {

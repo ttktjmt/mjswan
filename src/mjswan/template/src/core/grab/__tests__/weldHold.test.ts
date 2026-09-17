@@ -7,6 +7,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { WeldHold } from '../weldHold';
 import { POINTER_ANCHOR_BODY, POINTER_WELD, injectPointerGrabXml } from '../../interaction/grabInject';
+import { handWeldNames, injectHandMocapXml } from '../../xr/handMocap';
 
 type MainModule = import('mujoco').MainModule;
 type MjModel = import('mujoco').MjModel;
@@ -108,14 +109,30 @@ describe('WeldHold against the real WASM', () => {
   });
 
   it('refuses a body another slot is already holding', () => {
-    const { mjModel, mjData, cube, anchor } = load();
-    const weld = new WeldHold();
-    weld.bind(mujoco, mjModel, [POINTER_WELD]);
+    // A hand-tracking scene, so the second slot is one the model really carries: asking
+    // for a slot that does not exist would be refused by the wrong branch and the guard
+    // this names would never run.
+    const mjModel = (
+      mujoco as unknown as { MjModel: { from_xml_string(s: string): MjModel } }
+    ).MjModel.from_xml_string(injectHandMocapXml(injectPointerGrabXml(SCENE)));
+    const mjData = new (mujoco as unknown as { MjData: new (m: MjModel) => MjData }).MjData(mjModel);
     mujoco.mj_forward(mjModel, mjData);
-    expect(weld.hold(mjModel, mjData, POINTER_WELD, anchor, cube)).toBe(true);
+    const id = (name: string) => mujoco.mj_name2id(mjModel, mujoco.mjtObj.mjOBJ_BODY.value, name);
+    const [hand] = handWeldNames();
+
+    const weld = new WeldHold();
+    weld.bind(mujoco, mjModel, [POINTER_WELD, ...handWeldNames()]);
+    expect(weld.has(hand), 'the hand slot is really in this model').toBe(true);
+
+    const cube = id('cube');
+    expect(weld.hold(mjModel, mjData, POINTER_WELD, id(POINTER_ANCHOR_BODY), cube)).toBe(true);
     // The same slot may re-aim at what it already has; another one may not take it.
-    expect(weld.hold(mjModel, mjData, POINTER_WELD, anchor, cube)).toBe(true);
-    expect(weld.hold(mjModel, mjData, 'mjswan_xr0_grab', anchor, cube)).toBe(false);
+    expect(weld.hold(mjModel, mjData, POINTER_WELD, id(POINTER_ANCHOR_BODY), cube)).toBe(true);
+    expect(weld.hold(mjModel, mjData, hand, id(POINTER_ANCHOR_BODY), cube)).toBe(false);
+    // A refusal that had already retargeted the row would leave the loser active.
+    const handWeldId = mujoco.mj_name2id(mjModel, mujoco.mjtObj.mjOBJ_EQUALITY.value, hand);
+    expect(mjData.eq_active[handWeldId]).toBe(0);
+    expect(weld.heldBy(hand)).toBeNull();
   });
 
   it('has no slots at all in a scene that was never injected', () => {

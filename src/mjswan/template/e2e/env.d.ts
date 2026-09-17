@@ -11,5 +11,8 @@ interface Window {
   /** Published by src/harness/interaction-entry.ts for the pointer-mode spec. */
   __engine?: unknown;
   __ready?: boolean;
-  __pool?: () => { poolZ: number[]; thrown: number };
+  __probe?: {
+    reset(): void;
+    read(): { poolZ: number[]; thrown: number; maxForce: number; welded: boolean };
+  };
 }
