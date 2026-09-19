@@ -314,6 +314,7 @@ class Builder:
         task_id: str,
         *,
         run_path: str | list[str] | None = None,
+        hf_repo_id: str | None = None,
         project_name: str = "mjlab",
         play: bool | None = None,
         env_cfg: Any | None = None,
@@ -339,6 +340,12 @@ class Builder:
                 observations/actions), build manually with
                 :meth:`add_project` → :meth:`~mjswan.project.ProjectHandle.add_scene_mjlab`
                 → :meth:`~mjswan.scene.SceneHandle.add_policy_wandb`.
+            hf_repo_id: Optional Hugging Face Hub repository (``"<owner>/<name>"``) to
+                take the policy's exported ONNX from instead — no torch conversion, and
+                the joint names and rest pose come from the file's own metadata. May be
+                combined with ``run_path`` to show both on one scene. For finer control
+                (a specific file, a pinned revision) build manually and call
+                :meth:`~mjswan.scene.SceneHandle.add_policy_hf`.
             project_name: Name for the auto-created project. Defaults to ``"mjlab"``.
             play: Which of the task's two registered configs to load; unset means play.
                 Mutually exclusive with ``env_cfg``. See
@@ -375,6 +382,7 @@ class Builder:
         builder.add_project_mjlab(
             task_id,
             run_path=run_path,
+            hf_repo_id=hf_repo_id,
             project_name=project_name,
             play=play,
             env_cfg=env_cfg,
@@ -386,6 +394,7 @@ class Builder:
         task_id: str,
         *,
         run_path: str | list[str] | None = None,
+        hf_repo_id: str | None = None,
         project_name: str = "mjlab",
         play: bool | None = None,
         env_cfg: Any | None = None,
@@ -402,6 +411,8 @@ class Builder:
                 list of such paths. When provided, all checkpoints are fetched
                 and converted to ONNX via mjlab+torch (both required) using
                 ``task_id``. Defaults to ``None`` (no policy attached).
+            hf_repo_id: Optional Hugging Face Hub repository to take the policy's
+                exported ONNX from. See :meth:`from_mjlab`.
             project_name: Name for the created project. Defaults to ``"mjlab"``.
             play: Which of the task's two registered configs to load; unset means play.
                 Mutually exclusive with ``env_cfg``. See
@@ -418,6 +429,8 @@ class Builder:
         scene = project.add_scene_mjlab(task_id, play=play, env_cfg=env_cfg)
         if run_path is not None:
             scene.add_policy_wandb(run_path, task_id=task_id)
+        if hf_repo_id is not None:
+            scene.add_policy_hf(hf_repo_id, task_id=task_id)
         return project
 
     def add_project(

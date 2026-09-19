@@ -64,6 +64,37 @@ app = mjswan.Builder.from_mjlab(
 app.launch()
 ```
 
+## A policy published on the Hugging Face Hub
+
+Where a W&B run holds training state — which is why the call above needs mjlab and torch
+to convert it — a Hub repository holds the exported ONNX. So this path downloads and
+stops: `pip install mjswan[hf]` is all it needs.
+
+```python
+import mjswan
+
+app = mjswan.Builder.from_mjlab(
+    "Mjlab-Velocity-Flat-Unitree-G1",
+    hf_repo_id="<owner>/<name>",
+).build()
+app.launch()
+```
+
+On a scene of your own, `add_policy_hf` reads what mjlab baked into the file — the joint
+names, the rest pose and the action scale — so they need not be repeated here:
+
+```python
+scene.add_policy_hf("<owner>/<name>")
+```
+
+With no filename given it takes `policy.onnx`, then `final.onnx`, then the repository's
+single `.onnx`; pass `filename=` for anything else, or a list of them to add several
+policies at once. The metadata is used only when your scene's model presents the same
+joints in actuator order — a mismatch warns and fills nothing rather than misdriving the
+actuators. Observation terms are never reconstructed from it: the file names them but
+does not carry the functions mjswan traces, so `observations=` is still yours to supply
+(or the task's, on a scene from `add_scene_mjlab`).
+
 ## Policy with velocity command sliders
 
 ```python

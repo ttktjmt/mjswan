@@ -303,6 +303,72 @@ class PolicyHandle:
         self._config.motions.append(motion)
         return MotionHandle(motion, self)
 
+    def add_motion_hf(
+        self,
+        repo_id: str,
+        filename: str,
+        *,
+        name: str | None = None,
+        revision: str | None = None,
+        repo_type: str = "dataset",
+        token: str | None = None,
+        fps: float = 50.0,
+        anchor_body_name: str,
+        body_names: tuple[str, ...] | list[str],
+        dataset_joint_names: list[str] | None = None,
+        default: bool = False,
+        loop: bool = True,
+    ) -> MotionHandle:
+        """Download a ``.npz`` reference motion from the Hugging Face Hub.
+
+        The Hub counterpart of :meth:`add_motion_wandb`, which finds its clip by walking
+        a run's artifacts; here the clip is named outright.
+
+        Args:
+            repo_id: Hub repository, ``"<owner>/<name>"``.
+            filename: Path to the ``.npz`` within the repository.
+            name: Display name. Defaults to the file's stem.
+            revision: Branch, tag or commit. ``None`` takes the default branch.
+            repo_type: ``"dataset"`` by default — a clip is data, and the retargeted
+                sets published so far are dataset repositories.
+            token: Hub token for a gated or private repository. Several public motion
+                datasets are gated behind an accepted licence, which needs one.
+            fps: Playback frame rate.
+            anchor_body_name: Reference anchor body for the tracking observations.
+            body_names: Ordered body names the clip covers.
+            dataset_joint_names: Joint ordering in the clip. Defaults to the policy's.
+            default: Select this motion when the policy loads.
+            loop: Restart from the first frame after the last.
+        """
+        from .hf_io import fetch_motion_npz_from_hf
+
+        motion_name, payload = fetch_motion_npz_from_hf(
+            repo_id,
+            filename,
+            revision=revision,
+            repo_type=repo_type,
+            token=token,
+        )
+        motion = MotionConfig(
+            name=name or motion_name,
+            data=payload,
+            fps=fps,
+            anchor_body_name=anchor_body_name,
+            body_names=tuple(body_names),
+            dataset_joint_names=(
+                list(dataset_joint_names)
+                if dataset_joint_names is not None
+                else (
+                    list(self._config.policy_joint_names)
+                    if self._config.policy_joint_names is not None
+                    else None
+                )
+            ),
+            default=default,
+            loop=loop,
+        )
+        return self._append_motion(motion)
+
 
 __all__ = [
     "DEFAULT_IN_KEYS",

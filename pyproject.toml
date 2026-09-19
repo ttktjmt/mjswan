@@ -74,6 +74,12 @@ dev = [
     "ty==0.0.77",
     "pytest>=9.0.2",
 ]
+# Deliberately its own extra rather than part of `examples`: fetching a published
+# policy from the Hub needs neither mjlab nor torch, and folding it into the heavy
+# extra would hide that. `pip install mjswan[hf]` is the whole light path.
+hf = [
+    "huggingface-hub>=0.26.0",
+]
 examples = [
     "mjlab==1.5.3",
     "torch>=2.9.1",

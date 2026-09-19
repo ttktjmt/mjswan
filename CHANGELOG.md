@@ -16,6 +16,27 @@ velocity-command shortcuts were removed outright, see Removed.
 
 ### Added
 
+- **Policies and motions load from the Hugging Face Hub**: `SceneHandle.add_policy_hf()`,
+  `PolicyHandle.add_motion_hf()`, and `hf_repo_id=` on `Builder.from_mjlab()` /
+  `add_project_mjlab()`, beside their `_wandb` counterparts. The two sources are not
+  symmetric and the code says so: a W&B run holds *training state*, so `add_policy_wandb`
+  rebuilds a live mjlab env and converts every `model_*.pt` with torch; a Hub repository
+  holds the *published artifact*, so `add_policy_hf` downloads the `.onnx` and stops —
+  neither mjlab nor torch is needed, and `task_id` is optional. `huggingface_hub` is the
+  one dependency, in its own `hf` extra rather than `examples`, so `pip install
+  mjswan[hf]` is the whole light path. With no filename given, `policy.onnx` then
+  `final.onnx` then the repository's single `.onnx`; several unnamed candidates raise
+  rather than pick one.
+- **An mjlab export describes itself, and mjswan now reads it**: `mjlab_onnx_meta.py`
+  parses the `metadata_props` mjlab bakes into an exported policy, so `add_policy_hf`
+  fills `policy_joint_names`, `default_joint_pos` and the joint-position action term
+  from the file instead of asking for them again. Only when this scene's own model
+  presents the same joints in actuator order: mjlab records every joint of the robot in
+  joint order while the network emits one action per actuator, and pairing lists that
+  differ in length or order would misdrive every actuator with nothing at playback to
+  say so — a mismatch warns and fills nothing. Observation terms are never reconstructed;
+  the metadata names them but does not carry the functions mjswan traces. Reading needs
+  no mjlab installed, the encoding being plain strings.
 - **License files travel with the build**
   ([ADR 0007](docs/adr/0007-license-files-in-the-build.md)): `<project-id>/LICENSE` /
   `NOTICE` for the work, via `Builder(license=, copyright=)`, `add_project(license=…)` or

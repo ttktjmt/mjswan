@@ -31,6 +31,8 @@ src/mjswan/          Python package source
   document.py          The .swn simulation document: list / pack / unpack the built tree,
                        and DOCUMENT_FORMAT, the layout version the manifest stamps
   wandb_io.py          W&B checkpoint / motion artifact downloads
+  hf_io.py             Hugging Face Hub downloads: policy ONNX, motion .npz
+  mjlab_onnx_meta.py   Reads the metadata mjlab bakes into an exported .onnx
   _onnx_build.py       Bridges term cfg dataclasses → compile/ tracer; writes .onnx + JSON
   _graph_io.py         Bundle path a traced graph gets, and the guarded write to it
   _cli.py              Typer-based `mjswan` CLI + legacy entry points
@@ -74,8 +76,9 @@ Builder(base_path, gtm_id, mt, debug)
         └── .add_scene(name, model|spec, metadata, control_dt, events) → SceneHandle
               ├── .add_policy(name, policy, mdp=MdpConfig | the five term sets,
               │               in_keys=, out_keys=, ...) → PolicyHandle
-              │     └── .add_motion(...) / .add_motion_wandb(...) → MotionHandle
+              │     └── .add_motion(...) / .add_motion_wandb(...) / .add_motion_hf(...) → MotionHandle
               ├── .add_policy_wandb(run_path, ...) → list[PolicyHandle]   # one MdpConfig per call
+              ├── .add_policy_hf(repo_id, ...) → list[PolicyHandle]       # one MdpConfig per call
               ├── .add_splat(name, source|url, ...) → SplatHandle
               ├── .set_viewer(ViewerConfig)
               ├── .set_events(events)             # the scene's default events for its policies
@@ -89,7 +92,7 @@ MjswanApp.publish(title=..., tags=...)       # → mjswan Cloud; a .swn publishe
 
 Every project / scene / MDP / policy / splat has an `id = name2id(name)`, unique within its parent (collision → `<id>_1` + RuntimeWarning); ids are the directories in the build and the `?project=` / `?scene=` / `?policy=` values (ADR 0006 §4).
 
-`Builder.from_mjlab(task_id, run_path=...)` is the one-liner shortcut for the common "visualize a single mjlab task" pattern; it delegates to the instance method `Builder.add_project_mjlab`, which creates a project, adds an mjlab scene, and optionally attaches all `model_*.pt` checkpoints from one or more W&B runs (converted to ONNX via mjlab+torch). For finer control, build manually: `add_project` → `ProjectHandle.add_scene_mjlab` → `SceneHandle.add_policy_wandb(...)`.
+`Builder.from_mjlab(task_id, run_path=...)` is the one-liner shortcut for the common "visualize a single mjlab task" pattern; it delegates to the instance method `Builder.add_project_mjlab`, which creates a project, adds an mjlab scene, and optionally attaches all `model_*.pt` checkpoints from one or more W&B runs (converted to ONNX via mjlab+torch). For finer control, build manually: `add_project` → `ProjectHandle.add_scene_mjlab` → `SceneHandle.add_policy_wandb(...)`. `hf_repo_id=` is the same shortcut against a Hugging Face Hub repository, which holds an exported ONNX rather than training state and so needs no conversion.
 
 Each `*Handle` wraps a `*Config` dataclass — the handle is the fluent API, the config is the serializable state.
 
@@ -172,6 +175,12 @@ Orchestrates the Node.js / Vite frontend build. Manages a local `nodeenv` if Nod
 
 ### `wandb_io.py`
 Downloads `model_*.pt` checkpoints and motion `.npz` artifacts from Weights & Biases runs. Used by `SceneHandle.add_policy_wandb()` and `PolicyHandle.add_motion_wandb()`.
+
+### `hf_io.py`
+Downloads a published policy `.onnx` or a motion `.npz` from the Hugging Face Hub. Used by `SceneHandle.add_policy_hf()` and `PolicyHandle.add_motion_hf()`. `huggingface_hub` is an optional dependency (the `hf` extra), imported only when a caller asks for the Hub. Where `wandb_io` rebuilds a live mjlab env and converts a run's training state with torch, this module only downloads: a Hub repository holds the finished artifact, so neither mjlab nor torch is involved. With no filename given, `policy.onnx` then `final.onnx` then the repository's single `.onnx` — the names the Hub's own mjlab download query counts — and several unnamed candidates raise rather than pick.
+
+### `mjlab_onnx_meta.py`
+Parses the `metadata_props` mjlab's `attach_metadata_to_onnx` writes into an exported policy: joint names, rest pose, action scale, and a description of each observation term. Plain strings, so it needs neither mjlab nor torch — which is what lets a Hub-fetched ONNX be added on the light path. The encoding is lossy (mjlab formats list values with `{:.3f}`; ints and bools arrive as `"1.000"`), and `joint_names` covers *every* joint of the robot in joint order while the network emits one action per actuator in actuator order, so `add_policy_hf` pairs it against the scene's own model before using it. Observation terms are named but not carried — the functions mjswan traces are not in the file — so an observation group is never reconstructed from this.
 
 ### `utils.py`
 Asset bundling and path helpers. `to_zip_deflated()` is the per-scene packager: it collects mesh/texture/hfield/skin files from disk (with `spec.assets` fallback for mjlab's prefixed-key layout), encodes buffer-only textures as PNGs, rewrites the MuJoCo XML so meshdir/texturedir hints are eliminated and all paths are ZIP-safe, and writes a DEFLATE-compressed ZIP that JSZip decodes on the client. `name2id()` is the lowercase-underscore slug helper used everywhere project / scene / policy IDs are derived from human-readable names.

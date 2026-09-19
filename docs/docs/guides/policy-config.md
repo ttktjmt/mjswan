@@ -413,6 +413,39 @@ message naming this call.
 | [examples/demo/gentle_humanoid/](https://github.com/ttktjmt/mjswan/tree/main/examples/demo/gentle_humanoid){:target="_blank"} | Real tracking policy: 11 traced terms reading a reference-trajectory window and a sparse proprioceptive history, 1590 observation values. |
 | [examples/mjlab/defaults/](https://github.com/ttktjmt/mjswan/tree/main/examples/mjlab/defaults){:target="_blank"} | Seven mjlab tasks with W&B checkpoints, custom command registrations, and per-task viewer configs. |
 
+## What an mjlab export already carries
+
+mjlab writes the checkpoint's own defaults into the `.onnx` itself — `joint_names`,
+`default_joint_pos`, `action_scale`, and a description of each observation term — so an
+mjlab policy travels self-describing.
+[`add_policy_hf`](../getting-started/examples.md#a-policy-published-on-the-hugging-face-hub)
+reads that block and fills `policy_joint_names`, `default_joint_pos` and the
+joint-position action term from it, leaving anything you pass explicitly alone. To read
+one yourself:
+
+```python
+import onnx
+from mjswan.mjlab_onnx_meta import read_mjlab_metadata
+
+meta = read_mjlab_metadata(onnx.load("policy.onnx"))
+print(meta.joint_names, meta.action_scale, meta.observation_names)
+```
+
+`None` means the file carries no mjlab metadata — a hand-built graph, or one from
+another framework — which is a normal case, not an error.
+
+Two limits are worth knowing. The encoding is **lossy**: mjlab formats list values with
+`{:.3f}`, so numbers come back rounded to three decimals (a scalar written outside a
+list keeps full precision). And `joint_names` lists **every joint of the robot in joint
+order**, while the network emits one action per actuator in actuator order — the same
+list only when the robot has no passive joints and its actuators are declared in joint
+order. `add_policy_hf` therefore checks the metadata against your scene's own model
+before using any of it, and warns rather than guessing when they disagree.
+
+Observation terms are named but not reconstructable: the metadata carries each term's
+scale, clip and history length, but not the function behind the name, and mjswan traces
+real functions. So `observations=` remains yours to supply.
+
 ## Legacy: passing a JSON file via `config_path=`
 
 `add_policy(config_path="policy.json")` still accepts a JSON sidecar for the checkpoint's

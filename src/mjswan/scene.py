@@ -193,6 +193,56 @@ def _onnx_output_width(model: onnx.ModelProto) -> int | None:
     return int(width) if width > 0 else None
 
 
+def _actuated_joint_names(model: mujoco.MjModel | None) -> list[str] | None:
+    """The joint each actuator drives, in actuator order — the order actions come in.
+
+    ``None`` when the model does not give one unambiguously: no actuators, a
+    transmission that is not a joint (tendon, site, body), an unnamed joint, or two
+    actuators on the same joint. Each of those makes "the i-th action drives this joint"
+    untrue, and a wrong answer here is silent at playback.
+    """
+    if model is None or model.nu == 0:
+        return None
+    names: list[str] = []
+    for index in range(model.nu):
+        if int(model.actuator_trntype[index]) != int(mujoco.mjtTrn.mjTRN_JOINT):
+            return None
+        name = mujoco.mj_id2name(
+            model, mujoco.mjtObj.mjOBJ_JOINT, int(model.actuator_trnid[index, 0])
+        )
+        if not name:
+            return None
+        names.append(name)
+    return names if len(set(names)) == len(names) else None
+
+
+def _hf_driven_joints(
+    meta: Any | None, policy: onnx.ModelProto, actuated: list[str] | None
+) -> list[str] | None:
+    """The scene's joint names in actuator order, if ``meta`` describes that same list.
+
+    mjlab records ``robot.joint_names`` — every joint of the robot, in the model's joint
+    order — while the network emits one action per *actuator*, in actuator order. The
+    two are neither the same length (a passive joint) nor the same order (an actuator
+    block written out of joint order) in general, and either mismatch would map every
+    action onto the wrong actuator with nothing at playback to say so. So the metadata
+    is trusted only when ``actuated`` agrees with it name for name, and the names
+    returned are the model's own spelling — namespaced as mjlab writes them into a
+    scene, which is what the runtime resolves against.
+    """
+    if meta is None or actuated is None:
+        return None
+    from .mjlab_onnx_meta import joint_mapping_usable
+
+    if not joint_mapping_usable(meta, action_width=_onnx_output_width(policy)):
+        return None
+    # mjlab exports the bare joint name; a scene built from an mjlab task carries it
+    # namespaced (`robot/hip`). Compare on the tail, return the model's spelling.
+    if [name.rsplit("/", 1)[-1] for name in actuated] != list(meta.joint_names):
+        return None
+    return list(actuated)
+
+
 def _default_to_latest(handles: list[PolicyHandle]) -> None:
     """Open the scene on the highest-step checkpoint."""
     if not handles:
@@ -1033,6 +1083,263 @@ class SceneHandle:
 
         _default_to_latest(handles)
         return handles
+
+    def add_policy_hf(
+        self,
+        repo_id: str,
+        *,
+        filename: str | list[str] | None = None,
+        revision: str | None = None,
+        repo_type: str = "model",
+        token: str | None = None,
+        name: str | None = None,
+        use_metadata: bool = True,
+        task_id: str | None = None,
+        config_path: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        env_cfg: Any | None = None,
+        observations: ObservationGroupCfg | Mapping[str, Any] | Any | None = None,
+        commands: Mapping[str, Any] | None = None,
+        actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
+        terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
+        in_keys: Sequence[str] | None = None,
+        out_keys: Sequence[str | Sequence[str]] | None = None,
+        policy_joint_names: list[str] | None = None,
+        default_joint_pos: list[float] | None = None,
+        encoder_bias: list[float] | None = None,
+        clip_actions: float | None = None,
+        extras: dict[str, Any] | None = None,
+    ) -> list[PolicyHandle]:
+        """Add ONNX policies fetched from a Hugging Face Hub repository.
+
+        The light counterpart of :meth:`add_policy_wandb`. A W&B run holds *training
+        state*, so that method rebuilds a live mjlab env and converts every
+        ``model_*.pt`` with torch; a Hub repository holds the *published artifact*, so
+        this one downloads the ``.onnx`` and reads what mjlab baked into it. Neither
+        mjlab nor torch is needed, and ``task_id`` is optional.
+
+        With ``use_metadata`` left on, an mjlab export fills what the caller did not:
+        ``policy_joint_names`` and ``default_joint_pos`` per policy, and — only when this
+        scene has no mjlab env config to take them from — the joint-position action term.
+        It is used only when **this scene's own model** presents the same joints in
+        actuator order: mjlab records every joint of the robot in joint order, the
+        network emits one action per actuator, and pairing lists that differ in length
+        or order would misdrive every actuator with nothing at playback to say so. A
+        mismatch warns and fills nothing rather than guessing.
+
+        Observation terms are *never* reconstructed: the metadata names them but does
+        not carry the functions mjswan traces, so ``observations`` stays the caller's
+        (or the scene's) to supply.
+
+        Args:
+            repo_id: Hub repository, ``"<owner>/<name>"``.
+            filename: Path within the repository, or a list to add several policies from
+                one repository. ``None`` resolves it — ``policy.onnx``, then
+                ``final.onnx``, then the single ``.onnx`` if that is all there is.
+            revision: Branch, tag or commit. ``None`` takes the default branch, so the
+                build follows the repository; pass a commit to pin it.
+            repo_type: ``"model"`` (default), ``"dataset"`` or ``"space"``.
+            token: Hub token for a gated or private repository. ``None`` uses the
+                locally stored login, then anonymous access.
+            name: Display name, for a single file only. Omitted, the name is the file's
+                stem, or the repository's own name when the stem is a generic one such
+                as ``policy``.
+            use_metadata: Read mjlab's ``metadata_props``, as described above. ``False``
+                ignores them entirely.
+            task_id: mjlab task whose runner config supplies defaults such as
+                ``clip_actions``. Optional; defaults to the scene's, when it has one.
+            config_path: Optional policy config JSON applied to every fetched policy.
+            metadata: Optional metadata dictionary applied to every fetched policy.
+            env_cfg: mjlab env config the unset term sets are taken from, instead of the
+                scene's. See :meth:`add_policy`.
+            observations: Observation groups applied to every fetched policy.
+            commands: Command term configurations applied to every fetched policy.
+            actions: Action term configurations applied to every fetched policy. Given
+                here, the metadata's action term is not consulted.
+            terminations: Termination terms applied to every fetched policy.
+            in_keys: ONNX input slot table; see :meth:`add_policy`.
+            out_keys: ONNX output slot table; see :meth:`add_policy`.
+            policy_joint_names: Overrides what the metadata would supply.
+            default_joint_pos: Overrides what the metadata would supply.
+            encoder_bias: Per-joint encoder bias; mjlab records none, so it is the
+                caller's to pass when the checkpoint needs one.
+            clip_actions: Raw-action bound. This path never loads mjlab, so a task's
+                runner config is read only if ``task_id`` names one that is installed.
+            extras: Optional extra JSON payload applied to every fetched policy.
+
+        Returns:
+            One :class:`PolicyHandle` per fetched file, in the order given.
+
+        Raises:
+            ImportError: If ``huggingface_hub`` is not installed.
+            ValueError: If ``name`` is given for more than one file, or the repository
+                has no unambiguous ``.onnx`` and none was named.
+
+        Example:
+            ```python
+            scene.add_policy_hf("my-org/g1-velocity-flat")
+            ```
+
+        Example — several policies from one repository, pinned to a commit:
+            ```python
+            scene.add_policy_hf(
+                "my-org/microduck",
+                filename=["policies/walk.onnx", "policies/stand.onnx"],
+                revision="9a1c2f0",
+            )
+            ```
+        """
+        from .hf_io import fetch_onnx_from_hf, resolve_policy_filename
+        from .mjlab_onnx_meta import read_mjlab_metadata
+
+        if filename is None:
+            filenames = [
+                resolve_policy_filename(
+                    repo_id, revision=revision, repo_type=repo_type, token=token
+                )
+            ]
+        elif isinstance(filename, str):
+            filenames = [filename]
+        else:
+            filenames = list(filename)
+        if name is not None and len(filenames) != 1:
+            raise ValueError(
+                f"add_policy_hf({repo_id!r}) was given name={name!r} for "
+                f"{len(filenames)} files. A name applies to one policy; drop it and "
+                "each file is named after itself."
+            )
+
+        fetched = [
+            fetch_onnx_from_hf(
+                repo_id,
+                fname,
+                revision=revision,
+                repo_type=repo_type,
+                token=token,
+            )
+            for fname in filenames
+        ]
+
+        metas = [
+            read_mjlab_metadata(model) if use_metadata else None for _, model in fetched
+        ]
+        # Compiled once, not once per file: every policy in a repository is checked
+        # against the same scene.
+        actuated = _actuated_joint_names(_get_scene_model(self._config))
+        driven = [
+            _hf_driven_joints(meta, model, actuated)
+            for meta, (_, model) in zip(metas, fetched)
+        ]
+
+        if task_id is None:
+            task_id = self._config.mjlab_task_id
+        observations, commands, actions, terminations, events = self._derive_term_sets(
+            env_cfg, observations, commands, actions, terminations
+        )
+        first_meta = metas[0] if metas else None
+        if actions is None and first_meta is not None and driven[0] is not None:
+            # Only reached when neither the caller nor an env config supplied actions —
+            # `_derive_term_sets` has already had its turn — so the metadata is the last
+            # description of the action term there is, not a competing one. Guarded by
+            # `driven`, so the scale is known to line up with the actions it scales.
+            from .mjlab_onnx_meta import action_cfg_from_metadata
+
+            actions = (
+                action_cfg_from_metadata(
+                    first_meta, action_width=_onnx_output_width(fetched[0][1])
+                )
+                or None
+            )
+
+        # One MDP across the repository's policies, as `add_policy_wandb` does for a
+        # run's checkpoints: they describe one task, so they share its graphs.
+        shared_mdp = MdpConfig(
+            observations=observations,
+            commands=commands,
+            actions=actions,
+            terminations=terminations,
+            events=events,
+        )
+
+        handles: list[PolicyHandle] = []
+        for (policy_name, model), meta, policy_driven in zip(fetched, metas, driven):
+            joint_kwargs = self._hf_joint_kwargs(
+                meta,
+                model,
+                policy_driven,
+                policy_name=policy_name,
+                repo_id=repo_id,
+                policy_joint_names=policy_joint_names,
+                default_joint_pos=default_joint_pos,
+            )
+            handles.append(
+                self.add_policy(
+                    name=name or policy_name,
+                    policy=model,
+                    config_path=config_path,
+                    metadata=metadata,
+                    env_cfg=env_cfg,
+                    task_id=task_id,
+                    mdp=shared_mdp,
+                    in_keys=in_keys,
+                    out_keys=out_keys,
+                    encoder_bias=encoder_bias,
+                    clip_actions=clip_actions,
+                    extras=extras,
+                    **joint_kwargs,
+                )
+            )
+
+        _default_to_latest(handles)
+        return handles
+
+    @staticmethod
+    def _hf_joint_kwargs(
+        meta: Any | None,
+        policy: onnx.ModelProto,
+        driven: list[str] | None,
+        *,
+        policy_name: str,
+        repo_id: str,
+        policy_joint_names: list[str] | None,
+        default_joint_pos: list[float] | None,
+    ) -> dict[str, Any]:
+        """``policy_joint_names`` / ``default_joint_pos`` for one policy.
+
+        The caller's values win outright. Metadata that exists but does not line up with
+        the scene is reported rather than dropped: it is the one case where someone who
+        expected the fetch to fill everything gets nothing and no reason why.
+        """
+        explicit = {
+            key: value
+            for key, value in (
+                ("policy_joint_names", policy_joint_names),
+                ("default_joint_pos", default_joint_pos),
+            )
+            if value is not None
+        }
+        if meta is None or len(explicit) == 2:
+            return explicit
+
+        if driven is None:
+            if meta.joint_names:
+                warnings.warn(
+                    f"Policy {policy_name!r} from {repo_id!r} carries mjlab metadata "
+                    f"for {len(meta.joint_names)} joints ({meta.joint_names[:4]}…), but "
+                    f"this scene's model does not present that list in actuator order "
+                    f"against a network of {_onnx_output_width(policy)} actions. "
+                    "policy_joint_names / default_joint_pos were left unset — pass them "
+                    "explicitly, in the order the policy's actions come out.",
+                    category=RuntimeWarning,
+                    stacklevel=3,
+                )
+            return explicit
+
+        derived = {
+            "policy_joint_names": list(driven),
+            "default_joint_pos": list(meta.default_joint_pos),
+        }
+        return {**derived, **explicit}
 
     def add_splat(
         self,
