@@ -30,16 +30,17 @@ from ._build_client import ClientBuilder, install_spa
 from ._version import __version__
 from .app import MjswanApp
 from .document import DOCUMENT_FORMAT
+from .document.ids import assign_id, name2id, unique_id
+from .document.manifest import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS, RUNTIME_INPUT_SLOTS
 from .envs.mdp.actions.actions import (
     MuscleActivationActionCfg,
     validate_muscle_actuators,
 )
-from .licenses import resolve_license
-from .policy import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS, RUNTIME_INPUT_SLOTS
+from .license import resolve_license
 from .project import ProjectConfig, ProjectHandle
 from .scene import SceneConfig
 from .splat import SplatConfig
-from .utils import assign_id, collect_spec_assets, name2id, to_zip_deflated, unique_id
+from .utils import collect_spec_assets, to_zip_deflated
 from .viewer import ViewerConfig
 
 

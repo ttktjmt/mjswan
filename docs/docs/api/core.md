@@ -969,7 +969,7 @@ compiled JavaScript.
 | `token` | `str \| None` | `$MJSWAN_TOKEN` | Access token. |
 | `api_base` | `str \| None` | `$MJSWAN_API_BASE`, then `https://api.mjswan.com` | Cloud API base URL. |
 
-**Raises** — `mjswan.publish.PublishError` on validation failure or server rejection,
+**Raises** — `mjswan.cloud.publish.PublishError` on validation failure or server rejection,
 including a build that uses custom-JavaScript MDP terms (`uses_custom_js: true`), which
 Cloud cannot render.
 

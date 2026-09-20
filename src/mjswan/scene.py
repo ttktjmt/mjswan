@@ -29,12 +29,12 @@ from .adapters import (
     resolve_pd_gains,
     resolve_runner_defaults,
 )
-from .licenses import Attribution, resolve_license, resolve_notice
+from .document.ids import assign_id, name2id, unique_id
+from .license import Attribution, resolve_license, resolve_notice
 from .mdp import MdpConfig
 from .motion import MotionConfig
 from .policy import PolicyConfig, PolicyHandle
 from .splat import SplatConfig, SplatHandle
-from .utils import assign_id, name2id, unique_id
 from .viewer import ViewerConfig
 
 if TYPE_CHECKING:

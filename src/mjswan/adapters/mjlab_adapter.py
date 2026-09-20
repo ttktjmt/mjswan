@@ -32,6 +32,7 @@ from typing import Any, NamedTuple
 from ..command import CommandTermConfig as MjswanCommandTermConfig
 from ..command import PendingCommandTrace, PendingResetTrace, default_viz
 from ..command import _custom_registry as _custom_command_registry
+from ..document.manifest import DEFAULT_IN_KEYS
 from ..envs.mdp import actions as _actions_module
 from ..envs.mdp.actions.actions import (
     ActionTermCfg as MjswanActionTermCfg,
@@ -55,7 +56,6 @@ from ..managers.observation_manager import (
 from ..managers.termination_manager import (
     TerminationTermCfg as MjswanTerminationTermCfg,
 )
-from ..policy import DEFAULT_IN_KEYS
 
 
 def _is_from_mjlab(obj: Any) -> bool:

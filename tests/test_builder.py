@@ -23,13 +23,13 @@ from onnx import TensorProto, helper
 import mjswan
 from mjswan._build_client import ClientBuilder
 from mjswan.builder import Builder
+from mjswan.document.ids import name2id
 from mjswan.envs.mdp import events as evt_fns
 from mjswan.envs.mdp import observations as obs_fns
 from mjswan.envs.mdp import terminations as term_fns
 from mjswan.envs.mdp.actions import JointEffortActionCfg, JointPositionActionCfg
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjswan.managers.termination_manager import TerminationTermCfg
-from mjswan.utils import name2id
 from mjswan.viewer import ViewerConfig
 
 

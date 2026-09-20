@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 
 from mjswan.builder import Builder
+from mjswan.document.ids import name2id
 from mjswan.splat import SplatConfig
-from mjswan.utils import name2id
 
 
 # ===========================================================================

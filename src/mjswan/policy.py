@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 import onnx
 
 from .command import CommandTermConfig
+from .document.manifest import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS, RUNTIME_INPUT_SLOTS
 from .mdp import MdpConfig
 from .motion import MotionConfig, MotionHandle
 
@@ -22,14 +23,6 @@ if TYPE_CHECKING:
     from .managers.observation_manager import ObservationGroupCfg
     from .managers.termination_manager import TerminationTermCfg
     from .scene import SceneHandle
-
-#: Input slots the runtime fills itself rather than from an observation group: the
-#: recurrent carry (``is_init``, ``adapt_hx``) and the step counter (``time_step``).
-RUNTIME_INPUT_SLOTS = frozenset({"is_init", "adapt_hx", "time_step"})
-
-#: What the runtime assumes when a policy declares no slot table (ADR 0006 §5).
-DEFAULT_IN_KEYS = ("actor",)
-DEFAULT_OUT_KEYS = ("action",)
 
 
 @dataclass
@@ -138,7 +131,7 @@ class PolicyConfig:
 
     def __post_init__(self) -> None:
         if not self.id:
-            from .utils import name2id
+            from .document.ids import name2id
 
             self.id = name2id(self.name)
 

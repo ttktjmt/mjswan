@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .licenses import (
+from ..license import (
     LICENSE_CONTENT_TYPE,
     LICENSE_FILE_MAX_BYTES,
     LicenseDeclaration,
@@ -43,6 +43,7 @@ from .licenses import (
     is_license_file_path,
     restricted_warning,
 )
+from .transport import USER_AGENT
 
 # ── Client-side constraints (mirror the server's; fail fast and locally) ──────
 
@@ -93,24 +94,6 @@ def simulation_url(sim_id: str, web_base: str | None = None) -> str:
     """The web app page URL for a published simulation."""
     return f"{resolve_web_base(web_base)}/s/{sim_id}"
 
-
-def _user_agent() -> str:
-    """A non-default User-Agent.
-
-    The API is fronted by Cloudflare, which rejects the stdlib's default
-    ``Python-urllib/X.Y`` agent with HTTP 403 (error 1010, "banned by browser
-    signature"). Any real agent string passes, so identify the CLI explicitly.
-    """
-    try:
-        from importlib.metadata import version
-
-        ver = version("mjswan")
-    except Exception:  # pragma: no cover - packaging edge cases
-        ver = "0"
-    return f"mjswan/{ver} (+https://github.com/ttktjmt/mjswan)"
-
-
-USER_AGENT: str = _user_agent()
 
 _CONTENT_TYPES: dict[str, str] = {
     ".json": "application/json",
@@ -371,7 +354,7 @@ def resolve_token(token: str | None) -> str:
 
     # Fall back to a stored `mjswan login` session (imported lazily so publish
     # has no hard dependency on the auth flow).
-    from mjswan import auth
+    from . import auth
 
     try:
         stored = auth.current_access_token()
@@ -435,7 +418,7 @@ def publish_dist(
     Raises:
         PublishError: on any client-side validation failure or server rejection.
     """
-    from .document import DocumentError, as_directory
+    from ..document import DocumentError, as_directory
 
     transport = transport or HttpTransport()
     base = resolve_api_base(api_base)
@@ -600,7 +583,6 @@ __all__ = [
     "MAX_FILE_BYTES",
     "MAX_TOTAL_BYTES",
     "TOKEN_ENV_VAR",
-    "USER_AGENT",
     "WEB_BASE_ENV_VAR",
     "HttpResponse",
     "HttpTransport",

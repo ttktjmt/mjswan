@@ -14,8 +14,9 @@ from typing import TYPE_CHECKING, Any
 import mujoco
 
 from .adapters import apply_mjlab_sim_options, ensure_mjlab_extensions
+from .document.ids import assign_id, name2id
 from .envs.mdp.events import apply_terrain_spawn
-from .licenses import (
+from .license import (
     detect_attributions,
     known_attribution,
     resolve_license,
@@ -23,7 +24,7 @@ from .licenses import (
     spec_asset_directories,
 )
 from .scene import SceneConfig, SceneHandle, _env_cfg_control_dt
-from .utils import assign_id, collect_spec_assets, name2id
+from .utils import collect_spec_assets
 from .viewer import ViewerConfig
 
 if TYPE_CHECKING:
@@ -88,7 +89,7 @@ class ProjectHandle:
 
         Args:
             license: A generatable SPDX id (one of
-                :data:`mjswan.licenses.GENERATABLE_LICENSES`) for the standard text, or
+                :data:`mjswan.license.GENERATABLE_LICENSES`) for the standard text, or
                 the path to a license text, copied verbatim.
             copyright: The holder line of a generated text, e.g. ``"2026 Example"``.
 

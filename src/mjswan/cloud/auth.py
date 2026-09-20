@@ -42,7 +42,7 @@ from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-from mjswan.publish import USER_AGENT
+from .transport import USER_AGENT
 
 # ── Supabase configuration (public; overridable via env) ──────────────────────
 
@@ -79,7 +79,7 @@ def supabase_publishable_key() -> str:
     if not key:
         raise AuthError(
             "No Supabase publishable key configured. Set the "
-            "DEFAULT_SUPABASE_PUBLISHABLE_KEY constant in mjswan/auth.py, or set "
+            "DEFAULT_SUPABASE_PUBLISHABLE_KEY constant in mjswan/cloud/auth.py, or set "
             f"${SUPABASE_PUBLISHABLE_KEY_ENV_VAR}, to the publishable key for "
             f"{supabase_url()}."
         )

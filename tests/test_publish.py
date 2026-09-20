@@ -1,4 +1,4 @@
-"""Tests for mjswan Cloud publishing (mjswan.publish + app.publish + CLI).
+"""Tests for mjswan Cloud publishing (mjswan.cloud.publish + app.publish + CLI).
 
 L1 — pure Python, no MuJoCo/ONNX/network required (safe for pre-commit).
 The HTTP transport is faked, so no real requests are made.
@@ -11,12 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from mjswan.publish import (
+from mjswan.cloud.publish import (
     DATA_EXTENSIONS,
     MAX_FILE_BYTES,
     MAX_FILES,
     MAX_TOTAL_BYTES,
-    USER_AGENT,
     HttpResponse,
     HttpTransport,
     PublishError,
@@ -27,6 +26,7 @@ from mjswan.publish import (
     resolve_web_base,
     simulation_url,
 )
+from mjswan.cloud.transport import USER_AGENT
 
 
 @pytest.fixture(autouse=True)
@@ -193,7 +193,7 @@ class TestHttpTransportUserAgent:
             seen.append(req.get_header("User-agent"))
             return _Resp()
 
-        monkeypatch.setattr("mjswan.publish.urllib.request.urlopen", fake_urlopen)
+        monkeypatch.setattr("mjswan.cloud.publish.urllib.request.urlopen", fake_urlopen)
         t = HttpTransport()
         t.post_json("https://api.mjswan.com/x", {}, "tok")
         t.put_bytes("https://r2.example.com/x", b"data", "application/json")
@@ -266,20 +266,20 @@ class TestPlanPublish:
 
     def test_rejects_oversized_file(self, tmp_path: Path, monkeypatch):
         dist = _make_dist(tmp_path)
-        monkeypatch.setattr("mjswan.publish.MAX_FILE_BYTES", 5)
+        monkeypatch.setattr("mjswan.cloud.publish.MAX_FILE_BYTES", 5)
         with pytest.raises(PublishError) as exc:
             plan_publish(dist)
         assert exc.value.file is not None
 
     def test_rejects_too_many_files(self, tmp_path: Path, monkeypatch):
         dist = _make_dist(tmp_path)
-        monkeypatch.setattr("mjswan.publish.MAX_FILES", 2)
+        monkeypatch.setattr("mjswan.cloud.publish.MAX_FILES", 2)
         with pytest.raises(PublishError, match="Too many files"):
             plan_publish(dist)
 
     def test_rejects_total_size(self, tmp_path: Path, monkeypatch):
         dist = _make_dist(tmp_path)
-        monkeypatch.setattr("mjswan.publish.MAX_TOTAL_BYTES", 10)
+        monkeypatch.setattr("mjswan.cloud.publish.MAX_TOTAL_BYTES", 10)
         with pytest.raises(PublishError, match="Total upload size"):
             plan_publish(dist)
 
@@ -308,7 +308,7 @@ def _with_licenses(dist: Path, files: dict[str, str | bytes]) -> Path:
 
 class TestLicenseFiles:
     def test_admits_project_and_scene_files_as_text_never_the_root(self, tmp_path):
-        from mjswan.licenses import license_template
+        from mjswan.license import license_template
 
         dist = _with_licenses(
             _make_dist(tmp_path),
@@ -346,7 +346,7 @@ class TestLicenseFiles:
         assert plan.license_warnings() == []
 
     def test_the_declaration_is_printed_before_the_upload(self, tmp_path):
-        from mjswan.licenses import license_template
+        from mjswan.license import license_template
 
         dist = _with_licenses(
             _make_dist(tmp_path), {"demo/LICENSE": license_template("MIT")}
@@ -421,7 +421,7 @@ class TestLicenseFiles:
         assert plan.license_warnings() == []
 
     def test_an_oversized_license_file_is_refused(self, tmp_path):
-        from mjswan.licenses import LICENSE_FILE_MAX_BYTES
+        from mjswan.license import LICENSE_FILE_MAX_BYTES
 
         dist = _with_licenses(
             _make_dist(tmp_path), {"demo/LICENSE": b"x" * (LICENSE_FILE_MAX_BYTES + 1)}
@@ -436,13 +436,13 @@ class TestLicenseFiles:
         from typer.testing import CliRunner
 
         from mjswan._cli import app
-        from mjswan.publish import PublishResult
+        from mjswan.cloud.publish import PublishResult
 
         def fake_publish_dist(dist_dir, **kwargs):
             kwargs["on_warning"]("demo/LICENSE is GPL-3.0-only (copyleft).")
             return PublishResult(id="s1", sim_id="s1", upload_id="u")
 
-        monkeypatch.setattr("mjswan.publish.publish_dist", fake_publish_dist)
+        monkeypatch.setattr("mjswan.cloud.publish.publish_dist", fake_publish_dist)
         result = CliRunner().invoke(
             app, ["publish", str(_make_dist(tmp_path)), "--token", "tok"]
         )
@@ -561,7 +561,9 @@ class TestPublishDist:
         dist = _make_dist(tmp_path)
         transport = FakeTransport()
         tokens = iter(["token-at-upload", "token-at-commit"])
-        monkeypatch.setattr("mjswan.publish.resolve_token", lambda _t: next(tokens))
+        monkeypatch.setattr(
+            "mjswan.cloud.publish.resolve_token", lambda _t: next(tokens)
+        )
 
         publish_dist(dist, title="T", token="ignored", transport=transport)
 
@@ -695,11 +697,11 @@ class TestAppPublish:
         def fake_publish_dist(dist_dir, **kwargs):
             captured["dist_dir"] = dist_dir
             captured.update(kwargs)
-            from mjswan.publish import PublishResult
+            from mjswan.cloud.publish import PublishResult
 
             return PublishResult(id="zzz", sim_id="zzz", upload_id="u")
 
-        monkeypatch.setattr("mjswan.publish.publish_dist", fake_publish_dist)
+        monkeypatch.setattr("mjswan.cloud.publish.publish_dist", fake_publish_dist)
         dist = _make_dist(tmp_path)
         result = MjswanApp(dist).publish(title="Hello", tags=["x"])
         assert result.id == "zzz"
@@ -719,7 +721,7 @@ class TestPublishCli:
 
     def test_publish_success(self, tmp_path: Path, monkeypatch):
         from mjswan._cli import app
-        from mjswan.publish import PublishResult
+        from mjswan.cloud.publish import PublishResult
 
         captured: dict = {}
 
@@ -728,7 +730,7 @@ class TestPublishCli:
             captured.update(kwargs)
             return PublishResult(id="sim777", sim_id="sim777", upload_id="u")
 
-        monkeypatch.setattr("mjswan.publish.publish_dist", fake_publish_dist)
+        monkeypatch.setattr("mjswan.cloud.publish.publish_dist", fake_publish_dist)
         dist = _make_dist(tmp_path)
 
         result = self._runner().invoke(
@@ -760,9 +762,9 @@ class TestPublishCli:
 
     def test_publish_auto_logs_in_when_no_token(self, tmp_path: Path, monkeypatch):
         """No --token, no env, no stored session → publish triggers login first."""
-        from mjswan import auth
         from mjswan._cli import app
-        from mjswan.publish import PublishResult
+        from mjswan.cloud import auth
+        from mjswan.cloud.publish import PublishResult
 
         monkeypatch.setenv("MJSWAN_CONFIG_HOME", str(tmp_path / "cfg"))
         monkeypatch.delenv("MJSWAN_TOKEN", raising=False)
@@ -777,9 +779,9 @@ class TestPublishCli:
             auth.save_credentials(creds)
             return creds
 
-        monkeypatch.setattr("mjswan.auth.login", fake_login)
+        monkeypatch.setattr("mjswan.cloud.auth.login", fake_login)
         monkeypatch.setattr(
-            "mjswan.publish.publish_dist",
+            "mjswan.cloud.publish.publish_dist",
             lambda dist_dir, **kw: PublishResult(id="s1", sim_id="s1", upload_id="u"),
         )
 
@@ -790,14 +792,14 @@ class TestPublishCli:
 
     def test_publish_skips_login_when_token_given(self, tmp_path: Path, monkeypatch):
         from mjswan._cli import app
-        from mjswan.publish import PublishResult
+        from mjswan.cloud.publish import PublishResult
 
         monkeypatch.setattr(
-            "mjswan.auth.login",
+            "mjswan.cloud.auth.login",
             lambda **k: pytest.fail("login must not run when a token is provided"),
         )
         monkeypatch.setattr(
-            "mjswan.publish.publish_dist",
+            "mjswan.cloud.publish.publish_dist",
             lambda dist_dir, **kw: PublishResult(id="s1", sim_id="s1", upload_id="u"),
         )
         result = self._runner().invoke(
@@ -807,12 +809,12 @@ class TestPublishCli:
 
     def test_publish_error_surfaced(self, tmp_path: Path, monkeypatch):
         from mjswan._cli import app
-        from mjswan.publish import PublishError
+        from mjswan.cloud.publish import PublishError
 
         def fake_publish_dist(dist_dir, **kwargs):
             raise PublishError("nope, custom-JS", file="policy.json")
 
-        monkeypatch.setattr("mjswan.publish.publish_dist", fake_publish_dist)
+        monkeypatch.setattr("mjswan.cloud.publish.publish_dist", fake_publish_dist)
         dist = _make_dist(tmp_path)
 
         result = self._runner().invoke(app, ["publish", str(dist), "--token", "tok"])

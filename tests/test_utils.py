@@ -17,15 +17,14 @@ from pathlib import Path
 
 import pytest
 
+from mjswan.document.ids import name2id, unique_id
 from mjswan.utils import (
     _buffer_texture_to_png,
     _make_zip_safe_path,
     _rewrite_xml_paths,
     _strip_leading_dotdot,
     collect_spec_assets,
-    name2id,
     to_zip_deflated,
-    unique_id,
 )
 
 # The frontend's `sanitizeName` reads the same table (src/manifest/index.test.ts): a URL

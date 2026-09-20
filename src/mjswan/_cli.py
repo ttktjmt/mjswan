@@ -141,7 +141,7 @@ def publish_cmd(
     ] = None,
 ) -> None:
     """Publish a built dist directory, or a .swn document, to mjswan Cloud."""
-    from mjswan.publish import (
+    from mjswan.cloud.publish import (
         TOKEN_ENV_VAR,
         PublishError,
         publish_dist,
@@ -156,7 +156,7 @@ def publish_cmd(
     # No flag, env or stored session: run the browser login first, then publish.
     import os
 
-    from mjswan import auth
+    from mjswan.cloud import auth
 
     if not token and not os.environ.get(TOKEN_ENV_VAR) and not auth.load_credentials():
         console.print("[dim]Not logged in — signing in to mjswan Cloud first…[/dim]")
@@ -192,7 +192,7 @@ def _do_login(*, open_browser: bool) -> bool:
     Returns ``True`` on success, ``False`` (with an error printed) on failure.
     Shared by ``mjswan login`` and ``mjswan publish``'s auto-login.
     """
-    from mjswan.auth import AuthError, login
+    from mjswan.cloud.auth import AuthError, login
 
     try:
         creds = login(
@@ -225,7 +225,7 @@ def login_cmd(
 @app.command("whoami")
 def whoami_cmd() -> None:
     """Show the mjswan Cloud account you are signed in as."""
-    from mjswan.auth import AuthError, fetch_identity
+    from mjswan.cloud.auth import AuthError, fetch_identity
 
     try:
         identity = fetch_identity()
@@ -246,7 +246,7 @@ def whoami_cmd() -> None:
 @app.command("logout")
 def logout_cmd() -> None:
     """Remove the stored mjswan Cloud session."""
-    from mjswan.auth import clear_credentials, credentials_path
+    from mjswan.cloud.auth import clear_credentials, credentials_path
 
     if clear_credentials():
         console.print("[green]Logged out.[/green]")
@@ -465,7 +465,7 @@ def info_cmd(
 
 def _describe_licenses(node, root: Path, directory: Path) -> None:
     """One line per license file in ``directory`` (ADR 0007 §4), identifier included."""
-    from mjswan.licenses import declare
+    from mjswan.license import declare
 
     for path in sorted(directory.iterdir()) if directory.is_dir() else []:
         if not path.is_file():

@@ -16,6 +16,7 @@ import pytest
 
 from mjswan.app import MjswanApp
 from mjswan.builder import Builder
+from mjswan.cloud.publish import HttpResponse, plan_publish, publish_dist
 from mjswan.document import (
     document_files,
     is_document,
@@ -24,7 +25,6 @@ from mjswan.document import (
     write_document,
 )
 from mjswan.envs.mdp.actions import JointPositionActionCfg
-from mjswan.publish import HttpResponse, plan_publish, publish_dist
 
 
 @pytest.fixture
@@ -157,7 +157,7 @@ class TestPublishingADocument:
         assert "manifest.json" in as_directory
 
     def test_a_bad_document_is_a_publish_error(self, tmp_path, monkeypatch):
-        from mjswan.publish import PublishError
+        from mjswan.cloud.publish import PublishError
 
         monkeypatch.setenv("MJSWAN_TOKEN", "t")
         not_a_zip = tmp_path / "broken.swn"

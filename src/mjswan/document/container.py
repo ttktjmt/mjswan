@@ -1,4 +1,4 @@
-"""The ``.swn`` simulation document: a build's data as one file (ADR 0006 §8).
+"""The ``.swn`` container: a build's data as one file (ADR 0006 §8).
 
 A build is a directory, ``manifest.json`` over ``<project-id>/<scene-id>/``, and that
 directory is the document. Packaging it is a ZIP whose entries are the tree's paths, so
@@ -18,18 +18,9 @@ import zipfile
 from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
 
-DOCUMENT_SUFFIX = ".swn"
-MANIFEST_NAME = "manifest.json"
+from .manifest import MANIFEST_NAME
 
-#: The structure a build writes: what files exist, where they sit, and what the manifest
-#: says about them. Bumped by hand, only when an engine reading the old structure would
-#: misread the new one. Distinct from ``version``, the mjswan release: a host picks an
-#: engine by ``version``, an engine protects itself by ``format`` (ADR 0006 §7).
-#:
-#: 2: ``input_slots`` may carry a raw ``mjData`` field (``{"sim": ...}``), narrowed to
-#: ``rows``. A format-1 engine accepts the entry, cannot serve it, and freezes the
-#: observation group at its previous value.
-DOCUMENT_FORMAT = 2
+DOCUMENT_SUFFIX = ".swn"
 
 #: Already-compressed containers: deflating them again costs time for nothing.
 _STORED_SUFFIXES = frozenset({".mjz", ".npz", ".spz"})
@@ -163,9 +154,7 @@ def as_directory(source: str | Path) -> Iterator[Path]:
 
 
 __all__ = [
-    "DOCUMENT_FORMAT",
     "DOCUMENT_SUFFIX",
-    "MANIFEST_NAME",
     "DocumentError",
     "as_directory",
     "document_files",

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .publish import PublishResult
+    from .cloud.publish import PublishResult
 
 
 def _detect_colab() -> bool:
@@ -119,9 +119,9 @@ class MjswanApp:
             The publish result, including the new simulation id.
 
         Raises:
-            mjswan.publish.PublishError: on validation failure or server rejection.
+            mjswan.cloud.publish.PublishError: on validation failure or server rejection.
         """
-        from .publish import DEFAULT_API_BASE, publish_dist
+        from .cloud.publish import DEFAULT_API_BASE, publish_dist
 
         return publish_dist(
             self._app_dir,
