@@ -604,7 +604,11 @@ class TestAdaptCommands:
 
         Otherwise a `debug_vis=True` task the author forgot is silently blank.
         """
-        from mjswan.command import CommandBinding, _custom_registry, register_command
+        from mjswan.managers.command_manager import (
+            CommandBinding,
+            _custom_registry,
+            register_command,
+        )
 
         cfg_cls = _make_mjlab_class(
             "LiftingCommandCfg",
@@ -634,7 +638,11 @@ class TestAdaptCommands:
 
     def test_a_registered_cfg_adapts_from_outside_the_mjlab_package(self):
         """The registry decides, not the defining module."""
-        from mjswan.command import CommandBinding, _custom_registry, register_command
+        from mjswan.managers.command_manager import (
+            CommandBinding,
+            _custom_registry,
+            register_command,
+        )
 
         class SkateCommandCfg:
             resampling_time_range = (20.0, 20.0)

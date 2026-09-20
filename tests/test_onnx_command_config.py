@@ -308,7 +308,7 @@ def test_native_command_emits_a_traced_reset_graph(tmp_path):
     from rsi_body_fixture import rsi_joint_offset
 
     from mjswan.build.mdp import serialize_command
-    from mjswan.command import CommandTermConfig, PendingResetTrace
+    from mjswan.managers.command_manager import CommandTermConfig, PendingResetTrace
 
     cfg = CommandTermConfig(
         term_name="TrackingCommand",
@@ -360,7 +360,7 @@ def test_element_bounds_broadcasts_mjlab_per_axis_ranges():
 
 def test_command_without_a_reset_trace_is_unchanged(tmp_path):
     from mjswan.build.mdp import serialize_command
-    from mjswan.command import CommandTermConfig
+    from mjswan.managers.command_manager import CommandTermConfig
 
     cfg = CommandTermConfig(
         term_name="TrackingCommand", params={"sampling_mode": "start"}

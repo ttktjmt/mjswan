@@ -64,10 +64,10 @@ def uses_custom_js() -> bool:
     Surfaced at the top of ``manifest.json`` so a consumer can enforce a
     declarative-only policy without inspecting the bundled engine (ADR 0003).
     """
-    from mjswan.command import _custom_registry as _command_registry
     from mjswan.envs.mdp.events import _custom_registry as _event_registry
     from mjswan.envs.mdp.observations import _custom_registry as _obs_registry
     from mjswan.envs.mdp.terminations import _custom_registry as _term_registry
+    from mjswan.managers.command_manager import _custom_registry as _command_registry
 
     for registry in (_obs_registry, _term_registry, _event_registry, _command_registry):
         for sentinel in registry.values():
@@ -243,10 +243,10 @@ class ClientBuilder:
     @staticmethod
     def _collect_custom_terms() -> dict[str, dict[str, Path]]:
         """Map each MDP kind to {ts_name: source_path} for registered ts_src terms."""
-        from mjswan.command import _custom_registry as cmd_reg
         from mjswan.envs.mdp.events import _custom_registry as evt_reg
         from mjswan.envs.mdp.observations import _custom_registry as obs_reg
         from mjswan.envs.mdp.terminations import _custom_registry as term_reg
+        from mjswan.managers.command_manager import _custom_registry as cmd_reg
 
         kinds = {
             "observations": obs_reg,

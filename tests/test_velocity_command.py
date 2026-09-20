@@ -21,8 +21,8 @@ pytest.importorskip("mjlab")
 
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg  # noqa: E402
 
-from mjswan.command import _custom_registry  # noqa: E402
 from mjswan.envs.mdp.commands import bind_velocity_override  # noqa: E402
+from mjswan.managers.command_manager import _custom_registry  # noqa: E402
 
 HEADING_W = 0.7
 """The stand-in robot's yaw. Non-zero so a world-frame rotation is not the identity."""

@@ -670,10 +670,10 @@ class TestUsesCustomJsFlag:
     def _isolate_registries(self, monkeypatch):
         """Swap each MDP custom-registry for an empty dict so the test does
         not see registrations leaked in from other tests / modules."""
-        from mjswan import command as command_mod
         from mjswan.envs.mdp import events as events_mod
         from mjswan.envs.mdp import observations as obs_mod
         from mjswan.envs.mdp import terminations as term_mod
+        from mjswan.managers import command_manager as command_mod
 
         monkeypatch.setattr(obs_mod, "_custom_registry", {})
         monkeypatch.setattr(term_mod, "_custom_registry", {})

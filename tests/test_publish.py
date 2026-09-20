@@ -435,7 +435,7 @@ class TestLicenseFiles:
     def test_the_cli_prints_the_warning(self, tmp_path, monkeypatch):
         from typer.testing import CliRunner
 
-        from mjswan._cli import app
+        from mjswan.cli import app
         from mjswan.cloud.publish import PublishResult
 
         def fake_publish_dist(dist_dir, **kwargs):
@@ -720,7 +720,7 @@ class TestPublishCli:
         return CliRunner()
 
     def test_publish_success(self, tmp_path: Path, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
         from mjswan.cloud.publish import PublishResult
 
         captured: dict = {}
@@ -754,7 +754,7 @@ class TestPublishCli:
         assert captured["tags"] == ["robotics", "humanoid"]
 
     def test_publish_missing_dir(self, tmp_path: Path):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         result = self._runner().invoke(app, ["publish", str(tmp_path / "nope")])
         assert result.exit_code == 1
@@ -762,7 +762,7 @@ class TestPublishCli:
 
     def test_publish_auto_logs_in_when_no_token(self, tmp_path: Path, monkeypatch):
         """No --token, no env, no stored session → publish triggers login first."""
-        from mjswan._cli import app
+        from mjswan.cli import app
         from mjswan.cloud import auth
         from mjswan.cloud.publish import PublishResult
 
@@ -791,7 +791,7 @@ class TestPublishCli:
         assert "ada" in result.output  # signed-in account surfaced
 
     def test_publish_skips_login_when_token_given(self, tmp_path: Path, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
         from mjswan.cloud.publish import PublishResult
 
         monkeypatch.setattr(
@@ -808,7 +808,7 @@ class TestPublishCli:
         assert result.exit_code == 0, result.output
 
     def test_publish_error_surfaced(self, tmp_path: Path, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
         from mjswan.cloud.publish import PublishError
 
         def fake_publish_dist(dist_dir, **kwargs):

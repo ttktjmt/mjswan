@@ -348,7 +348,7 @@ class TestAuthCli:
         return CliRunner()
 
     def test_login_success_shows_username(self, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         def fake_login(**kwargs):
             return Credentials(
@@ -362,7 +362,7 @@ class TestAuthCli:
         assert "octocat" in result.output
 
     def test_login_failure(self, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         def fake_login(**kwargs):
             raise AuthError("port busy")
@@ -373,7 +373,7 @@ class TestAuthCli:
         assert "port busy" in result.output
 
     def test_logout_when_logged_in(self):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         save_credentials(Credentials("a", "r", expires_at=time.time() + 1))
         result = self._runner().invoke(app, ["logout"])
@@ -382,7 +382,7 @@ class TestAuthCli:
         assert load_credentials() is None
 
     def test_logout_when_logged_out(self):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         result = self._runner().invoke(app, ["logout"])
         assert result.exit_code == 0
@@ -466,7 +466,7 @@ class TestWhoamiCli:
         return CliRunner()
 
     def test_whoami_logged_in(self, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
         from mjswan.cloud.auth import Identity
 
         monkeypatch.setattr(
@@ -478,7 +478,7 @@ class TestWhoamiCli:
         assert "octocat" in result.output
 
     def test_whoami_logged_out(self, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         monkeypatch.setattr("mjswan.cloud.auth.fetch_identity", lambda *a, **k: None)
         result = self._runner().invoke(app, ["whoami"])
@@ -486,7 +486,7 @@ class TestWhoamiCli:
         assert "Not logged in" in result.output
 
     def test_whoami_stale_session(self, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         def boom(*a, **k):
             raise AuthError("Could not verify session")

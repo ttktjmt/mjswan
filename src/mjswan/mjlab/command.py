@@ -13,9 +13,9 @@ import warnings
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from ..command import CommandTermConfig as MjswanCommandTermConfig
-from ..command import PendingCommandTrace, PendingResetTrace
-from ..command import _custom_registry as _custom_command_registry
+from ..managers.command_manager import CommandTermConfig as MjswanCommandTermConfig
+from ..managers.command_manager import PendingCommandTrace, PendingResetTrace
+from ..managers.command_manager import _custom_registry as _custom_command_registry
 from .detect import is_from_mjlab
 
 

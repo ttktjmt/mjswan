@@ -18,8 +18,8 @@ from . import graph
 from .provenance import graph_meta, resolved_params, term_provenance
 
 if TYPE_CHECKING:
-    from ...command import CommandTermConfig
     from ...compile.command import CommandExport
+    from ...managers.command_manager import CommandTermConfig
 
 
 def command_config(

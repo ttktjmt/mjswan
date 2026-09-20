@@ -16,8 +16,9 @@ import pytest
 
 import mjswan
 from mjswan.builder import Builder
-from mjswan.command import CommandTermConfig, SliderConfig, ui_command
 from mjswan.envs.mdp.actions import JointPositionActionCfg
+from mjswan.envs.mdp.commands import ui_command
+from mjswan.managers.command_manager import CommandTermConfig, SliderConfig
 from mjswan.managers.termination_manager import TerminationTermCfg
 from mjswan.project import _collect_mjlab_scene_assets
 from mjswan.scene import SceneConfig

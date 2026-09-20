@@ -1,4 +1,4 @@
-"""Tests for mjswan.command.
+"""Tests for mjswan.managers.command_manager and mjswan.envs.mdp.commands.
 
 Layer: L1 (pure Python, no MuJoCo/ONNX required).
 """
@@ -6,15 +6,14 @@ Layer: L1 (pure Python, no MuJoCo/ONNX required).
 import pytest
 
 import mjswan
-from mjswan.command import (
+from mjswan.envs.mdp.commands import ui_command, velocity_command
+from mjswan.managers.command_manager import (
     ButtonConfig,
     CommandBinding,
     CommandTermConfig,
     SliderConfig,
     _custom_registry,
     register_command,
-    ui_command,
-    velocity_command,
 )
 
 
@@ -165,14 +164,14 @@ class TestMotionRsiRegistration:
     `TrackingCommand.ts` used to jitter with `Math.random()`. ADR 0005 moved that
     into a traced graph whose body needs mjlab's own `sample_uniform` /
     `quat_from_euler_xyz`, so it is registered from `examples/mjlab/defaults/
-    commands` rather than from `mjswan.command` (which keeps mjlab a soft
+    commands` rather than from `mjswan.envs.mdp.commands` (which keeps mjlab a soft
     dependency). A task whose author never imported that module therefore got the
     plain binding — no graph — and quietly stopped jittering. These pin the
     diagnosis that replaced the silence.
     """
 
     def test_warns_when_a_jittering_cfg_has_no_registered_graph(self):
-        from mjswan.command import _motion_rsi_unregistered
+        from mjswan.envs.mdp.commands import _motion_rsi_unregistered
 
         class MotionCommandCfg:
             # mjlab's play override: pose/velocity cleared, joint jitter kept.
@@ -187,7 +186,7 @@ class TestMotionRsiRegistration:
         """A task with every range cleared is not missing anything."""
         import warnings
 
-        from mjswan.command import _motion_rsi_unregistered
+        from mjswan.envs.mdp.commands import _motion_rsi_unregistered
 
         class MotionCommandCfg:
             pose_range: dict = {}
@@ -199,7 +198,7 @@ class TestMotionRsiRegistration:
             assert _motion_rsi_unregistered(MotionCommandCfg()) is None
 
     def test_warns_for_a_pose_or_velocity_range_too(self):
-        from mjswan.command import _motion_rsi_unregistered
+        from mjswan.envs.mdp.commands import _motion_rsi_unregistered
 
         class PoseOnly:
             pose_range = {"x": (-0.1, 0.1)}
@@ -217,7 +216,8 @@ class TestMotionRsiRegistration:
 
     def test_the_builtin_binding_carries_the_diagnosis(self):
         """Registered on the binding, or nothing would ever call it."""
-        from mjswan.command import _custom_registry, _motion_rsi_unregistered
+        from mjswan.envs.mdp.commands import _motion_rsi_unregistered
+        from mjswan.managers.command_manager import _custom_registry
 
         spec = _custom_registry["MotionCommandCfg"]
         # An author-side re-registration replaces this, so only pin the diagnosing default.

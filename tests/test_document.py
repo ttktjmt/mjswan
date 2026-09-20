@@ -221,7 +221,7 @@ class TestServingADocument:
     def test_serve_cli_refuses_a_document_without_a_manifest(self, tmp_path):
         from typer.testing import CliRunner
 
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         other = tmp_path / "other.swn"
         with zipfile.ZipFile(other, "w") as zf:
@@ -238,7 +238,7 @@ class TestInfoCli:
         return CliRunner()
 
     def test_info_reads_a_document_like_a_directory(self, built):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         path = write_document(built)
         as_dir = self._runner().invoke(app, ["info", str(built)])
@@ -251,7 +251,7 @@ class TestInfoCli:
         assert "mjswan document" in as_doc.output
 
     def test_info_refuses_a_document_without_a_manifest(self, tmp_path):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         other = tmp_path / "other.swn"
         with zipfile.ZipFile(other, "w") as zf:

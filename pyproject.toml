@@ -94,7 +94,7 @@ examples = [
 "GitHub" = "https://github.com/ttktjmt/mjswan"
 
 [project.scripts]
-mjswan = "mjswan._cli:app"
+mjswan = "mjswan.cli:app"
 
 [tool.pyright]
 extraPaths = []

@@ -6,8 +6,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ...command import ButtonConfig, CommandTermConfig
 from ...envs.mdp.observations import ObservationBinding
+from ...managers.command_manager import ButtonConfig, CommandTermConfig
 from . import graph
 from .binding import require_ts_src
 from .provenance import graph_meta, resolved_params, term_provenance

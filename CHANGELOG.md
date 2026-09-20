@@ -206,6 +206,25 @@ shortcuts.
 
 ### Changed
 
+- **The package is laid out by layer** ([ADR 0008](docs/adr/0008-package-layout.md)).
+  The root holds the object model — `Builder`, the `*Handle` / `*Config` pairs,
+  `MdpConfig`, `cli.py` — and everything else is a package with one job: `build/` (what
+  `Builder.build()` does, and the one place that knows the manifest's shape), `compile/`
+  (the tracer, one module per pass and per term kind), `mjlab/` (everything that reads
+  mjlab's own objects: the adapters, the trace envs, the runner, the exported-ONNX
+  metadata reader), `source/` (`wandb.py`, `hf.py`: fetching only, conversion is the
+  runner's), `document/`, `cloud/` and `license/`, beside the mjlab-mirror `managers/`
+  and `envs/mdp/`. The public API in `mjswan/__init__.py` is unchanged; module paths are
+  not: `mjswan.command` → `mjswan.managers.command_manager` (the configs,
+  `CommandBinding`, `register_command`) and `mjswan.envs.mdp.commands` (`ui_command`,
+  `velocity_command`); `mjswan.trace_env` → `mjswan.mjlab.env`; `mjswan.mjlab_onnx_meta`
+  → `mjswan.mjlab.onnx_meta`; `mjswan.wandb_io` / `hf_io` → `mjswan.source.wandb` / `hf`;
+  `mjswan.publish` / `auth` → `mjswan.cloud.publish` / `auth`; `mjswan.licenses` →
+  `mjswan.license`; `mjswan.document` is a package; `mjswan._cli` → `mjswan.cli`;
+  `ActionTermCfg` is defined in `mjswan.managers.action_manager`, as mjlab's is. The
+  ADR carries the full old → new table. No compatibility shims: old module paths do not
+  import.
+
 - **The policy network runs on WebGPU where the browser has it**, and on wasm everywhere
   else. `executionProviders: ['webgpu', 'wasm']` is the whole change: ORT initializes each
   provider in turn and keeps the first that works, so nothing is feature-detected and a

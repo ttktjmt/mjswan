@@ -541,7 +541,7 @@ class TestInfoCli:
     ):
         from typer.testing import CliRunner
 
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         builder = Builder(license="Apache-2.0", copyright="x")
         _, scene = _project_with_scene(builder, minimal_model)

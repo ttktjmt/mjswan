@@ -11,7 +11,17 @@ os.environ.setdefault("MUJOCO_GL", "disable")
 
 from .app import MjswanApp
 from .builder import Builder
-from .command import (
+from .envs.mdp import MdpBinding
+from .envs.mdp.actions import (
+    ActionTermCfg,
+    JointEffortActionCfg,
+    JointPositionActionCfg,
+)
+from .envs.mdp.commands import ui_command, velocity_command
+from .envs.mdp.events import EventBinding, register_event
+from .envs.mdp.observations import ObservationBinding, register_observation
+from .envs.mdp.terminations import TerminationBinding, register_termination
+from .managers.command_manager import (
     Button,
     ButtonConfig,
     Checkbox,
@@ -24,18 +34,7 @@ from .command import (
     SliderConfig,
     SliderRangeConfig,
     register_command,
-    ui_command,
-    velocity_command,
 )
-from .envs.mdp import MdpBinding
-from .envs.mdp.actions import (
-    ActionTermCfg,
-    JointEffortActionCfg,
-    JointPositionActionCfg,
-)
-from .envs.mdp.events import EventBinding, register_event
-from .envs.mdp.observations import ObservationBinding, register_observation
-from .envs.mdp.terminations import TerminationBinding, register_termination
 from .managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from .managers.termination_manager import TerminationTermCfg
 from .mdp import MdpConfig
