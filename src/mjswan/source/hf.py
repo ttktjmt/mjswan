@@ -23,6 +23,9 @@ DEFAULT_POLICY_FILENAMES = ("policy.onnx", "final.onnx")
 #: called one of these is better labelled by the repository itself.
 _GENERIC_STEMS = frozenset({"policy", "final", "model", "actor"})
 
+#: The same for a scene, whose identity is its directory rather than its XML's name.
+_GENERIC_SCENE_STEMS = frozenset({"scene", "model", "robot", "main"})
+
 
 def _hub() -> Any:
     """The ``huggingface_hub`` module, or an ImportError naming the extra to install."""
@@ -101,6 +104,20 @@ def policy_name_for(repo_id: str, filename: str) -> str:
     return stem
 
 
+def scene_name_for(repo_id: str, path: str) -> str:
+    """The display name a fetched scene gets, by the rule :func:`policy_name_for` uses.
+
+    A scene is several files, so its directory is what identifies it:
+    ``scenes/unitree_g1/scene.xml`` is the G1, not "scene". A stem that names something
+    is kept.
+    """
+    stem = Path(path).stem
+    if stem.lower() not in _GENERIC_SCENE_STEMS:
+        return stem
+    parent = Path(path).parent.name
+    return parent or repo_id.rsplit("/", 1)[-1] or stem
+
+
 def fetch_file(
     repo_id: str,
     filename: str,
@@ -123,6 +140,60 @@ def fetch_file(
             token=token,
         )
     )
+
+
+def fetch_dir(
+    repo_id: str,
+    path: str | None = None,
+    *,
+    revision: str | None = None,
+    repo_type: str = "model",
+    token: str | None = None,
+    allow_patterns: list[str] | None = None,
+) -> Path:
+    """Download a directory of the repository and return its local path.
+
+    What :func:`fetch_file` is to one file, for an asset that is several — an MJCF and
+    the meshes it references, which MuJoCo resolves relative to the XML and so must land
+    beside it.
+
+    Args:
+        repo_id: Hub repository, ``"<owner>/<name>"``.
+        path: Directory within the repository. ``None`` takes the whole repository,
+            which for a repository holding several assets is rarely what you want.
+        revision: Branch, tag or commit. ``None`` takes the default branch.
+        repo_type: ``"model"`` (default), ``"dataset"`` or ``"space"``.
+        token: Hub token for a gated or private repository.
+        allow_patterns: Overrides what is downloaded, as repository-root-relative
+            ``fnmatch`` patterns. The default takes everything under ``path``; pass this
+            when the asset reaches outside its own directory — an MJCF whose ``meshdir``
+            points at a shared folder, say — since nothing here parses the XML to find
+            out.
+
+    Returns:
+        The local directory for ``path``: a subdirectory of the Hub cache, so a repeated
+        build of the same revision re-uses it rather than downloading again.
+    """
+    if allow_patterns is None and path is not None:
+        # `fnmatch`'s `*` crosses `/`, so one pattern takes the whole subtree.
+        allow_patterns = [f"{path.rstrip('/')}/*"]
+    root = Path(
+        _hub().snapshot_download(
+            repo_id=repo_id,
+            revision=revision,
+            repo_type=repo_type,
+            token=token,
+            allow_patterns=allow_patterns,
+        )
+    )
+    local = root / path if path else root
+    if not local.is_dir():
+        raise ValueError(
+            f"{path!r} is not a directory in {repo_id!r} (nothing matched "
+            f"{allow_patterns}). Pass allow_patterns= if the asset's files live "
+            "elsewhere in the repository."
+        )
+    return local
 
 
 def fetch_onnx(
@@ -181,10 +252,12 @@ def fetch_motion_npz(
 __all__ = [
     "DEFAULT_POLICY_FILENAMES",
     "choose_policy_filename",
+    "fetch_dir",
     "fetch_file",
     "fetch_motion_npz",
     "fetch_onnx",
     "list_repo_onnx",
     "policy_name_for",
     "resolve_policy_filename",
+    "scene_name_for",
 ]

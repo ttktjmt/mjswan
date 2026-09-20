@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, Any
 
 import mujoco
 import numpy as np
-import onnx
 
 from .document.ids import assign_id, name2id, unique_id
 from .license import Attribution, resolve_license, resolve_notice
@@ -46,6 +45,8 @@ from .splat import SplatConfig, SplatHandle
 from .viewer import ViewerConfig
 
 if TYPE_CHECKING:
+    import onnx
+
     from .envs.mdp.actions.actions import ActionTermCfg
     from .managers.event_manager import EventTermCfg
     from .managers.observation_manager import ObservationGroupCfg

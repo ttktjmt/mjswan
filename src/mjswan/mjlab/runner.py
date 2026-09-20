@@ -14,9 +14,10 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
-import onnx
+if TYPE_CHECKING:
+    import onnx
 
 
 class MjlabRunnerDefaults(NamedTuple):
@@ -218,6 +219,7 @@ def export_checkpoint(context: PtOnnxExportContext, pt_path: Path) -> onnx.Model
     The observation normalizer is aligned to the checkpoint first, so a run whose
     ``rl_cfg`` moved on since training still exports what was trained.
     """
+    import onnx
     import torch
 
     with tempfile.TemporaryDirectory() as tmp_dir:

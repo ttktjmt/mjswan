@@ -41,7 +41,7 @@ src/mjswan/          Python package source: the object model at the root, one pa
   mjlab/               Everything that reads mjlab's own objects (mjlab imported lazily)
     observation · termination · command · action · event   per-manager adapters
     task.py · runner.py · env.py · sim.py · gui.py · onnx_meta.py · detect.py
-  source/              A reference in, local files out: wandb.py, hf.py
+  source/              A reference in, local files out: wandb.py, hf.py (file, dir, ONNX)
   document/            The .swn document (ADR 0006): container.py, manifest.py, ids.py
   cloud/               mjswan Cloud: publish.py, auth.py (loopback PKCE OAuth), transport.py
   license/             LICENSE / NOTICE files in the build (ADR 0007): path, spdx, attribution
@@ -75,6 +75,7 @@ Builder(base_path, gtm_id, mt, debug)
   ├── .add_project_mjlab(task_id, run_path=..., play=...) → ProjectHandle
   └── .add_project(name, default=False) → ProjectHandle      # id = name2id(name)
         ├── .add_scene_mjlab(task_id, play=..., env_cfg=..., events=...) → SceneHandle
+        ├── .add_scene_hf(repo_id, path, name=..., ...) → SceneHandle   # MJCF + its meshes
         └── .add_scene(name, model|spec, metadata, control_dt, events) → SceneHandle
               ├── .add_policy(name, policy, mdp=MdpConfig | the five term sets,
               │               in_keys=, out_keys=, ...) → PolicyHandle
@@ -171,7 +172,7 @@ mjlab stays a soft dependency: it is imported lazily inside the functions that n
 - `detect.py`: `is_from_mjlab`, the duck-typed check the adapters share.
 
 ### `source/` — a reference in, local files out
-Each module backs one `add_<layer>_<source>()` family and knows nothing about what the files mean. `wandb.py`: `resolve_run_path`, `fetch_onnx`, `fetch_motion_npz` (from a run or an artifact) and `fetch_checkpoints`, a context manager yielding a run's `model_*.pt` files for `mjlab.runner` to convert. `hf.py`: the same verbs against the Hugging Face Hub, which holds the finished artifact, so neither mjlab nor torch is involved; `huggingface_hub` is an optional dependency (the `hf` extra), imported only when a caller asks for the Hub. With no filename given, `policy.onnx` then `final.onnx` then the repository's single `.onnx` — the names the Hub's own mjlab download query counts — and several unnamed candidates raise rather than pick.
+Each module backs one `add_<layer>_<source>()` family and knows nothing about what the files mean. `wandb.py`: `resolve_run_path`, `fetch_onnx`, `fetch_motion_npz` (from a run or an artifact) and `fetch_checkpoints`, a context manager yielding a run's `model_*.pt` files for `mjlab.runner` to convert. `hf.py`: the same verbs against the Hugging Face Hub, which holds the finished artifact, so neither mjlab nor torch is involved; `huggingface_hub` is an optional dependency (the `hf` extra), imported only when a caller asks for the Hub. With no filename given, `policy.onnx` then `final.onnx` then the repository's single `.onnx` — the names the Hub's own mjlab download query counts — and several unnamed candidates raise rather than pick. `fetch_dir` is `fetch_file` for an asset that is several files: a MuJoCo model is an MJCF plus the meshes it resolves relative to itself, so `add_scene_hf` brings the XML's whole directory down (`snapshot_download` scoped to it) and compiles the spec where it lands, license detection included.
 
 ### `compile/` — the tracer (ADR 0005)
 Runs each `func(env, **params)` once against a recording proxy to discover its reads, classifies each as time-varying state (a graph input, or "slot") or a model-derived constant (baked in), then exports an `nn.Module` via `torch.onnx.export`. Returns bytes and `*Export` records; writing them is `build/mdp/`'s job.

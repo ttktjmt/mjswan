@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import mujoco
-import onnx
 
 from .document.manifest import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS, RUNTIME_INPUT_SLOTS
 from .managers.command_manager import CommandTermConfig
@@ -20,6 +19,8 @@ from .mdp import MdpConfig
 from .motion import MotionConfig, MotionHandle
 
 if TYPE_CHECKING:
+    import onnx
+
     from .envs.mdp.actions.actions import ActionTermCfg
     from .managers.event_manager import EventTermCfg
     from .managers.observation_manager import ObservationGroupCfg

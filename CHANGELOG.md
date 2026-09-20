@@ -14,6 +14,15 @@ shortcuts.
 
 ### Added
 
+- **Whole MuJoCo models load from the Hugging Face Hub**: `ProjectHandle.add_scene_hf()`
+  beside `add_scene_mjlab`, and `source.hf.fetch_dir()` behind it. A model is rarely one
+  file — the MJCF names meshes MuJoCo resolves relative to it — so the XML's whole
+  directory comes down and the spec is compiled where it lands; `add_scene(spec=…)`'s
+  license detection then finds a `LICENSE` that travelled with it (ADR 0007 §2). The
+  scene is named after its directory when the XML's own stem only names a role
+  (`scene.xml`), and `allow_patterns=` covers a model whose `meshdir` reaches outside
+  its own directory, since nothing parses the XML to find out.
+
 - **Policies and motions load from the Hugging Face Hub**: `SceneHandle.add_policy_hf()`,
   `PolicyHandle.add_motion_hf()`, and `hf_repo_id=` on `Builder.from_mjlab()` /
   `add_project_mjlab()`, beside their `_wandb` counterparts. The two sources are not
@@ -205,6 +214,13 @@ shortcuts.
 - The `mjlab-to-mjswan` agent skill ([skills/mjlab-to-mjswan/](skills/mjlab-to-mjswan/)), published from this repo as the `mjswan` Claude Code plugin (`/mjswan:mjlab-to-mjswan`): it ports one mjlab task from any repo into a browser app.
 
 ### Changed
+
+- **`import mjswan` no longer imports `onnx`**, only `mujoco` and `numpy` — about 190 ms
+  down to 125 ms, 153 fewer modules. `policy.py`, `scene.py` and `mjlab/runner.py`
+  annotate an `onnx.ModelProto` but never touch the module (they read `model.graph`
+  duck-typed), so the import moves under `TYPE_CHECKING` and into the one function that
+  loads a file. Opening a MuJoCo model in the viewer with no policy involved now costs
+  nothing for a policy format it never reads.
 
 - **The package is laid out by layer** ([ADR 0008](docs/adr/0008-package-layout.md)).
   The root holds the object model — `Builder`, the `*Handle` / `*Config` pairs,

@@ -1,6 +1,6 @@
 import pytest
 
-from mjswan.source.hf import choose_policy_filename, policy_name_for
+from mjswan.source.hf import choose_policy_filename, policy_name_for, scene_name_for
 
 
 class TestChoosePolicyFilename:
@@ -47,3 +47,23 @@ class TestPolicyNameFor:
 
     def test_repo_id_without_owner(self):
         assert policy_name_for("microduck", "policy.onnx") == "microduck"
+
+
+class TestSceneNameFor:
+    """A scene is several files, so its directory is what identifies it."""
+
+    def test_generic_stem_falls_back_to_the_directory(self):
+        assert scene_name_for("org/assets", "scenes/unitree_g1/scene.xml") == (
+            "unitree_g1"
+        )
+
+    def test_model_xml_is_generic_too(self):
+        assert scene_name_for("org/assets", "robots/go2/model.xml") == "go2"
+
+    def test_a_specific_stem_wins(self):
+        assert scene_name_for("org/assets", "scenes/g1/g1_with_hands.xml") == (
+            "g1_with_hands"
+        )
+
+    def test_a_generic_stem_at_the_root_falls_back_to_the_repo(self):
+        assert scene_name_for("org/unitree-g1", "scene.xml") == "unitree-g1"

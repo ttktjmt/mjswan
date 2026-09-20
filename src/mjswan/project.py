@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 import mujoco
@@ -205,6 +206,82 @@ class ProjectHandle:
         if events:
             handle.set_events(events)
         return handle
+
+    def add_scene_hf(
+        self,
+        repo_id: str,
+        path: str,
+        *,
+        name: str | None = None,
+        revision: str | None = None,
+        repo_type: str = "model",
+        token: str | None = None,
+        allow_patterns: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        control_dt: float | None = None,
+        events: Mapping[str, Any] | None = None,
+    ) -> SceneHandle:
+        """Add a scene whose MJCF and assets come from a Hugging Face Hub repository.
+
+        A MuJoCo model is rarely one file — the XML names meshes and textures that
+        MuJoCo resolves relative to it — so the XML's whole directory is downloaded and
+        the spec is compiled where it lands. Everything `add_scene(spec=…)` does then
+        follows, license detection included: a ``LICENSE`` beside the model in the
+        repository is copied into the scene directory (ADR 0007 §2).
+
+        Args:
+            repo_id: Hub repository, ``"<owner>/<name>"``.
+            path: The MJCF within the repository, e.g. ``"scenes/unitree_g1/scene.xml"``.
+            name: Scene name. Defaults to the XML's directory when its own stem only
+                names a role (``scene.xml``, ``model.xml``), else to the stem.
+            revision: Branch, tag or commit. ``None`` takes the default branch, so the
+                build follows the repository; pass a commit to pin it.
+            repo_type: ``"model"`` (default), ``"dataset"`` or ``"space"``.
+            token: Hub token for a gated or private repository.
+            allow_patterns: What to download, overriding "everything beside the XML".
+                Needed when the model reaches outside its own directory — a ``meshdir``
+                pointing at a shared folder — since the XML is not parsed to find out.
+            metadata: Optional metadata dictionary for the scene.
+            control_dt: Seconds per control step. See :meth:`add_scene`.
+            events: Default events for every policy's MDP on this scene.
+
+        Returns:
+            SceneHandle for adding policies and further configuration.
+
+        Raises:
+            ImportError: If ``huggingface_hub`` is not installed.
+            ValueError: If ``path`` does not name an XML file.
+
+        Example:
+            ```python
+            scene = project.add_scene_hf("my-org/assets", "scenes/unitree_g1/scene.xml")
+            scene.add_policy_hf("my-org/assets", filename="policies/walk.onnx")
+            ```
+        """
+        from .source.hf import fetch_dir, scene_name_for
+
+        if not path.lower().endswith(".xml"):
+            raise ValueError(
+                f"add_scene_hf({repo_id!r}) takes the path of the MJCF, not its "
+                f"directory — got {path!r}. The XML names the meshes beside it, so "
+                "which one to compile cannot be guessed."
+            )
+        local_dir = fetch_dir(
+            repo_id,
+            str(PurePosixPath(path).parent),
+            revision=revision,
+            repo_type=repo_type,
+            token=token,
+            allow_patterns=allow_patterns,
+        )
+        spec = mujoco.MjSpec.from_file(str(local_dir / PurePosixPath(path).name))
+        return self.add_scene(
+            name=name or scene_name_for(repo_id, path),
+            spec=spec,
+            metadata=metadata,
+            control_dt=control_dt,
+            events=events,
+        )
 
     def add_scene_mjlab(
         self,

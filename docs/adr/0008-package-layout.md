@@ -164,7 +164,11 @@ migration guide.
 ## Consequences
 
 - `import mjswan` imports neither torch, mjlab, `onnx` nor `rich`: `builder.py` no
-  longer imports the build pipeline at module level.
+  longer imports the build pipeline at module level, and the three modules the
+  object model does reach (`policy.py`, `scene.py`, `mjlab/runner.py`) take `onnx`
+  under `TYPE_CHECKING` — they annotate a `ModelProto` but read it duck-typed.
+  Someone opening a MuJoCo model in the viewer with no policy pays for `mujoco` and
+  `numpy` and nothing else.
 - A reader finds a manifest key in `build/manifest.py` or `build/mdp/<kind>.py` and
   nowhere else; a tracing question in `compile/<pass or kind>.py`; anything that reads
   an mjlab object in `mjlab/`.
