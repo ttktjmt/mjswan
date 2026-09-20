@@ -27,7 +27,7 @@ def stamp_provenance(onnx_bytes: bytes, meta: dict[str, str]) -> bytes:
     """
     import onnx
 
-    from ._version import __version__
+    from ..._version import __version__
 
     model = onnx.load_from_string(onnx_bytes)
     model.producer_name = "mjswan"

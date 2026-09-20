@@ -19,7 +19,6 @@ way mjlab's do. Example::
 from __future__ import annotations
 
 import abc
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -62,13 +61,4 @@ class ActionTermCfg(abc.ABC):
         raise NotImplementedError
 
 
-def serialize_actions(actions: Mapping[str, ActionTermCfg]) -> dict[str, Any]:
-    """Serialize a dict of action term configs to JSON-compatible format.
-
-    Returns a dict keyed by term name, each value being the term's
-    ``to_dict()`` output.
-    """
-    return {name: term_cfg.to_dict() for name, term_cfg in actions.items()}
-
-
-__all__ = ["ActionTermCfg", "serialize_actions"]
+__all__ = ["ActionTermCfg"]

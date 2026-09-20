@@ -309,7 +309,7 @@ class SceneConfig:
     """Live env ONNX tracing (ADR 0005) runs authored observation/termination/
     event/command term bodies against. Built at build time from
     :attr:`mjlab_env_cfg` when the scene came from a task (see
-    ``builder._scene_trace_env``), so a tracking task's env is constructed only once
+    ``mjswan.build.pipeline``), so a tracking task's env is constructed only once
     its clip is in the bundle — unless :meth:`SceneHandle.add_policy_wandb` already
     built one to export the checkpoints, which it hands over rather than closing. A
     scene built via plain :meth:`ProjectHandle.add_scene` (no mjlab task) has none by
@@ -347,7 +347,7 @@ class SceneConfig:
         if not self.id:
             self.id = name2id(self.name)
         # The scene asset's filename, from whichever of spec/model was given. Fixed now
-        # rather than a property: `_save_web` drops both right after writing the asset.
+        # rather than a property: the build drops both right after writing the asset.
         self.scene_filename = "scene.mjz" if self.spec is not None else "scene.mjb"
 
     def mdp_id(self, mdp: MdpConfig, *, policy_id: str | None = None) -> str:

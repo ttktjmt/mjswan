@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import mujoco
 
+from .build.mjz import collect_spec_assets
 from .document.ids import assign_id, name2id
 from .license import (
     detect_attributions,
@@ -30,7 +31,6 @@ from .mjlab.task import (
     extract_terrain_data,
 )
 from .scene import SceneConfig, SceneHandle
-from .utils import collect_spec_assets
 
 if TYPE_CHECKING:
     from .builder import Builder
@@ -293,7 +293,7 @@ class ProjectHandle:
             if known is not None:
                 handle._config.attributions.append(known)
 
-        # The trace env comes later, from `builder._scene_trace_env`: a tracking task
+        # The trace env comes later, from `mjswan.build.pipeline`: a tracking task
         # cannot build one until its clip has been written into the bundle.
         # Rates differ per task — Cartpole 0.05, locomotion 0.02 — so read it here.
         control_dt = env_cfg_control_dt(env_cfg)

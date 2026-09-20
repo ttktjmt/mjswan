@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from mjswan._graph_io import onnx_ref, write_onnx
+from mjswan.build.mdp.graph import onnx_ref, write_onnx
 
 
 class TestOnnxRef:

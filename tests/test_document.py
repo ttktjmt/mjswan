@@ -30,8 +30,10 @@ from mjswan.envs.mdp.actions import JointPositionActionCfg
 @pytest.fixture
 def built(tmp_path, minimal_model, minimal_onnx, monkeypatch) -> Path:
     """A real `_save_web` tree with the engine files a build would also carry."""
-    monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-    monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+    monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+    monkeypatch.setattr(
+        "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+    )
     builder = Builder()
     scene = builder.add_project(name="Demo").add_scene(
         control_dt=0.02, name="Humanoid", model=minimal_model
@@ -177,7 +179,7 @@ class TestServingADocument:
         (engine / "dist" / "assets" / "index-abc.js").write_text("console.log(1)")
         (engine / "dist" / "fixtures").mkdir()
         (engine / "dist" / ".mjswan-build-meta.json").write_text("{}")
-        monkeypatch.setattr("mjswan._build_client.TEMPLATE_DIR", engine)
+        monkeypatch.setattr("mjswan.build.frontend.TEMPLATE_DIR", engine)
         return engine
 
     def test_a_directory_is_served_where_it_sits(self, built, monkeypatch, tmp_path):

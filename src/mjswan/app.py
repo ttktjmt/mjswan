@@ -45,7 +45,7 @@ class MjswanApp:
         import shutil
         import tempfile
 
-        from ._build_client import TEMPLATE_DIR, ClientBuilder, install_spa
+        from .build.frontend import TEMPLATE_DIR, ClientBuilder, install_spa
         from .document import DocumentError, is_document, read_manifest, unpack_document
 
         source = Path(source).expanduser()

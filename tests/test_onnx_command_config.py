@@ -15,7 +15,7 @@ import pytest
 # Pure-Python serialization, but `mjswan.compile` imports torch at load time.
 torch = pytest.importorskip("torch")
 
-from mjswan.compile import command_config, write_command_artifact  # noqa: E402
+from mjswan.build.mdp import command_config, write_command_artifact  # noqa: E402
 from mjswan.compile.tracer import (  # noqa: E402
     _COMMAND_NS,
     _SENSOR_NS,
@@ -307,7 +307,7 @@ def test_native_command_emits_a_traced_reset_graph(tmp_path):
     pytest.importorskip("mjlab")
     from rsi_body_fixture import rsi_joint_offset
 
-    from mjswan._onnx_build import serialize_command
+    from mjswan.build.mdp import serialize_command
     from mjswan.command import CommandTermConfig, PendingResetTrace
 
     cfg = CommandTermConfig(
@@ -359,7 +359,7 @@ def test_element_bounds_broadcasts_mjlab_per_axis_ranges():
 
 
 def test_command_without_a_reset_trace_is_unchanged(tmp_path):
-    from mjswan._onnx_build import serialize_command
+    from mjswan.build.mdp import serialize_command
     from mjswan.command import CommandTermConfig
 
     cfg = CommandTermConfig(
@@ -445,7 +445,7 @@ def test_term_reading_nothing_is_a_constant_not_untraceable():
 
 
 def test_serializer_bakes_a_constant_but_refuses_an_untraceable_term(tmp_path):
-    from mjswan._onnx_build import serialize_observation_term
+    from mjswan.build.mdp import serialize_observation_term
     from mjswan.compile.tracer import UntraceableTerm
     from mjswan.managers.observation_manager import ObservationTermCfg
 
@@ -473,7 +473,7 @@ def test_observation_binding_without_ts_src_fails_rather_than_dropping():
     nothing in the browser and the term goes missing from a bundle that reports
     itself complete — shortening the vector the policy was trained on.
     """
-    from mjswan._onnx_build import serialize_observation_term
+    from mjswan.build.mdp import serialize_observation_term
     from mjswan.envs.mdp.observations import ObservationBinding
     from mjswan.managers.observation_manager import ObservationTermCfg
 
@@ -490,7 +490,7 @@ def test_termination_binding_without_ts_src_fails_rather_than_dropping():
     and could not warn the way it does for a term whose graph failed to load. The
     episode then silently never checks a reset condition it is configured to have.
     """
-    from mjswan._onnx_build import serialize_terminations
+    from mjswan.build.mdp import serialize_terminations
     from mjswan.envs.mdp.terminations import TerminationBinding
     from mjswan.managers.termination_manager import TerminationTermCfg
 
@@ -505,7 +505,7 @@ def test_termination_binding_without_ts_src_fails_rather_than_dropping():
 
 def test_a_binding_with_ts_src_serializes(tmp_path):
     """The supported shape: a class the builder will inject."""
-    from mjswan._onnx_build import serialize_observation_term
+    from mjswan.build.mdp import serialize_observation_term
     from mjswan.envs.mdp.observations import ObservationBinding
     from mjswan.managers.observation_manager import ObservationTermCfg
 
@@ -620,7 +620,7 @@ def time_out(env):
 
 def test_terminations_fuse_into_one_graph_with_one_lane_per_term(tmp_path):
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import FUSED_TERMINATION_KEY, serialize_terminations
+    from mjswan.build.mdp import FUSED_TERMINATION_KEY, serialize_terminations
     from mjswan.managers.termination_manager import TerminationTermCfg
 
     entries = serialize_terminations(
@@ -656,7 +656,7 @@ def test_terminations_fuse_into_one_graph_with_one_lane_per_term(tmp_path):
 def test_a_lone_traced_termination_is_not_fused(tmp_path):
     """Fusing one term buys no `ort.run()` and costs a wire shape."""
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import FUSED_TERMINATION_KEY, serialize_terminations
+    from mjswan.build.mdp import FUSED_TERMINATION_KEY, serialize_terminations
     from mjswan.managers.termination_manager import TerminationTermCfg
 
     entries = serialize_terminations(
@@ -678,7 +678,7 @@ def test_a_lone_traced_termination_is_not_fused(tmp_path):
 
 def test_time_out_is_native_by_name_and_never_traced(tmp_path):
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import serialize_terminations
+    from mjswan.build.mdp import serialize_terminations
     from mjswan.managers.termination_manager import TerminationTermCfg
 
     def time_out(env):
@@ -703,7 +703,7 @@ def _constant_false(env):
 @pytest.mark.parametrize("flagged", [True, False])
 def test_a_termination_reading_nothing_fails_the_build(tmp_path, flagged):
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import serialize_terminations
+    from mjswan.build.mdp import serialize_terminations
     from mjswan.managers.termination_manager import TerminationTermCfg
 
     with pytest.raises(ValueError, match="'deviation' reads no simulation state"):
@@ -717,7 +717,7 @@ def test_a_termination_reading_nothing_fails_the_build(tmp_path, flagged):
 def test_a_constant_termination_fails_the_fused_path_too(tmp_path):
     """Two terms take the fused path; the constant one must still be named."""
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import serialize_terminations
+    from mjswan.build.mdp import serialize_terminations
     from mjswan.managers.termination_manager import TerminationTermCfg
 
     with pytest.raises(ValueError, match="'deviation' reads no simulation state"):

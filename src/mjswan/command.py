@@ -189,7 +189,7 @@ class CommandTermConfig:
         if self.pending_trace is not None or self.pending_reset_trace is not None:
             raise TypeError(
                 f"CommandTermConfig({self.term_name!r}) is pending ONNX trace — "
-                "use mjswan._onnx_build.serialize_command(name, cfg, env, out_dir) "
+                "use mjswan.build.mdp.serialize_command(name, cfg, env, out_dir) "
                 "instead of to_dict() directly (the Builder does this automatically)."
             )
         data = {"name": self.term_name, **self.params}

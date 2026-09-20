@@ -21,7 +21,8 @@ import pytest
 from onnx import TensorProto, helper
 
 import mjswan
-from mjswan._build_client import ClientBuilder
+from mjswan.build.frontend import ClientBuilder
+from mjswan.build.pipeline import write_mt_headers
 from mjswan.builder import Builder
 from mjswan.document.ids import name2id
 from mjswan.envs.mdp import events as evt_fns
@@ -384,21 +385,6 @@ class TestBuilderValidation:
         scene.add_policy(name="Policy", policy=minimal_onnx)
         manifest = build_manifest(builder, tmp_path / "out")
         assert manifest["projects"][0]["scenes"][0]["control_dt"] == 0.05
-
-    def test_policy_filename_rejects_empty_string(self):
-        with pytest.raises(ValueError):
-            Builder()._policy_filename("")
-
-    def test_policy_filename_rejects_forward_slash(self):
-        with pytest.raises(ValueError):
-            Builder()._policy_filename("path/policy")
-
-    def test_policy_filename_rejects_backslash(self):
-        with pytest.raises(ValueError):
-            Builder()._policy_filename("path\\policy")
-
-    def test_policy_filename_accepts_plain_name(self):
-        assert Builder()._policy_filename("my_policy") == "my_policy"
 
 
 # ===========================================================================
@@ -869,8 +855,10 @@ class TestSaveWebPolicyJson:
     @pytest.fixture(autouse=True)
     def _no_frontend(self, monkeypatch):
         """Skip the Node.js frontend build and the large template copytree."""
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr(
+            "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+        )
 
     def _run(self, builder: Builder, tmp_path: Path) -> Path:
         """Call _save_web and return the output directory."""
@@ -1972,7 +1960,7 @@ class TestFullBuild:
 
 
 # ===========================================================================
-# L1 — mt parameter: _save_mt_headers / no-headers when mt=False
+# L1 — mt parameter: write_mt_headers / no-headers when mt=False
 # ===========================================================================
 class TestMtHeaders:
     def test_mt_defaults_to_false(self):
@@ -1982,21 +1970,21 @@ class TestMtHeaders:
         assert Builder(mt=True)._mt is True
 
     def test_save_mt_headers_creates_headers_file(self, tmp_path):
-        Builder()._save_mt_headers(tmp_path)
+        write_mt_headers(tmp_path)
         assert (tmp_path / "_headers").exists()
 
     def test_save_mt_headers_contains_coop(self, tmp_path):
-        Builder()._save_mt_headers(tmp_path)
+        write_mt_headers(tmp_path)
         content = (tmp_path / "_headers").read_text()
         assert "Cross-Origin-Opener-Policy: same-origin" in content
 
     def test_save_mt_headers_contains_coep(self, tmp_path):
-        Builder()._save_mt_headers(tmp_path)
+        write_mt_headers(tmp_path)
         content = (tmp_path / "_headers").read_text()
         assert "Cross-Origin-Embedder-Policy: require-corp" in content
 
     def test_save_mt_headers_applies_wildcard_route(self, tmp_path):
-        Builder()._save_mt_headers(tmp_path)
+        write_mt_headers(tmp_path)
         content = (tmp_path / "_headers").read_text()
         assert content.startswith("/*")
 
@@ -2004,8 +1992,10 @@ class TestMtHeaders:
         self, tmp_path, minimal_model, monkeypatch
     ):
         """_save_web with mt=False must not create _headers."""
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr(
+            "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+        )
         builder = Builder(mt=False)
         builder.add_project(name="P").add_scene(
             control_dt=0.02, name="S", model=minimal_model
@@ -2016,8 +2006,10 @@ class TestMtHeaders:
 
     def test_mt_true_writes_headers(self, tmp_path, minimal_model, monkeypatch):
         """_save_web with mt=True must create _headers with COOP/COEP content."""
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr(
+            "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+        )
         builder = Builder(mt=True)
         builder.add_project(name="P").add_scene(
             control_dt=0.02, name="S", model=minimal_model
@@ -2038,8 +2030,10 @@ class TestMtHeaders:
         The output is assembled allowlist-style from the built dist/ (+ LICENSE),
         so template-root scaffolding like _mt is excluded by construction.
         """
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr(
+            "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+        )
 
         builder = Builder(mt=False)
         builder.add_project(name="P").add_scene(

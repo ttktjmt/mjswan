@@ -1,4 +1,9 @@
-"""Utility functions for mjswan."""
+"""Pack a scene into one ``.mjz``: its ``MjSpec`` plus every asset it references.
+
+``mujoco.to_zip`` stores entries uncompressed, so this is the DEFLATE-compressed
+equivalent, with the model's mesh and texture paths rewritten to the flat layout inside
+the archive. Buffer-only textures, which have no file to copy, are encoded to PNG.
+"""
 
 from __future__ import annotations
 

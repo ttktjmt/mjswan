@@ -1,6 +1,6 @@
-"""Automatic Node.js environment setup and client build management.
+"""The Python side of ``template/``: Node.js environment setup and the client build.
 
-This module handles:
+``template/`` itself stays where npm, Vite, CI and hatch expect it. This module handles:
 - Creating isolated Node.js environments using nodeenv
 - Installing dependencies
 - Building TypeScript/JavaScript clients
@@ -23,10 +23,11 @@ __all__ = [
     "ensure_node_env",
     "build_client",
     "install_spa",
+    "uses_custom_js",
 ]
 
 #: The packaged frontend: its sources, and `dist/` once it has been built once.
-TEMPLATE_DIR = Path(__file__).parent / "template"
+TEMPLATE_DIR = Path(__file__).parents[1] / "template"
 
 #: What vite leaves in `dist/` for the dev loop alone: the E2E fixture, the cache key.
 _SPA_EXCLUDES = frozenset({"fixtures", ".mjswan-build-meta.json"})
@@ -55,6 +56,24 @@ def install_spa(dest: Path, template_dir: Path | None = None) -> bool:
     if license_file.exists():
         shutil.copy2(license_file, dest / license_file.name)
     return True
+
+
+def uses_custom_js() -> bool:
+    """Whether the current build embeds author-supplied TypeScript.
+
+    Surfaced at the top of ``manifest.json`` so a consumer can enforce a
+    declarative-only policy without inspecting the bundled engine (ADR 0003).
+    """
+    from mjswan.command import _custom_registry as _command_registry
+    from mjswan.envs.mdp.events import _custom_registry as _event_registry
+    from mjswan.envs.mdp.observations import _custom_registry as _obs_registry
+    from mjswan.envs.mdp.terminations import _custom_registry as _term_registry
+
+    for registry in (_obs_registry, _term_registry, _event_registry, _command_registry):
+        for sentinel in registry.values():
+            if getattr(sentinel, "ts_src", None) is not None:
+                return True
+    return False
 
 
 class ClientBuilder:

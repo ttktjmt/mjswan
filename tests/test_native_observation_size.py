@@ -95,7 +95,7 @@ def test_a_width_neither_side_knows_fails_the_build():
 
 
 def test_policy_native_sizes_reads_the_policy_config():
-    from mjswan._onnx_build import policy_native_sizes
+    from mjswan.build.mdp import policy_native_sizes
     from mjswan.command import Button, ui_command, velocity_command
 
     sizes = policy_native_sizes(
@@ -111,7 +111,7 @@ def test_policy_native_sizes_reads_the_policy_config():
 
 
 def test_policy_num_actions_wins_over_joint_names():
-    from mjswan._onnx_build import policy_native_sizes
+    from mjswan.build.mdp import policy_native_sizes
 
     sizes = policy_native_sizes(
         {"policy_joint_names": ["j"] * 29, "policy_num_actions": 80}, None

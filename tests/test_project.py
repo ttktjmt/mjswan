@@ -55,7 +55,7 @@ def _install_fake_mjlab(monkeypatch, minimal_spec) -> tuple[list[tuple], _FakeEn
 
     class FakeManagerBasedRlEnv:
         """Stands in for mjlab's real env — ADR 0005 needs a live env to trace term
-        bodies, built lazily at build time by `builder._scene_trace_env`."""
+        bodies, built lazily at build time by `mjswan.build.pipeline`."""
 
         def __init__(self, env_cfg, device: str):
             calls.append(("env", env_cfg, device))
@@ -179,7 +179,7 @@ class TestSceneConfig:
 
     def test_scene_filename_survives_the_build_releasing_the_spec(self, minimal_spec):
         cfg = SceneConfig(name="Test", spec=minimal_spec)
-        cfg.spec = None  # what Builder._save_web does after writing scene.mjz
+        cfg.spec = None  # what the build does after writing scene.mjz
         assert cfg.scene_filename == "scene.mjz"
 
 

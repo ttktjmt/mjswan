@@ -865,7 +865,7 @@ class TestAdaptedSerialization:
     def test_adapted_obs_to_dict_requires_tracing(self):
         # A plain-callable func (mjlab's own, resolved by the adapter with no mirror lookup)
         # cannot be serialized via to_dict()/to_list() directly — it must be traced to ONNX
-        # against a live env at build time (mjswan._onnx_build.serialize_observation_group).
+        # against a live env at build time (mjswan.build.mdp.serialize_observation_group).
         mjlab_func = _make_mjlab_obs_func("last_action")
         mjlab_term = FakeMjlabObsTermCfg(func=mjlab_func)
         mjlab_group = FakeMjlabObsGroupCfg(terms={"la": mjlab_term})

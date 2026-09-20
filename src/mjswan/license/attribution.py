@@ -155,7 +155,7 @@ def _matching(directory: Path, names: re.Pattern[str]) -> list[Path]:
 
 def spec_asset_directories(spec: Any) -> list[Path]:
     """The model's own directory, then those its meshes, textures, heightfields and
-    skins resolve to (as :func:`mjswan.utils.collect_spec_assets` resolves them).
+    skins resolve to (as :func:`mjswan.build.mjz.collect_spec_assets` resolves them).
 
     Empty for a spec parsed from a string: resolving its asset paths against the
     working directory would find whatever happens to be there.

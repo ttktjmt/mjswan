@@ -213,7 +213,7 @@ class TestEnvSimData:
             trace_term(reads_the_model, {}, env, name="nq")
 
     def test_a_termination_reading_env_sim_data_is_traced(self, env, tmp_path):
-        from mjswan._onnx_build import serialize_terminations
+        from mjswan.build.mdp import serialize_terminations
         from mjswan.managers.termination_manager import TerminationTermCfg
 
         def deviation(env):

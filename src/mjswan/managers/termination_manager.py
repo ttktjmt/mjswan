@@ -53,14 +53,14 @@ class TerminationTermCfg:
         """Serialize a ``TerminationBinding`` term.
 
         A plain-callable term needs a live env this method has no access to; the Builder
-        calls ``mjswan._onnx_build.serialize_termination`` for those.
+        calls ``mjswan.build.mdp.serialize_termination`` for those.
         """
         if isinstance(self.func, TerminationBinding):
             return self._to_dict_legacy()
         raise TypeError(
             f"TerminationTermCfg.to_dict() cannot serialize a plain callable "
             f"func ({self.func!r}) — it must be traced to ONNX against a live "
-            f"env. Use mjswan._onnx_build.serialize_termination(cfg, env, "
+            f"env. Use mjswan.build.mdp.serialize_termination(cfg, env, "
             f"out_dir) instead (the Builder does this automatically)."
         )
 

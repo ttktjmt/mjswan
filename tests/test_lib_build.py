@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 import mjswan
-from mjswan._build_client import ClientBuilder
+from mjswan.build.frontend import ClientBuilder
 
 TEMPLATE_DIR = Path(mjswan.__file__).parent / "template"
 
