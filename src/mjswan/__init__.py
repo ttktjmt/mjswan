@@ -3,9 +3,9 @@
 Interactive MuJoCo simulations with ONNX policies running entirely in the browser.
 """
 
-__version__ = "0.10.2"
-
 import os
+
+from ._version import __version__ as __version__
 
 os.environ.setdefault("MUJOCO_GL", "disable")
 
@@ -65,8 +65,7 @@ __all__ = [
     "PolicyConfig",
     "MdpConfig",
     "MotionConfig",
-    # MDP bindings (mjlab-name → browser impl). Pre-0.8 register_*_func /
-    # register_command_term names survive as deprecated aliases via _compat.
+    # MDP bindings (mjlab-name → browser impl)
     "MdpBinding",
     "ObservationBinding",
     "register_observation",
@@ -99,6 +98,3 @@ __all__ = [
     # ONNX tracing (ADR 0005)
     "build_single_entity_trace_env",
 ]
-
-# Deprecated pre-0.8 aliases (methods, classes, modules). Remove in 0.9.
-from . import _compat  # noqa: E402, F401

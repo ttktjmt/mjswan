@@ -149,7 +149,7 @@ class ClientBuilder:
 
     def sync_version_from_python(self) -> None:
         """Sync package.json version with Python package __version__."""
-        from mjswan import __version__
+        from mjswan._version import __version__
 
         package_json = self.project_dir / "package.json"
         with open(package_json, "r") as f:
@@ -315,7 +315,7 @@ class ClientBuilder:
         plugins.js, ADR 0004 §10), so any build with a matching key is reusable.
         The fingerprint rebuilds the SPA whenever the app codebase changes.
         """
-        from mjswan import __version__
+        from mjswan._version import __version__
 
         return {
             "version": __version__,

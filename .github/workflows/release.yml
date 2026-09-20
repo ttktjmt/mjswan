@@ -56,7 +56,7 @@ jobs:
 
       - name: Update version in __init__.py
         run: |
-          sed -i "s/^__version__ = \".*\"/__version__ = \"${{ inputs.version }}\"/" src/mjswan/__init__.py
+          sed -i "s/^__version__ = \".*\"/__version__ = \"${{ inputs.version }}\"/" src/mjswan/_version.py
 
       - name: Update version in package.json
         run: |
@@ -75,7 +75,7 @@ jobs:
       - name: Commit version bump (stable only)
         if: steps.type.outputs.is_prerelease != 'true'
         run: |
-          git add src/mjswan/__init__.py src/mjswan/template/package.json
+          git add src/mjswan/_version.py src/mjswan/template/package.json
           if git diff --cached --quiet; then
             echo "Version already at ${{ inputs.version }}, skipping commit"
           else

@@ -35,9 +35,8 @@ src/mjswan/          Python package source
   mjlab_onnx_meta.py   Reads the metadata mjlab bakes into an exported .onnx
   _onnx_build.py       Bridges term cfg dataclasses → compile/ tracer; writes .onnx + JSON
   _graph_io.py         Bundle path a traced graph gets, and the guarded write to it
-  _cli.py              Typer-based `mjswan` CLI + legacy entry points
+  _cli.py              Typer-based `mjswan` CLI
   _build_client.py     Frontend build orchestration (npm/vite, managed nodeenv)
-  _compat.py           Deprecated pre-0.8 aliases (methods, classes, modules). Remove in 0.9
   compile/             ONNX tracing + numeric parity (ADR 0005)
     tracer.py            trace_term / trace_event_term / trace_command_term
     serialize.py         traced command → manifest entry + JSON schema
@@ -185,9 +184,6 @@ Parses the `metadata_props` mjlab's `attach_metadata_to_onnx` writes into an exp
 ### `utils.py`
 Asset bundling and path helpers. `to_zip_deflated()` is the per-scene packager: it collects mesh/texture/hfield/skin files from disk (with `spec.assets` fallback for mjlab's prefixed-key layout), encodes buffer-only textures as PNGs, rewrites the MuJoCo XML so meshdir/texturedir hints are eliminated and all paths are ZIP-safe, and writes a DEFLATE-compressed ZIP that JSZip decodes on the client. `name2id()` is the lowercase-underscore slug helper used everywhere project / scene / policy IDs are derived from human-readable names.
 
-### `_compat.py`
-Deprecated pre-0.8 aliases, imported for its side effects by `__init__.py`. Method aliases (`add_mjlab_scene`, `add_policy_from_wandb`, `set_viewer_config`, `add_splat_section`), the `mjswanApp` class name, `register_obs_func` / `register_termination_func` / `register_event_func` / `register_command_term`, binding class aliases (`ObsBinding`, `TermFunc`, `CommandTermSpec`, …), and module aliases (`mjswan.viewer_config`, `mjswan.wandb_utils`). Functions warn; class aliases cannot. Remove in 0.9.
-
 
 ## Frontend (`src/mjswan/template/`)
 
@@ -225,8 +221,6 @@ The primary CLI is `mjswan` (Typer-based, defined in `_cli.py:app`). Subcommands
 | `mjswan info <dist-dir \| document.swn>` | Show a tree of projects/scenes/policies and asset sizes |
 | `mjswan publish <dist-dir>` | Upload a built dist's data files to mjswan Cloud (rejects custom-JS builds) |
 | `mjswan login` / `whoami` / `logout` | mjswan Cloud session (loopback GitHub OAuth) |
-
-Legacy entry points (kept for backward compatibility): `main`, `simple`, `mjlab`, `serve <dist-dir>` — each runs the corresponding `examples/` module.
 
 
 ## Tooling and workflow

@@ -30,7 +30,7 @@ jobs:
       # prerelease versions; pip installs them only with --pre.
       - name: Set version
         run: |
-          sed -i "s/^__version__ = \".*\"/__version__ = \"${{ inputs.version }}\"/" src/mjswan/__init__.py
+          sed -i "s/^__version__ = \".*\"/__version__ = \"${{ inputs.version }}\"/" src/mjswan/_version.py
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7

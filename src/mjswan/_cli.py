@@ -515,32 +515,3 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
 
 
 # ── Legacy entry points (backward compatibility) ──────────────
-
-
-def main() -> None:
-    """Run examples/demo/main.py"""
-    _run_module("examples.demo.main")
-
-
-def simple() -> None:
-    """Run examples/demo/simple.py"""
-    _run_module("examples.demo.simple")
-
-
-def mjlab() -> None:
-    """Run examples/mjlab/defaults/main.py"""
-    _run_module("examples.mjlab.defaults.main")
-
-
-def serve() -> None:
-    """Launch a pre-built mjswan app from a dist directory or a ``.swn`` document.
-
-    Usage: serve <dist-dir | document.swn>
-    """
-    if len(sys.argv) < 2:
-        print("Usage: serve <dist-dir | document.swn>", file=sys.stderr)
-        sys.exit(1)
-
-    from mjswan.app import MjswanApp
-
-    MjswanApp.from_document(Path(sys.argv[1])).launch()

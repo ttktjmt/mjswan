@@ -8,11 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 API-wide rename for consistency: `add_[layer]_[source]` for methods that add an
-object, `enable_`/`set_` for toggles, spelled-out MDP binding names. All pre-0.8
-names stay importable via `mjswan/_compat.py` until 0.9; renamed methods, modules
-and `register_*` functions emit a `DeprecationWarning`, the MDP binding *class*
-aliases stay silent (a type alias cannot warn on attribute access). The
-velocity-command shortcuts were removed outright, see Removed.
+object, `enable_`/`set_` for toggles, spelled-out MDP binding names. The pre-0.8
+names are gone with this release (see Removed), as are the velocity-command
+shortcuts.
 
 ### Added
 
@@ -308,18 +306,19 @@ velocity-command shortcuts were removed outright, see Removed.
   3.10 and adds `onnxruntime`. The pin is exact because the tracer reads mjlab's
   internals; a weekly CI parity sweep catches upstream drift.
 
-### Deprecated
-
-All kept as aliases via `_compat.py`, removed in 0.9:
-
-- Renamed methods, modules and `register_*` functions, which emit a
-  `DeprecationWarning`.
-- The pre-0.8 MDP binding **class aliases** (`ObsBinding`, `ObsFunc`, `TermBinding`,
-  `TermFunc`, `EventFunc`, `MjlabMdpBinding`, `CommandTermSpec`), restored as silent
-  aliases on their original import paths. Migrate to the spelled-out `*Binding` names.
-
 ### Removed
 
+- **The pre-0.8 compatibility aliases** (`mjswan._compat`), which were due to go in 0.9:
+  the renamed methods (`add_mjlab_scene`, `add_policy_from_wandb`, `set_viewer_config`,
+  `add_splat_section`, `add_motion_from_wandb`), the `mjswanApp` class name, the
+  `register_obs_func` / `register_termination_func` / `register_event_func` /
+  `register_command_term` functions, the MDP binding class aliases (`ObsBinding`,
+  `ObsFunc`, `TermBinding`, `TermFunc`, `EventFunc`, `MjlabMdpBinding`,
+  `CommandTermSpec`) and the module aliases `mjswan.viewer_config` / `mjswan.wandb_utils`.
+  Use the spelled-out names.
+- The `main`, `simple`, `mjlab` and `serve` console scripts, which only launched a module
+  under `examples/`. `mjswan serve <dist-dir | document.swn>` replaces the last; run the
+  examples as modules.
 - **`config.json` and the per-policy `<policy>.json`**, replaced by the one root
   `manifest.json` (supersedes ADR 0005 §1). The per-project `index.html` / `logo.svg`
   copies and the `main/` special case for the first project go with them: a project's

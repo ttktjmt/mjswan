@@ -26,8 +26,8 @@ from rich.progress import (
     TextColumn,
 )
 
-from . import __version__
 from ._build_client import ClientBuilder, install_spa
+from ._version import __version__
 from .app import MjswanApp
 from .document import DOCUMENT_FORMAT
 from .envs.mdp.actions.actions import (
