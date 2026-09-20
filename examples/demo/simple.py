@@ -14,7 +14,7 @@ from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationT
 
 import mjswan
 from mjswan.envs.mdp.actions import JointPositionActionCfg
-from mjswan.trace_env import build_single_entity_trace_env
+from mjswan.mjlab.env import build_single_entity_trace_env
 
 # This demo's own arm pose offset; the gains it rides on live in `locomotion.json`.
 _G1_OFFSET = {

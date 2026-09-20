@@ -1,4 +1,4 @@
-"""Tests for mjswan.adapters.mjlab_adapter — mjlab type conversion.
+"""Tests for mjswan.mjlab — mjlab type conversion.
 
 Layer: L1 (pure Python, no MuJoCo/ONNX/mjlab required).
 
@@ -18,7 +18,12 @@ from typing import Any
 
 import pytest
 
-from mjswan.adapters.mjlab_adapter import (
+from mjswan.document.manifest import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS
+from mjswan.envs.mdp.observations import ObservationBinding
+from mjswan.envs.mdp.terminations import TerminationBinding
+from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
+from mjswan.managers.termination_manager import TerminationTermCfg
+from mjswan.mjlab import (
     DEFAULT_OBS_GROUP_KEY,
     adapt_actions,
     adapt_commands,
@@ -28,11 +33,6 @@ from mjswan.adapters.mjlab_adapter import (
     resolve_pd_gains,
     resolve_runner_defaults,
 )
-from mjswan.document.manifest import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS
-from mjswan.envs.mdp.observations import ObservationBinding
-from mjswan.envs.mdp.terminations import TerminationBinding
-from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
-from mjswan.managers.termination_manager import TerminationTermCfg
 
 # ---------------------------------------------------------------------------
 # Fake mjlab types — classes whose __module__ starts with "mjlab"

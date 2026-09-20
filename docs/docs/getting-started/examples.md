@@ -108,7 +108,7 @@ from mjswan.managers.observation_manager import (
     ObservationGroupCfg,
     ObservationTermCfg,
 )
-from mjswan.trace_env import build_single_entity_trace_env
+from mjswan.mjlab.env import build_single_entity_trace_env
 
 
 def build_spec() -> mujoco.MjSpec:

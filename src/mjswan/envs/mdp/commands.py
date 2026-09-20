@@ -131,7 +131,7 @@ def bind_velocity_override(term: Any) -> None:
 
 
 # No `ui=`: the joystick descriptor is recorded from the term's own `create_gui` at
-# build time (`mjswan.adapters.gui_spy`). No `viz=`: `command.default_viz` has it.
+# build time (`mjswan.mjlab.gui`). No `viz=`: `mjswan.mjlab.command.default_viz` has it.
 register_command(
     "UniformVelocityCommandCfg",
     CommandBinding(

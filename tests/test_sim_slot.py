@@ -33,7 +33,7 @@ from mjswan.compile.tracer import (  # noqa: E402
     trace_observation_group,
     trace_term,
 )
-from mjswan.trace_env import build_single_entity_trace_env  # noqa: E402
+from mjswan.mjlab.env import build_single_entity_trace_env  # noqa: E402
 
 MUSCLE_MODEL = """
 <mujoco>

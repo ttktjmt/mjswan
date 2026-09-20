@@ -166,7 +166,8 @@ def _dump_task(task_id: str, out_dir: Path) -> dict[str, Any]:
     from mjlab.tasks.registry import load_env_cfg
 
     from mjswan._onnx_build import serialize_observation_group, serialize_terminations
-    from mjswan.adapters.mjlab_adapter import _adapt_obs_group, _adapt_term_cfg
+    from mjswan.mjlab.observation import _adapt_obs_group
+    from mjswan.mjlab.termination import _adapt_term_cfg
 
     cfg = load_env_cfg(task_id, play=True)
     cfg.scene.num_envs = 1

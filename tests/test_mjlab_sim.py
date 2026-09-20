@@ -1,4 +1,4 @@
-"""Tests for mjswan.adapters.mjlab_compat."""
+"""Tests for mjswan.mjlab.sim."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from types import ModuleType
 
 import mujoco
 
-from mjswan.adapters import apply_mjlab_sim_options, ensure_mjlab_extensions
+from mjswan.mjlab import apply_mjlab_sim_options, ensure_mjlab_extensions
 
 
 class TestMjlabCompat:

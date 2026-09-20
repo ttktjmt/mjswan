@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from mjswan.adapters.gui_spy import record_gui
+from mjswan.mjlab.gui import record_gui
 
 
 class _JoystickTerm:

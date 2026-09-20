@@ -1,4 +1,4 @@
-"""Utilities for loading policy and motion assets from the Hugging Face Hub.
+"""The Hugging Face Hub as a source: a repository id in, files out.
 
 The W&B counterpart in :mod:`mjswan.wandb_io` rebuilds a live mjlab env and converts a
 run's ``model_*.pt`` checkpoints with torch, because a run holds training state. A Hub
@@ -101,7 +101,7 @@ def policy_name_for(repo_id: str, filename: str) -> str:
     return stem
 
 
-def fetch_file_from_hf(
+def fetch_file(
     repo_id: str,
     filename: str,
     *,
@@ -125,7 +125,7 @@ def fetch_file_from_hf(
     )
 
 
-def fetch_onnx_from_hf(
+def fetch_onnx(
     repo_id: str,
     filename: str | None = None,
     *,
@@ -152,13 +152,13 @@ def fetch_onnx_from_hf(
         filename = resolve_policy_filename(
             repo_id, revision=revision, repo_type=repo_type, token=token
         )
-    local_path = fetch_file_from_hf(
+    local_path = fetch_file(
         repo_id, filename, revision=revision, repo_type=repo_type, token=token
     )
     return policy_name_for(repo_id, filename), onnx.load(str(local_path))
 
 
-def fetch_motion_npz_from_hf(
+def fetch_motion_npz(
     repo_id: str,
     filename: str,
     *,
@@ -172,7 +172,7 @@ def fetch_motion_npz_from_hf(
     published so far are dataset repositories. Returns ``(motion_name, payload)``, the
     name being the file's stem.
     """
-    local_path = fetch_file_from_hf(
+    local_path = fetch_file(
         repo_id, filename, revision=revision, repo_type=repo_type, token=token
     )
     return Path(filename).stem, local_path.read_bytes()
@@ -181,9 +181,9 @@ def fetch_motion_npz_from_hf(
 __all__ = [
     "DEFAULT_POLICY_FILENAMES",
     "choose_policy_filename",
-    "fetch_file_from_hf",
-    "fetch_motion_npz_from_hf",
-    "fetch_onnx_from_hf",
+    "fetch_file",
+    "fetch_motion_npz",
+    "fetch_onnx",
     "list_repo_onnx",
     "policy_name_for",
     "resolve_policy_filename",

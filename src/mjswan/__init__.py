@@ -39,12 +39,12 @@ from .envs.mdp.terminations import TerminationBinding, register_termination
 from .managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from .managers.termination_manager import TerminationTermCfg
 from .mdp import MdpConfig
+from .mjlab.env import build_single_entity_trace_env
 from .motion import MotionConfig, MotionHandle
 from .policy import PolicyConfig, PolicyHandle
 from .project import ProjectConfig, ProjectHandle
 from .scene import SceneConfig, SceneHandle
 from .splat import SplatConfig, SplatHandle
-from .trace_env import build_single_entity_trace_env
 from .viewer import ViewerConfig
 
 __all__ = [

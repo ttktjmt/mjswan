@@ -20,20 +20,28 @@ import mujoco
 import numpy as np
 import onnx
 
-from .adapters import (
+from .document.ids import assign_id, name2id, unique_id
+from .license import Attribution, resolve_license, resolve_notice
+from .mdp import MdpConfig
+from .mjlab import (
     adapt_actions,
     adapt_commands,
+    adapt_events,
     adapt_observations,
     adapt_terminations,
     resolve_action_scales,
     resolve_pd_gains,
     resolve_runner_defaults,
 )
-from .document.ids import assign_id, name2id, unique_id
-from .license import Attribution, resolve_license, resolve_notice
-from .mdp import MdpConfig
-from .motion import MotionConfig
-from .policy import PolicyConfig, PolicyHandle
+from .mjlab.task import env_cfg_control_dt
+from .motion import attach_tracking_motion, tracking_motion_term
+from .policy import (
+    PolicyConfig,
+    PolicyHandle,
+    actuated_joint_names,
+    check_slot_tables,
+    onnx_output_width,
+)
 from .splat import SplatConfig, SplatHandle
 from .viewer import ViewerConfig
 
@@ -122,18 +130,6 @@ def _resolve_observation_joints(
     return names, defaults
 
 
-def _env_cfg_control_dt(env_cfg: Any) -> float | None:
-    """An mjlab env config's seconds-per-control-step, or ``None`` if it carries neither.
-
-    Mirrors ``ManagerBasedRlEnv.step_dt`` (``sim.mujoco.timestep * decimation``) so the
-    rate can be read off a config without paying to construct the env.
-    """
-    try:
-        return float(env_cfg.sim.mujoco.timestep) * int(env_cfg.decimation)
-    except (AttributeError, TypeError, ValueError):
-        return None
-
-
 def _enrich_joint_observations(
     scene_config: SceneConfig,
     observations: dict[str, Any] | None,
@@ -182,40 +178,6 @@ def _enrich_joint_observations(
             term.params = params
 
 
-def _onnx_output_width(model: onnx.ModelProto) -> int | None:
-    """The last dim of the graph's first output, or ``None`` when it is not static."""
-    if not model.graph.output:
-        return None
-    dims = model.graph.output[0].type.tensor_type.shape.dim
-    if len(dims) < 2:
-        return None
-    width = dims[-1].dim_value
-    return int(width) if width > 0 else None
-
-
-def _actuated_joint_names(model: mujoco.MjModel | None) -> list[str] | None:
-    """The joint each actuator drives, in actuator order — the order actions come in.
-
-    ``None`` when the model does not give one unambiguously: no actuators, a
-    transmission that is not a joint (tendon, site, body), an unnamed joint, or two
-    actuators on the same joint. Each of those makes "the i-th action drives this joint"
-    untrue, and a wrong answer here is silent at playback.
-    """
-    if model is None or model.nu == 0:
-        return None
-    names: list[str] = []
-    for index in range(model.nu):
-        if int(model.actuator_trntype[index]) != int(mujoco.mjtTrn.mjTRN_JOINT):
-            return None
-        name = mujoco.mj_id2name(
-            model, mujoco.mjtObj.mjOBJ_JOINT, int(model.actuator_trnid[index, 0])
-        )
-        if not name:
-            return None
-        names.append(name)
-    return names if len(set(names)) == len(names) else None
-
-
 def _hf_driven_joints(
     meta: Any | None, policy: onnx.ModelProto, actuated: list[str] | None
 ) -> list[str] | None:
@@ -232,9 +194,9 @@ def _hf_driven_joints(
     """
     if meta is None or actuated is None:
         return None
-    from .mjlab_onnx_meta import joint_mapping_usable
+    from .mjlab.onnx_meta import joint_mapping_usable
 
-    if not joint_mapping_usable(meta, action_width=_onnx_output_width(policy)):
+    if not joint_mapping_usable(meta, action_width=onnx_output_width(policy)):
         return None
     # mjlab exports the bare joint name; a scene built from an mjlab task carries it
     # namespaced (`robot/hip`). Compare on the tail, return the model's spelling.
@@ -340,7 +302,7 @@ class SceneConfig:
     that carries a policy — the build fails rather than defaulting, because a wrong
     control rate raises no error at playback, it just runs the policy at a speed it
     was not trained for. Deliberately *not* read from a trace env: the one
-    :func:`mjswan.trace_env.build_single_entity_trace_env` builds declares
+    :func:`mjswan.mjlab.env.build_single_entity_trace_env` builds declares
     ``decimation=1`` as a tracing placeholder, which is not anybody's control rate."""
 
     mjlab_env: Any = field(default=None, repr=False, compare=False)
@@ -356,7 +318,7 @@ class SceneConfig:
     plain-callable (non-``Binding``) term functions. Only needs
     ``env.scene[name].data.<field>`` (and, for events, entity write methods) —
     doesn't have to be a full ``ManagerBasedRlEnv``, see
-    :func:`mjswan.trace_env.build_single_entity_trace_env`. Python-build-time-
+    :func:`mjswan.mjlab.env.build_single_entity_trace_env`. Python-build-time-
     only state; never part of the scene's serialized JSON output."""
 
     mjlab_env_cfg: Any = field(default=None, repr=False, compare=False)
@@ -379,7 +341,7 @@ class SceneConfig:
 
     Used to reach the task's *runner* config for the two things playback needs from it
     (which observation group the actor reads, and ``clip_actions``) — see
-    :func:`mjswan.adapters.resolve_runner_defaults`."""
+    :func:`mjswan.mjlab.resolve_runner_defaults`."""
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -414,69 +376,6 @@ class SceneConfig:
         return ident
 
 
-def _onnx_io_names(model: onnx.ModelProto) -> tuple[list[str], list[str]]:
-    """The network's real input and output names, initializers excluded."""
-    initializers = {init.name for init in model.graph.initializer}
-    inputs = [i.name for i in model.graph.input if i.name not in initializers]
-    return inputs, [o.name for o in model.graph.output]
-
-
-def _check_slot_tables(
-    name: str,
-    model: onnx.ModelProto,
-    in_keys: Sequence[str] | None,
-    out_keys: Sequence[str | Sequence[str]] | None,
-) -> tuple[list[str] | None, list[str | list[str]] | None]:
-    """Check a policy's slot tables against its network and return them as lists.
-
-    ``in_keys[i]`` fills the *i*-th input and ``out_keys[i]`` names the *i*-th output, so
-    each table must be exactly as long as what it indexes. A network with several inputs
-    must declare ``in_keys``: nothing else records where the runtime-synthesized tensors
-    sit relative to the observation groups (ADR 0006 §5). Several *outputs* cannot be
-    refused the same way, since which one is the action is unknowable here, so the
-    default (the first) is announced instead.
-    """
-    inputs, outputs = _onnx_io_names(model)
-    if in_keys is None:
-        if len(inputs) > 1:
-            raise ValueError(
-                f"Policy {name!r} has {len(inputs)} ONNX inputs ({inputs}) but declares "
-                "no in_keys. Pass in_keys naming, per input in order, the observation "
-                "group or runtime tensor (is_init, adapt_hx, time_step) that fills it."
-            )
-        checked_in = None
-    else:
-        checked_in = [str(k) for k in in_keys]
-        if len(checked_in) != len(inputs):
-            raise ValueError(
-                f"Policy {name!r} declares {len(checked_in)} in_keys {checked_in} but its "
-                f"ONNX has {len(inputs)} inputs ({inputs}). in_keys[i] fills the i-th "
-                "input, so the two must have the same length."
-            )
-    if out_keys is None:
-        if len(outputs) > 1:
-            warnings.warn(
-                f"Policy {name!r} has {len(outputs)} ONNX outputs ({outputs}) but "
-                f"declares no out_keys, so the runtime drives the actuators from the "
-                f"first one, {outputs[0]!r}. If the action is a different output, pass "
-                "out_keys naming each output in order (ADR 0006 §5).",
-                category=RuntimeWarning,
-                stacklevel=3,
-            )
-        checked_out: list[str | list[str]] | None = None
-    else:
-        checked_out = [
-            k if isinstance(k, str) else [str(p) for p in k] for k in out_keys
-        ]
-        if len(checked_out) != len(outputs):
-            raise ValueError(
-                f"Policy {name!r} declares {len(checked_out)} out_keys but its ONNX has "
-                f"{len(outputs)} outputs ({outputs}). out_keys[i] names the i-th output, "
-                "so the two must have the same length."
-            )
-    return checked_in, checked_out
-
-
 _COMPONENT = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
@@ -506,7 +405,7 @@ class SceneHandle:
         if env_cfg is None:
             return self._config.mjlab_env_cfg
 
-        policy_dt = _env_cfg_control_dt(env_cfg)
+        policy_dt = env_cfg_control_dt(env_cfg)
         scene_dt = self._config.control_dt
         if (
             policy_dt is not None
@@ -603,8 +502,6 @@ class SceneHandle:
         mdp.commands = adapt_commands(commands) or {}
         mdp.actions = adapt_actions(actions)
         mdp.terminations = adapt_terminations(terminations)
-        from .adapters.mjlab_adapter import adapt_events
-
         mdp.events = adapt_events(events)
         _enrich_joint_observations(self._config, mdp.observations)
         if mdp.actions and policy_joint_names:
@@ -770,11 +667,11 @@ class SceneHandle:
         )
         if clip_actions is None:
             clip_actions = runner.clip_actions
-        slot_in, slot_out = _check_slot_tables(name, policy, in_keys, out_keys)
+        slot_in, slot_out = check_slot_tables(name, policy, in_keys, out_keys)
         if policy_num_actions is None and not policy_joint_names:
             # A muscle policy has no joint transmission to count, so take the action
             # count from the network's own output width.
-            policy_num_actions = _onnx_output_width(policy)
+            policy_num_actions = onnx_output_width(policy)
 
         policy_config = PolicyConfig(
             name=name,
@@ -924,7 +821,7 @@ class SceneHandle:
         observations, commands, actions, terminations, events = self._derive_term_sets(
             env_cfg, observations, commands, actions, terminations
         )
-        tracking_motion_term = _extract_tracking_motion_term(commands)
+        tracking_term = tracking_motion_term(commands)
         tracking_motion_cache: dict[str, tuple[str, bytes]] = {}
         # One MDP for every checkpoint this call adds: they were trained against one
         # env config, so they share its graphs rather than tracing them once each.
@@ -936,13 +833,13 @@ class SceneHandle:
             events=events,
         )
 
+        from . import source
+
         handles = []
         seen_names: set[str] = set()
         if only_latest:
             for path in run_paths:
-                from .wandb_io import fetch_onnx_from_wandb_run
-
-                name, model = fetch_onnx_from_wandb_run(path)
+                name, model = source.wandb.fetch_onnx(path)
                 if name not in seen_names:
                     seen_names.add(name)
                     handle = self.add_policy(
@@ -958,10 +855,10 @@ class SceneHandle:
                         clip_actions=clip_actions,
                         extras=extras,
                     )
-                    _attach_tracking_motion(
+                    attach_tracking_motion(
                         handle,
                         path,
-                        tracking_motion_term,
+                        tracking_term,
                         tracking_motion_cache,
                     )
                     handles.append(handle)
@@ -971,10 +868,9 @@ class SceneHandle:
             assert task_id is not None
 
             def _convert(on_run: Callable[[str], None] = lambda _: None) -> None:
-                from .wandb_io import (
+                from .mjlab.runner import (
                     create_pt_onnx_export_context,
-                    fetch_motion_npz_from_wandb_run,
-                    fetch_pt_onnx_from_wandb_run,
+                    export_checkpoint,
                 )
 
                 with tempfile.TemporaryDirectory() as staging_dir:
@@ -986,16 +882,14 @@ class SceneHandle:
                     export_env_cfg: Any = (
                         copy.deepcopy(source_cfg) if source_cfg is not None else None
                     )
-                    if tracking_motion_term is not None:
-                        existing_file = getattr(
-                            tracking_motion_term, "motion_file", None
-                        )
+                    if tracking_term is not None:
+                        existing_file = getattr(tracking_term, "motion_file", None)
                         if existing_file and Path(existing_file).is_file():
                             motion_name = Path(existing_file).stem
                             motion_bytes = Path(existing_file).read_bytes()
                             motion_file_for_env = existing_file
                         else:
-                            motion_name, motion_bytes = fetch_motion_npz_from_wandb_run(
+                            motion_name, motion_bytes = source.wandb.fetch_motion_npz(
                                 run_paths[0]
                             )
                             staged = Path(staging_dir) / f"{motion_name}.npz"
@@ -1026,42 +920,43 @@ class SceneHandle:
                     export_context = create_pt_onnx_export_context(
                         task_id, env_cfg=export_env_cfg
                     )
+
+                    def _adopt(path: str, name: str, model: onnx.ModelProto) -> None:
+                        handle = self.add_policy(
+                            name=name,
+                            policy=model,
+                            config_path=config_path,
+                            metadata=metadata,
+                            env_cfg=env_cfg,
+                            task_id=task_id,
+                            mdp=shared_mdp,
+                            policy_joint_names=export_context.joint_names or None,
+                            default_joint_pos=export_context.default_joint_pos or None,
+                            encoder_bias=export_context.encoder_bias or None,
+                            in_keys=in_keys,
+                            out_keys=out_keys,
+                            clip_actions=clip_actions,
+                            extras=extras,
+                        )
+                        attach_tracking_motion(
+                            handle,
+                            path,
+                            tracking_term,
+                            tracking_motion_cache,
+                            dataset_joint_names=export_context.joint_names or None,
+                        )
+                        handles.append(handle)
+
                     try:
                         for path in run_paths:
                             on_run(path.rsplit("/", 1)[-1])
-                            for name, model in fetch_pt_onnx_from_wandb_run(
-                                path, task_id, export_context=export_context
-                            ):
-                                if name in seen_names:
-                                    continue
-                                seen_names.add(name)
-                                handle = self.add_policy(
-                                    name=name,
-                                    policy=model,
-                                    config_path=config_path,
-                                    metadata=metadata,
-                                    env_cfg=env_cfg,
-                                    task_id=task_id,
-                                    mdp=shared_mdp,
-                                    policy_joint_names=export_context.joint_names
-                                    or None,
-                                    default_joint_pos=export_context.default_joint_pos
-                                    or None,
-                                    encoder_bias=export_context.encoder_bias or None,
-                                    in_keys=in_keys,
-                                    out_keys=out_keys,
-                                    clip_actions=clip_actions,
-                                    extras=extras,
-                                )
-                                _attach_tracking_motion(
-                                    handle,
-                                    path,
-                                    tracking_motion_term,
-                                    tracking_motion_cache,
-                                    dataset_joint_names=export_context.joint_names
-                                    or None,
-                                )
-                                handles.append(handle)
+                            with source.wandb.fetch_checkpoints(path) as checkpoints:
+                                for name, pt_path in checkpoints:
+                                    if name in seen_names:
+                                        continue
+                                    seen_names.add(name)
+                                    model = export_checkpoint(export_context, pt_path)
+                                    _adopt(path, name, model)
                     finally:
                         # Keep it as the scene's trace env rather than building a second
                         # one from the same config.
@@ -1189,12 +1084,12 @@ class SceneHandle:
             )
             ```
         """
-        from .hf_io import fetch_onnx_from_hf, resolve_policy_filename
-        from .mjlab_onnx_meta import read_mjlab_metadata
+        from . import source
+        from .mjlab.onnx_meta import action_cfg_from_metadata, read_mjlab_metadata
 
         if filename is None:
             filenames = [
-                resolve_policy_filename(
+                source.hf.resolve_policy_filename(
                     repo_id, revision=revision, repo_type=repo_type, token=token
                 )
             ]
@@ -1210,7 +1105,7 @@ class SceneHandle:
             )
 
         fetched = [
-            fetch_onnx_from_hf(
+            source.hf.fetch_onnx(
                 repo_id,
                 fname,
                 revision=revision,
@@ -1225,7 +1120,7 @@ class SceneHandle:
         ]
         # Compiled once, not once per file: every policy in a repository is checked
         # against the same scene.
-        actuated = _actuated_joint_names(_get_scene_model(self._config))
+        actuated = actuated_joint_names(_get_scene_model(self._config))
         driven = [
             _hf_driven_joints(meta, model, actuated)
             for meta, (_, model) in zip(metas, fetched)
@@ -1242,11 +1137,9 @@ class SceneHandle:
             # `_derive_term_sets` has already had its turn — so the metadata is the last
             # description of the action term there is, not a competing one. Guarded by
             # `driven`, so the scale is known to line up with the actions it scales.
-            from .mjlab_onnx_meta import action_cfg_from_metadata
-
             actions = (
                 action_cfg_from_metadata(
-                    first_meta, action_width=_onnx_output_width(fetched[0][1])
+                    first_meta, action_width=onnx_output_width(fetched[0][1])
                 )
                 or None
             )
@@ -1327,7 +1220,7 @@ class SceneHandle:
                     f"Policy {policy_name!r} from {repo_id!r} carries mjlab metadata "
                     f"for {len(meta.joint_names)} joints ({meta.joint_names[:4]}…), but "
                     f"this scene's model does not present that list in actuator order "
-                    f"against a network of {_onnx_output_width(policy)} actions. "
+                    f"against a network of {onnx_output_width(policy)} actions. "
                     "policy_joint_names / default_joint_pos were left unset — pass them "
                     "explicitly, in the order the policy's actions come out.",
                     category=RuntimeWarning,
@@ -1495,8 +1388,6 @@ class SceneHandle:
         Returns:
             Self for method chaining.
         """
-        from .adapters.mjlab_adapter import adapt_events
-
         self._config.events = adapt_events(events)
         self._config.events_explicit = _explicit
         return self
@@ -1507,7 +1398,7 @@ class SceneHandle:
         Required for a plain :meth:`ProjectHandle.add_scene` scene with plain-callable
         term functions, which has no task env of its own. The env only has to satisfy
         ``env.scene[name].data.<field>`` (plus the entity write methods for write-side
-        terms) — see :func:`mjswan.trace_env.build_single_entity_trace_env` for a minimal
+        terms) — see :func:`mjswan.mjlab.env.build_single_entity_trace_env` for a minimal
         one built from a single entity's spec.
 
         An :meth:`ProjectHandle.add_scene_mjlab` scene builds its own at build time;
@@ -1594,57 +1485,3 @@ class SceneHandle:
 
 
 __all__ = ["ViewerConfig", "SceneConfig", "SceneHandle", "SplatConfig", "SplatHandle"]
-
-
-def _extract_tracking_motion_term(commands: Mapping[str, Any] | None) -> Any | None:
-    if not commands:
-        return None
-    for term in commands.values():
-        if type(term).__name__ == "MotionCommandCfg":
-            return term
-        if hasattr(term, "anchor_body_name") and hasattr(term, "body_names"):
-            return term
-    return None
-
-
-def _attach_tracking_motion(
-    handle: PolicyHandle,
-    run_path: str,
-    tracking_motion_term: Any | None,
-    cache: dict[str, tuple[str, bytes]],
-    *,
-    dataset_joint_names: list[str] | None = None,
-) -> None:
-    if tracking_motion_term is None:
-        return
-
-    from .wandb_io import fetch_motion_npz_from_wandb_run
-
-    motion_file = getattr(tracking_motion_term, "motion_file", None)
-    motion_path = Path(motion_file).expanduser() if motion_file else None
-    if motion_path is not None and motion_path.is_file():
-        motion_name = motion_path.stem or "motion"
-        payload = motion_path.read_bytes()
-    else:
-        if run_path not in cache:
-            cache[run_path] = fetch_motion_npz_from_wandb_run(run_path)
-        motion_name, payload = cache[run_path]
-
-    resolved_joint_names = (
-        dataset_joint_names
-        if dataset_joint_names is not None
-        else (
-            list(handle._config.policy_joint_names)
-            if handle._config.policy_joint_names is not None
-            else None
-        )
-    )
-    motion = MotionConfig(
-        name=motion_name,
-        data=payload,
-        anchor_body_name=getattr(tracking_motion_term, "anchor_body_name", ""),
-        body_names=tuple(getattr(tracking_motion_term, "body_names", ()) or ()),
-        dataset_joint_names=resolved_joint_names,
-        default=True,
-    )
-    handle._append_motion(motion)

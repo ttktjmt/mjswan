@@ -169,7 +169,8 @@ class PendingCommandTrace:
     """Author-authored control-panel descriptor, already resolved to a concrete dict."""
 
     viz: list[dict[str, Any]] | None = None
-    """Debug-vis primitives; :func:`default_viz` fills these in when none are given."""
+    """Debug-vis primitives; :func:`mjswan.mjlab.command.default_viz` fills these in
+    when none are given."""
 
 
 @dataclass
@@ -228,7 +229,7 @@ class CommandBinding:
       traced at build time and served by the shared ``OnnxCommand`` handler. Set
       ``trace_override`` when it needs a trace-friendly rewrite first. ``ui`` and ``viz``
       may each be a value or a ``(mjlab_cfg) -> value`` callable; an omitted ``viz``
-      falls back to :func:`default_viz`.
+      falls back to :func:`mjswan.mjlab.command.default_viz`.
     - **``ts_src`` escape hatch**: a hand-written TS command term.
     """
 
@@ -314,87 +315,6 @@ def velocity_command(
     )
 
 
-# --- Debug visualization ---
-#
-# mjlab's `_debug_vis_impl` runs Python every frame, so the browser cannot. These restate
-# what each mjlab command class draws, as data `core/command/debugViz.ts` evaluates.
-
-_ARROW_WIDTH = 0.015  # As mjlab passes to every `add_arrow`.
-
-
-def _velocity_viz(cfg: Any) -> list[dict[str, Any]]:
-    """`UniformVelocityCommand`'s four arrows: commanded and actual, linear and angular."""
-    entity = getattr(cfg, "entity_name", None) or "robot"
-    viz = getattr(cfg, "viz", None)
-    scale = float(getattr(viz, "scale", 0.5))
-    z_offset = float(getattr(viz, "z_offset", 0.2))
-    frame = {
-        "entity": entity,
-        "pos_field": "root_link_pos_w",
-        "quat_field": "root_link_quat_w",
-    }
-
-    def arrow(
-        source: dict[str, Any],
-        components: list[int | None],
-        color: tuple[float, float, float, float],
-    ) -> dict[str, Any]:
-        return {
-            "shape": "arrow",
-            "color": list(color),
-            "width": _ARROW_WIDTH,
-            "frame": frame,
-            # mjlab scales the whole local offset, so the base rises with it too.
-            "origin": {"const": [0.0, 0.0, z_offset * scale]},
-            "vector": {**source, "components": components, "scale": scale},
-        }
-
-    command = {"state": "vel_command_b"}
-    return [
-        arrow(command, [0, 1, None], (0.2, 0.2, 0.6, 0.6)),
-        arrow(command, [None, None, 2], (0.2, 0.6, 0.2, 0.6)),
-        arrow(
-            {"entity": entity, "field": "root_link_lin_vel_b"},
-            [0, 1, None],
-            (0.0, 0.6, 1.0, 0.7),
-        ),
-        arrow(
-            {"entity": entity, "field": "root_link_ang_vel_b"},
-            [None, None, 2],
-            (0.0, 1.0, 0.4, 0.7),
-        ),
-    ]
-
-
-def _lifting_viz(cfg: Any) -> list[dict[str, Any]]:
-    """`LiftingCommand`'s target sphere, colored from the task's own cfg."""
-    viz = getattr(cfg, "viz", None)
-    color = list(getattr(viz, "target_color", (1.0, 0.0, 0.0, 1.0)))
-    return [
-        {
-            "shape": "sphere",
-            "radius": 0.03,
-            "color": color,
-            "origin": {"state": "target_pos"},
-        }
-    ]
-
-
-_default_viz_builders: dict[str, Callable[[Any], list[dict[str, Any]]]] = {
-    "UniformVelocityCommandCfg": _velocity_viz,
-    "LiftingCommandCfg": _lifting_viz,
-}
-
-
-def default_viz(mjlab_cfg: Any) -> list[dict[str, Any]] | None:
-    """The debug drawing mjswan knows for an mjlab command cfg, or ``None``.
-
-    Keyed by cfg class, so any task built on one of mjlab's own command classes gets it.
-    """
-    builder = _default_viz_builders.get(type(mjlab_cfg).__name__)
-    return builder(mjlab_cfg) if builder is not None else None
-
-
 def _serialize_motion_command(cfg: Any) -> dict[str, Any]:
     """Convert mjlab's ``MotionCommandCfg`` into browser tracking metadata."""
     data: dict[str, Any] = {
@@ -469,7 +389,6 @@ __all__ = [
     "Slider",
     "SliderConfig",
     "_custom_registry",
-    "default_viz",
     "register_command",
     "ui_command",
     "velocity_command",

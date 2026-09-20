@@ -1,6 +1,6 @@
 import pytest
 
-from mjswan.hf_io import choose_policy_filename, policy_name_for
+from mjswan.source.hf import choose_policy_filename, policy_name_for
 
 
 class TestChoosePolicyFilename:

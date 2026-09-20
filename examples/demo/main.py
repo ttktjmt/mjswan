@@ -39,7 +39,7 @@ from mjswan.managers.observation_manager import (  # noqa: E402
     ObservationTermCfg,
 )
 from mjswan.managers.termination_manager import TerminationTermCfg  # noqa: E402
-from mjswan.trace_env import build_single_entity_trace_env  # noqa: E402
+from mjswan.mjlab.env import build_single_entity_trace_env  # noqa: E402
 
 # --- Demo-specific observations. These scenes have no mjlab task, so each supplies its
 # own trace env via SceneHandle.set_trace_env, and the terms below are written against

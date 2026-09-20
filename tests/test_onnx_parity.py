@@ -305,7 +305,7 @@ def test_serialized_observation_widths_match_mjlab(task_id, tmp_path):
     from mjlab.tasks.registry import load_env_cfg
 
     from mjswan._onnx_build import serialize_observation_group
-    from mjswan.adapters.mjlab_adapter import adapt_observations
+    from mjswan.mjlab import adapt_observations
 
     cfg = load_env_cfg(task_id, play=True)
     env = ManagerBasedRlEnv(cfg, device="cpu")

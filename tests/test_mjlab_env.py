@@ -18,7 +18,7 @@ pytest.importorskip("mjlab")
 
 import mujoco  # noqa: E402
 
-from mjswan.trace_env import (  # noqa: E402
+from mjswan.mjlab.env import (  # noqa: E402
     _quiet_warp_module_loads,
     build_mjlab_env,
     build_single_entity_trace_env,

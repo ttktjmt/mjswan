@@ -1,4 +1,4 @@
-"""Record an mjlab command term's viser GUI as an mjswan UI descriptor.
+"""Record an mjlab command term's viser GUI as a control-panel descriptor.
 
 Running ``CommandTerm.create_gui`` against a recording stand-in makes mjlab's own
 declaration the browser control panel's only definition, instead of hand-copying slider

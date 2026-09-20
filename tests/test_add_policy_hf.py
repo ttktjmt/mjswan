@@ -85,7 +85,7 @@ def fake_hub(monkeypatch, tmp_path):
         ):
             return repo[filename]
 
-    monkeypatch.setattr("mjswan.hf_io._hub", lambda: _Hub)
+    monkeypatch.setattr("mjswan.source.hf._hub", lambda: _Hub)
 
     def register(filename: str, **kwargs) -> str:
         repo[filename] = str(

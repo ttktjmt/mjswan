@@ -72,7 +72,7 @@ def _scene_trace_env(scene: SceneConfig) -> Any | None:
         return scene.mjlab_env
     if scene.mjlab_env_cfg is None:
         return None
-    from .trace_env import build_mjlab_env
+    from .mjlab.env import build_mjlab_env
 
     scene.mjlab_env = build_mjlab_env(scene.mjlab_env_cfg)
     scene.mjlab_env.reset()

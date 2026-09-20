@@ -244,7 +244,7 @@ class TestDefaultViz:
             target_color = (1.0, 0.5, 0.0, 0.3)
 
     def test_velocity_draws_mjlabs_four_arrows(self):
-        from mjswan.command import default_viz
+        from mjswan.mjlab.command import default_viz
 
         primitives = default_viz(self.UniformVelocityCommandCfg())
         assert [p["shape"] for p in primitives] == ["arrow"] * 4
@@ -262,7 +262,7 @@ class TestDefaultViz:
 
     def test_velocity_scales_base_and_vector_as_mjlab_does(self):
         """mjlab scales `([0, 0, z_offset] + v) * scale`, so the base rises too."""
-        from mjswan.command import default_viz
+        from mjswan.mjlab.command import default_viz
 
         primitive = default_viz(self.UniformVelocityCommandCfg())[0]
         assert primitive["origin"] == {"const": [0.0, 0.0, 0.1]}
@@ -270,7 +270,7 @@ class TestDefaultViz:
         assert primitive["frame"]["entity"] == "robot"
 
     def test_lifting_takes_its_color_from_the_task_cfg(self):
-        from mjswan.command import default_viz
+        from mjswan.mjlab.command import default_viz
 
         assert default_viz(self.LiftingCommandCfg()) == [
             {
@@ -282,7 +282,7 @@ class TestDefaultViz:
         ]
 
     def test_an_unknown_cfg_class_gets_nothing(self):
-        from mjswan.command import default_viz
+        from mjswan.mjlab.command import default_viz
 
         class CustomCommandCfg:
             debug_vis = True

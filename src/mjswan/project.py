@@ -7,15 +7,13 @@ managing projects containing multiple scenes.
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import mujoco
 
-from .adapters import apply_mjlab_sim_options, ensure_mjlab_extensions
 from .document.ids import assign_id, name2id
-from .envs.mdp.events import apply_terrain_spawn
 from .license import (
     detect_attributions,
     known_attribution,
@@ -23,9 +21,16 @@ from .license import (
     resolve_notice,
     spec_asset_directories,
 )
-from .scene import SceneConfig, SceneHandle, _env_cfg_control_dt
+from .mjlab import apply_mjlab_sim_options, ensure_mjlab_extensions
+from .mjlab.event import apply_terrain_spawn
+from .mjlab.task import (
+    adapt_viewer_config,
+    entity_specs,
+    env_cfg_control_dt,
+    extract_terrain_data,
+)
+from .scene import SceneConfig, SceneHandle
 from .utils import collect_spec_assets
-from .viewer import ViewerConfig
 
 if TYPE_CHECKING:
     from .builder import Builder
@@ -280,7 +285,7 @@ class ProjectHandle:
         if not handle._config.attributions:
             handle._config.attributions = detect_attributions(
                 d
-                for entity_spec in _mjlab_entity_specs(env_cfg.scene)
+                for entity_spec in entity_specs(env_cfg.scene)
                 for d in spec_asset_directories(entity_spec)
             )
         if not handle._config.attributions:
@@ -291,7 +296,7 @@ class ProjectHandle:
         # The trace env comes later, from `builder._scene_trace_env`: a tracking task
         # cannot build one until its clip has been written into the bundle.
         # Rates differ per task — Cartpole 0.05, locomotion 0.02 — so read it here.
-        control_dt = _env_cfg_control_dt(env_cfg)
+        control_dt = env_cfg_control_dt(env_cfg)
         if control_dt is None:
             raise ValueError(
                 f"Could not read a control rate off task {task_id!r}'s env config "
@@ -299,10 +304,10 @@ class ProjectHandle:
                 "and build the scene manually."
             )
         handle._config.control_dt = control_dt
-        viewer_cfg = _adapt_mjlab_viewer_config(getattr(env_cfg, "viewer", None))
+        viewer_cfg = adapt_viewer_config(getattr(env_cfg, "viewer", None))
         if viewer_cfg is not None:
             handle.set_viewer(viewer_cfg)
-        terrain_data = _extract_terrain_data(scene)
+        terrain_data = extract_terrain_data(scene)
         if terrain_data:
             handle._config.terrain_data = terrain_data
         if events is not None:
@@ -314,104 +319,12 @@ class ProjectHandle:
         return handle
 
 
-def _extract_terrain_data(scene: Any) -> dict[str, Any] | None:
-    """Extract spawn positions from a mjlab Scene for browser-side event execution.
-
-    Tries named flat_patches first (higher-quality sampled positions); falls back
-    to terrain_origins (one per sub-terrain tile) when flat_patch_sampling is not
-    configured on any sub-terrain.
-    """
-    terrain = getattr(scene, "terrain", None)
-    if terrain is None:
-        return None
-
-    # Try explicit flat_patches (only present when flat_patch_sampling is configured).
-    flat_patches = getattr(terrain, "flat_patches", None)
-    if flat_patches:
-        serialized: dict[str, list[list[float]]] = {}
-        for name, patches in flat_patches.items():
-            # patches: (num_rows, num_cols, num_patches, 3) tensor
-            try:
-                arr = patches.cpu().numpy()
-                rows, cols, n, _ = arr.shape
-                positions = arr.reshape(rows * cols * n, 3).tolist()
-                serialized[name] = positions
-            except Exception:
-                pass
-        if serialized:
-            return {"flat_patches": serialized}
-
-    # Fall back to terrain_origins (one spawn point per sub-terrain tile).
-    terrain_origins = getattr(terrain, "terrain_origins", None)
-    if terrain_origins is not None:
-        try:
-            arr = terrain_origins.cpu().numpy()
-            # shape: (num_rows, num_cols, 3)
-            num_rows, num_cols, _ = arr.shape
-            positions = arr.reshape(num_rows * num_cols, 3).tolist()
-            return {"flat_patches": {"spawn": positions}}
-        except Exception:
-            pass
-
-    return None
-
-
-def _mjlab_entity_specs(scene_cfg: Any) -> Iterator[mujoco.MjSpec]:
-    """The terrain's and each entity's own spec, before the scene flattens them."""
-    spec_cfgs = [getattr(scene_cfg, "terrain", None)]
-    entities = getattr(scene_cfg, "entities", {})
-    if isinstance(entities, dict):
-        spec_cfgs.extend(entities.values())
-
-    for cfg in spec_cfgs:
-        spec_fn = getattr(cfg, "spec_fn", None)
-        if not callable(spec_fn):
-            continue
-        spec = spec_fn()
-        if isinstance(spec, mujoco.MjSpec):
-            yield spec
-
-
 def _collect_mjlab_scene_assets(scene_cfg: Any) -> dict[str, bytes]:
     """Collect assets from mjlab scene component specs before they are flattened."""
     assets: dict[str, bytes] = {}
-    for spec in _mjlab_entity_specs(scene_cfg):
+    for spec in entity_specs(scene_cfg):
         assets.update(collect_spec_assets(spec))
     return assets
-
-
-def _adapt_mjlab_viewer_config(config: Any | None) -> ViewerConfig | None:
-    """Convert mjlab's ``ViewerConfig`` dataclass to mjswan's equivalent."""
-    if config is None:
-        return None
-
-    defaults = ViewerConfig()
-    entity_name = getattr(config, "entity_name", None)
-    body_name = getattr(config, "body_name", None)
-    if entity_name is None and body_name is not None:
-        entity_name = "robot"
-    origin_type_name = getattr(getattr(config, "origin_type", None), "name", None)
-    if isinstance(origin_type_name, str):
-        origin_type = getattr(ViewerConfig.OriginType, origin_type_name, None)
-    else:
-        origin_type = None
-
-    return ViewerConfig(
-        lookat=tuple(getattr(config, "lookat", (0.0, 0.0, 0.0))),
-        distance=float(getattr(config, "distance", 4.0)),
-        fovy=getattr(config, "fovy", None),
-        elevation=float(getattr(config, "elevation", -30.0)),
-        azimuth=float(getattr(config, "azimuth", 45.0)),
-        origin_type=origin_type or defaults.origin_type,
-        entity_name=entity_name,
-        body_name=body_name,
-        env_idx=int(getattr(config, "env_idx", 0)),
-        max_extra_envs=int(getattr(config, "max_extra_envs", 2)),
-        enable_reflections=bool(getattr(config, "enable_reflections", True)),
-        enable_shadows=bool(getattr(config, "enable_shadows", True)),
-        height=int(getattr(config, "height", 240)),
-        width=int(getattr(config, "width", 320)),
-    )
 
 
 __all__ = ["ProjectConfig", "ProjectHandle"]

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 import onnx
 
 if TYPE_CHECKING:
-    from .envs.mdp.actions.actions import ActionTermCfg
+    from ..managers.action_manager import ActionTermCfg
 
 #: Keys every mjlab export carries (``mjlab.rl.exporter_utils.get_base_metadata``).
 #: Both must be present for :func:`read_mjlab_metadata` to claim a model as mjlab's.
@@ -227,7 +227,7 @@ def action_cfg_from_metadata(
         return {}
     if not joint_mapping_usable(meta, action_width=action_width):
         return {}
-    from .envs.mdp.actions import JointPositionActionCfg
+    from ..envs.mdp.actions import JointPositionActionCfg
 
     scale = (
         list(meta.action_scale)

@@ -1088,10 +1088,8 @@ class TestApplyTerrainSpawn:
         )
 
     def test_it_replaces_the_uniform_reset_and_keeps_entity_and_yaw(self):
-        from mjswan.envs.mdp.events import (
-            apply_terrain_spawn,
-            reset_root_state_on_flat_patch,
-        )
+        from mjswan.envs.mdp.events import reset_root_state_on_flat_patch
+        from mjswan.mjlab.event import apply_terrain_spawn
 
         patches = [[0.0, 0.0, 0.0], [1.0, 1.0, 0.5]]
         scene = self._scene(
@@ -1107,7 +1105,7 @@ class TestApplyTerrainSpawn:
         assert term.params["yaw_range"] == (-1.0, 1.0)
 
     def test_it_leaves_a_scene_without_terrain_alone(self):
-        from mjswan.envs.mdp.events import apply_terrain_spawn
+        from mjswan.mjlab.event import apply_terrain_spawn
 
         event = self._uniform_event()
         scene = self._scene(None, {"reset_base": event})

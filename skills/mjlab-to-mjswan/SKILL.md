@@ -53,7 +53,7 @@ Show the discovered task ids to the user and let them pick one. Ask **here**, no
 ```sh
 python - <<'PY'
 from mjlab.tasks.registry import load_env_cfg
-from mjswan.adapters import adapt_actions
+from mjswan.mjlab import adapt_actions
 import your_repo.tasks
 cfg = load_env_cfg("Mjlab-Velocity-Flat-Unitree-G1", play=True)
 for name, term in (adapt_actions(cfg.actions) or {}).items():
@@ -177,9 +177,9 @@ A successful build only proves every term *traced*. It does not prove the graph 
 ```sh
 MUJOCO_GL=disable python - <<'PY'
 from mjlab.tasks.registry import load_env_cfg
-from mjswan.adapters import resolve_runner_defaults
+from mjswan.mjlab import resolve_runner_defaults
 from mjswan.compile import run_parity
-from mjswan.trace_env import build_mjlab_env
+from mjswan.mjlab.env import build_mjlab_env
 import your_repo.tasks
 import mjswan_app.terms  # only if terms.py exists
 

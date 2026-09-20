@@ -9,7 +9,7 @@ installed, and the suite runs without the examples extras.
 import onnx
 import pytest
 
-from mjswan.mjlab_onnx_meta import (
+from mjswan.mjlab.onnx_meta import (
     action_cfg_from_metadata,
     joint_mapping_usable,
     policy_kwargs_from_metadata,

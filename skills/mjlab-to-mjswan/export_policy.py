@@ -11,7 +11,7 @@ Writes one ``<stem>.onnx`` per checkpoint into ``--out-dir`` plus a
 file alone -- ``policy_joint_names``, ``default_joint_pos``, ``encoder_bias`` -- and
 the checkpoint order, numeric so ``model_50`` precedes ``model_100``.
 
-Mirrors ``mjswan.wandb_io.fetch_pt_onnx_from_wandb_run`` minus the W&B download,
+Mirrors ``mjswan.mjlab.runner.export_checkpoint`` minus the W&B download,
 ``align_obs_normalizer`` included: without it the exported graph carries the wrong
 observation normalization.
 """
@@ -51,7 +51,7 @@ def main() -> None:
 
     import torch
 
-    from mjswan.wandb_io import align_obs_normalizer, create_pt_onnx_export_context
+    from mjswan.mjlab.runner import align_obs_normalizer, create_pt_onnx_export_context
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     context = create_pt_onnx_export_context(args.task_id)

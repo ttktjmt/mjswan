@@ -25,7 +25,7 @@ torch = pytest.importorskip("torch")
 
 from mjswan.compile import trace_term  # noqa: E402
 from mjswan.compile.tracer import slots_json  # noqa: E402
-from mjswan.trace_env import TraceCommandManager  # noqa: E402
+from mjswan.mjlab.env import TraceCommandManager  # noqa: E402
 
 STEPS = 3
 JOINTS = 2

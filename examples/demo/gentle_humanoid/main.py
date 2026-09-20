@@ -19,7 +19,7 @@ from mjlab.managers.scene_entity_config import SceneEntityCfg
 import mjswan
 from mjswan.envs.mdp.actions import JointPositionActionCfg
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
-from mjswan.trace_env import build_single_entity_trace_env
+from mjswan.mjlab.env import build_single_entity_trace_env
 
 from . import terms
 

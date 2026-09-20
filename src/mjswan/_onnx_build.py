@@ -1182,7 +1182,7 @@ def _record_command_gui(term: Any, name: str) -> dict[str, Any] | None:
     ``compute()`` reads. A descriptor is presentation, not behaviour, so a term this
     cannot record still builds.
     """
-    from .adapters.gui_spy import record_gui
+    from .mjlab.gui import record_gui
 
     try:
         return record_gui(term, name)
