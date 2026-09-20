@@ -1,4 +1,11 @@
-"""Trace-friendly rewrites of mjlab command bodies, and their registrations.
+"""Command terms mjswan supplies, and its bindings for mjlab's.
+
+:func:`ui_command` and :func:`velocity_command` are the operator-driven presets: nothing
+resamples, the value is what the control panel says. The rest binds mjlab's command
+classes by cfg-class name. ``UniformVelocityCommandCfg`` is traced through a
+trace-friendly rewrite of its body; ``MotionCommandCfg`` stays native
+(``TrackingCommand``), with only its reset jitter traced, from an author-side
+registration.
 
 A command is a class, not a function, and mjlab's use constructs the tracer cannot
 follow: ``Tensor.uniform_`` draws its RNG spy cannot see, and per-``env_ids`` assignment
@@ -13,9 +20,17 @@ parity harness cannot: that only ever checks "graph == override".
 from __future__ import annotations
 
 import types
+import warnings
 from typing import Any
 
-from ...command import CommandBinding, register_command
+from ...managers.command_manager import (
+    CommandBinding,
+    CommandInput,
+    CommandTermConfig,
+    CommandUiConfig,
+    SliderConfig,
+    register_command,
+)
 
 try:
     # Module-level, not deferred: the RNG spy patches a term body's *module globals*,
@@ -24,6 +39,58 @@ try:
     from mjlab.utils.lab_api.math import sample_uniform, wrap_to_pi
 except ImportError:
     pass
+
+
+def ui_command(inputs: list[CommandInput]) -> CommandTermConfig:
+    """Create the built-in manual UI command term."""
+
+    return CommandTermConfig(
+        term_name="UiCommand",
+        ui=CommandUiConfig(inputs=list(inputs)),
+    )
+
+
+def velocity_command(
+    *,
+    lin_vel_x: tuple[float, float] = (-1.0, 1.0),
+    lin_vel_y: tuple[float, float] = (-0.5, 0.5),
+    ang_vel_z: tuple[float, float] = (-1.0, 1.0),
+    default_lin_vel_x: float = 0.5,
+    default_lin_vel_y: float = 0.0,
+    default_ang_vel_z: float = 0.0,
+) -> CommandTermConfig:
+    """Three sliders the operator drives, as a ``ui_command`` preset.
+
+    Not mjlab's ``UniformVelocityCommand``: nothing resamples, and the value is
+    whatever the slider says. A scene carrying an mjlab task should pass that cfg
+    instead (this module binds it) and get mjlab's own joystick.
+    """
+
+    return ui_command(
+        [
+            SliderConfig(
+                name="lin_vel_x",
+                label="Forward Velocity",
+                range=lin_vel_x,
+                default=default_lin_vel_x,
+                step=0.05,
+            ),
+            SliderConfig(
+                name="lin_vel_y",
+                label="Lateral Velocity",
+                range=lin_vel_y,
+                default=default_lin_vel_y,
+                step=0.05,
+            ),
+            SliderConfig(
+                name="ang_vel_z",
+                label="Yaw Rate",
+                range=ang_vel_z,
+                default=default_ang_vel_z,
+                step=0.05,
+            ),
+        ]
+    )
 
 
 # --- UniformVelocityCommand (mjlab's locomotion tasks, and anything built on them) ---
@@ -131,7 +198,7 @@ def bind_velocity_override(term: Any) -> None:
 
 
 # No `ui=`: the joystick descriptor is recorded from the term's own `create_gui` at
-# build time (`mjswan.adapters.gui_spy`). No `viz=`: `command.default_viz` has it.
+# build time (`mjswan.mjlab.gui`). No `viz=`: `mjswan.mjlab.command.default_viz` has it.
 register_command(
     "UniformVelocityCommandCfg",
     CommandBinding(
@@ -150,4 +217,74 @@ register_command(
 )
 
 
-__all__ = ["bind_velocity_override"]
+# --- MotionCommand (tracking tasks): the clip lookup stays native, the RSI jitter is
+# traced author-side. ---
+
+
+def serialize_motion_command(cfg: Any) -> dict[str, Any]:
+    """Convert mjlab's ``MotionCommandCfg`` into browser tracking metadata."""
+    data: dict[str, Any] = {
+        "anchor_body_name": getattr(cfg, "anchor_body_name", ""),
+        "body_names": list(getattr(cfg, "body_names", ()) or ()),
+        "sampling_mode": getattr(cfg, "sampling_mode", "start"),
+        "pose_range": {
+            key: list(value)
+            for key, value in (getattr(cfg, "pose_range", None) or {}).items()
+        },
+        "velocity_range": {
+            key: list(value)
+            for key, value in (getattr(cfg, "velocity_range", None) or {}).items()
+        },
+        "joint_position_range": list(getattr(cfg, "joint_position_range", (0.0, 0.0))),
+    }
+    entity_name = getattr(cfg, "entity_name", None)
+    if entity_name:
+        data["entity_name"] = entity_name
+    return data
+
+
+def _motion_rsi_unregistered(cfg: Any) -> None:
+    """Stand-in `reset_trace` that says the real one is not loaded.
+
+    The reference-state-initialization jitter traces from mjlab's own helpers, so its
+    body lives author-side (`examples/mjlab/defaults/commands`), keeping mjlab a soft
+    dependency here. Without it `TrackingCommand` starts every episode
+    unjittered, which this warns about. Always returns `None`.
+    """
+    pose_range = dict(getattr(cfg, "pose_range", None) or {})
+    velocity_range = dict(getattr(cfg, "velocity_range", None) or {})
+    joint_position_range = tuple(getattr(cfg, "joint_position_range", (0.0, 0.0)))
+    if not pose_range and not velocity_range and joint_position_range == (0.0, 0.0):
+        return None  # Nothing to jitter; the plain binding is the whole story.
+    warnings.warn(
+        "MotionCommandCfg declares reference-state-initialization jitter "
+        f"(pose_range={pose_range or None}, velocity_range={velocity_range or None}, "
+        f"joint_position_range={joint_position_range}) but no traced reset graph is "
+        "registered, so the browser will start every episode from the unjittered "
+        "reference frame. Import the module that registers it — "
+        "`examples.mjlab.defaults.commands` for the bundled examples — or supply "
+        "your own via mjswan.register_command('MotionCommandCfg', ...).",
+        category=RuntimeWarning,
+        stacklevel=3,
+    )
+    return None
+
+
+# Bridges mjlab's MotionCommandCfg to TrackingCommand. `reset_trace` only diagnoses its
+# own absence; the real graph comes from an author-side re-registration.
+register_command(
+    "MotionCommandCfg",
+    CommandBinding(
+        ts_name="TrackingCommand",
+        serializer=serialize_motion_command,
+        reset_trace=_motion_rsi_unregistered,
+    ),
+)
+
+
+__all__ = [
+    "bind_velocity_override",
+    "serialize_motion_command",
+    "ui_command",
+    "velocity_command",
+]

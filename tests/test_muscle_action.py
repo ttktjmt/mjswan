@@ -5,7 +5,7 @@ Covers:
     variants, ``normalize`` toggle).
   - ``validate_muscle_actuators`` helper: name resolution, dyntype enforcement,
     regex semantics.
-  - ``Builder._validate_muscle_action_terms`` end-to-end at build time.
+  - the build's muscle-term validation end-to-end (``mjswan.build.pipeline``).
   - Builder round-trip of ``policy_num_actions`` / ``initial_qpos`` /
     ``initial_qvel`` together with a muscle action term.
 """
@@ -227,15 +227,15 @@ class TestValidateMuscleActuators:
 
 
 # ---------------------------------------------------------------------------
-# Builder._validate_muscle_action_terms — end-to-end at build time
+# build.pipeline muscle validation — end-to-end at build time
 # ---------------------------------------------------------------------------
 
 
 class TestBuilderMuscleValidation:
     @pytest.fixture(autouse=True)
     def _no_frontend(self, monkeypatch):
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.shutil.copytree", MagicMock())
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr("mjswan.build.pipeline.shutil.copytree", MagicMock())
 
     def _make_builder(self, model, actions, minimal_onnx):
         builder = Builder()
@@ -315,8 +315,8 @@ class TestBuilderMuscleValidation:
 class TestBuilderMuscleRoundTrip:
     @pytest.fixture(autouse=True)
     def _no_frontend(self, monkeypatch):
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.shutil.copytree", MagicMock())
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr("mjswan.build.pipeline.shutil.copytree", MagicMock())
 
     def test_policy_num_actions_initial_qpos_qvel_emitted(
         self, tmp_path, muscle_model, minimal_onnx

@@ -1,19 +1,21 @@
 """Build-time tracing of mjlab MDP term bodies to ONNX graphs, plus a numeric parity
-harness validating the exported graphs against the live mjlab env (ADR 0005)."""
+harness validating the exported graphs against the live mjlab env (ADR 0005).
+
+One pass records what a term reads (:mod:`.record`), a second replays those reads
+while torch traces the body (:mod:`.replay`); :mod:`.slot` names the reads and
+:mod:`.export` holds the mechanics both passes share. :mod:`.term`, :mod:`.event`,
+:mod:`.command` and :mod:`.group` trace one kind of term each, and :mod:`.native` names
+the terms that need no graph. Nothing here writes a file: that is
+:mod:`mjswan.build.mdp`.
+"""
 
 from __future__ import annotations
 
+from .command import CommandExport, trace_command_term
+from .event import EventExport, trace_event_term
 from .parity import ParityReport, TermReport, run_command_parity, run_parity
 from .rng import DrawRecorder, ReplayRng
-from .serialize import command_config, write_command_artifact
-from .tracer import (
-    CommandExport,
-    EventExport,
-    TermExport,
-    trace_command_term,
-    trace_event_term,
-    trace_term,
-)
+from .term import TermExport, trace_term
 
 __all__ = [
     "TermExport",
@@ -28,6 +30,4 @@ __all__ = [
     "TermReport",
     "DrawRecorder",
     "ReplayRng",
-    "command_config",
-    "write_command_artifact",
 ]

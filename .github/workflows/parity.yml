@@ -16,8 +16,8 @@ on:
   pull_request:
     paths:
       - "src/mjswan/compile/**"
-      - "src/mjswan/_onnx_build.py"
-      - "src/mjswan/trace_env.py"
+      - "src/mjswan/build/mdp/**"
+      - "src/mjswan/mjlab/env.py"
       - "tests/test_onnx_*.py"
       - "uv.lock"
       - ".github/workflows/parity.yml"

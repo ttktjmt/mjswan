@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from mjswan.wandb_io import align_obs_normalizer
+from mjswan.mjlab.runner import align_obs_normalizer
 
 torch = pytest.importorskip("torch")
 EmpiricalNormalization = pytest.importorskip("rsl_rl.modules").EmpiricalNormalization

@@ -58,7 +58,7 @@ class EventTermCfg:
         """Serialize an ``EventBinding`` term.
 
         A plain-callable term needs a live env this method has no access to; the Builder
-        calls ``mjswan._onnx_build.serialize_event`` for those.
+        calls ``mjswan.build.mdp.serialize_event`` for those.
         """
         if isinstance(self.func, EventBinding):
             entry: dict[str, Any] = {"name": self.func.ts_name}
@@ -69,7 +69,7 @@ class EventTermCfg:
         raise TypeError(
             f"EventTermCfg.to_dict() cannot serialize a plain callable func "
             f"({self.func!r}) — it must be traced to ONNX against a live env. "
-            f"Use mjswan._onnx_build.serialize_event(cfg, env, out_dir) instead "
+            f"Use mjswan.build.mdp.serialize_event(cfg, env, out_dir) instead "
             f"(the Builder does this automatically)."
         )
 

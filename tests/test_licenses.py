@@ -14,8 +14,9 @@ import mujoco
 import pytest
 
 from mjswan.builder import Builder
+from mjswan.cloud.publish import plan_publish
 from mjswan.document import document_files, unpack_document, write_document
-from mjswan.licenses import (
+from mjswan.license import (
     BLOCKED,
     CUSTOM,
     GENERATABLE_LICENSES,
@@ -41,7 +42,6 @@ from mjswan.licenses import (
     spec_asset_directories,
     tier_of,
 )
-from mjswan.publish import plan_publish
 
 # ── The naming rule ───────────────────────────────────────────────────────────
 
@@ -541,7 +541,7 @@ class TestInfoCli:
     ):
         from typer.testing import CliRunner
 
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         builder = Builder(license="Apache-2.0", copyright="x")
         _, scene = _project_with_scene(builder, minimal_model)

@@ -8,7 +8,7 @@ exclude = ["src/mjswan/template/.nodeenv", "src/mjswan/template/node_modules", "
 ignore-vcs = true
 
 [tool.hatch.version]
-path = "src/mjswan/__init__.py"
+path = "src/mjswan/_version.py"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -94,11 +94,7 @@ examples = [
 "GitHub" = "https://github.com/ttktjmt/mjswan"
 
 [project.scripts]
-mjswan = "mjswan._cli:app"
-main = "mjswan._cli:main"
-simple = "mjswan._cli:simple"
-mjlab = "mjswan._cli:mjlab"
-serve = "mjswan._cli:serve"
+mjswan = "mjswan.cli:app"
 
 [tool.pyright]
 extraPaths = []

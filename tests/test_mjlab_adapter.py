@@ -1,4 +1,4 @@
-"""Tests for mjswan.adapters.mjlab_adapter — mjlab type conversion.
+"""Tests for mjswan.mjlab — mjlab type conversion.
 
 Layer: L1 (pure Python, no MuJoCo/ONNX/mjlab required).
 
@@ -18,7 +18,12 @@ from typing import Any
 
 import pytest
 
-from mjswan.adapters.mjlab_adapter import (
+from mjswan.document.manifest import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS
+from mjswan.envs.mdp.observations import ObservationBinding
+from mjswan.envs.mdp.terminations import TerminationBinding
+from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
+from mjswan.managers.termination_manager import TerminationTermCfg
+from mjswan.mjlab import (
     DEFAULT_OBS_GROUP_KEY,
     adapt_actions,
     adapt_commands,
@@ -28,11 +33,6 @@ from mjswan.adapters.mjlab_adapter import (
     resolve_pd_gains,
     resolve_runner_defaults,
 )
-from mjswan.envs.mdp.observations import ObservationBinding
-from mjswan.envs.mdp.terminations import TerminationBinding
-from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
-from mjswan.managers.termination_manager import TerminationTermCfg
-from mjswan.policy import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS
 
 # ---------------------------------------------------------------------------
 # Fake mjlab types — classes whose __module__ starts with "mjlab"
@@ -604,7 +604,11 @@ class TestAdaptCommands:
 
         Otherwise a `debug_vis=True` task the author forgot is silently blank.
         """
-        from mjswan.command import CommandBinding, _custom_registry, register_command
+        from mjswan.managers.command_manager import (
+            CommandBinding,
+            _custom_registry,
+            register_command,
+        )
 
         cfg_cls = _make_mjlab_class(
             "LiftingCommandCfg",
@@ -634,7 +638,11 @@ class TestAdaptCommands:
 
     def test_a_registered_cfg_adapts_from_outside_the_mjlab_package(self):
         """The registry decides, not the defining module."""
-        from mjswan.command import CommandBinding, _custom_registry, register_command
+        from mjswan.managers.command_manager import (
+            CommandBinding,
+            _custom_registry,
+            register_command,
+        )
 
         class SkateCommandCfg:
             resampling_time_range = (20.0, 20.0)
@@ -865,7 +873,7 @@ class TestAdaptedSerialization:
     def test_adapted_obs_to_dict_requires_tracing(self):
         # A plain-callable func (mjlab's own, resolved by the adapter with no mirror lookup)
         # cannot be serialized via to_dict()/to_list() directly — it must be traced to ONNX
-        # against a live env at build time (mjswan._onnx_build.serialize_observation_group).
+        # against a live env at build time (mjswan.build.mdp.serialize_observation_group).
         mjlab_func = _make_mjlab_obs_func("last_action")
         mjlab_term = FakeMjlabObsTermCfg(func=mjlab_func)
         mjlab_group = FakeMjlabObsGroupCfg(terms={"la": mjlab_term})

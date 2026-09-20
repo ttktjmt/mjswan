@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from mjswan._graph_io import stamp_provenance, write_onnx
-from mjswan._onnx_build import _param_json, _provenance
+from mjswan.build.mdp.graph import stamp_provenance, write_onnx
+from mjswan.build.mdp.provenance import param_json, term_provenance
 
 
 def base_lin_vel(env, asset_cfg):
@@ -32,7 +32,7 @@ class _EntityCfg:
 
 class TestProvenance:
     def test_names_the_function_and_its_first_doc_line(self):
-        out = _provenance(base_lin_vel, {"asset_cfg": _EntityCfg()})
+        out = term_provenance(base_lin_vel, {"asset_cfg": _EntityCfg()})
         assert out["func"] == f"{__name__}:base_lin_vel"
         assert out["doc"] == "Root linear velocity in the asset's root frame."
         assert out["params"] == {
@@ -43,20 +43,20 @@ class TestProvenance:
         }
 
     def test_a_class_is_named_like_a_function(self):
-        out = _provenance(_EntityCfg)
+        out = term_provenance(_EntityCfg)
         assert out["func"] == f"{__name__}:_EntityCfg"
         assert "params" not in out
 
     def test_undocumented_lambda_still_gets_a_func(self):
-        out = _provenance(lambda env: env)
+        out = term_provenance(lambda env: env)
         assert out["func"].endswith(".<lambda>")
         assert "doc" not in out
 
     def test_params_never_carry_objects(self):
-        assert _param_json(0.5) == 0.5
-        assert _param_json((1, 2)) == [1, 2]
-        assert _param_json(object()) == "object"
-        assert _param_json(None) is None
+        assert param_json(0.5) == 0.5
+        assert param_json((1, 2)) == [1, 2]
+        assert param_json(object()) == "object"
+        assert param_json(None) is None
 
 
 def _tiny_model() -> bytes:
@@ -97,7 +97,7 @@ class TestStamp:
 
 def test_constant_observation_entry_carries_provenance(tmp_path):
     torch = pytest.importorskip("torch")
-    from mjswan._onnx_build import serialize_observation_term
+    from mjswan.build.mdp import serialize_observation_term
     from mjswan.managers.observation_manager import ObservationTermCfg
 
     def padding(env, **_):

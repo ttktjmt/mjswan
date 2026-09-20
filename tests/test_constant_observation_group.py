@@ -46,7 +46,7 @@ def _other_padding(env, **_):
 
 
 def test_all_constant_group_serializes_per_term(tmp_path):
-    from mjswan._onnx_build import serialize_observation_group
+    from mjswan.build.mdp import serialize_observation_group
     from mjswan.managers.observation_manager import (
         ObservationGroupCfg,
         ObservationTermCfg,
@@ -75,7 +75,7 @@ def test_group_with_one_dynamic_term_still_fuses(tmp_path):
     """The fallback must not swallow groups that do have a graph."""
     from mjlab.envs.mdp import observations as obs_fns
 
-    from mjswan._onnx_build import serialize_observation_group
+    from mjswan.build.mdp import serialize_observation_group
     from mjswan.managers.observation_manager import (
         ObservationGroupCfg,
         ObservationTermCfg,
@@ -99,8 +99,8 @@ def test_a_baked_term_is_named_in_a_warning(tmp_path):
     """Both bake sites: the lone term and the fused group."""
     from mjlab.envs.mdp import observations as obs_fns
 
-    from mjswan._onnx_build import serialize_observation_group
-    from mjswan.compile.tracer import GroupTermSpec, trace_observation_group
+    from mjswan.build.mdp import serialize_observation_group
+    from mjswan.compile.group import GroupTermSpec, trace_observation_group
     from mjswan.managers.observation_manager import (
         ObservationGroupCfg,
         ObservationTermCfg,
@@ -120,7 +120,7 @@ def test_a_baked_term_is_named_in_a_warning(tmp_path):
 
 def test_constant_group_raises_from_the_fused_path(tmp_path):
     """The fallback exists because tracing is the only way to know: assert the signal."""
-    from mjswan.compile.tracer import (
+    from mjswan.compile.group import (
         ConstantGroup,
         GroupTermSpec,
         trace_observation_group,

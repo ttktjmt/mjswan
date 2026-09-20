@@ -53,7 +53,7 @@ Show the discovered task ids to the user and let them pick one. Ask **here**, no
 ```sh
 python - <<'PY'
 from mjlab.tasks.registry import load_env_cfg
-from mjswan.adapters import adapt_actions
+from mjswan.mjlab import adapt_actions
 import your_repo.tasks
 cfg = load_env_cfg("Mjlab-Velocity-Flat-Unitree-G1", play=True)
 for name, term in (adapt_actions(cfg.actions) or {}).items():
@@ -156,7 +156,7 @@ The build fails loudly by design and names the ways out. For each failure: read 
   ```
 
   Resolution goes by the mjlab function's `__name__` first, then the term's dict key, so a closure can only be reached by its key. The annotations on `register_event` / `register_termination` say `*Binding`, but the adapter accepts a plain traceable callable, which is what you want here; a `*Binding` means TypeScript and is out of scope.
-- **Unbound command cfg class**: `mjswan.register_command("CfgClassName", CommandBinding(...))`, keyed by the *class* name, not a function name. Read `command.py` in the installed package for which shape applies (traced `state_fields` / `command_field`, versus native `ts_name` + `serializer`).
+- **Unbound command cfg class**: `mjswan.register_command("CfgClassName", CommandBinding(...))`, keyed by the *class* name, not a function name. Read `managers/command_manager.py` in the installed package for which shape applies (traced `state_fields` / `command_field`, versus native `ts_name` + `serializer`).
 - **`MotionCommandCfg` reset-jitter warning** (tracking tasks): fetch and adapt `examples/mjlab/defaults/commands/__init__.py` from the mjswan repo, never re-derive the quaternion math, because `run_command_parity` traces the override itself and a mistake there is invisible to the parity gate. If you cannot fetch it, leave the warning in place and report it.
 - **Missing asset or credential**: stop and hand the user the exact command (`wandb login`, `hf auth login`, a licence to accept, an env var to set).
 
@@ -177,9 +177,9 @@ A successful build only proves every term *traced*. It does not prove the graph 
 ```sh
 MUJOCO_GL=disable python - <<'PY'
 from mjlab.tasks.registry import load_env_cfg
-from mjswan.adapters import resolve_runner_defaults
+from mjswan.mjlab import resolve_runner_defaults
 from mjswan.compile import run_parity
-from mjswan.trace_env import build_mjlab_env
+from mjswan.mjlab.env import build_mjlab_env
 import your_repo.tasks
 import mjswan_app.terms  # only if terms.py exists
 
@@ -224,7 +224,7 @@ print(type(cfg.actions['TERM_NAME']).__module__)
 
 A feature that makes the author restate what mjlab already declares is the wrong design. mjlab's config is the source; mjswan reads it.
 
-- A new action term: name the mjswan cfg class exactly as mjlab names its own, or add the mapping to `_ACTION_CLASS_ALIASES` in `adapters/mjlab_adapter.py`. `_adapt_action_cfg` then copies every matching dataclass field by itself and the port needs no extra argument.
+- A new action term: name the mjswan cfg class exactly as mjlab names its own, or add the mapping to `_ACTION_CLASS_ALIASES` in `mjlab/action.py`. `_adapt_action_cfg` then copies every matching dataclass field by itself and the port needs no extra argument.
 - Anything the task's env config or runner config already carries (`env_cfg`, `resolve_runner_defaults`) is read from there, never restated at the call site.
 - A keyword argument the author has to pass by hand is the last resort, not the first.
 

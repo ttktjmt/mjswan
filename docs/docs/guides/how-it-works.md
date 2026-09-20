@@ -276,7 +276,7 @@ plain `add_scene()` scene has none, so a policy with traced terms on it raises â
 one explicitly:
 
 ```python
-from mjswan.trace_env import build_single_entity_trace_env
+from mjswan.mjlab.env import build_single_entity_trace_env
 
 scene = project.add_scene(name="Hovering Box", spec=build_spec(), control_dt=0.02)
 scene.set_trace_env(build_single_entity_trace_env(build_spec))

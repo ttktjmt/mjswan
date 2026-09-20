@@ -30,9 +30,9 @@ from myosuite.envs.myo.backends.mjlab.register_mjlab_tasks import (
 )
 
 import mjswan
-from mjswan.command import CommandTermConfig
+from mjswan.document.ids import name2id
+from mjswan.managers.command_manager import CommandTermConfig
 from mjswan.motion import MotionConfig
-from mjswan.utils import name2id
 
 from . import (
     observations,  # noqa: F401 - registers all mimic observation terms

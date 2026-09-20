@@ -22,8 +22,6 @@ mjswan --help
 | [`mjswan whoami`](#mjswan-login-whoami-logout) | Show the signed-in account |
 | [`mjswan logout`](#mjswan-login-whoami-logout) | Remove the stored session |
 
-The legacy entry points `main`, `simple`, `mjlab`, and `serve <dist-dir>` are kept for backward compatibility — prefer the subcommands above for new scripts.
-
 ## `mjswan view`
 
 ```bash

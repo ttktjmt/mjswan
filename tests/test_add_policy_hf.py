@@ -1,6 +1,6 @@
 """``SceneHandle.add_policy_hf`` end to end, with the Hub itself stubbed.
 
-Only ``hf_io._hub`` is replaced, so the filename resolution, the name derivation, the
+Only ``source.hf._hub`` is replaced, so the filename resolution, the name derivation, the
 metadata read and the ``add_policy`` call all run for real — the network is the one
 thing that does not.
 """
@@ -85,7 +85,7 @@ def fake_hub(monkeypatch, tmp_path):
         ):
             return repo[filename]
 
-    monkeypatch.setattr("mjswan.hf_io._hub", lambda: _Hub)
+    monkeypatch.setattr("mjswan.source.hf._hub", lambda: _Hub)
 
     def register(filename: str, **kwargs) -> str:
         repo[filename] = str(

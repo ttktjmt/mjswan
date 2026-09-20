@@ -59,7 +59,7 @@ class SplatConfig:
 
     def __post_init__(self) -> None:
         if not self.id:
-            from .utils import name2id
+            from .document.ids import name2id
 
             self.id = name2id(self.name)
 

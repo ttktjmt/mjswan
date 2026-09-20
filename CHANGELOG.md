@@ -8,11 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 API-wide rename for consistency: `add_[layer]_[source]` for methods that add an
-object, `enable_`/`set_` for toggles, spelled-out MDP binding names. All pre-0.8
-names stay importable via `mjswan/_compat.py` until 0.9; renamed methods, modules
-and `register_*` functions emit a `DeprecationWarning`, the MDP binding *class*
-aliases stay silent (a type alias cannot warn on attribute access). The
-velocity-command shortcuts were removed outright, see Removed.
+object, `enable_`/`set_` for toggles, spelled-out MDP binding names. The pre-0.8
+names are gone with this release (see Removed), as are the velocity-command
+shortcuts.
 
 ### Added
 
@@ -27,7 +25,7 @@ velocity-command shortcuts were removed outright, see Removed.
   mjswan[hf]` is the whole light path. With no filename given, `policy.onnx` then
   `final.onnx` then the repository's single `.onnx`; several unnamed candidates raise
   rather than pick one.
-- **An mjlab export describes itself, and mjswan now reads it**: `mjlab_onnx_meta.py`
+- **An mjlab export describes itself, and mjswan now reads it**: `mjlab/onnx_meta.py`
   parses the `metadata_props` mjlab bakes into an exported policy, so `add_policy_hf`
   fills `policy_joint_names`, `default_joint_pos` and the joint-position action term
   from the file instead of asking for them again. Only when this scene's own model
@@ -208,6 +206,25 @@ velocity-command shortcuts were removed outright, see Removed.
 
 ### Changed
 
+- **The package is laid out by layer** ([ADR 0008](docs/adr/0008-package-layout.md)).
+  The root holds the object model — `Builder`, the `*Handle` / `*Config` pairs,
+  `MdpConfig`, `cli.py` — and everything else is a package with one job: `build/` (what
+  `Builder.build()` does, and the one place that knows the manifest's shape), `compile/`
+  (the tracer, one module per pass and per term kind), `mjlab/` (everything that reads
+  mjlab's own objects: the adapters, the trace envs, the runner, the exported-ONNX
+  metadata reader), `source/` (`wandb.py`, `hf.py`: fetching only, conversion is the
+  runner's), `document/`, `cloud/` and `license/`, beside the mjlab-mirror `managers/`
+  and `envs/mdp/`. The public API in `mjswan/__init__.py` is unchanged; module paths are
+  not: `mjswan.command` → `mjswan.managers.command_manager` (the configs,
+  `CommandBinding`, `register_command`) and `mjswan.envs.mdp.commands` (`ui_command`,
+  `velocity_command`); `mjswan.trace_env` → `mjswan.mjlab.env`; `mjswan.mjlab_onnx_meta`
+  → `mjswan.mjlab.onnx_meta`; `mjswan.wandb_io` / `hf_io` → `mjswan.source.wandb` / `hf`;
+  `mjswan.publish` / `auth` → `mjswan.cloud.publish` / `auth`; `mjswan.licenses` →
+  `mjswan.license`; `mjswan.document` is a package; `mjswan._cli` → `mjswan.cli`;
+  `ActionTermCfg` is defined in `mjswan.managers.action_manager`, as mjlab's is. The
+  ADR carries the full old → new table. No compatibility shims: old module paths do not
+  import.
+
 - **The policy network runs on WebGPU where the browser has it**, and on wasm everywhere
   else. `executionProviders: ['webgpu', 'wasm']` is the whole change: ORT initializes each
   provider in turn and keeps the first that works, so nothing is feature-detected and a
@@ -308,18 +325,19 @@ velocity-command shortcuts were removed outright, see Removed.
   3.10 and adds `onnxruntime`. The pin is exact because the tracer reads mjlab's
   internals; a weekly CI parity sweep catches upstream drift.
 
-### Deprecated
-
-All kept as aliases via `_compat.py`, removed in 0.9:
-
-- Renamed methods, modules and `register_*` functions, which emit a
-  `DeprecationWarning`.
-- The pre-0.8 MDP binding **class aliases** (`ObsBinding`, `ObsFunc`, `TermBinding`,
-  `TermFunc`, `EventFunc`, `MjlabMdpBinding`, `CommandTermSpec`), restored as silent
-  aliases on their original import paths. Migrate to the spelled-out `*Binding` names.
-
 ### Removed
 
+- **The pre-0.8 compatibility aliases** (`mjswan._compat`), which were due to go in 0.9:
+  the renamed methods (`add_mjlab_scene`, `add_policy_from_wandb`, `set_viewer_config`,
+  `add_splat_section`, `add_motion_from_wandb`), the `mjswanApp` class name, the
+  `register_obs_func` / `register_termination_func` / `register_event_func` /
+  `register_command_term` functions, the MDP binding class aliases (`ObsBinding`,
+  `ObsFunc`, `TermBinding`, `TermFunc`, `EventFunc`, `MjlabMdpBinding`,
+  `CommandTermSpec`) and the module aliases `mjswan.viewer_config` / `mjswan.wandb_utils`.
+  Use the spelled-out names.
+- The `main`, `simple`, `mjlab` and `serve` console scripts, which only launched a module
+  under `examples/`. `mjswan serve <dist-dir | document.swn>` replaces the last; run the
+  examples as modules.
 - **`config.json` and the per-policy `<policy>.json`**, replaced by the one root
   `manifest.json` (supersedes ADR 0005 §1). The per-project `index.html` / `logo.svg`
   copies and the `main/` special case for the first project go with them: a project's

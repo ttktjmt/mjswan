@@ -19,13 +19,13 @@ from mjlab.utils.lab_api.math import (
 )
 
 from mjswan import CommandBinding, register_command
-from mjswan.command import _serialize_motion_command
+from mjswan.envs.mdp.commands import serialize_motion_command
 
 # --- LiftingCommand (Lift-Cube-Yam) traces directly: `_resample_command`'s writes are
 # captured as `entity_write`, and `target_pos` is the only state. ---
 
 
-# No `viz=`: `mjswan.command.default_viz` supplies the target sphere.
+# No `viz=`: `mjswan.mjlab.command.default_viz` supplies the target sphere.
 register_command(
     "LiftingCommandCfg",
     CommandBinding(
@@ -142,7 +142,7 @@ register_command(
     "MotionCommandCfg",
     CommandBinding(
         ts_name="TrackingCommand",
-        serializer=_serialize_motion_command,
+        serializer=serialize_motion_command,
         reset_trace=_motion_rsi_trace,
     ),
 )

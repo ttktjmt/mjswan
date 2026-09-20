@@ -6,13 +6,16 @@ ONNX policy configuration and command management.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import warnings
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import mujoco
 import onnx
 
-from .command import CommandTermConfig
+from .document.manifest import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS, RUNTIME_INPUT_SLOTS
+from .managers.command_manager import CommandTermConfig
 from .mdp import MdpConfig
 from .motion import MotionConfig, MotionHandle
 
@@ -23,13 +26,102 @@ if TYPE_CHECKING:
     from .managers.termination_manager import TerminationTermCfg
     from .scene import SceneHandle
 
-#: Input slots the runtime fills itself rather than from an observation group: the
-#: recurrent carry (``is_init``, ``adapt_hx``) and the step counter (``time_step``).
-RUNTIME_INPUT_SLOTS = frozenset({"is_init", "adapt_hx", "time_step"})
 
-#: What the runtime assumes when a policy declares no slot table (ADR 0006 §5).
-DEFAULT_IN_KEYS = ("actor",)
-DEFAULT_OUT_KEYS = ("action",)
+def onnx_io_names(model: onnx.ModelProto) -> tuple[list[str], list[str]]:
+    """The network's real input and output names, initializers excluded."""
+    initializers = {init.name for init in model.graph.initializer}
+    inputs = [i.name for i in model.graph.input if i.name not in initializers]
+    return inputs, [o.name for o in model.graph.output]
+
+
+def check_slot_tables(
+    name: str,
+    model: onnx.ModelProto,
+    in_keys: Sequence[str] | None,
+    out_keys: Sequence[str | Sequence[str]] | None,
+) -> tuple[list[str] | None, list[str | list[str]] | None]:
+    """Check a policy's slot tables against its network and return them as lists.
+
+    ``in_keys[i]`` fills the *i*-th input and ``out_keys[i]`` names the *i*-th output, so
+    each table must be exactly as long as what it indexes. A network with several inputs
+    must declare ``in_keys``: nothing else records where the runtime-synthesized tensors
+    sit relative to the observation groups (ADR 0006 §5). Several *outputs* cannot be
+    refused the same way, since which one is the action is unknowable here, so the
+    default (the first) is announced instead.
+    """
+    inputs, outputs = onnx_io_names(model)
+    if in_keys is None:
+        if len(inputs) > 1:
+            raise ValueError(
+                f"Policy {name!r} has {len(inputs)} ONNX inputs ({inputs}) but declares "
+                "no in_keys. Pass in_keys naming, per input in order, the observation "
+                "group or runtime tensor (is_init, adapt_hx, time_step) that fills it."
+            )
+        checked_in = None
+    else:
+        checked_in = [str(k) for k in in_keys]
+        if len(checked_in) != len(inputs):
+            raise ValueError(
+                f"Policy {name!r} declares {len(checked_in)} in_keys {checked_in} but its "
+                f"ONNX has {len(inputs)} inputs ({inputs}). in_keys[i] fills the i-th "
+                "input, so the two must have the same length."
+            )
+    if out_keys is None:
+        if len(outputs) > 1:
+            warnings.warn(
+                f"Policy {name!r} has {len(outputs)} ONNX outputs ({outputs}) but "
+                f"declares no out_keys, so the runtime drives the actuators from the "
+                f"first one, {outputs[0]!r}. If the action is a different output, pass "
+                "out_keys naming each output in order (ADR 0006 §5).",
+                category=RuntimeWarning,
+                stacklevel=3,
+            )
+        checked_out: list[str | list[str]] | None = None
+    else:
+        checked_out = [
+            k if isinstance(k, str) else [str(p) for p in k] for k in out_keys
+        ]
+        if len(checked_out) != len(outputs):
+            raise ValueError(
+                f"Policy {name!r} declares {len(checked_out)} out_keys but its ONNX has "
+                f"{len(outputs)} outputs ({outputs}). out_keys[i] names the i-th output, "
+                "so the two must have the same length."
+            )
+    return checked_in, checked_out
+
+
+def onnx_output_width(model: onnx.ModelProto) -> int | None:
+    """The last dim of the graph's first output, or ``None`` when it is not static."""
+    if not model.graph.output:
+        return None
+    dims = model.graph.output[0].type.tensor_type.shape.dim
+    if len(dims) < 2:
+        return None
+    width = dims[-1].dim_value
+    return int(width) if width > 0 else None
+
+
+def actuated_joint_names(model: mujoco.MjModel | None) -> list[str] | None:
+    """The joint each actuator drives, in actuator order — the order actions come in.
+
+    ``None`` when the model does not give one unambiguously: no actuators, a
+    transmission that is not a joint (tendon, site, body), an unnamed joint, or two
+    actuators on the same joint. Each of those makes "the i-th action drives this joint"
+    untrue, and a wrong answer here is silent at playback.
+    """
+    if model is None or model.nu == 0:
+        return None
+    names: list[str] = []
+    for index in range(model.nu):
+        if int(model.actuator_trntype[index]) != int(mujoco.mjtTrn.mjTRN_JOINT):
+            return None
+        name = mujoco.mj_id2name(
+            model, mujoco.mjtObj.mjOBJ_JOINT, int(model.actuator_trnid[index, 0])
+        )
+        if not name:
+            return None
+        names.append(name)
+    return names if len(set(names)) == len(names) else None
 
 
 @dataclass
@@ -138,7 +230,7 @@ class PolicyConfig:
 
     def __post_init__(self) -> None:
         if not self.id:
-            from .utils import name2id
+            from .document.ids import name2id
 
             self.id = name2id(self.name)
 
@@ -270,15 +362,15 @@ class PolicyHandle:
         loop: bool = True,
     ) -> MotionHandle:
         """Download a motion artifact from W&B and attach it to this policy."""
-        from .wandb_io import fetch_motion_npz_from_wandb_run, resolve_wandb_run_path
+        from . import source
 
-        resolved_run_path = resolve_wandb_run_path(
-            wandb_run_path=run_path,
+        resolved_run_path = source.wandb.resolve_run_path(
+            run_path=run_path,
             run_id=run_id,
             entity=entity,
             project=project,
         )
-        motion_name, payload = fetch_motion_npz_from_wandb_run(resolved_run_path)
+        motion_name, payload = source.wandb.fetch_motion_npz(resolved_run_path)
         motion = MotionConfig(
             name=name or motion_name,
             data=payload,
@@ -340,9 +432,9 @@ class PolicyHandle:
             default: Select this motion when the policy loads.
             loop: Restart from the first frame after the last.
         """
-        from .hf_io import fetch_motion_npz_from_hf
+        from . import source
 
-        motion_name, payload = fetch_motion_npz_from_hf(
+        motion_name, payload = source.hf.fetch_motion_npz(
             repo_id,
             filename,
             revision=revision,
@@ -376,4 +468,8 @@ __all__ = [
     "RUNTIME_INPUT_SLOTS",
     "PolicyConfig",
     "PolicyHandle",
+    "actuated_joint_names",
+    "check_slot_tables",
+    "onnx_io_names",
+    "onnx_output_width",
 ]

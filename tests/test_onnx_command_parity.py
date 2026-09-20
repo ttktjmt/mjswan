@@ -64,7 +64,7 @@ def _traced_command(task_id: str, command_name: str) -> tuple[Any, Any]:
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.tasks.registry import load_env_cfg
 
-    from mjswan.adapters.mjlab_adapter import _adapt_command_cfg
+    from mjswan.mjlab.command import _adapt_command_cfg
 
     cfg = load_env_cfg(task_id, play=True)
     cfg.scene.num_envs = 1

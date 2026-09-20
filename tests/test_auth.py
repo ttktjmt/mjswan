@@ -1,4 +1,4 @@
-"""Tests for mjswan Cloud authentication (mjswan.auth + login/logout CLI).
+"""Tests for mjswan Cloud authentication (mjswan.cloud.auth + login/logout CLI).
 
 L1 — pure Python, no network. The Supabase token endpoint is faked, and the
 interactive browser round-trip is replaced by a fake transport, so no real
@@ -13,8 +13,8 @@ import time
 
 import pytest
 
-from mjswan import auth
-from mjswan.auth import (
+from mjswan.cloud import auth
+from mjswan.cloud.auth import (
     AuthError,
     AuthTransport,
     Credentials,
@@ -100,7 +100,7 @@ class FakeAuthTransport(AuthTransport):
 
 class TestAuthTransportUserAgent:
     def test_post_and_get_set_non_default_user_agent(self, monkeypatch):
-        from mjswan.publish import USER_AGENT
+        from mjswan.cloud.transport import USER_AGENT
 
         seen: list = []
 
@@ -317,21 +317,21 @@ class TestLoginExchange:
 
 class TestResolveTokenWithStoredSession:
     def test_falls_back_to_stored_session(self, monkeypatch):
-        from mjswan.publish import resolve_token
+        from mjswan.cloud.publish import resolve_token
 
         monkeypatch.delenv("MJSWAN_TOKEN", raising=False)
         save_credentials(Credentials("stored-tok", "r", expires_at=time.time() + 3600))
         assert resolve_token(None) == "stored-tok"
 
     def test_explicit_token_beats_stored(self, monkeypatch):
-        from mjswan.publish import resolve_token
+        from mjswan.cloud.publish import resolve_token
 
         monkeypatch.delenv("MJSWAN_TOKEN", raising=False)
         save_credentials(Credentials("stored", "r", expires_at=time.time() + 3600))
         assert resolve_token("explicit") == "explicit"
 
     def test_error_mentions_login(self, monkeypatch):
-        from mjswan.publish import PublishError, resolve_token
+        from mjswan.cloud.publish import PublishError, resolve_token
 
         monkeypatch.delenv("MJSWAN_TOKEN", raising=False)
         with pytest.raises(PublishError, match="mjswan login"):
@@ -348,32 +348,32 @@ class TestAuthCli:
         return CliRunner()
 
     def test_login_success_shows_username(self, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         def fake_login(**kwargs):
             return Credentials(
                 "a", "r", expires_at=time.time() + 3600, username="octocat"
             )
 
-        monkeypatch.setattr("mjswan.auth.login", fake_login)
+        monkeypatch.setattr("mjswan.cloud.auth.login", fake_login)
         result = self._runner().invoke(app, ["login"])
         assert result.exit_code == 0, result.output
         assert "Logged in" in result.output
         assert "octocat" in result.output
 
     def test_login_failure(self, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         def fake_login(**kwargs):
             raise AuthError("port busy")
 
-        monkeypatch.setattr("mjswan.auth.login", fake_login)
+        monkeypatch.setattr("mjswan.cloud.auth.login", fake_login)
         result = self._runner().invoke(app, ["login"])
         assert result.exit_code == 1
         assert "port busy" in result.output
 
     def test_logout_when_logged_in(self):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         save_credentials(Credentials("a", "r", expires_at=time.time() + 1))
         result = self._runner().invoke(app, ["logout"])
@@ -382,7 +382,7 @@ class TestAuthCli:
         assert load_credentials() is None
 
     def test_logout_when_logged_out(self):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         result = self._runner().invoke(app, ["logout"])
         assert result.exit_code == 0
@@ -437,12 +437,12 @@ class TestIdentity:
         assert loaded.username == "ada" and loaded.email == "a@b"
 
     def test_fetch_identity_when_logged_out(self):
-        from mjswan.auth import fetch_identity
+        from mjswan.cloud.auth import fetch_identity
 
         assert fetch_identity(FakeAuthTransport()) is None
 
     def test_fetch_identity_returns_user(self):
-        from mjswan.auth import fetch_identity
+        from mjswan.cloud.auth import fetch_identity
 
         save_credentials(Credentials("a", "r", expires_at=time.time() + 3600))
         transport = FakeAuthTransport(username="octocat", email="o@gh.com")
@@ -452,7 +452,7 @@ class TestIdentity:
         assert transport.gets[0][0].endswith("/auth/v1/user")
 
     def test_fetch_identity_stale_session_raises(self):
-        from mjswan.auth import fetch_identity
+        from mjswan.cloud.auth import fetch_identity
 
         save_credentials(Credentials("a", "r", expires_at=time.time() + 3600))
         with pytest.raises(AuthError, match="verify session"):
@@ -466,11 +466,11 @@ class TestWhoamiCli:
         return CliRunner()
 
     def test_whoami_logged_in(self, monkeypatch):
-        from mjswan._cli import app
-        from mjswan.auth import Identity
+        from mjswan.cli import app
+        from mjswan.cloud.auth import Identity
 
         monkeypatch.setattr(
-            "mjswan.auth.fetch_identity",
+            "mjswan.cloud.auth.fetch_identity",
             lambda *a, **k: Identity("u1", "octocat", "o@gh.com"),
         )
         result = self._runner().invoke(app, ["whoami"])
@@ -478,20 +478,20 @@ class TestWhoamiCli:
         assert "octocat" in result.output
 
     def test_whoami_logged_out(self, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
-        monkeypatch.setattr("mjswan.auth.fetch_identity", lambda *a, **k: None)
+        monkeypatch.setattr("mjswan.cloud.auth.fetch_identity", lambda *a, **k: None)
         result = self._runner().invoke(app, ["whoami"])
         assert result.exit_code == 1
         assert "Not logged in" in result.output
 
     def test_whoami_stale_session(self, monkeypatch):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         def boom(*a, **k):
             raise AuthError("Could not verify session")
 
-        monkeypatch.setattr("mjswan.auth.fetch_identity", boom)
+        monkeypatch.setattr("mjswan.cloud.auth.fetch_identity", boom)
         result = self._runner().invoke(app, ["whoami"])
         assert result.exit_code == 1
         assert "verify session" in result.output

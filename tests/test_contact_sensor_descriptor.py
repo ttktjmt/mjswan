@@ -13,7 +13,7 @@ import pytest
 
 pytest.importorskip("torch")
 
-from mjswan._onnx_build import contact_sensor_descriptor  # noqa: E402
+from mjswan.build.mdp import contact_sensor_descriptor  # noqa: E402
 
 
 class _Cfg:

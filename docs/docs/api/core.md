@@ -870,10 +870,10 @@ decision procedure.
 
 ---
 
-## Deprecated pre-0.8 names
+## Removed pre-0.8 names
 
-These aliases still work and warn (class aliases silently), and are scheduled for removal
-in **0.9**.
+The pre-0.8 aliases are gone, together with the compatibility layer that carried them:
+the old names no longer import. What each became:
 
 | Pre-0.8 | Current |
 |---|---|
@@ -892,8 +892,8 @@ in **0.9**.
 | `MjlabMdpBinding` | `MdpBinding` |
 | `CommandTermSpec` | `CommandBinding` |
 
-Two renamed modules keep their old import paths as well: `mjswan.viewer_config` →
-`mjswan.viewer`, and `mjswan.wandb_utils` → `mjswan.wandb_io`.
+The two renamed modules' old paths are gone with them: `mjswan.viewer_config` is
+`mjswan.viewer`, and `mjswan.wandb_utils` is now `mjswan.source.wandb`.
 
 ---
 
@@ -969,7 +969,7 @@ compiled JavaScript.
 | `token` | `str \| None` | `$MJSWAN_TOKEN` | Access token. |
 | `api_base` | `str \| None` | `$MJSWAN_API_BASE`, then `https://api.mjswan.com` | Cloud API base URL. |
 
-**Raises** — `mjswan.publish.PublishError` on validation failure or server rejection,
+**Raises** — `mjswan.cloud.publish.PublishError` on validation failure or server rejection,
 including a build that uses custom-JavaScript MDP terms (`uses_custom_js: true`), which
 Cloud cannot render.
 

@@ -21,51 +21,14 @@ Usage (identical to mjlab)::
 
 from __future__ import annotations
 
-import abc
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+from mjswan.managers.action_manager import ActionTermCfg
+
 if TYPE_CHECKING:
     import mujoco
-
-
-@dataclass(kw_only=True)
-class ActionTermCfg(abc.ABC):
-    """Base configuration for an action term.
-
-    Mirrors ``mjlab.managers.action_manager.ActionTermCfg``.
-    """
-
-    entity_name: str = "robot"
-    """Name of the entity in the scene.  Accepted for mjlab compatibility;
-    mjswan targets the single policy entity."""
-
-    clip: dict[str, tuple] | None = None
-    """Per-target clipping bounds, applied after scale/offset.
-
-    Keys are joint-name *patterns* (mjlab resolves them with ``re.fullmatch`` via
-    ``resolve_matching_names_values``), values are ``(min, max)``. A target no
-    pattern matches is unbounded. Mirrors ``BaseActionCfg.clip``: mjlab clamps
-    ``raw * scale + offset`` — the *processed* action, before any encoder-bias
-    subtraction — so the browser applies it at the same point."""
-
-    unsupported_reason: str | None = None
-    """If set, raises ``NotImplementedError`` at build time."""
-
-    def _add_clip(self, entry: dict[str, Any]) -> None:
-        """Attach ``clip`` to a serialized entry, if this term declares any.
-
-        Emitted as patterns and resolved browser-side with mjlab's fullmatch — unlike
-        ``stiffness``/``damping``, which are mjswan's own and keyed by exact joint name.
-        """
-        if self.clip is not None:
-            entry["clip"] = {k: list(v) for k, v in self.clip.items()}
-
-    @abc.abstractmethod
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize to a JSON-compatible dict for the TS runtime."""
-        raise NotImplementedError
 
 
 @dataclass(kw_only=True)

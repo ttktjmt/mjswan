@@ -32,7 +32,7 @@ from onnx import TensorProto, helper
 import mjswan
 from mjswan.envs.mdp.actions import MuscleActivationActionCfg
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
-from mjswan.trace_env import build_single_entity_trace_env
+from mjswan.mjlab.env import build_single_entity_trace_env
 
 JOINT_NAMES = ("IFadb", "IFmcp", "IFpip", "IFdip")
 MUSCLE_NAMES = ("extn", "adabR", "adabL", "mflx", "dflx")

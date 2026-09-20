@@ -194,7 +194,7 @@ term bodies to ONNX at build time, so there is no reimplementation to import and
 ```python
 from mjlab.envs.mdp import observations as obs_fns
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
-from mjswan.trace_env import build_single_entity_trace_env
+from mjswan.mjlab.env import build_single_entity_trace_env
 
 scene = project.add_scene(spec=build_spec(), name="My Robot", control_dt=0.02)
 scene.set_trace_env(

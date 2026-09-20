@@ -28,7 +28,7 @@ from typing import Any
 
 os.environ.setdefault("MUJOCO_GL", "disable")
 
-from mjswan.compile.tracer import READER_FIELDS  # noqa: E402
+from mjswan.compile.slot import READER_FIELDS  # noqa: E402
 
 OUT = (
     Path(__file__).resolve().parents[1]
@@ -245,7 +245,7 @@ def _dump_synthetic() -> dict[str, Any]:
     from mjlab.envs import ManagerBasedRlEnvCfg
     from mjlab.scene import SceneCfg
 
-    from mjswan.trace_env import build_mjlab_env
+    from mjswan.mjlab.env import build_mjlab_env
 
     entity_cfg = EntityCfg(
         spec_fn=lambda: mujoco.MjSpec.from_string(SYNTHETIC_MODEL),

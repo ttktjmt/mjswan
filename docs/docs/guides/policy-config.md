@@ -389,7 +389,7 @@ patterns against. `add_scene_mjlab` builds one from its task; a plain `add_scene
 must be given one:
 
 ```python
-from mjswan.trace_env import build_single_entity_trace_env
+from mjswan.mjlab.env import build_single_entity_trace_env
 
 scene = project.add_scene(name="Hovering Box", spec=build_spec(), control_dt=0.02)
 scene.set_trace_env(build_single_entity_trace_env(build_spec))
@@ -425,7 +425,7 @@ one yourself:
 
 ```python
 import onnx
-from mjswan.mjlab_onnx_meta import read_mjlab_metadata
+from mjswan.mjlab.onnx_meta import read_mjlab_metadata
 
 meta = read_mjlab_metadata(onnx.load("policy.onnx"))
 print(meta.joint_names, meta.action_scale, meta.observation_names)

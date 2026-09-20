@@ -34,7 +34,7 @@ jobs:
       # tagged commit may not carry the bump (see release.yml).
       - name: Set version
         run: |
-          sed -i "s/^__version__ = \".*\"/__version__ = \"${{ inputs.version }}\"/" src/mjswan/__init__.py
+          sed -i "s/^__version__ = \".*\"/__version__ = \"${{ inputs.version }}\"/" src/mjswan/_version.py
           cd src/mjswan/template
           jq --arg v "${{ inputs.version }}" '.version = $v' package.json > package.json.tmp
           mv package.json.tmp package.json

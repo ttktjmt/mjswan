@@ -18,9 +18,10 @@ from pathlib import Path
 
 import pytest
 
+from mjswan.build.manifest import splat_entry
 from mjswan.builder import Builder
+from mjswan.document.ids import name2id
 from mjswan.splat import SplatConfig
-from mjswan.utils import name2id
 
 
 # ===========================================================================
@@ -87,7 +88,7 @@ class TestSplatConfigToDict:
         assert "control" not in SplatConfig(name="S", control=False).to_dict()
 
     def test_path_not_in_dict(self):
-        # path is injected externally by Builder._build_splat_config_dict
+        # path is injected externally by build.manifest.splat_entry
         d = SplatConfig(name="S", source="bg.spz").to_dict()
         assert "path" not in d
 
@@ -182,29 +183,29 @@ class TestSplatHandle:
 
 
 # ===========================================================================
-# L1 — Builder._build_splat_config_dict()
+# L1 — build.manifest.splat_entry()
 # ===========================================================================
 class TestBuildSplatConfigDict:
     def test_source_splat_adds_path_key(self):
         splat = SplatConfig(name="My Splat", source="bg.spz")
-        d = Builder()._build_splat_config_dict(splat)
+        d = splat_entry(splat)
         assert "path" in d
 
     def test_source_splat_path_is_scene_relative_under_assets(self):
         # Every path under a scene entry resolves against the scene directory
         # (ADR 0006, manifest rule 2); the scene never appears in it.
         splat = SplatConfig(name="My Splat", source="bg.spz")
-        d = Builder()._build_splat_config_dict(splat)
+        d = splat_entry(splat)
         assert d["path"] == f"assets/{name2id('My Splat')}.spz"
 
     def test_url_splat_has_no_path_key(self):
         splat = SplatConfig(name="My Splat", url="https://example.com/bg.spz")
-        d = Builder()._build_splat_config_dict(splat)
+        d = splat_entry(splat)
         assert "path" not in d
 
     def test_url_splat_has_url_key(self):
         splat = SplatConfig(name="My Splat", url="https://example.com/bg.spz")
-        d = Builder()._build_splat_config_dict(splat)
+        d = splat_entry(splat)
         assert d["url"] == "https://example.com/bg.spz"
 
 
