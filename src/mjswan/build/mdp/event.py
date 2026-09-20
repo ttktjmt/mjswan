@@ -274,7 +274,7 @@ def serialize_event(
             'mode="interval" term if it should also fire on its own.'
         )
     from ...compile import trace_event_term
-    from ...compile.tracer import UnsupportedEnvRead, slots_json
+    from ...compile.slot import UnsupportedEnvRead, slots_json
 
     func = term_cfg.func
     if isinstance(func, EventBinding):

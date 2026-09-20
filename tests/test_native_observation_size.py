@@ -49,7 +49,7 @@ def _trace_env():
 def _specs(native_size_actions=None, native_size_command=None):
     from mjlab.envs.mdp import observations as obs_fns
 
-    from mjswan.compile.tracer import GroupTermSpec
+    from mjswan.compile.group import GroupTermSpec
 
     return [
         GroupTermSpec("base_ang_vel", obs_fns.base_ang_vel, {}),
@@ -67,7 +67,7 @@ def _specs(native_size_actions=None, native_size_command=None):
 
 def test_declared_widths_fix_the_graph_inputs():
     pytest.importorskip("mjlab")
-    from mjswan.compile.tracer import trace_observation_group
+    from mjswan.compile.group import trace_observation_group
 
     export = trace_observation_group(
         _specs(native_size_actions=29, native_size_command=3),
@@ -86,7 +86,7 @@ def test_declared_widths_fix_the_graph_inputs():
 def test_a_width_neither_side_knows_fails_the_build():
     """Not silently zero-wide: that shortens the policy's input vector."""
     pytest.importorskip("mjlab")
-    from mjswan.compile.tracer import trace_observation_group
+    from mjswan.compile.group import trace_observation_group
 
     with pytest.raises(ValueError, match="last_action"):
         trace_observation_group(

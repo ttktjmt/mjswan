@@ -100,7 +100,7 @@ def test_a_baked_term_is_named_in_a_warning(tmp_path):
     from mjlab.envs.mdp import observations as obs_fns
 
     from mjswan.build.mdp import serialize_observation_group
-    from mjswan.compile.tracer import GroupTermSpec, trace_observation_group
+    from mjswan.compile.group import GroupTermSpec, trace_observation_group
     from mjswan.managers.observation_manager import (
         ObservationGroupCfg,
         ObservationTermCfg,
@@ -120,7 +120,7 @@ def test_a_baked_term_is_named_in_a_warning(tmp_path):
 
 def test_constant_group_raises_from_the_fused_path(tmp_path):
     """The fallback exists because tracing is the only way to know: assert the signal."""
-    from mjswan.compile.tracer import (
+    from mjswan.compile.group import (
         ConstantGroup,
         GroupTermSpec,
         trace_observation_group,

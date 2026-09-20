@@ -19,7 +19,7 @@ from .provenance import graph_meta, resolved_params, term_provenance
 
 if TYPE_CHECKING:
     from ...command import CommandTermConfig
-    from ...compile.tracer import CommandExport
+    from ...compile.command import CommandExport
 
 
 def command_config(
@@ -39,7 +39,7 @@ def command_config(
     ``ui`` (control-panel inputs) and ``viz`` (what mjlab's ``_debug_vis_impl`` draws,
     shown while ``debug_vis`` is on) are not derivable from the trace.
     """
-    from ...compile.tracer import slots_json
+    from ...compile.slot import slots_json
 
     cfg: dict[str, Any] = {
         "name": "OnnxCommand",
@@ -132,7 +132,7 @@ def _serialize_reset_graph(
     if pending is None:
         return None
     from ...compile import trace_event_term
-    from ...compile.tracer import slots_json
+    from ...compile.slot import slots_json
 
     graph_name = f"{name}_reset"
     export = trace_event_term(

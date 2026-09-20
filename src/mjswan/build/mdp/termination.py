@@ -25,7 +25,8 @@ def serialize_termination(
 ) -> dict[str, Any] | None:
     """Serialize one termination term."""
     from ...compile import trace_term
-    from ...compile.tracer import ConstantTerm, slots_json
+    from ...compile.slot import slots_json
+    from ...compile.term import ConstantTerm
 
     func = term_cfg.func
     if isinstance(func, TerminationBinding):
@@ -77,7 +78,7 @@ def _native_termination_entry(
 
 def _is_native_termination(term_cfg: TerminationTermCfg) -> bool:
     """Whether the term is mjlab's `time_out`, decided by the function name."""
-    from ...compile.tracer import is_native_termination
+    from ...compile.native import is_native_termination
 
     return is_native_termination(term_cfg.func)
 
@@ -148,12 +149,9 @@ def _fused_termination_entry(
     *,
     scope: str | None = None,
 ) -> dict[str, Any]:
-    from ...compile.tracer import (
-        ConstantTerm,
-        GroupTermSpec,
-        slots_json,
-        trace_termination_group,
-    )
+    from ...compile.group import GroupTermSpec, trace_termination_group
+    from ...compile.slot import slots_json
+    from ...compile.term import ConstantTerm
 
     specs = [
         GroupTermSpec(name=name, func=cfg.func, params=resolved_params(cfg.params, env))

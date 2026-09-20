@@ -101,7 +101,7 @@ def structured_sensor_descriptors(
     Without one the runtime would hold a stale value rather than fail, so an
     undescribable sensor fails the build instead.
     """
-    from ...compile.tracer import _SENSOR_NS
+    from ...compile.slot import _SENSOR_NS
 
     descriptors: dict[str, Any] = {}
     for namespace, name_part in export.input_slots:

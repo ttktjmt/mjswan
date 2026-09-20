@@ -16,10 +16,10 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from mjswan.build.mdp import command_config, write_command_artifact  # noqa: E402
-from mjswan.compile.tracer import (  # noqa: E402
+from mjswan.compile.command import CommandExport  # noqa: E402
+from mjswan.compile.slot import (  # noqa: E402
     _COMMAND_NS,
     _SENSOR_NS,
-    CommandExport,
     _is_dynamic_field,
     slot_to_json,
 )
@@ -269,9 +269,9 @@ def test_the_export_filters_match_the_exporters_wording(monkeypatch):
     from being swallowed with the three that are safe. `catch_warnings` stops the
     process-wide install from leaking into the rest of the session.
     """
-    from mjswan.compile import tracer
+    from mjswan.compile import export as onnx_export
 
-    monkeypatch.setattr(tracer, "_EXPORT_FILTERS_INSTALLED", False)
+    monkeypatch.setattr(onnx_export, "_EXPORT_FILTERS_INSTALLED", False)
     vetted = [
         "ONNX Preprocess - Removing mutation from node aten::index_put_ on block "
         "input: 'value.1'. This changes graph semantics.",
@@ -289,7 +289,7 @@ def test_the_export_filters_match_the_exporters_wording(monkeypatch):
     ]
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        tracer._prepare_single_env_export(1)
+        onnx_export._prepare_single_env_export(1)
         for message in vetted + others:
             warnings.warn(message, UserWarning, stacklevel=1)
     assert [str(w.message) for w in caught] == others
@@ -297,7 +297,7 @@ def test_the_export_filters_match_the_exporters_wording(monkeypatch):
 
 def test_a_batched_trace_is_refused():
     """Silencing `len(env_ids)` is only sound while the baked row count is 1."""
-    from mjswan.compile.tracer import _prepare_single_env_export
+    from mjswan.compile.export import _prepare_single_env_export
 
     with pytest.raises(ValueError, match="num_envs=4"):
         _prepare_single_env_export(4)
@@ -424,7 +424,7 @@ def _reads_nothing(env, *, width=3):
 
 
 def test_untraceable_observation_fails_the_build():
-    from mjswan.compile.tracer import UntraceableTerm, trace_term
+    from mjswan.compile.term import UntraceableTerm, trace_term
 
     with pytest.raises(UntraceableTerm) as excinfo:
         trace_term(_reads_opaque_state, {}, _opaque_state_env(), name="contact_obs")
@@ -435,7 +435,7 @@ def test_untraceable_observation_fails_the_build():
 
 
 def test_term_reading_nothing_is_a_constant_not_untraceable():
-    from mjswan.compile.tracer import ConstantTerm, UntraceableTerm, trace_term
+    from mjswan.compile.term import ConstantTerm, UntraceableTerm, trace_term
 
     with pytest.raises(ConstantTerm) as excinfo:
         trace_term(_reads_nothing, {}, _opaque_state_env(), name="padding")
@@ -446,7 +446,7 @@ def test_term_reading_nothing_is_a_constant_not_untraceable():
 
 def test_serializer_bakes_a_constant_but_refuses_an_untraceable_term(tmp_path):
     from mjswan.build.mdp import serialize_observation_term
-    from mjswan.compile.tracer import UntraceableTerm
+    from mjswan.compile.term import UntraceableTerm
     from mjswan.managers.observation_manager import ObservationTermCfg
 
     env = _opaque_state_env()
@@ -525,7 +525,8 @@ def test_structured_sensor_fields_become_one_slot_each():
     tasks. Each field is its own slot now, so the arithmetic traces and the runtime
     is told exactly which readings to supply.
     """
-    from mjswan.compile.tracer import slot_to_json, trace_term
+    from mjswan.compile.slot import slot_to_json
+    from mjswan.compile.term import trace_term
 
     class _RayData:
         def __init__(self):
@@ -733,7 +734,8 @@ def test_a_constant_termination_fails_the_fused_path_too(tmp_path):
 
 def test_discovery_refuses_an_env_read_the_tracer_does_not_serve():
     """The attribute exists on the real env, so forwarding it would bake a constant."""
-    from mjswan.compile.tracer import UnsupportedEnvRead, trace_term
+    from mjswan.compile.slot import UnsupportedEnvRead
+    from mjswan.compile.term import trace_term
 
     def reads_the_horizon(env):
         return env.scene["robot"].data.root_link_pos_w[:, 2] * env.max_episode_length_s
@@ -749,11 +751,8 @@ def test_fused_lanes_match_the_terms_run_individually(tmp_path):
     """The graph's lane *i* must be term *i* — a swap would be silent."""
     pytest.importorskip("mjlab")
     onnxruntime = pytest.importorskip("onnxruntime")
-    from mjswan.compile.tracer import (
-        GroupTermSpec,
-        read_slot,
-        trace_termination_group,
-    )
+    from mjswan.compile.group import GroupTermSpec, trace_termination_group
+    from mjswan.compile.slot import read_slot
 
     env = _term_env()
     specs = [
@@ -916,7 +915,7 @@ def test_a_command_terms_replay_env_does_not_forward_back_into_the_term():
     forwarding at the term makes `num_envs` recurse until the stack dies. Only the
     slow command-parity suite caught this, which is too late to be useful.
     """
-    from mjswan.compile.tracer import _EventReplayEnv
+    from mjswan.compile.replay import _EventReplayEnv
 
     class _RealEnv:
         num_envs = 4

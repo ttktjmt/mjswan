@@ -35,7 +35,7 @@ def _native_observation_entry(
     ``generated_commands`` with a browser-only ``UiCommand`` fails mjlab's own assert
     during discovery.
     """
-    from ...compile.tracer import native_observation_entry
+    from ...compile.native import native_observation_entry
 
     entry = native_observation_entry(name, func, params, env)
     if entry is None:
@@ -100,7 +100,8 @@ def serialize_observation_term(
     trained on, and baking a time-varying one freezes an input.
     """
     from ...compile import trace_term
-    from ...compile.tracer import ConstantTerm, slots_json, warn_constant_observation
+    from ...compile.slot import slots_json
+    from ...compile.term import ConstantTerm, warn_constant_observation
 
     func = term_cfg.func
     if isinstance(func, ObservationBinding):
@@ -232,11 +233,8 @@ def _fused_group_entry(
     scope: str | None = None,
 ) -> dict[str, Any]:
     """Trace the group as one graph and return the fused config entry."""
-    from ...compile.tracer import (
-        GroupTermSpec,
-        slots_json,
-        trace_observation_group,
-    )
+    from ...compile.group import GroupTermSpec, trace_observation_group
+    from ...compile.slot import slots_json
 
     specs = [
         GroupTermSpec(
@@ -290,7 +288,7 @@ def serialize_observation_group(
     scope: str | None = None,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     """Serialize an observation group — one fused graph where possible, else per term."""
-    from ...compile.tracer import ConstantGroup
+    from ...compile.group import ConstantGroup
 
     if _group_is_fusable(group):
         try:

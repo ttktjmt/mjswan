@@ -28,7 +28,7 @@ from typing import Any
 
 os.environ.setdefault("MUJOCO_GL", "disable")
 
-from mjswan.compile.tracer import READER_FIELDS  # noqa: E402
+from mjswan.compile.slot import READER_FIELDS  # noqa: E402
 
 OUT = (
     Path(__file__).resolve().parents[1]
