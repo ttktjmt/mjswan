@@ -870,10 +870,10 @@ decision procedure.
 
 ---
 
-## Deprecated pre-0.8 names
+## Removed pre-0.8 names
 
-These aliases still work and warn (class aliases silently), and are scheduled for removal
-in **0.9**.
+The pre-0.8 aliases are gone, together with the compatibility layer that carried them:
+the old names no longer import. What each became:
 
 | Pre-0.8 | Current |
 |---|---|
@@ -892,8 +892,8 @@ in **0.9**.
 | `MjlabMdpBinding` | `MdpBinding` |
 | `CommandTermSpec` | `CommandBinding` |
 
-Two renamed modules keep their old import paths as well: `mjswan.viewer_config` →
-`mjswan.viewer`, and `mjswan.wandb_utils` → `mjswan.wandb_io`.
+The two renamed modules' old paths are gone with them: `mjswan.viewer_config` is
+`mjswan.viewer`, and `mjswan.wandb_utils` is now `mjswan.source.wandb`.
 
 ---
 

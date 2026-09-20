@@ -224,7 +224,7 @@ print(type(cfg.actions['TERM_NAME']).__module__)
 
 A feature that makes the author restate what mjlab already declares is the wrong design. mjlab's config is the source; mjswan reads it.
 
-- A new action term: name the mjswan cfg class exactly as mjlab names its own, or add the mapping to `_ACTION_CLASS_ALIASES` in `adapters/mjlab_adapter.py`. `_adapt_action_cfg` then copies every matching dataclass field by itself and the port needs no extra argument.
+- A new action term: name the mjswan cfg class exactly as mjlab names its own, or add the mapping to `_ACTION_CLASS_ALIASES` in `mjlab/action.py`. `_adapt_action_cfg` then copies every matching dataclass field by itself and the port needs no extra argument.
 - Anything the task's env config or runner config already carries (`env_cfg`, `resolve_runner_defaults`) is read from there, never restated at the call site.
 - A keyword argument the author has to pass by hand is the last resort, not the first.
 

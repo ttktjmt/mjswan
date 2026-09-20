@@ -1,7 +1,7 @@
 """The Hugging Face Hub as a source: a repository id in, files out.
 
-The W&B counterpart in :mod:`mjswan.wandb_io` rebuilds a live mjlab env and converts a
-run's ``model_*.pt`` checkpoints with torch, because a run holds training state. A Hub
+A W&B run holds training state, so its ``model_*.pt`` checkpoints (:mod:`.wandb`) go
+through a live mjlab env and torch to become ONNX (:mod:`mjswan.mjlab.runner`). A Hub
 repository holds the published artifact instead, so this module only downloads and
 loads — no mjlab, no torch. ``huggingface_hub`` is its one dependency, and it is
 optional: nothing here is imported until a caller asks for the Hub.

@@ -588,16 +588,16 @@ class TestPolicyHandle:
         import mjlab.tasks  # noqa: F401 — populates the registry
         from mjlab.tasks.registry import load_env_cfg
 
-        from mjswan import wandb_io
+        from mjswan import source
 
         env_cfg = load_env_cfg(
             "Mjlab-Tracking-Flat-Unitree-G1-No-State-Estimation", play=True
         )
         monkeypatch.setattr(
-            wandb_io, "fetch_onnx_from_wandb_run", lambda p: ("model_100", minimal_onnx)
+            source.wandb, "fetch_onnx", lambda p: ("model_100", minimal_onnx)
         )
         monkeypatch.setattr(
-            wandb_io, "fetch_motion_npz_from_wandb_run", lambda p: ("spinkick", b"npz")
+            source.wandb, "fetch_motion_npz", lambda p: ("spinkick", b"npz")
         )
 
         scene = (

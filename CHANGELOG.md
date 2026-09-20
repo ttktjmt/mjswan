@@ -25,7 +25,7 @@ shortcuts.
   mjswan[hf]` is the whole light path. With no filename given, `policy.onnx` then
   `final.onnx` then the repository's single `.onnx`; several unnamed candidates raise
   rather than pick one.
-- **An mjlab export describes itself, and mjswan now reads it**: `mjlab_onnx_meta.py`
+- **An mjlab export describes itself, and mjswan now reads it**: `mjlab/onnx_meta.py`
   parses the `metadata_props` mjlab bakes into an exported policy, so `add_policy_hf`
   fills `policy_joint_names`, `default_joint_pos` and the joint-position action term
   from the file instead of asking for them again. Only when this scene's own model
