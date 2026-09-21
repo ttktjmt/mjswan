@@ -2,7 +2,7 @@
  * The one place that talks to `onnxruntime-web`, kept minimal so a term handler stays
  * testable with a fake — no ORT, browser or WASM.
  */
-import * as ort from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web/wasm';
 
 // Configures ort.env before any session is created; see ortEnv.ts.
 import './ortEnv';
@@ -161,8 +161,9 @@ class OrtSession implements OnnxSession {
 /** Create a real ORT-Web-backed session from graph bytes; never fetches. */
 export async function createOnnxSession(bytes: ArrayBuffer): Promise<OnnxSession> {
   const session = await ort.InferenceSession.create(bytes, {
-    // wasm, not the WebGPU-first list the policy gets: many small graphs per step through
-    // one serialized queue. See docs/docs/api/engine.md, "Where inference runs".
+    // The only provider the shipped ORT build registers, and the right one anyway: many
+    // small graphs per step through one serialized queue. See docs/docs/api/engine.md,
+    // "Where inference runs".
     executionProviders: ['wasm'],
     graphOptimizationLevel: 'all',
   });

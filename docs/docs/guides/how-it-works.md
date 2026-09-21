@@ -205,9 +205,8 @@ called with `resample_mask = 1`.
     so later draws shift — and a termination verdict arriving a frame late moves the
     reset frame, which is control flow rather than randomness. Startup randomization is
     drawn synchronously and *is* fully reproducible; a command's resample schedule is
-    drawn before the in-flight check and is timing-independent too. The policy network
-    adds one more source: it runs on WebGPU where the browser has one, and GPU float32
-    differs across adapters, so a session recorded on one machine drifts on another.
+    drawn before the in-flight check and is timing-independent too. Inference adds
+    nothing: every graph runs on the same wasm build on every machine.
 
 ## Artifact layout
 

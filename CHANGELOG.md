@@ -14,6 +14,24 @@ shortcuts.
 
 ### Changed
 
+- **Inference ships ONNX Runtime's CPU build, so the engine's largest file is 13.3 MiB
+  instead of 26.5 MiB.** Importing `onnxruntime-web` resolves to the JSEP build, whose
+  WebAssembly carries the WebGPU kernels; `onnxruntime-web/wasm` is the same API without
+  them. The policy session asked for `['webgpu', 'wasm']` and now asks for `['wasm']`,
+  which is what every traced MDP term graph already used.
+
+  The 26.5 MiB is over the 25 MiB per-file limit Cloudflare Pages enforces, so a demo
+  hosted there could not serve the file at all: the request fell through to the SPA's
+  `index.html` and the page died on `expected magic word 00 61 73 6d, found 3c 21 64 6f`
+  — `<!do`. Dropping the provider also halves the wasm every visitor downloads and takes
+  330 KB of JSEP glue out of the bundle, against a GPU path whose benefit for networks
+  this size was never measured: a dispatch and readback per step, at 50 Hz, through the
+  one serialized inference queue the page has.
+
+  `vite.wasm.ts` now also states the per-file ceiling, and a unit test holds every
+  co-located wasm source under it — an upstream bump that crosses it would otherwise
+  build green and 404 at runtime.
+
 - **`add_policy_hf` uses an mjlab checkpoint's metadata when the model actuates a
   subset of it**, instead of requiring an exact match. The old guard wanted the
   metadata's joint list to equal the scene's actuated list, name for name and in the

@@ -101,6 +101,15 @@ this way.
 
 No `base_path` change is needed on a `*.pages.dev` root domain.
 
+!!! warning "25 MiB per file"
+    Cloudflare Pages refuses any single file above 25 MiB, and nothing the engine itself
+    ships comes near it — the largest is ONNX Runtime's WebAssembly at 13.3 MiB. One big
+    mesh, `.spz` splat or `.onnx` checkpoint will trip it; `mjswan info dist` finds which,
+    and `url=` (splats) or a fetched checkpoint keeps it out of the build. Deleting
+    oversized files in the build command is not the way out: the engine's own WebAssembly
+    is the largest thing in `dist/`, and a page whose wasm 404s is served HTML in its place
+    and fails with `expected magic word 00 61 73 6d`.
+
 ## Cross-Origin Isolation headers for multi-threading
 
 MuJoCo WASM is compiled in single-threaded mode by default. To use the multi-threaded build, pass `mt=True` when constructing the `Builder`:
