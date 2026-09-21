@@ -75,30 +75,14 @@ export class PolicyStateBuilder {
   }
 
   /**
-   * Returns the subset of control addresses whose *actuator* matches any of the given
-   * regex patterns, along with the action vector indices (positions in the flat policy
-   * output) for those entries.
+   * Returns the subset of control addresses for joints matching any of the
+   * given regex patterns, along with the action vector indices (positions in
+   * the flat policy output) for those joints.
    *
-   * The patterns come from an action term's `actuator_names`, and mjlab resolves that
-   * against actuator names — `JointPositionActionCfg(actuator_names=(".*",))` selects
-   * actuators, not joints. So each candidate is tested against the name of the actuator
-   * driving it, and only then against the joint's own name.
+   * Patterns follow MuJoCo/mjlab convention: `".*"` matches all joints.
+   * Each pattern is anchored with `^(?:...)$` so partial matches are rejected.
    *
-   * The joint-name fallback is for compatibility and is not redundant: a model may name
-   * its actuator differently from the joint it drives (`<motor name="thrust"
-   * joint="lift"/>`), and mjswan accepted the joint name here before it accepted the
-   * actuator's. Dropping it would silently unhook such a term, so it stays.
-   *
-   * Candidates and their order come from `allJointNames`, which is the policy's own
-   * joint list: the i-th action drives the i-th of them. That is what makes this a
-   * *subset* of the policy's actions rather than a walk over the model's actuators, and
-   * it is why a policy that drives four joints of a twelve-actuator model still gets
-   * four.
-   *
-   * Patterns follow MuJoCo/mjlab convention: `".*"` matches everything. Each is
-   * anchored with `^(?:...)$` so partial matches are rejected.
-   *
-   * Returns `null` if nothing matches or control addresses are unavailable.
+   * Returns `null` if no joints match or control addresses are unavailable.
    */
   getControlMappingFor(
     patterns: string[],
@@ -114,17 +98,16 @@ export class PolicyStateBuilder {
     }
 
     const regexps = patterns.map((p) => new RegExp(`^(?:${p})$`));
-    const matchesAny = (name: string | undefined): boolean =>
-      name !== undefined && regexps.some((re) => re.test(name));
+    const matchesAny = (name: string): boolean =>
+      regexps.some((re) => re.test(name));
 
-    const actuatorNames = this.getActuatorNames(this.mjModel);
     const ctrlAdr: number[] = [];
     const qposAdr: number[] = [];
     const qvelAdr: number[] = [];
     const actionIndices: number[] = [];
 
     for (let i = 0; i < allJointNames.length; i++) {
-      if (matchesAny(actuatorNames[this.ctrlAdr[i]]) || matchesAny(allJointNames[i])) {
+      if (matchesAny(allJointNames[i])) {
         ctrlAdr.push(this.ctrlAdr[i]);
         qposAdr.push(this.qposAdr[i]);
         qvelAdr.push(this.qvelAdr[i]);

@@ -45,26 +45,15 @@ function makeModel(
   return { mujoco, mjModel, mjData };
 }
 
+/**
+ * These pin the behaviour to mjlab's, which the field name `actuator_names` argues
+ * against: `JointPositionAction` resolves it through
+ * `Entity.find_joints_by_actuator_names`, which narrows `joint_names` to the actuated
+ * ones and then matches the patterns against those *joint* names. So a pattern here is
+ * a joint pattern, whatever the field is called.
+ */
 describe('getControlMappingFor', () => {
-  // mjlab writes `actuator_names` and resolves it against actuators, so that is what a
-  // pattern is tested against first.
-  it('matches the actuator driving each joint', () => {
-    const { mujoco, mjModel, mjData } = makeModel([
-      { joint: 'lift', actuator: 'thrust' },
-      { joint: 'slide', actuator: 'push' },
-    ]);
-    const builder = new PolicyStateBuilder(mujoco, mjModel, mjData, ['lift', 'slide']);
-
-    expect(builder.getControlMappingFor(['thrust'], ['lift', 'slide'])).toMatchObject({
-      actionIndices: [0],
-      ctrlAdr: [0],
-    });
-  });
-
-  // `<motor name="thrust" joint="lift"/>` with `actuator_names=("lift",)` is what
-  // `examples/tutorial/minimum_policy.py` does, and it worked before the actuator name
-  // was consulted at all. Dropping the fallback would unhook it silently.
-  it('still matches a joint name, which is what mjswan accepted first', () => {
+  it('matches the joint name, as mjlab does', () => {
     const { mujoco, mjModel, mjData } = makeModel([
       { joint: 'lift', actuator: 'thrust' },
       { joint: 'slide', actuator: 'push' },
@@ -73,17 +62,27 @@ describe('getControlMappingFor', () => {
 
     expect(builder.getControlMappingFor(['lift'], ['lift', 'slide'])).toMatchObject({
       actionIndices: [0],
+      ctrlAdr: [0],
     });
   });
 
-  it('keeps the policy order, not the model order', () => {
+  it('does not match the actuator name, which mjlab never looks at', () => {
+    const { mujoco, mjModel, mjData } = makeModel([
+      { joint: 'lift', actuator: 'thrust' },
+    ]);
+    const builder = new PolicyStateBuilder(mujoco, mjModel, mjData, ['lift']);
+
+    expect(builder.getControlMappingFor(['thrust'], ['lift'])).toBeNull();
+  });
+
+  it('keeps the order it is given, which is the order the actions come out', () => {
     const { mujoco, mjModel, mjData } = makeModel([
       { joint: 'hip', actuator: 'hip_act' },
       { joint: 'knee', actuator: 'knee_act' },
     ]);
     const builder = new PolicyStateBuilder(mujoco, mjModel, mjData, ['knee', 'hip']);
 
-    // `.*` takes both, in the order the policy's actions come out.
+    // Action 0 drives `knee`, which is the model's actuator 1.
     expect(builder.getControlMappingFor(['.*'], ['knee', 'hip'])).toMatchObject({
       actionIndices: [0, 1],
       ctrlAdr: [1, 0],
@@ -96,7 +95,9 @@ describe('getControlMappingFor', () => {
       { joint: 'knee', actuator: 'knee_act' },
       { joint: 'ankle', actuator: 'ankle_act' },
     ]);
-    // A policy that drives two of the model's three actuators.
+    // A policy that drives two of the model's three actuators. `.*` must stay "every
+    // joint this policy drives", or a four-action policy on a twelve-actuator model
+    // would suddenly be asked for twelve.
     const builder = new PolicyStateBuilder(mujoco, mjModel, mjData, ['hip', 'knee']);
 
     expect(builder.getControlMappingFor(['.*'], ['hip', 'knee'])).toMatchObject({
@@ -115,10 +116,10 @@ describe('getControlMappingFor', () => {
 
   it('anchors each pattern, so a partial name does not match', () => {
     const { mujoco, mjModel, mjData } = makeModel([
-      { joint: 'hip', actuator: 'hip_act' },
+      { joint: 'hip_pitch', actuator: 'hip_pitch_act' },
     ]);
-    const builder = new PolicyStateBuilder(mujoco, mjModel, mjData, ['hip']);
+    const builder = new PolicyStateBuilder(mujoco, mjModel, mjData, ['hip_pitch']);
 
-    expect(builder.getControlMappingFor(['hip_'], ['hip'])).toBeNull();
+    expect(builder.getControlMappingFor(['hip_'], ['hip_pitch'])).toBeNull();
   });
 });

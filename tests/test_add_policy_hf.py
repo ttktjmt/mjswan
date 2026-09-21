@@ -172,6 +172,46 @@ class TestMetadataFill:
         assert not policy._config.mdp.actions
 
 
+class TestSceneDefault:
+    """At most one policy on a scene may open it, across however many calls made them."""
+
+    def test_two_calls_leave_one_default(self, scene, fake_hub):
+        """A scene carrying two differently-trained policies takes two calls.
+
+        `examples/demo/main.py`'s G1 does exactly this — locomotion and balance were
+        trained on different observation sets, so they are two MDPs and two calls — and
+        each call marking its own best made the build refuse the scene.
+        """
+        fake_hub("locomotion.onnx", metadata=MJLAB_METADATA)
+        fake_hub("balance.onnx", metadata=MJLAB_METADATA)
+
+        (walk,) = scene.add_policy_hf("my-org/two-joint", filename="locomotion.onnx")
+        (stand,) = scene.add_policy_hf("my-org/two-joint", filename="balance.onnx")
+
+        assert [walk._config.default, stand._config.default] == [True, False]
+
+    def test_the_first_call_keeps_it(self, scene, fake_hub):
+        """Not the highest step across the scene: the first call to name one wins."""
+        fake_hub("model_10.onnx", metadata=MJLAB_METADATA)
+        fake_hub("model_20.onnx", metadata=MJLAB_METADATA)
+
+        (older,) = scene.add_policy_hf("my-org/two-joint", filename="model_10.onnx")
+        (newer,) = scene.add_policy_hf("my-org/two-joint", filename="model_20.onnx")
+
+        assert older._config.default is True
+        assert newer._config.default is False
+
+    def test_one_call_still_opens_on_the_latest(self, scene, fake_hub):
+        fake_hub("model_10.onnx", metadata=MJLAB_METADATA)
+        fake_hub("model_20.onnx", metadata=MJLAB_METADATA)
+
+        older, newer = scene.add_policy_hf(
+            "my-org/two-joint", filename=["model_10.onnx", "model_20.onnx"]
+        )
+
+        assert [older._config.default, newer._config.default] == [False, True]
+
+
 class TestJointMappingGuard:
     """The metadata is paired with the scene's model, never taken on faith."""
 
@@ -204,12 +244,13 @@ class TestJointMappingGuard:
         # is one value against three joints, which `joint_mapping_usable` refuses.
         assert not policy._config.mdp.actions
 
-    def test_actuators_out_of_joint_order_are_reordered(self, fake_hub):
-        """Actions come out in actuator order; the metadata is written in joint order.
+    def test_actuator_order_does_not_become_the_action_order(self, fake_hub):
+        """The actuator block's order is the model's; the actions come in joint order.
 
-        The real case is the Unitree G1, whose actuator block is not in joint order. A
-        permutation is all that separates the two, so refusing here would throw away a
-        mapping that is fully determined — and leave a 29-action policy driving nothing.
+        The real case is the Unitree G1, whose actuator block is not in joint order.
+        mjlab resolves the action term through `find_joints_by_actuator_names`, which
+        keeps `joint_names`' order, so the metadata is already in the action order and
+        the model's actuator block must not be allowed to reorder it.
         """
         builder = mjswan.Builder()
         reversed_scene = builder.add_project(name="T").add_scene(
@@ -230,10 +271,8 @@ class TestJointMappingGuard:
             warnings.simplefilter("error", RuntimeWarning)
             (policy,) = reversed_scene.add_policy_hf("my-org/two-joint")
 
-        assert policy._config.policy_joint_names == ["knee", "hip"]
-        # The rest pose follows the actions, not the metadata's own order: mjlab wrote
-        # hip=-0.312 then knee=0.669, and knee is now action 0.
-        assert policy._config.default_joint_pos == [0.669, -0.312]
+        assert policy._config.policy_joint_names == ["hip", "knee"]
+        assert policy._config.default_joint_pos == [-0.312, 0.669]
 
     def test_same_count_but_different_joints_still_fills_nothing(self, scene, fake_hub):
         """The metadata may know extra joints, but never fewer: `knee` is not in it."""
@@ -242,7 +281,7 @@ class TestJointMappingGuard:
             metadata={**MJLAB_METADATA, "joint_names": "hip,ankle"},
         )
 
-        with pytest.warns(RuntimeWarning, match="a joint the metadata never mentions"):
+        with pytest.warns(RuntimeWarning, match="actuates a different set"):
             (policy,) = scene.add_policy_hf("my-org/two-joint")
 
         assert policy._config.policy_joint_names is None

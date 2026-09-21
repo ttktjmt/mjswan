@@ -14,41 +14,33 @@ shortcuts.
 
 ### Changed
 
-- **`add_policy_hf` reads an mjlab checkpoint's metadata into action order**, instead of
-  refusing whenever it was not already in it. The old guard wanted the metadata's joint
-  list to match the scene's actuated list exactly, which sounds conservative and was in
-  fact a hole. Every mjlab task selects its action term with `actuator_names=(".*",)`,
-  so the network emits one action per *actuator*, in actuator order; the metadata lists
-  `robot.joint_names` in *joint* order, every joint of the robot. They differ in order
-  (the Unitree G1's actuator block is not in joint order) and in length (mjlab's YAM has
-  eight joints and seven actions, two fingers ganged into one gripper) — and a refusal
-  left those policies with no `policy_joint_names` at all, which is what the runtime
-  resolves an actuator through. Warned-and-broken on 42 of the demo's policies.
+- **`add_policy_hf` uses an mjlab checkpoint's metadata when the model actuates a
+  subset of it**, instead of requiring an exact match. The old guard wanted the
+  metadata's joint list to equal the scene's actuated list, name for name and in the
+  same order, and refused otherwise — leaving those policies with no
+  `policy_joint_names` at all, which is what the runtime resolves an actuator through.
+  Warned-and-broken on 42 of the demo's policies.
 
-  Neither difference is an obstacle, because the scene's actuated list already *is* the
-  action order. All that has to hold is one action per actuator and a metadata that
-  knows every joint being driven; the rest pose is then read out of it per action.
-  A metadata describing a different robot still warns and fills nothing.
-
-- **An action term's `actuator_names` are matched against actuator names.** mjlab
-  resolves that field against actuators — `JointPositionActionCfg(actuator_names=(".*",))`
-  selects actuators, not joints — and mjswan carried the field through to the manifest
-  but then tested each pattern against the *joint* name. That worked only because
-  menagerie names an actuator after the joint it drives; a model that does not
-  (`<motor name="thrust" joint="lift"/>`) silently matched nothing and left the term
-  unhooked.
-
-  The joint name is still accepted as a fallback, because mjswan took it before it took
-  the actuator's and dropping it would unhook the models that relied on it — including
-  `examples/tutorial/minimum_policy.py`, which now names its actuator instead.
-  `policy_joint_names` remains what fixes the *order*, and `".*"` still means "every
-  joint this policy drives" rather than "every actuator in the model", so a policy
-  driving four joints of a twelve-actuator model still gets four.
+  Two things made the lists differ, and neither is an obstacle. The metadata lists
+  `robot.joint_names`, which may include a joint the model does not actuate (mjlab's YAM
+  has eight against seven actions, two fingers ganged into one gripper) — an unactuated
+  joint simply drops out. And the *order* the old guard compared against was the
+  model's actuator block, which is not the action order: `JointPositionAction` resolves
+  `actuator_names` through `Entity.find_joints_by_actuator_names`, which narrows
+  `joint_names` and keeps their order, so the actions come out in **joint** order and
+  the metadata is already written in it. The Unitree G1 is a robot where the two
+  differ. A metadata describing a different robot still warns and fills nothing.
 
 - **`SceneHandle.actuated_joint_names()`** returns the joint each actuator drives, in
-  actuator order — the order a policy's actions come out in, and what
-  `policy_joint_names` wants. It is what the warning above now tells you to pass, which
-  until now had no supported way to obtain.
+  actuator order. Useful for seeing what a model actuates; not `policy_joint_names`
+  without thought, since that wants the order the network's actions come out in and an
+  mjlab policy's is joint order.
+
+- **Two `add_policy_*` calls on one scene no longer both claim the default.** Each call
+  marked its own highest-step checkpoint as the one the scene opens on, which the build
+  then refused for having several (ADR 0006 §4). A scene carrying two differently
+  trained policies takes two calls — they are two MDPs — so the first call to name a
+  default now keeps it.
 
 - **The demo stores no assets, and `examples/demo/assets/` is gone** — 116 MB of
   vendored meshes, policies and a `.mjz` scene, none of which had to be in a git
