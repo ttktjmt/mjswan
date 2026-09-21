@@ -7,6 +7,8 @@ thing that does not.
 
 from __future__ import annotations
 
+import warnings
+
 import mujoco
 import onnx
 import pytest
@@ -193,8 +195,13 @@ class TestJointMappingGuard:
         assert policy._config.default_joint_pos is None
         assert not policy._config.mdp.actions
 
-    def test_actuators_out_of_joint_order_warn_and_fill_nothing(self, fake_hub):
-        """The counts agree; only the order does not, which a length check misses."""
+    def test_actuators_out_of_joint_order_are_reordered(self, fake_hub):
+        """Actions come out in actuator order; the metadata is written in joint order.
+
+        The real case is the Unitree G1, whose actuator block is not in joint order. A
+        permutation is all that separates the two, so refusing here would throw away a
+        mapping that is fully determined — and leave a 29-action policy driving nothing.
+        """
         builder = mjswan.Builder()
         reversed_scene = builder.add_project(name="T").add_scene(
             name="Robot",
@@ -210,10 +217,27 @@ class TestJointMappingGuard:
         )
         fake_hub("policy.onnx", metadata=MJLAB_METADATA)
 
-        with pytest.warns(RuntimeWarning, match="actuator order"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
             (policy,) = reversed_scene.add_policy_hf("my-org/two-joint")
 
+        assert policy._config.policy_joint_names == ["knee", "hip"]
+        # The rest pose follows the actions, not the metadata's own order: mjlab wrote
+        # hip=-0.312 then knee=0.669, and knee is now action 0.
+        assert policy._config.default_joint_pos == [0.669, -0.312]
+
+    def test_same_count_but_different_joints_still_fills_nothing(self, scene, fake_hub):
+        """A permutation needs the same names; these are a different set of two."""
+        fake_hub(
+            "policy.onnx",
+            metadata={**MJLAB_METADATA, "joint_names": "hip,ankle"},
+        )
+
+        with pytest.warns(RuntimeWarning, match="not the joints this network"):
+            (policy,) = scene.add_policy_hf("my-org/two-joint")
+
         assert policy._config.policy_joint_names is None
+        assert policy._config.default_joint_pos is None
 
     def test_joint_names_are_emitted_as_the_model_spells_them(self, fake_hub):
         """A scene from an mjlab task namespaces its joints; mjlab's export does not."""

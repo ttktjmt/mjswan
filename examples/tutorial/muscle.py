@@ -44,7 +44,14 @@ OBS_DIM = 2 * NUM_JOINTS  # joint_pos + joint_vel
 INITIAL_QPOS = [0.0, 0.3, 0.3, 0.3]
 INITIAL_QVEL = [0.0] * NUM_JOINTS
 
-_MYOFINGER_BASE = "https://raw.githubusercontent.com/MyoHub/myo_sim/main/finger"
+# Pinned to a commit, not a branch: these files moved from `finger/` to
+# `myo_sim/models/legacy/finger/` upstream and took the demo build down with a 404.
+# A tag would be better; the repository publishes none.
+_MYOFINGER_COMMIT = "93b0ca8f4ec90c9899ee7f05fee561e9911da91b"
+_MYOFINGER_BASE = (
+    f"https://raw.githubusercontent.com/MyoHub/myo_sim/{_MYOFINGER_COMMIT}"
+    "/myo_sim/models/legacy/finger"
+)
 _CACHE_DIR = Path(__file__).resolve().parent / ".cache" / "myofinger"
 
 

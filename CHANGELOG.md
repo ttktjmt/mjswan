@@ -14,6 +14,18 @@ shortcuts.
 
 ### Changed
 
+- **`add_policy_hf` reorders an mjlab checkpoint's rest pose into action order.** The
+  guard that pairs mjlab's metadata with a scene refused whenever the two orders
+  differed, which sounds conservative and was in fact a hole: every mjlab task selects
+  its action term with `actuator_names=(".*",)`, so the network emits one action per
+  *actuator*, while the metadata lists `robot.joint_names` in *joint* order. Those
+  coincide only by luck — the Unitree G1's do not — and a refusal left a 29-action
+  locomotion policy with no `policy_joint_names` at all, which the runtime needs to
+  reach an actuator. A permutation is fully determined whenever the two name sets
+  match, so it is applied, and `default_joint_pos` is read into action order with it.
+  A genuine mismatch (a passive joint, a ganged pair counted once — mjlab's YAM) still
+  warns and fills nothing, and now says which of the two it is.
+
 - **The demo stores no assets, and `examples/demo/assets/` is gone** — 116 MB of
   vendored meshes, policies and a `.mjz` scene, none of which had to be in a git
   repository ([#128](https://github.com/ttktjmt/mjswan/issues/128)). `examples/` is now
@@ -26,6 +38,11 @@ shortcuts.
     no `WANDB_API_KEY` — the build is anonymous end to end.
   - The MyoFinger XMLs are still fetched from MyoHub at run time, now into a gitignored
     `.cache/` rather than into the tracked asset tree.
+
+  The MyoFinger XMLs are pinned to a commit rather than `main`: upstream moved them from
+  `finger/` to `myo_sim/models/legacy/finger/`, and a branch URL took the build down
+  with a 404. The `examples` extra sheds MyoSuite, Playground, `robot_descriptions` and
+  `gymnasium` with the gallery projects that imported them.
 
   `demo/main.py` is rebuilt around that: **two projects instead of four**, and the split
   is the explanation — *mjlab Tasks* is mjlab taken as it is (8 scenes), *Showcase* is
