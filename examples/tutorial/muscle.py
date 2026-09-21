@@ -15,13 +15,11 @@ This demo exercises three features used by muscle-driven policies:
 2. ``initial_qpos`` / ``initial_qvel`` -- override the rest pose on reset.
 3. ``MuscleActivationActionCfg`` -- maps outputs through ``sigmoid(5*(a-0.5))``.
 
-MyoFinger XMLs are fetched at runtime from upstream, so this example adds no
-Python dependency on ``myo_sim``.
+The MyoFinger XMLs come from the Hugging Face Hub, so this example adds no Python
+dependency on ``myo_sim``. Needs ``pip install 'mjswan[hf]'``.
 """
 
 import os
-from pathlib import Path
-from urllib.request import urlretrieve
 
 import mujoco
 import onnx
@@ -33,6 +31,7 @@ import mjswan
 from mjswan.envs.mdp.actions import MuscleActivationActionCfg
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjswan.mjlab.env import build_single_entity_trace_env
+from mjswan.source import hf
 
 JOINT_NAMES = ("IFadb", "IFmcp", "IFpip", "IFdip")
 MUSCLE_NAMES = ("extn", "adabR", "adabL", "mflx", "dflx")
@@ -47,22 +46,8 @@ INITIAL_QVEL = [0.0] * NUM_JOINTS
 # Pinned to a commit, not a branch: these files moved from `finger/` to
 # `myo_sim/models/legacy/finger/` upstream and took the demo build down with a 404.
 # A tag would be better; the repository publishes none.
-_MYOFINGER_COMMIT = "93b0ca8f4ec90c9899ee7f05fee561e9911da91b"
-_MYOFINGER_BASE = (
-    f"https://raw.githubusercontent.com/MyoHub/myo_sim/{_MYOFINGER_COMMIT}"
-    "/myo_sim/models/legacy/finger"
-)
-_CACHE_DIR = Path(__file__).resolve().parent / ".cache" / "myofinger"
-
-
-def _fetch_myofinger() -> Path:
-    """Download MyoFinger XMLs next to this demo; return the entry-point XML."""
-    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    for name in ("myofinger_v0.xml", "finger_v0.xml"):
-        target = _CACHE_DIR / name
-        if not target.exists():
-            urlretrieve(f"{_MYOFINGER_BASE}/{name}", target)
-    return _CACHE_DIR / "myofinger_v0.xml"
+HF_REPO = "ttktjmt/mjswan"
+MYO_SCENE = "scenes/myofinger/myofinger_v0.xml"
 
 
 def _build_policy() -> onnx.ModelProto:
@@ -101,11 +86,12 @@ def setup_builder() -> mjswan.Builder:
     builder = mjswan.Builder(debug=True)
     project = builder.add_project(name="Muscle Actuator")
 
-    myofinger_path = str(_fetch_myofinger())
-    scene = project.add_scene(
-        control_dt=0.02,  # 50 Hz control step
-        spec=mujoco.MjSpec.from_file(myofinger_path),
+    myofinger_path = str(hf.fetch_dir(HF_REPO, "scenes/myofinger") / "myofinger_v0.xml")
+    scene = project.add_scene_hf(
+        HF_REPO,
+        MYO_SCENE,
         name="MyoFinger",
+        control_dt=0.02,  # 50 Hz control step
     )
     trace_env = build_single_entity_trace_env(
         lambda: mujoco.MjSpec.from_file(myofinger_path)

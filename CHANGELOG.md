@@ -36,13 +36,14 @@ shortcuts.
     directory, `LICENSE` included.
   - Policies: every W&B checkpoint is mirrored to the Hub, so the deploy workflow needs
     no `WANDB_API_KEY` — the build is anonymous end to end.
-  - The MyoFinger XMLs are still fetched from MyoHub at run time, now into a gitignored
-    `.cache/` rather than into the tracked asset tree.
+  - The MyoFinger XMLs, which mjlab has no task for, come from the Hub as a directory —
+    two files, one including the other, plus the `LICENSE`.
 
-  The MyoFinger XMLs are pinned to a commit rather than `main`: upstream moved them from
-  `finger/` to `myo_sim/models/legacy/finger/`, and a branch URL took the build down
-  with a 404. The `examples` extra sheds MyoSuite, Playground, `robot_descriptions` and
-  `gymnasium` with the gallery projects that imported them.
+  The MyoFinger XMLs move to the Hub with everything else, after upstream relocated them
+  from `finger/` to `myo_sim/models/legacy/finger/` and a branch URL took the build down
+  with a 404 — one public host to reach instead of two, and a version that only moves
+  when someone moves it. The `examples` extra sheds MyoSuite, Playground,
+  `robot_descriptions` and `gymnasium` with the gallery projects that imported them.
 
   `demo/main.py` is rebuilt around that: **two projects instead of four**, and the split
   is the explanation — *mjlab Tasks* is mjlab taken as it is (8 scenes), *Showcase* is

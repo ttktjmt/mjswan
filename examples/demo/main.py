@@ -11,15 +11,14 @@ Two projects, and the split is the explanation:
   background, a model mjlab has no task for, muscle actuators.
 
 **No asset is stored in this repository.** Models come from mjlab or from the Hugging
-Face Hub, policies from the Hub, and the MyoFinger XMLs from MyoHub at run time. The Hub
-repository is public, so a build needs no credentials of any kind — which is why the
-deploy workflow carries no secret.
+Face Hub, and policies from the Hub. The Hub repository is public, so a build needs no
+credentials of any kind — which is why the deploy workflow carries no secret, and one
+public host is the only thing it has to reach.
 """
 
 import os
 import re
 from pathlib import Path
-from urllib.request import urlretrieve
 
 import mujoco
 import onnx
@@ -240,14 +239,10 @@ def _add_g1_on_street(project: mjswan.ProjectHandle) -> None:
         )
     )
 
-    # Two captures on one scene: the viewer shows a selector, and only the one being
-    # shown is fetched. The placement values line each capture up with this model and
-    # belong to the capture, not to the file, so no part of the Hub knows them.
+    # The placement values line this capture up with this model. They belong to the
+    # capture rather than to the file, so no part of the Hub knows them.
     scene.add_splat_hf(
         HF_REPO, "splats/street.spz", name="Street", scale=3.275, z_offset=0.708, yaw=40
-    )
-    scene.add_splat_hf(
-        HF_REPO, "splats/cafe.spz", name="Cafe", scale=3.275, z_offset=0.708
     )
 
     # Two separate calls, not one with a list: these policies were trained on different
@@ -308,33 +303,14 @@ def _add_g1_on_street(project: mjswan.ProjectHandle) -> None:
 
 
 # MyoFinger: 4 hinge joints (IFadb, IFmcp, IFpip, IFdip) driven by 5 MuJoCo muscle
-# actuators. The XMLs are fetched from upstream at run time, so this adds no Python
-# dependency on `myo_sim` and nothing is vendored here.
+# actuators. mjlab has no task for it, so the model comes from the Hub — two XMLs, one
+# including the other, which is why it is a directory like the G1.
 MYO_JOINT_NAMES = ("IFadb", "IFmcp", "IFpip", "IFdip")
 MYO_MUSCLE_NAMES = ("extn", "adabR", "adabL", "mflx", "dflx")
 MYO_OBS_DIM = 2 * len(MYO_JOINT_NAMES)  # joint_pos + joint_vel
 MYO_INITIAL_QPOS = [0.0, 0.3, 0.3, 0.3]  # slightly flexed, not fully extended
 MYO_INITIAL_QVEL = [0.0] * len(MYO_JOINT_NAMES)
-
-# Pinned to a commit, not a branch: these files moved from `finger/` to
-# `myo_sim/models/legacy/finger/` upstream and took the demo build down with a 404.
-# A tag would be better; the repository publishes none.
-_MYOFINGER_COMMIT = "93b0ca8f4ec90c9899ee7f05fee561e9911da91b"
-_MYOFINGER_BASE = (
-    f"https://raw.githubusercontent.com/MyoHub/myo_sim/{_MYOFINGER_COMMIT}"
-    "/myo_sim/models/legacy/finger"
-)
-_MYOFINGER_CACHE = Path(__file__).resolve().parent / ".cache" / "myofinger"
-
-
-def _fetch_myofinger() -> Path:
-    """Download the MyoFinger XMLs into a gitignored cache; return the entry point."""
-    _MYOFINGER_CACHE.mkdir(parents=True, exist_ok=True)
-    for name in ("myofinger_v0.xml", "finger_v0.xml"):
-        target = _MYOFINGER_CACHE / name
-        if not target.exists():
-            urlretrieve(f"{_MYOFINGER_BASE}/{name}", target)
-    return _MYOFINGER_CACHE / "myofinger_v0.xml"
+MYO_SCENE = "scenes/myofinger/myofinger_v0.xml"
 
 
 def _build_muscle_policy() -> onnx.ModelProto:
@@ -373,11 +349,13 @@ def _build_muscle_policy() -> onnx.ModelProto:
 
 def _add_myofinger(project: mjswan.ProjectHandle) -> None:
     """Muscle actuators: no joint mapping, an overridden rest pose, sigmoid activation."""
-    myofinger_path = str(_fetch_myofinger())
-    scene = project.add_scene(
-        control_dt=0.02,  # 50 Hz control step
-        spec=mujoco.MjSpec.from_file(myofinger_path),
+    # Cached, so `add_scene_hf` below re-uses this rather than fetching twice.
+    myofinger_path = str(hf.fetch_dir(HF_REPO, "scenes/myofinger") / "myofinger_v0.xml")
+    scene = project.add_scene_hf(
+        HF_REPO,
+        MYO_SCENE,
         name="MyoFinger",
+        control_dt=0.02,  # 50 Hz control step
     )
     scene.set_trace_env(
         build_single_entity_trace_env(lambda: mujoco.MjSpec.from_file(myofinger_path))

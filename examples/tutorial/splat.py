@@ -4,14 +4,13 @@ One concept: standing a MuJoCo model inside a photographed place. A splat is a c
 of somewhere real, so the interesting part is not loading it — it is the six numbers
 that line the capture up with the model, which no file can tell you.
 
-Two captures go on the same scene here, which is worth seeing: the viewer shows a
-selector, and only the one being displayed is fetched. `control=True` puts live sliders
-for those six numbers in the control panel, which is how you find them in the first
-place; drop it once they are dialled in.
+`control=True` puts live sliders for those six numbers in the control panel, which is
+how you find them in the first place; drop it once they are dialled in. Call
+`add_splat_hf` more than once and the viewer shows a selector, fetching only the capture
+being displayed.
 
-The model and both captures come from the Hugging Face Hub, so this downloads about
-40 MB the first time and nothing after — `huggingface_hub` caches under
-`~/.cache/huggingface`.
+The model and the capture come from the Hugging Face Hub, so this downloads about 28 MB
+the first time and nothing after — `huggingface_hub` caches under `~/.cache/huggingface`.
 
 Needs `pip install 'mjswan[hf]'`. No policy, so no mjlab and no torch.
 
@@ -53,14 +52,6 @@ def setup_builder() -> mjswan.Builder:
         scale=3.275,
         z_offset=0.708,
         yaw=40,
-        control=True,
-    )
-    scene.add_splat_hf(
-        HF_REPO,
-        "splats/cafe.spz",
-        name="Cafe",
-        scale=3.275,
-        z_offset=0.708,
         control=True,
     )
 
