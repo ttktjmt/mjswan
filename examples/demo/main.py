@@ -168,12 +168,23 @@ def _add_tracking_scene(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> 
     if viewer_cfg := TASK_VIEWER_CONFIG_MAP.get(TRACKING_TASK):
         scene.set_viewer(viewer_cfg)
 
-    # `in_keys` is positional, so a two-input export cannot be read off the network's
-    # own input names (ADR 0006 §5).
+    # Both slot tables are positional, so a two-input, seven-output export cannot be
+    # read off the network's own tensor names (ADR 0006 §5). The runtime drives the
+    # actuators from the slot called `action`; the six after it are the reference pose
+    # the clip already carries, named here so the table lines up rather than to be read.
     policies = scene.add_policy_hf(
         HF_REPO,
         filename=_checkpoints_for(TRACKING_TASK, repo_onnx),
         in_keys=["actor", "time_step"],
+        out_keys=[
+            "action",
+            "joint_pos",
+            "joint_vel",
+            "body_pos_w",
+            "body_quat_w",
+            "body_lin_vel_w",
+            "body_ang_vel_w",
+        ],
     )
 
     # `add_policy_wandb` finds the clip in the run's artifacts; the Hub holds published

@@ -14,17 +14,26 @@ shortcuts.
 
 ### Changed
 
-- **`add_policy_hf` reorders an mjlab checkpoint's rest pose into action order.** The
-  guard that pairs mjlab's metadata with a scene refused whenever the two orders
-  differed, which sounds conservative and was in fact a hole: every mjlab task selects
-  its action term with `actuator_names=(".*",)`, so the network emits one action per
-  *actuator*, while the metadata lists `robot.joint_names` in *joint* order. Those
-  coincide only by luck — the Unitree G1's do not — and a refusal left a 29-action
-  locomotion policy with no `policy_joint_names` at all, which the runtime needs to
-  reach an actuator. A permutation is fully determined whenever the two name sets
-  match, so it is applied, and `default_joint_pos` is read into action order with it.
-  A genuine mismatch (a passive joint, a ganged pair counted once — mjlab's YAM) still
-  warns and fills nothing, and now says which of the two it is.
+- **`add_policy_hf` reads an mjlab checkpoint's metadata into action order**, instead of
+  refusing whenever it was not already in it. The old guard wanted the metadata's joint
+  list to match the scene's actuated list exactly, which sounds conservative and was in
+  fact a hole. Every mjlab task selects its action term with `actuator_names=(".*",)`,
+  so the network emits one action per *actuator*, in actuator order; the metadata lists
+  `robot.joint_names` in *joint* order, every joint of the robot. They differ in order
+  (the Unitree G1's actuator block is not in joint order) and in length (mjlab's YAM has
+  eight joints and seven actions, two fingers ganged into one gripper) — and a refusal
+  left those policies with no `policy_joint_names` at all, which is what the runtime
+  resolves an actuator through. Warned-and-broken on 42 of the demo's policies.
+
+  Neither difference is an obstacle, because the scene's actuated list already *is* the
+  action order. All that has to hold is one action per actuator and a metadata that
+  knows every joint being driven; the rest pose is then read out of it per action.
+  A metadata describing a different robot still warns and fills nothing.
+
+- **`SceneHandle.actuated_joint_names()`** returns the joint each actuator drives, in
+  actuator order — the order a policy's actions come out in, and what
+  `policy_joint_names` wants. It is what the warning above now tells you to pass, which
+  until now had no supported way to obtain.
 
 - **The demo stores no assets, and `examples/demo/assets/` is gone** — 116 MB of
   vendored meshes, policies and a `.mjz` scene, none of which had to be in a git

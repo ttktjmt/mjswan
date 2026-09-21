@@ -188,33 +188,36 @@ def _hf_driven_joints(
     in — paired with, for each of them, its index in ``meta.joint_names``. ``None`` when
     the metadata does not describe this network's actions at all.
 
-    The two orders are different things and mjlab writes only one of them. The metadata
-    carries ``robot.joint_names``: every joint of the robot, in the model's *joint*
-    order. Every mjlab task selects its action term with ``actuator_names=(".*",)``, so
-    the network emits one action per *actuator*, in *actuator* order. Those coincide
-    only when the model happens to declare its actuators in joint order, which the
-    Unitree G1 does not.
+    What the network emits and what the metadata records are two different lists, and
+    mjlab writes only the second. Every mjlab task selects its action term with
+    ``actuator_names=(".*",)``, so the network emits one action per *actuator*, in
+    *actuator* order; the metadata carries ``robot.joint_names``, every joint of the
+    robot in the model's *joint* order. They differ in order — the Unitree G1's actuator
+    block is not in joint order — and in length: mjlab's YAM has eight joints and seven
+    actions, two fingers ganged into one gripper.
 
-    So the names are always the model's — namespaced as mjlab writes them into a scene,
-    which is what the runtime resolves against — and the index list says how to read the
-    metadata's per-joint values (the rest pose) into that order. A permutation is enough
-    whenever the two name *sets* match; when they do not, the metadata is describing
-    joints this network does not drive (a passive joint, a ganged pair counted once),
-    nothing recoverable is on offer, and the caller is told rather than guessed at.
+    Neither difference is an obstacle, because ``actuated`` already *is* the action
+    order. The names returned are the model's own spelling, namespaced as mjlab writes
+    them into a scene, which is what the runtime resolves against; the index list says
+    where in the metadata each action's per-joint values (the rest pose) live. All that
+    has to hold is that the network has one action per actuator, and that the metadata
+    knows every joint being driven. When it does not, it is describing a different
+    robot, and the caller is told rather than guessed at.
     """
     if meta is None or actuated is None:
         return None
-    from .mjlab.onnx_meta import joint_mapping_usable
-
-    if not joint_mapping_usable(meta, action_width=onnx_output_width(policy)):
+    width = onnx_output_width(policy)
+    if width is not None and len(actuated) != width:
         return None
-    # mjlab exports the bare joint name; a scene built from an mjlab task carries it
-    # namespaced (`robot/hip`). Match on the tail, keep the model's spelling.
+    if not meta.joint_names or len(meta.default_joint_pos) != len(meta.joint_names):
+        return None
     where = {name: index for index, name in enumerate(meta.joint_names)}
     if len(where) != len(meta.joint_names):
         return None
+    # mjlab exports the bare joint name; a scene built from an mjlab task carries it
+    # namespaced (`robot/hip`). Match on the tail, keep the model's spelling.
     tails = [name.rsplit("/", 1)[-1] for name in actuated]
-    if set(tails) != set(where):
+    if not set(tails) <= set(where):
         return None
     return list(actuated), [where[tail] for tail in tails]
 
@@ -1233,12 +1236,13 @@ class SceneHandle:
                 warnings.warn(
                     f"Policy {policy_name!r} from {repo_id!r} carries mjlab metadata "
                     f"for {len(meta.joint_names)} joints ({meta.joint_names[:4]}…), but "
-                    "but they are not the joints this network's "
-                    f"{onnx_output_width(policy)} actions drive — a different count, or "
-                    "names this scene's model does not actuate. A different *order* "
-                    "would have been fine; this is not, so policy_joint_names / "
-                    "default_joint_pos were left unset. Pass them explicitly, in the "
-                    "order the policy's actions come out.",
+                    "this scene's model does not put one actuator behind each of the "
+                    f"network's {onnx_output_width(policy)} actions, or actuates a joint "
+                    "the metadata never mentions. A different order, or a metadata list "
+                    "longer than the action list, would both have been fine; this is "
+                    "neither, so policy_joint_names / default_joint_pos were left unset. "
+                    "Pass them explicitly — SceneHandle.actuated_joint_names() is the "
+                    "order the actions come out in.",
                     category=RuntimeWarning,
                     stacklevel=3,
                 )
@@ -1252,6 +1256,22 @@ class SceneHandle:
             "default_joint_pos": [meta.default_joint_pos[index] for index in order],
         }
         return {**derived, **explicit}
+
+    def actuated_joint_names(self) -> list[str] | None:
+        """The joint each of this scene's actuators drives, in actuator order.
+
+        This is the order a policy's actions come out in, so it is what
+        ``policy_joint_names`` wants — and the answer when a warning asks for it. An
+        mjlab checkpoint usually supplies it through its metadata; a network trained
+        elsewhere does not, and neither does a model whose actuators are not one per
+        joint.
+
+        ``None`` when the model does not give one unambiguously: no model, no actuators,
+        a transmission that is not a joint (a tendon, a site, a body), an unnamed joint,
+        or two actuators on one joint. Each of those makes "the i-th action drives this
+        joint" untrue, and a wrong answer here is silent at playback.
+        """
+        return actuated_joint_names(_get_scene_model(self._config))
 
     def add_splat(
         self,

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import mujoco
 import pytest
 
 import mjswan
@@ -171,3 +172,24 @@ class TestBuildRoundTrip:
         scene = manifest["projects"][0]["scenes"][0]
         assert scene["id"] == "unitree_g1"
         assert Path(tmp_path / "dist" / "test" / "unitree_g1" / "scene.mjz").exists()
+
+
+class TestActuatedJointNames:
+    """The order a policy's actions come out in, which `policy_joint_names` wants."""
+
+    def test_actuator_order_not_joint_order(self, project, fake_hub):
+        scene = project.add_scene_hf("org/assets", "scenes/unitree_g1/scene.xml")
+
+        assert scene.actuated_joint_names() == ["hip", "knee"]
+
+    def test_none_when_the_model_does_not_say_unambiguously(self, project):
+        """No actuators: "the i-th action drives this joint" has no answer."""
+        passive = project.add_scene(
+            name="Passive",
+            spec=mujoco.MjSpec.from_string(
+                '<mujoco><worldbody><body><joint name="hip" type="hinge"/>'
+                '<geom type="sphere" size="0.1"/></body></worldbody></mujoco>'
+            ),
+        )
+
+        assert passive.actuated_joint_names() is None

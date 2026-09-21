@@ -175,8 +175,14 @@ class TestMetadataFill:
 class TestJointMappingGuard:
     """The metadata is paired with the scene's model, never taken on faith."""
 
-    def test_a_passive_joint_warns_and_fills_nothing(self, scene, fake_hub):
-        """mjlab lists every joint; here one is unactuated, so the lists differ."""
+    def test_a_passive_joint_is_skipped_rather_than_refused(self, scene, fake_hub):
+        """mjlab lists every joint of the robot; the network drives the actuated ones.
+
+        mjlab's YAM is the real case — eight joints, seven actions, two fingers ganged
+        into one gripper. The metadata knowing about a joint this network does not drive
+        costs nothing: the actuated list is already the action order, and each of its
+        joints has a rest pose in there to look up.
+        """
         fake_hub(
             "policy.onnx",
             action_width=2,
@@ -188,11 +194,14 @@ class TestJointMappingGuard:
             },
         )
 
-        with pytest.warns(RuntimeWarning, match="3 joints"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
             (policy,) = scene.add_policy_hf("my-org/two-joint")
 
-        assert policy._config.policy_joint_names is None
-        assert policy._config.default_joint_pos is None
+        assert policy._config.policy_joint_names == ["hip", "knee"]
+        assert policy._config.default_joint_pos == [-0.312, 0.669]
+        # The action term stays unset: its scale is per action and `action_scale` here
+        # is one value against three joints, which `joint_mapping_usable` refuses.
         assert not policy._config.mdp.actions
 
     def test_actuators_out_of_joint_order_are_reordered(self, fake_hub):
@@ -227,13 +236,13 @@ class TestJointMappingGuard:
         assert policy._config.default_joint_pos == [0.669, -0.312]
 
     def test_same_count_but_different_joints_still_fills_nothing(self, scene, fake_hub):
-        """A permutation needs the same names; these are a different set of two."""
+        """The metadata may know extra joints, but never fewer: `knee` is not in it."""
         fake_hub(
             "policy.onnx",
             metadata={**MJLAB_METADATA, "joint_names": "hip,ankle"},
         )
 
-        with pytest.warns(RuntimeWarning, match="not the joints this network"):
+        with pytest.warns(RuntimeWarning, match="a joint the metadata never mentions"):
             (policy,) = scene.add_policy_hf("my-org/two-joint")
 
         assert policy._config.policy_joint_names is None
