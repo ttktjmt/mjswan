@@ -105,9 +105,9 @@ dev = [
 
 # What the bundled demos need on top of the sources they fetch from. MyoSuite,
 # Playground, robot_descriptions and gymnasium are gone: the demo's three model-gallery
-# projects went with the #128 rebuild, and the only scripts still importing them —
-# `examples/mjlab/{myosuite,musclemimic}` — are on their way to mjswan_playground, which
-# carries its own pinned dependencies. Install them alongside if you run those two.
+# projects went with the #128 rebuild, and the only scripts still importing them are
+# `examples/mjlab/{myosuite,musclemimic}`, each of which names its own in its README —
+# a git URL and a task package that no release of this project should have to pin.
 examples = [
     "mjswan[wandb,hf,mjlab]",
     "onnxruntime>=1.21.0",
