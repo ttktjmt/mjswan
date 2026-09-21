@@ -1738,19 +1738,28 @@ dependencies = [
     { name = "onnx" },
     { name = "rich" },
     { name = "typer" },
-    { name = "wandb" },
 ]
 
 [package.optional-dependencies]
+check = [
+    { name = "pyright" },
+    { name = "ruff" },
+    { name = "ty" },
+]
 dev = [
+    { name = "huggingface-hub" },
+    { name = "mjlab" },
     { name = "pre-commit" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "torch" },
     { name = "ty" },
+    { name = "wandb" },
 ]
 examples = [
     { name = "gymnasium" },
+    { name = "huggingface-hub" },
     { name = "mjlab" },
     { name = "myosuite" },
     { name = "onnxruntime", version = "1.24.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -1759,16 +1768,28 @@ examples = [
     { name = "playground", version = "0.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "robot-descriptions" },
     { name = "torch" },
+    { name = "wandb" },
 ]
 hf = [
     { name = "huggingface-hub" },
+]
+mjlab = [
+    { name = "mjlab" },
+    { name = "torch" },
+]
+wandb = [
+    { name = "wandb" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "gymnasium", marker = "extra == 'examples'" },
+    { name = "huggingface-hub", marker = "extra == 'dev'", specifier = ">=0.26.0" },
+    { name = "huggingface-hub", marker = "extra == 'examples'", specifier = ">=0.26.0" },
     { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=0.26.0" },
+    { name = "mjlab", marker = "extra == 'dev'", specifier = "==1.5.3" },
     { name = "mjlab", marker = "extra == 'examples'", specifier = "==1.5.3" },
+    { name = "mjlab", marker = "extra == 'mjlab'", specifier = "==1.5.3" },
     { name = "mujoco", specifier = "==3.8.1" },
     { name = "myosuite", marker = "extra == 'examples'" },
     { name = "nodeenv", specifier = ">=1.9.1" },
@@ -1776,17 +1797,24 @@ requires-dist = [
     { name = "onnxruntime", marker = "extra == 'examples'", specifier = ">=1.21.0" },
     { name = "playground", marker = "extra == 'examples'", specifier = ">=0.1.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.3.2" },
+    { name = "pyright", marker = "extra == 'check'", specifier = ">=1.1.407" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.407" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "robot-descriptions", marker = "extra == 'examples'", specifier = ">=1.22.0" },
+    { name = "ruff", marker = "extra == 'check'", specifier = "==0.16.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.0" },
+    { name = "torch", marker = "extra == 'dev'", specifier = ">=2.9.1" },
     { name = "torch", marker = "extra == 'examples'", specifier = ">=2.9.1" },
+    { name = "torch", marker = "extra == 'mjlab'", specifier = ">=2.9.1" },
+    { name = "ty", marker = "extra == 'check'", specifier = "==0.0.77" },
     { name = "ty", marker = "extra == 'dev'", specifier = "==0.0.77" },
     { name = "typer", specifier = ">=0.12.0" },
-    { name = "wandb", specifier = ">=0.23.1" },
+    { name = "wandb", marker = "extra == 'dev'", specifier = ">=0.23.1" },
+    { name = "wandb", marker = "extra == 'examples'", specifier = ">=0.23.1" },
+    { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.23.1" },
 ]
-provides-extras = ["dev", "examples", "hf"]
+provides-extras = ["check", "dev", "examples", "hf", "mjlab", "wandb"]
 
 [[package]]
 name = "mjviser"

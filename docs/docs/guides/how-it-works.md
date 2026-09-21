@@ -289,7 +289,7 @@ is only the tracer's read/write target.
 !!! warning "`mjlab` and `torch` are build-time dependencies for traced terms"
     Tracing runs `torch.onnx.export` against a live mjlab environment, so a policy with
     observation or termination terms needs both installed at build time (`pip install
-    'mjswan[examples]'`). Neither ships to the browser, and a *model-only* scene needs
+    'mjswan[mjlab]'`). Neither ships to the browser, and a *model-only* scene needs
     neither. See [Installation](../getting-started/installation.md).
 
 ### A scene with a policy has no `control_dt`

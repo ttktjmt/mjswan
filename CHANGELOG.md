@@ -12,6 +12,31 @@ object, `enable_`/`set_` for toggles, spelled-out MDP binding names. The pre-0.8
 names are gone with this release (see Removed), as are the velocity-command
 shortcuts.
 
+### Changed
+
+- **`wandb` is no longer a core dependency — `pip install mjswan` drops by about 108 MB.**
+  It moves to its own `wandb` extra, beside `hf` and a new `mjlab` one, because it is the
+  same kind of thing: a `source/` backend imported inside a function. `import mjswan`
+  never touched it — that loads `mujoco` and `numpy` and nothing else — so a user who
+  bundles an ONNX they already have was downloading a training-log client to not use it.
+  **Callers of `add_policy_wandb` / `add_motion_wandb` must now install `mjswan[wandb]`**;
+  without it the failure is a sentence naming the extra, as the Hub path already did.
+
+  The rest of the reshuffle follows one rule — core is the pipeline, extras are where the
+  assets come from:
+
+  - `mjlab` extra: `mjlab` and `torch`, split out of `examples` so that "I convert mjlab
+    checkpoints" and "I run the bundled demos" can be asked for separately. The docs that
+    said `mjswan[examples]` for a traced term now say `mjswan[mjlab]`.
+  - `check` extra: `ruff`, `ty`, `pyright` — what `make check` runs. The ruff workflow
+    installs this alone, so a linter job no longer resolves a source backend.
+  - `dev` extra: `check` plus every source, plus `pytest` and `pre-commit`. This closes a
+    real hole rather than being tidiness: `pytest.yml` installs `.[dev]`, and 33 tests
+    were gating themselves off with `importorskip("mjlab")` in a job that never had
+    mjlab, with no other job covering them — `parity.yml` names five files and reaches
+    the rest. The two workflows that now resolve torch ask for the CPU wheel, since
+    mjswan only ever calls `torch.onnx.export` and `torch.load(map_location="cpu")`.
+
 ### Added
 
 - **Whole MuJoCo models load from the Hugging Face Hub**: `ProjectHandle.add_scene_hf()`

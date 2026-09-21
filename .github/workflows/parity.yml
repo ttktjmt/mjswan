@@ -42,6 +42,9 @@ jobs:
       - name: Install dependencies
         run: |
           pip install uv
+          # See pytest.yml: the CPU torch wheel is all mjswan asks of torch.
+          uv pip install --system torch \
+            --index-url https://download.pytorch.org/whl/cpu
           uv pip install --system -e ".[dev,examples]"
 
       - name: Cache warp kernels

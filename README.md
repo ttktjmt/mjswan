@@ -54,7 +54,7 @@
 
 mjswan can be installed with `pip`:
 ``` sh
-pip install mjswan  # or 'mjswan[dev]', 'mjswan[examples]'
+pip install mjswan  # or 'mjswan[wandb]', 'mjswan[hf]', 'mjswan[mjlab]', …
 ```
 
 or with `npm`:

@@ -3,6 +3,9 @@
 A run's ``model_*.pt`` checkpoints are training state; turning one into ONNX is
 :func:`mjswan.mjlab.runner.export_checkpoint`'s business, not this module's. A run's
 latest ``.onnx`` and the motion clip it used or logged come back as they are.
+
+``wandb`` is its one dependency, and it is optional (the ``wandb`` extra): nothing here
+is imported until a caller asks for a run.
 """
 
 from __future__ import annotations
@@ -12,9 +15,22 @@ import re
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 import onnx
+
+
+def _wandb() -> Any:
+    """The ``wandb`` module, or an ImportError naming the extra to install."""
+    try:
+        import wandb
+    except ImportError as exc:
+        raise ImportError(
+            "wandb is required to fetch policies and motions from a Weights & Biases "
+            "run. Install it with: pip install 'mjswan[wandb]'"
+        ) from exc
+    return wandb
 
 
 def resolve_run_path(
@@ -88,9 +104,7 @@ def fetch_onnx(run_path: str) -> tuple[str, onnx.ModelProto]:
     Raises:
         ValueError: If no ``.onnx`` files are found in the run.
     """
-    import wandb
-
-    api = wandb.Api()
+    api = _wandb().Api()
     run = api.run(run_path)
 
     onnx_files = [f for f in run.files() if f.name.endswith(".onnx")]
@@ -111,9 +125,7 @@ def fetch_onnx(run_path: str) -> tuple[str, onnx.ModelProto]:
 
 def fetch_motion_npz(run_path: str) -> tuple[str, bytes]:
     """Download the ``motion.npz`` artifact used or logged by a W&B run."""
-    import wandb
-
-    api = wandb.Api()
+    api = _wandb().Api()
     run = api.run(run_path)
     artifact = next((a for a in run.used_artifacts() if a.type == "motions"), None)
     if artifact is None:
@@ -136,11 +148,9 @@ def fetch_motion_npz_from_artifact(
     artifact_path: str,
 ) -> tuple[str, bytes]:
     """Download ``motion.npz`` directly from a W&B motion artifact."""
-    import wandb
-
     artifact_name, artifact_type, file_path = resolve_artifact_path(artifact_path)
 
-    api = wandb.Api()
+    api = _wandb().Api()
     artifact = api.artifact(artifact_name, type=artifact_type)
     motion_name = artifact_name.split("/")[-1].split(":", 1)[0] or "motion"
 
@@ -164,9 +174,7 @@ def fetch_checkpoints(run_path: str) -> Iterator[list[tuple[str, Path]]]:
     Raises:
         ValueError: If the run holds no ``model_*.pt`` file.
     """
-    import wandb
-
-    api = wandb.Api()
+    api = _wandb().Api()
     run = api.run(run_path)
 
     pt_files = [f for f in run.files() if re.match(r"^model_\d+\.pt$", f.name)]

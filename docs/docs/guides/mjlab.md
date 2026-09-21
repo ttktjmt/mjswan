@@ -14,7 +14,7 @@ environment that [ONNX tracing](how-it-works.md) needs, so everything on this pa
 without a single `set_trace_env` or `control_dt` of your own.
 
 !!! info "Install"
-    mjlab is a soft dependency: `pip install 'mjswan[examples]'`. It is needed at **build
+    mjlab is a soft dependency: `pip install 'mjswan[mjlab]'`. It is needed at **build
     time** only, and nothing about it ships to the browser.
 
 This page walks through three integration levels, from the one-line shortcut to the full manual form.

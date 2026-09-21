@@ -25,6 +25,11 @@ jobs:
       - name: Install dependencies
         run: |
           pip install uv
+          # `[dev]` brings mjlab, which requires torch. mjswan only ever calls
+          # `torch.onnx.export` and `torch.load(map_location="cpu")`, so the CPU
+          # wheel is enough — and the default Linux wheel is the CUDA build.
+          uv pip install --system torch \
+            --index-url https://download.pytorch.org/whl/cpu
           uv pip install --system -e ".[dev]"
 
       # Runs L1/L2 tests only.
