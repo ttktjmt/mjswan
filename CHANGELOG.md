@@ -23,6 +23,14 @@ shortcuts.
   (`scene.xml`), and `allow_patterns=` covers a model whose `meshdir` reaches outside
   its own directory, since nothing parses the XML to find out.
 
+- **Splat backgrounds load from the Hugging Face Hub**: `SceneHandle.add_splat_hf()`,
+  beside `add_splat`. A splat is the opposite of a scene — one opaque file rather than an
+  MJCF and the meshes it resolves — so this downloads it and hands the local path to
+  `source=`: the `.spz` is bundled into the build as a local one is, and the deployed app
+  needs no network. The placement arguments (`scale`, the offsets, the rotations) describe
+  how *this* capture lines up with *this* model, which no file on the Hub knows, so they
+  stay the caller's. Named after its file, or after the repository when the stem only
+  names a role (`background.spz`).
 - **Policies and motions load from the Hugging Face Hub**: `SceneHandle.add_policy_hf()`,
   `PolicyHandle.add_motion_hf()`, and `hf_repo_id=` on `Builder.from_mjlab()` /
   `add_project_mjlab()`, beside their `_wandb` counterparts. The two sources are not

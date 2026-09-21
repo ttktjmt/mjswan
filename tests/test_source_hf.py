@@ -1,6 +1,11 @@
 import pytest
 
-from mjswan.source.hf import choose_policy_filename, policy_name_for, scene_name_for
+from mjswan.source.hf import (
+    choose_policy_filename,
+    policy_name_for,
+    scene_name_for,
+    splat_name_for,
+)
 
 
 class TestChoosePolicyFilename:
@@ -67,3 +72,16 @@ class TestSceneNameFor:
 
     def test_a_generic_stem_at_the_root_falls_back_to_the_repo(self):
         assert scene_name_for("org/unitree-g1", "scene.xml") == "unitree-g1"
+
+
+class TestSplatNameFor:
+    """A splat is one file, so there is no directory to fall back on."""
+
+    def test_a_specific_stem_names_the_capture(self):
+        assert splat_name_for("org/assets", "splats/street.spz") == "street"
+
+    def test_a_generic_stem_falls_back_to_the_repo(self):
+        assert splat_name_for("org/unitree-g1", "background.spz") == "unitree-g1"
+
+    def test_the_fallback_is_case_insensitive(self):
+        assert splat_name_for("org/lab", "Splat.spz") == "lab"

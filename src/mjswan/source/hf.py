@@ -26,6 +26,9 @@ _GENERIC_STEMS = frozenset({"policy", "final", "model", "actor"})
 #: The same for a scene, whose identity is its directory rather than its XML's name.
 _GENERIC_SCENE_STEMS = frozenset({"scene", "model", "robot", "main"})
 
+#: The same for a splat, which is one file, so the repository is what is left to name it.
+_GENERIC_SPLAT_STEMS = frozenset({"splat", "background", "scene"})
+
 
 def _hub() -> Any:
     """The ``huggingface_hub`` module, or an ImportError naming the extra to install."""
@@ -92,16 +95,30 @@ def choose_policy_filename(candidates: list[str], *, repo_id: str = "") -> str:
     )
 
 
+def _named_by_file_or_repo(filename: str, generic: frozenset[str], repo_id: str) -> str:
+    """A file's stem, or the repository's own name when the stem only names a role."""
+    stem = Path(filename).stem
+    if stem.lower() in generic:
+        return repo_id.rsplit("/", 1)[-1] or stem
+    return stem
+
+
 def policy_name_for(repo_id: str, filename: str) -> str:
     """The display name a fetched policy gets: its stem, or the repository's own name.
 
     ``policy.onnx`` names the file's role, not the policy, so a repository whose file is
     called that is labelled by its own last path segment instead.
     """
-    stem = Path(filename).stem
-    if stem.lower() in _GENERIC_STEMS:
-        return repo_id.rsplit("/", 1)[-1] or stem
-    return stem
+    return _named_by_file_or_repo(filename, _GENERIC_STEMS, repo_id)
+
+
+def splat_name_for(repo_id: str, filename: str) -> str:
+    """The display name a fetched splat gets, by the rule :func:`policy_name_for` uses.
+
+    A splat is one file, so unlike a scene there is no directory to fall back on:
+    ``background.spz`` is labelled by the repository.
+    """
+    return _named_by_file_or_repo(filename, _GENERIC_SPLAT_STEMS, repo_id)
 
 
 def scene_name_for(repo_id: str, path: str) -> str:
@@ -260,4 +277,5 @@ __all__ = [
     "policy_name_for",
     "resolve_policy_filename",
     "scene_name_for",
+    "splat_name_for",
 ]

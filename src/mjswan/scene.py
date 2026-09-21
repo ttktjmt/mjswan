@@ -1333,6 +1333,94 @@ class SceneHandle:
         self._config.splats.append(splat_config)
         return SplatHandle(splat_config, self)
 
+    def add_splat_hf(
+        self,
+        repo_id: str,
+        filename: str,
+        *,
+        name: str | None = None,
+        revision: str | None = None,
+        repo_type: str = "model",
+        token: str | None = None,
+        scale: float = 1.0,
+        x_offset: float = 0.0,
+        y_offset: float = 0.0,
+        z_offset: float = 0.0,
+        roll: float = 0.0,
+        pitch: float = 0.0,
+        yaw: float = 0.0,
+        collider_url: str | None = None,
+        control: bool = False,
+    ) -> SplatHandle:
+        """Add a Gaussian Splat background fetched from a Hugging Face Hub repository.
+
+        The Hub counterpart of :meth:`add_splat`. A splat is a single opaque file, so
+        this only downloads it and hands the local path to ``source=``: the ``.spz`` is
+        bundled into the build as a local one is, and the deployed app needs no network.
+
+        The placement arguments are the same as :meth:`add_splat`'s and mean the same
+        thing. They describe how *this* capture lines up with *this* model, which no
+        file on the Hub knows, so they stay the caller's to supply.
+
+        Args:
+            repo_id: Hub repository, ``"<owner>/<name>"``.
+            filename: Path to the ``.spz`` within the repository.
+            name: Display name shown in the viewer control panel. Omitted, the name is
+                the file's stem, or the repository's own name when the stem is a generic
+                one such as ``background``.
+            revision: Branch, tag or commit. ``None`` takes the default branch, so the
+                build follows the repository; pass a commit to pin it.
+            repo_type: ``"model"`` (default), ``"dataset"`` or ``"space"``.
+            token: Hub token for a gated or private repository. ``None`` uses the
+                locally stored login, then anonymous access.
+            scale: Metric scale factor. See :meth:`add_splat`.
+            x_offset: X-axis position offset (in scaled splat units).
+            y_offset: Y-axis position offset (in scaled splat units).
+            z_offset: Vertical position offset.
+            roll: Roll rotation in degrees.
+            pitch: Pitch rotation in degrees.
+            yaw: Yaw rotation in degrees.
+            collider_url: Optional URL to a ``.glb`` collision mesh. A collider is not
+                bundled, so one living on the Hub is named by its ``resolve`` URL
+                (``https://huggingface.co/<repo>/resolve/<rev>/<path>``).
+            control: If True, shows scale and offset controls in the viewer.
+
+        Returns:
+            SplatHandle for further configuration.
+
+        Raises:
+            ImportError: If ``huggingface_hub`` is not installed.
+
+        Example:
+            ```python
+            scene.add_splat_hf(
+                "my-org/assets", "splats/street.spz", scale=3.275, z_offset=0.708
+            )
+            ```
+        """
+        from . import source
+
+        local_path = source.hf.fetch_file(
+            repo_id,
+            filename,
+            revision=revision,
+            repo_type=repo_type,
+            token=token,
+        )
+        return self.add_splat(
+            name or source.hf.splat_name_for(repo_id, filename),
+            source=str(local_path),
+            scale=scale,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            z_offset=z_offset,
+            roll=roll,
+            pitch=pitch,
+            yaw=yaw,
+            collider_url=collider_url,
+            control=control,
+        )
+
     def enable_splat_section(self) -> SceneHandle:
         """Show the Splat section in the control panel even when no splats are defined.
 

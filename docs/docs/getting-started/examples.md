@@ -275,6 +275,27 @@ scene.add_splat(
 )
 ```
 
+## Gaussian Splat background (Hugging Face Hub)
+
+`add_splat_hf` downloads the `.spz` and bundles it, so the deployed app is as
+self-contained as a local one — the Hub is a build-time source, not a runtime
+dependency. Needs `pip install mjswan[hf]`.
+
+```python
+scene.add_splat_hf(
+    "<owner>/<name>",
+    "splats/street.spz",
+    scale=3.275,
+    z_offset=0.708,
+)
+```
+
+The splat is named after its file (`street`), or after the repository when the stem
+only names a role (`background.spz`); pass `name=` for anything else. The placement
+arguments describe how *this* capture lines up with *this* model, which no file on the
+Hub knows, so they stay yours to supply. `revision=` pins a branch, tag or commit —
+without it the build follows the repository's default branch.
+
 ## Multiple splats on one scene
 
 Add several splats to the same scene — the viewer shows a selector to switch between them at runtime.
