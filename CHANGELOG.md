@@ -14,6 +14,28 @@ shortcuts.
 
 ### Changed
 
+- **The demo stores no assets, and `examples/demo/assets/` is gone** — 116 MB of
+  vendored meshes, policies and a `.mjz` scene, none of which had to be in a git
+  repository ([#128](https://github.com/ttktjmt/mjswan/issues/128)). `examples/` is now
+  260 KB of Python. Where each asset went:
+
+  - Models: mjlab's own tasks supply G1, Go1, Yam and cartpole through
+    `add_scene_mjlab`; the one G1 mjlab has no task for comes from the Hub as a
+    directory, `LICENSE` included.
+  - Policies: every W&B checkpoint is mirrored to the Hub, so the deploy workflow needs
+    no `WANDB_API_KEY` — the build is anonymous end to end.
+  - The MyoFinger XMLs are still fetched from MyoHub at run time, now into a gitignored
+    `.cache/` rather than into the tracked asset tree.
+
+  `demo/main.py` is rebuilt around that: **two projects instead of four**, and the split
+  is the explanation — *mjlab Tasks* is mjlab taken as it is (8 scenes), *Showcase* is
+  the same engine with mjswan-side work on top (a splat-backed G1, muscle actuators).
+  The three model-gallery projects, about 120 scenes of viewer-only models, are dropped
+  along with the two upstream-API-drift patches they needed; `demo/simple.py` becomes
+  one task and one checkpoint, and `splat.py` / `muscle.py` move to `tutorial/` where a
+  file is one concept. A `no-binaries-in-examples` pre-commit hook keeps it this way,
+  because writing the rule down did not.
+
 - **The two pieces of library code that lived in `examples/` move into the package.**
   `examples/mjlab/defaults/{commands,terminations}/` were imported by a test, by a
   sibling example, and by the `mjlab-to-mjswan` skill, which told an agent to *fetch the

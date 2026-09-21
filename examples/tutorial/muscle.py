@@ -45,7 +45,7 @@ INITIAL_QPOS = [0.0, 0.3, 0.3, 0.3]
 INITIAL_QVEL = [0.0] * NUM_JOINTS
 
 _MYOFINGER_BASE = "https://raw.githubusercontent.com/MyoHub/myo_sim/main/finger"
-_CACHE_DIR = Path(__file__).parent / "assets" / "myofinger"
+_CACHE_DIR = Path(__file__).resolve().parent / ".cache" / "myofinger"
 
 
 def _fetch_myofinger() -> Path:

@@ -1,154 +1,235 @@
 """mjswan Demo Application
 
-This is a demo application showcasing the usage of mjswan.
-The demo app is hosted on GitHub Pages: https://ttktjmt.github.io/mjswan/
+A tour of what mjswan does, hosted on GitHub Pages: https://ttktjmt.github.io/mjswan/
+
+Two projects, and the split is the explanation:
+
+- **mjlab Tasks** — mjlab's own tasks, taken as they are. Every scene here is
+  ``add_scene_mjlab`` plus trained checkpoints; nothing is hand-written, so what you see
+  is what mjlab gives you through mjswan.
+- **Showcase** — the same engine with mjswan-side work on top: a Gaussian Splat
+  background, a model mjlab has no task for, muscle actuators.
+
+**No asset is stored in this repository.** Models come from mjlab or from the Hugging
+Face Hub, policies from the Hub, and the MyoFinger XMLs from MyoHub at run time. The Hub
+repository is public, so a build needs no credentials of any kind — which is why the
+deploy workflow carries no secret.
 """
 
 import os
-import posixpath
+import re
 from pathlib import Path
+from urllib.request import urlretrieve
 
-import gymnasium.logger as gym_logger
 import mujoco
-import mujoco.mjx as _mjx
 import onnx
-from mujoco_playground import registry
+from mjlab.envs.mdp import observations as obs_fns
+from mjlab.envs.mdp import terminations as term_fns
+from mjlab.managers.scene_entity_config import SceneEntityCfg
+from mjlab.tasks.registry import load_env_cfg
+from onnx import TensorProto, helper
 
-# Suppress gymnasium logger output from myosuite
-_prev_gym_level = gym_logger.min_level
-gym_logger.min_level = gym_logger.ERROR
+import mjswan
+import mjswan.mjlab.bindings  # noqa: F401 - registers the mjlab command bindings
+from mjswan.envs.mdp.actions import MuscleActivationActionCfg
+from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
+from mjswan.managers.termination_manager import TerminationTermCfg
+from mjswan.mjlab import register_custom_terminations
+from mjswan.mjlab.env import build_single_entity_trace_env
+from mjswan.source import hf
 
-from myosuite import gym_registry_specs  # noqa: E402
-from myosuite.envs.myo import myochallenge  # noqa: E402, F401 - for env registration
+#: Every asset this demo does not get from mjlab. Public, so the build is anonymous.
+HF_REPO = "ttktjmt/mjswan"
 
-gym_logger.min_level = _prev_gym_level
+# ─────────────────────────────────────────────────────────────────────────────
+# Project A — mjlab Tasks
+# ─────────────────────────────────────────────────────────────────────────────
 
-import torch  # noqa: E402
-from mjlab.envs.mdp import observations as obs_fns  # noqa: E402
-from mjlab.envs.mdp import terminations as term_fns  # noqa: E402
-from mjlab.managers.scene_entity_config import SceneEntityCfg  # noqa: E402
-from robot_descriptions._descriptions import DESCRIPTIONS  # noqa: E402
-
-import mjswan  # noqa: E402
-from mjswan.envs.mdp.actions import (  # noqa: E402
-    JointEffortActionCfg,
-    JointPositionActionCfg,
+#: mjlab's bundled tasks, in the order they appear in the scene list.
+MJLAB_TASKS = (
+    "Mjlab-Velocity-Flat-Unitree-G1",
+    "Mjlab-Velocity-Rough-Unitree-G1",
+    "Mjlab-Velocity-Flat-Unitree-Go1",
+    "Mjlab-Velocity-Rough-Unitree-Go1",
+    "Mjlab-Lift-Cube-Yam",
+    "Mjlab-Cartpole-Balance",
+    "Mjlab-Cartpole-Swingup",
 )
-from mjswan.managers.observation_manager import (  # noqa: E402
-    ObservationGroupCfg,
-    ObservationTermCfg,
-)
-from mjswan.managers.termination_manager import TerminationTermCfg  # noqa: E402
-from mjswan.mjlab.env import build_single_entity_trace_env  # noqa: E402
 
-# --- Demo-specific observations. These scenes have no mjlab task, so each supplies its
-# own trace env via SceneHandle.set_trace_env, and the terms below are written against
-# the same live-env API mjlab's own use. ---
+#: Motion tracking. Two inputs and seven outputs, so it needs `in_keys` and a clip.
+TRACKING_TASK = "Mjlab-Tracking-Flat-Unitree-G1-No-State-Estimation"
+TRACKING_MOTION = "motions/mimickit_spinkick_safe.npz"
 
-#: Newest first: these Go2 checkpoints predate `history_length` stacking chronologically.
-GO2_HISTORY_STEPS = (0, 1, 2)
+TASK_VIEWER_CONFIG_MAP: dict[str, mjswan.ViewerConfig] = {
+    "Mjlab-Cartpole-Balance": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 1.0),
+        distance=4.0,
+        elevation=-15.0,
+        azimuth=90.0,
+        origin_type=mjswan.ViewerConfig.OriginType.WORLD,
+    ),
+    "Mjlab-Cartpole-Swingup": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 1.0),
+        distance=4.0,
+        elevation=-15.0,
+        azimuth=90.0,
+        origin_type=mjswan.ViewerConfig.OriginType.WORLD,
+    ),
+    "Mjlab-Lift-Cube-Yam": mjswan.ViewerConfig(
+        lookat=(0.2, 0.0, 0.4),
+        distance=2.0,
+        elevation=-20.0,
+        azimuth=45.0,
+    ),
+    "Mjlab-Velocity-Flat-Unitree-G1": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 0.0),
+        distance=3.0,
+        elevation=-20.0,
+        azimuth=0.0,
+        origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+        body_name="torso_link",
+    ),
+    "Mjlab-Velocity-Flat-Unitree-Go1": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 0.0),
+        distance=2.0,
+        elevation=-10.0,
+        azimuth=0.0,
+        origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+        body_name="trunk",
+    ),
+    "Mjlab-Velocity-Rough-Unitree-G1": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 0.0),
+        distance=4.0,
+        elevation=-20.0,
+        azimuth=30.0,
+        origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+        body_name="torso_link",
+    ),
+    "Mjlab-Velocity-Rough-Unitree-Go1": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 0.0),
+        distance=4.0,
+        elevation=-20.0,
+        azimuth=30.0,
+        origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+        body_name="trunk",
+    ),
+    TRACKING_TASK: mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 0.0),
+        distance=3.5,
+        elevation=-15.0,
+        azimuth=135.0,
+        origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+        body_name="torso_link",
+    ),
+}
 
-#: The Go2 networks' input slot table: what fills each of their four inputs, in order.
-#: `actor` and `command_` are the observation groups below; `is_init` / `adapt_hx` are the
-#: recurrent carry the runtime supplies itself (ADR 0006 §5).
-GO2_VELOCITY_IN_KEYS = ["actor", "is_init", "adapt_hx", "command_"]
 
-#: One label per network output, in order. The runtime reads `action` and the
-#: `["next", "adapt_hx"]` carry; the rest are the exporter's tensordict keys, kept as the
-#: record of which output is which (ADR 0006 §5).
-GO2_OUT_KEYS = [
-    "policy",
-    "priv_pred",
-    "ext_pred",
-    ["info", "ext_rec"],
-    ["next", "adapt_hx"],
-    "_actor_inp",
-    "_actor_feature",
-    "loc",
-    "scale",
-    "flag",
-    "action",
-    "sample_log_prob",
-    "retro_inp",
-    "retro_feat",
-    ["info", "retro_pred"],
-]
+def _checkpoints_for(task_id: str, repo_onnx: list[str]) -> list[str]:
+    """A task's mirrored checkpoints, oldest first.
 
-
-def joint_pos_abs(env, *, asset_cfg: SceneEntityCfg = SceneEntityCfg(name="robot")):
-    """Absolute joint positions (no default-pose subtraction)."""
-    asset = env.scene[asset_cfg.name]
-    return asset.data.joint_pos[:, asset_cfg.joint_ids]
-
-
-def impedance_command(env, **_):
-    """Impedance command placeholder: 27 zeros (no trained impedance head in this demo)."""
-    del env
-    return torch.zeros(1, 27)
-
-
-def velocity_command_padding(env, **_):
-    """Zero-padding (13) to fill the oscillator command slots this policy expects."""
-    del env
-    return torch.zeros(1, 13)
-
-
-def _fix_unitree_mujoco_macos() -> None:
-    """Pre-fix the unitree_mujoco cache on macOS to avoid case-sensitivity errors.
-
-    On macOS (case-insensitive filesystem), robot_descriptions fails to checkout
-    the unitree_mujoco repo because git history contains a rename from
-    terrain.STL -> terrain.stl, which macOS treats as the same file.
-
-    Fix: clone with --no-checkout so no files exist in the working tree before
-    the target commit is checked out, and set core.ignorecase=false so git
-    handles the case-rename correctly.
+    ``list_repo_onnx`` sorts as strings, which puts ``model_1000`` before ``model_500``.
+    The viewer lists checkpoints in the order they are added, so training has to be
+    re-sorted numerically to read as progress. Which one opens is separate and does not
+    depend on this: ``add_policy_hf`` defaults to the highest step either way.
     """
-    import platform
-    import shutil
-    import subprocess
-
-    if platform.system() != "Darwin":
-        return
-
-    cache_dir = Path.home() / ".cache/robot_descriptions/unitree_mujoco"
-
-    if cache_dir.exists():
-        result = subprocess.run(
-            ["git", "config", "core.ignorecase"],
-            cwd=cache_dir,
-            capture_output=True,
-            text=True,
-            check=False,
+    prefix = f"checkpoints/{task_id.lower()}/"
+    named = [name for name in repo_onnx if name.startswith(prefix)]
+    if not named:
+        raise ValueError(
+            f"No checkpoints under {prefix!r} in {HF_REPO!r}. The mirror is a snapshot "
+            "of the W&B runs; re-run scripts/mirror_wandb_to_hf.py if a task was added."
         )
-        if result.stdout.strip() == "false":
-            return  # Already correctly configured
-        shutil.rmtree(cache_dir)
+    return sorted(named, key=lambda name: int(re.search(r"_(\d+)\.onnx$", name)[1]))
 
-    print("Preparing unitree_mujoco cache for macOS (one-time setup)...")
-    subprocess.run(
-        [
-            "git",
-            "clone",
-            "--no-checkout",
-            "https://github.com/unitreerobotics/unitree_mujoco.git",
-            str(cache_dir),
-        ],
-        check=True,
+
+def _add_mjlab_tasks(builder: mjswan.Builder) -> None:
+    """mjlab's tasks, as mjlab gives them, driven by the mirrored checkpoints."""
+    project = builder.add_project(name="mjlab Tasks")
+    repo_onnx = hf.list_repo_onnx(HF_REPO)
+
+    for task_id in MJLAB_TASKS:
+        env_cfg = load_env_cfg(task_id, play=True)
+        register_custom_terminations(env_cfg)
+        scene = project.add_scene_mjlab(task_id, env_cfg=env_cfg)
+        if viewer_cfg := TASK_VIEWER_CONFIG_MAP.get(task_id):
+            scene.set_viewer(viewer_cfg)
+        # Everything but the files comes from the task: observations, commands, actions,
+        # terminations and events are read off `env_cfg`, and the joint mapping and rest
+        # pose off the metadata mjlab baked into each `.onnx`.
+        scene.add_policy_hf(HF_REPO, filename=_checkpoints_for(task_id, repo_onnx))
+
+    _add_tracking_scene(project, repo_onnx)
+
+
+def _add_tracking_scene(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> None:
+    """G1 Spinkick: the one task whose policy needs a reference motion beside it."""
+    env_cfg = load_env_cfg(TRACKING_TASK, play=True)
+    motion_term = env_cfg.commands["motion"]
+    scene = project.add_scene_mjlab(TRACKING_TASK, env_cfg=env_cfg)
+    if viewer_cfg := TASK_VIEWER_CONFIG_MAP.get(TRACKING_TASK):
+        scene.set_viewer(viewer_cfg)
+
+    # `in_keys` is positional, so a two-input export cannot be read off the network's
+    # own input names (ADR 0006 §5).
+    policies = scene.add_policy_hf(
+        HF_REPO,
+        filename=_checkpoints_for(TRACKING_TASK, repo_onnx),
+        in_keys=["actor", "time_step"],
     )
-    subprocess.run(
-        ["git", "config", "core.ignorecase", "false"],
-        cwd=cache_dir,
-        check=True,
-    )
+
+    # `add_policy_wandb` finds the clip in the run's artifacts; the Hub holds published
+    # files and knows nothing about which clip a policy was trained against, so the
+    # tracking scene names it. The anchor and the body list come from the task itself,
+    # which is where the training read them from too.
+    for policy in policies:
+        policy.add_motion_hf(
+            HF_REPO,
+            TRACKING_MOTION,
+            repo_type="model",
+            anchor_body_name=motion_term.anchor_body_name,
+            body_names=list(motion_term.body_names),
+            default=True,
+        )
 
 
-def _add_g1_scene(project) -> None:
-    g1_scene = project.add_scene(
+# ─────────────────────────────────────────────────────────────────────────────
+# Project B — Showcase
+# ─────────────────────────────────────────────────────────────────────────────
+
+G1_TERMINATIONS: dict[str, TerminationTermCfg] = {
+    "bad_orientation": TerminationTermCfg(
+        func=term_fns.bad_orientation, params={"limit_angle": 1.0}
+    ),
+    "root_height_below_minimum": TerminationTermCfg(
+        func=term_fns.root_height_below_minimum, params={"minimum_height": 0.3}
+    ),
+}
+
+
+def _add_g1_on_street(project: mjswan.ProjectHandle) -> None:
+    """A Hub-hosted model, Hub-hosted policies, and two captures to stand it in.
+
+    mjlab has no task for this G1 — the two policies are third-party, trained against
+    this XML — so the model itself comes from the Hub as a directory: the MJCF, the 35
+    meshes it names, and the `LICENSE` that mjswan copies into the build beside it.
+    """
+    # Cached by `huggingface_hub`, so `add_scene_hf` below re-uses this download rather
+    # than fetching the tree twice. The robot-only XML is what the tracer needs; the
+    # scene XML that includes it is what the viewer shows.
+    g1_dir = hf.fetch_dir(HF_REPO, "scenes/unitree_g1")
+
+    scene = project.add_scene_hf(
+        HF_REPO,
+        "scenes/unitree_g1/scene.xml",
+        name="G1 on Street",
         control_dt=0.02,  # 50 Hz control step
-        spec=mujoco.MjSpec.from_file("assets/unitree_g1/scene.xml"),
-        name="G1",
-    ).set_viewer(
+    )
+    scene.set_trace_env(
+        build_single_entity_trace_env(
+            lambda: mujoco.MjSpec.from_file(str(g1_dir / "g1.xml"))
+        )
+    )
+    scene.set_viewer(
         mjswan.ViewerConfig(
             lookat=(0.0, 0.0, 0.7),
             distance=4.3,
@@ -158,521 +239,207 @@ def _add_g1_scene(project) -> None:
             body_name="torso_link",
         )
     )
-    g1_scene.set_trace_env(
-        build_single_entity_trace_env(
-            lambda: mujoco.MjSpec.from_file("assets/unitree_g1/g1.xml")
-        )
+
+    # Two captures on one scene: the viewer shows a selector, and only the one being
+    # shown is fetched. The placement values line each capture up with this model and
+    # belong to the capture, not to the file, so no part of the Hub knows them.
+    scene.add_splat_hf(
+        HF_REPO, "splats/street.spz", name="Street", scale=3.275, z_offset=0.708, yaw=40
     )
-    g1_scene.add_splat(
-        name="Street",
-        source="assets/unitree_g1/street.spz",
-        scale=3.275,
-        z_offset=0.708,
-        yaw=40,
-        control=True,
+    scene.add_splat_hf(
+        HF_REPO, "splats/cafe.spz", name="Cafe", scale=3.275, z_offset=0.708
     )
 
-    g1_terminations = {
-        "bad_orientation": TerminationTermCfg(
-            func=term_fns.bad_orientation, params={"limit_angle": 1.0}
+    # Two separate calls, not one with a list: these policies were trained on different
+    # observation sets, so they are two MDPs. Neither is an mjlab export, so neither
+    # carries metadata — the sidecar JSON beside it on the Hub supplies the PD gains.
+    scene.add_policy_hf(
+        HF_REPO,
+        filename="policies/locomotion.onnx",
+        name="locomotion",
+        config_path=str(hf.fetch_file(HF_REPO, "policies/locomotion.json")),
+        terminations=G1_TERMINATIONS,
+        observations=ObservationGroupCfg(
+            terms={
+                "base_lin_vel": ObservationTermCfg(func=obs_fns.base_lin_vel),
+                "base_ang_vel": ObservationTermCfg(func=obs_fns.base_ang_vel),
+                "projected_gravity": ObservationTermCfg(func=obs_fns.projected_gravity),
+                "joint_pos": ObservationTermCfg(func=obs_fns.joint_pos_rel),
+                "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
+                "last_action": ObservationTermCfg(func=obs_fns.last_action),
+                "velocity_cmd": ObservationTermCfg(
+                    func=obs_fns.generated_commands,
+                    params={"command_name": "velocity"},
+                ),
+            }
         ),
-        "root_height_below_minimum": TerminationTermCfg(
-            func=term_fns.root_height_below_minimum, params={"minimum_height": 0.3}
-        ),
-    }
-
-    g1_scene.add_policy(
-        policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
-        name="Locomotion",
-        config_path="assets/unitree_g1/locomotion.json",
-        terminations=g1_terminations,
         commands={
             "velocity": mjswan.velocity_command(
                 lin_vel_x=(-1.5, 1.5),
                 lin_vel_y=(-0.5, 0.5),
                 default_lin_vel_x=0.5,
-                default_lin_vel_y=0.0,
             )
         },
+    )
+    scene.add_policy_hf(
+        HF_REPO,
+        filename="policies/balance.onnx",
+        name="balance",
+        config_path=str(hf.fetch_file(HF_REPO, "policies/balance.json")),
+        terminations=G1_TERMINATIONS,
         observations=ObservationGroupCfg(
             terms={
-                "base_lin_vel": ObservationTermCfg(func=obs_fns.base_lin_vel),
-                "base_ang_vel": ObservationTermCfg(func=obs_fns.base_ang_vel),
-                "projected_gravity": ObservationTermCfg(func=obs_fns.projected_gravity),
-                "joint_pos": ObservationTermCfg(func=obs_fns.joint_pos_rel),
-                "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
-                "last_action": ObservationTermCfg(func=obs_fns.last_action),
-                "velocity_cmd": ObservationTermCfg(
-                    func=obs_fns.generated_commands,
-                    params={"command_name": "velocity"},
+                "base_ang_vel": ObservationTermCfg(
+                    func=obs_fns.base_ang_vel, history_length=1
                 ),
-            }
-        ),
-    )
-
-    g1_scene.add_policy(
-        policy=onnx.load("assets/unitree_g1/balance.onnx"),
-        name="Balance",
-        config_path="assets/unitree_g1/balance.json",
-        terminations=g1_terminations,
-        # One ONNX input, one group: handed over bare it lands under the default slot.
-        observations=ObservationGroupCfg(
-            terms={
-                "base_ang_vel": ObservationTermCfg(func=obs_fns.base_ang_vel),
-                "projected_gravity": ObservationTermCfg(func=obs_fns.projected_gravity),
-                "joint_pos": ObservationTermCfg(func=obs_fns.joint_pos_rel),
-                "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
-                "prev_actions": ObservationTermCfg(func=obs_fns.last_action),
-            }
-        ),
-    )
-
-
-def _add_go2_scene(project) -> None:
-    go2_scene = project.add_scene(
-        control_dt=0.02,  # 50 Hz control step
-        name="Go2",
-        spec=mujoco.MjSpec.from_file("assets/unitree_go2/scene.xml"),
-    ).set_viewer(
-        mjswan.ViewerConfig(
-            lookat=(0.0, 0.0, 0.7),
-            distance=3.8,
-            elevation=-20.0,
-            azimuth=34.0,
-            origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
-            body_name="base",
-        )
-    )
-    go2_scene.set_trace_env(
-        build_single_entity_trace_env(
-            lambda: mujoco.MjSpec.from_file("assets/unitree_go2/go2.xml")
-        )
-    )
-
-    go2_actions = {
-        "joint_pos": JointPositionActionCfg(
-            scale=0.5,
-            stiffness=25.0,
-            damping=0.5,
-        )
-    }
-    # Keyed by slot name (see GO2_VELOCITY_IN_KEYS), never by the networks' tensor names.
-    go2_velocity_obs = {
-        "actor": ObservationGroupCfg(
-            terms={
                 "projected_gravity": ObservationTermCfg(
-                    func=obs_fns.projected_gravity, history_steps=GO2_HISTORY_STEPS
+                    func=obs_fns.projected_gravity, history_length=1
                 ),
                 "joint_pos": ObservationTermCfg(
-                    func=obs_fns.joint_pos_rel, history_steps=GO2_HISTORY_STEPS
+                    func=obs_fns.joint_pos_rel, history_length=1
                 ),
                 "joint_vel": ObservationTermCfg(
-                    func=obs_fns.joint_vel_rel, history_steps=GO2_HISTORY_STEPS
-                ),
-                "prev_actions": ObservationTermCfg(
-                    func=obs_fns.last_action,
-                    history_steps=GO2_HISTORY_STEPS,
-                    history_interleaved=True,
-                ),
-            }
-        ),
-        "command_": ObservationGroupCfg(
-            terms={
-                "velocity_cmd": ObservationTermCfg(
-                    func=obs_fns.generated_commands,
-                    params={"command_name": "velocity"},
-                ),
-                "velocity_cmd_pad": ObservationTermCfg(func=velocity_command_padding),
-            }
-        ),
-    }
-
-    go2_scene.add_policy(
-        name="Facet",
-        policy=onnx.load("assets/unitree_go2/facet.onnx"),
-        config_path="assets/unitree_go2/facet.json",
-        actions=go2_actions,
-        in_keys=["command", "actor", "is_init", "adapt_hx"],
-        out_keys=["command", *GO2_OUT_KEYS],
-        # Genuinely multi-input (a command group beside the proprioceptive one), which
-        # is what the dict form is for: one group per slot.
-        observations={
-            "actor": ObservationGroupCfg(
-                terms={
-                    "projected_gravity": ObservationTermCfg(
-                        func=obs_fns.projected_gravity, history_steps=GO2_HISTORY_STEPS
-                    ),
-                    "joint_pos": ObservationTermCfg(
-                        func=joint_pos_abs, history_steps=GO2_HISTORY_STEPS
-                    ),
-                    "joint_vel": ObservationTermCfg(
-                        func=obs_fns.joint_vel_rel, history_steps=GO2_HISTORY_STEPS
-                    ),
-                    "prev_actions": ObservationTermCfg(
-                        func=obs_fns.last_action,
-                        history_steps=GO2_HISTORY_STEPS,
-                        history_interleaved=True,
-                    ),
-                }
-            ),
-            "command": ObservationGroupCfg(
-                terms={
-                    "impedance_cmd": ObservationTermCfg(func=impedance_command),
-                }
-            ),
-        },
-        commands={"velocity": mjswan.velocity_command()},
-    )
-
-    go2_scene.add_policy(
-        policy=onnx.load("assets/unitree_go2/vanilla.onnx"),
-        name="Vanilla",
-        config_path="assets/unitree_go2/vanilla.json",
-        actions=go2_actions,
-        in_keys=GO2_VELOCITY_IN_KEYS,
-        out_keys=GO2_OUT_KEYS,
-        observations=go2_velocity_obs,
-        commands={"velocity": mjswan.velocity_command()},
-    )
-
-    go2_scene.add_policy(
-        policy=onnx.load("assets/unitree_go2/robust.onnx"),
-        name="Robust",
-        config_path="assets/unitree_go2/robust.json",
-        actions=go2_actions,
-        in_keys=GO2_VELOCITY_IN_KEYS,
-        out_keys=GO2_OUT_KEYS,
-        observations=go2_velocity_obs,
-        commands={"velocity": mjswan.velocity_command()},
-    )
-
-
-def _add_go1_scene(project) -> None:
-    go1_scene = project.add_scene(
-        control_dt=0.02,  # 50 Hz control step
-        spec=mujoco.MjSpec.from_file("assets/unitree_go1/go1.xml"),
-        name="Go1",
-    ).set_viewer(
-        mjswan.ViewerConfig(
-            lookat=(0.0, 0.0, 0.2),
-            distance=3.1,
-            elevation=-25.0,
-            azimuth=-45.0,
-            origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
-            body_name="trunk",
-        )
-    )
-    go1_scene.set_trace_env(
-        build_single_entity_trace_env(
-            lambda: mujoco.MjSpec.from_file("assets/unitree_go1/go1.xml")
-        )
-    )
-
-    # HiMLoco is not shown: it asks for an interleaved group history, and the runtime stores
-    # that flag without applying it — the stack it feeds the policy is frame-major regardless.
-    go1_scene.add_policy(
-        policy=onnx.load("assets/unitree_go1/decap.onnx"),
-        name="Decap",
-        config_path="assets/unitree_go1/decap.json",
-        actions={
-            "effort": JointEffortActionCfg(
-                scale=8.0,
-                stiffness=20.0,
-                damping=0.5,
-            )
-        },
-        observations=ObservationGroupCfg(
-            terms={
-                "projected_gravity": ObservationTermCfg(func=obs_fns.projected_gravity),
-                "velocity_cmd": ObservationTermCfg(
-                    func=obs_fns.generated_commands,
-                    params={"command_name": "velocity"},
-                    scale=(2.0, 2.0, 0.25),
-                ),
-                "joint_pos": ObservationTermCfg(func=obs_fns.joint_pos_rel),
-                "joint_vel": ObservationTermCfg(
-                    func=obs_fns.joint_vel_rel,
-                    scale=0.05,
+                    func=obs_fns.joint_vel_rel, history_length=1
                 ),
                 "prev_actions": ObservationTermCfg(func=obs_fns.last_action),
             }
         ),
-        commands={"velocity": mjswan.velocity_command()},
     )
 
 
-def _anymal_c_trace_spec() -> mujoco.MjSpec:
-    # scene.mjz already carries an "init_state" keyframe from its own Entity build, and
-    # EntityCfg adds one of the same name when wrapping it again — so drop the existing.
-    spec = mujoco.MjSpec.from_zip("assets/anymal_c_velocity/scene.mjz")
-    for key in list(spec.keys):
-        if key.name == "init_state":
-            spec.delete(key)
-    return spec
+# MyoFinger: 4 hinge joints (IFadb, IFmcp, IFpip, IFdip) driven by 5 MuJoCo muscle
+# actuators. The XMLs are fetched from upstream at run time, so this adds no Python
+# dependency on `myo_sim` and nothing is vendored here.
+MYO_JOINT_NAMES = ("IFadb", "IFmcp", "IFpip", "IFdip")
+MYO_MUSCLE_NAMES = ("extn", "adabR", "adabL", "mflx", "dflx")
+MYO_OBS_DIM = 2 * len(MYO_JOINT_NAMES)  # joint_pos + joint_vel
+MYO_INITIAL_QPOS = [0.0, 0.3, 0.3, 0.3]  # slightly flexed, not fully extended
+MYO_INITIAL_QVEL = [0.0] * len(MYO_JOINT_NAMES)
+
+_MYOFINGER_BASE = "https://raw.githubusercontent.com/MyoHub/myo_sim/main/finger"
+_MYOFINGER_CACHE = Path(__file__).resolve().parent / ".cache" / "myofinger"
 
 
-def _add_anymal_c_scene(project) -> None:
-    anymal_c_scene = project.add_scene(
-        control_dt=0.02,  # 50 Hz control step
-        name="ANYmal C Velocity",
-        spec=mujoco.MjSpec.from_zip("assets/anymal_c_velocity/scene.mjz"),
+def _fetch_myofinger() -> Path:
+    """Download the MyoFinger XMLs into a gitignored cache; return the entry point."""
+    _MYOFINGER_CACHE.mkdir(parents=True, exist_ok=True)
+    for name in ("myofinger_v0.xml", "finger_v0.xml"):
+        target = _MYOFINGER_CACHE / name
+        if not target.exists():
+            urlretrieve(f"{_MYOFINGER_BASE}/{name}", target)
+    return _MYOFINGER_CACHE / "myofinger_v0.xml"
+
+
+def _build_muscle_policy() -> onnx.ModelProto:
+    """Random-uniform policy: ignores the observation, emits fresh [0, 1] samples.
+
+    The point is the action path, not the network — a muscle is excited by a value in
+    [0, 1], so a graph whose only op is `RandomUniform` drives every muscle with a new
+    excitation each policy step and shows the actuator model doing its work.
+    """
+    obs_in = helper.make_tensor_value_info("actor", TensorProto.FLOAT, [1, MYO_OBS_DIM])
+    act_out = helper.make_tensor_value_info(
+        "action", TensorProto.FLOAT, [1, len(MYO_MUSCLE_NAMES)]
     )
-    anymal_c_scene.set_trace_env(build_single_entity_trace_env(_anymal_c_trace_spec))
-    anymal_c_scene.add_policy(
-        name="velocity 3000 iters",
-        policy=onnx.load(
-            "assets/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.onnx"
+    random_node = helper.make_node(
+        "RandomUniform",
+        inputs=[],
+        outputs=["action"],
+        shape=[1, len(MYO_MUSCLE_NAMES)],
+        low=0.0,
+        high=1.0,
+        dtype=TensorProto.FLOAT,
+    )
+    model = helper.make_model(
+        helper.make_graph(
+            nodes=[random_node],
+            name="muscle_policy",
+            inputs=[obs_in],
+            outputs=[act_out],
         ),
-        config_path="assets/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.json",
-        actions={
-            "joint_pos": JointPositionActionCfg(
-                scale=1.013,
-                stiffness=19.739,
-                damping=1.257,
-            )
-        },
-        # mjlab's export names its one input `obs`, which does not matter: the mapping is
-        # positional, so the group goes over bare like any single-input policy's.
+        opset_imports=[helper.make_opsetid("", 17)],
+        producer_name="mjswan-demo",
+    )
+    onnx.checker.check_model(model)
+    return model
+
+
+def _add_myofinger(project: mjswan.ProjectHandle) -> None:
+    """Muscle actuators: no joint mapping, an overridden rest pose, sigmoid activation."""
+    myofinger_path = str(_fetch_myofinger())
+    scene = project.add_scene(
+        control_dt=0.02,  # 50 Hz control step
+        spec=mujoco.MjSpec.from_file(myofinger_path),
+        name="MyoFinger",
+    )
+    scene.set_trace_env(
+        build_single_entity_trace_env(lambda: mujoco.MjSpec.from_file(myofinger_path))
+    )
+    scene.set_viewer(
+        mjswan.ViewerConfig(
+            lookat=(0.0, 0.0, 0.2),
+            distance=1.5,
+            elevation=-20.0,
+            azimuth=120.0,
+            origin_type=mjswan.ViewerConfig.OriginType.WORLD,
+        )
+    )
+
+    # The build resolves joint_names -> joint_ids against the trace env, as mjlab does.
+    finger_joints = SceneEntityCfg(name="robot", joint_names=list(MYO_JOINT_NAMES))
+
+    scene.add_policy(
+        name="Random Action",
+        policy=_build_muscle_policy(),
+        # A muscle is not a joint, so there is no mapping to declare — only a count.
+        policy_joint_names=[],
+        policy_num_actions=len(MYO_MUSCLE_NAMES),
+        initial_qpos=MYO_INITIAL_QPOS,
+        initial_qvel=MYO_INITIAL_QVEL,
         observations=ObservationGroupCfg(
             terms={
-                "base_lin_vel": ObservationTermCfg(func=obs_fns.base_lin_vel),
-                "base_ang_vel": ObservationTermCfg(func=obs_fns.base_ang_vel),
-                "projected_gravity": ObservationTermCfg(func=obs_fns.projected_gravity),
-                "joint_pos": ObservationTermCfg(func=obs_fns.joint_pos_rel),
-                "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
-                "last_action": ObservationTermCfg(func=obs_fns.last_action),
-                "velocity_cmd": ObservationTermCfg(
-                    func=obs_fns.generated_commands,
-                    params={"command_name": "velocity"},
+                "joint_pos": ObservationTermCfg(
+                    func=obs_fns.joint_pos_rel,
+                    params={"asset_cfg": finger_joints},
+                ),
+                "joint_vel": ObservationTermCfg(
+                    func=obs_fns.joint_vel_rel,
+                    params={"asset_cfg": finger_joints},
                 ),
             }
         ),
-        commands={
-            "velocity": mjswan.velocity_command(
-                lin_vel_x=(-1.0, 1.0),
-                lin_vel_y=(-1.0, 1.0),
-                ang_vel_z=(-0.5, 0.5),
-                default_lin_vel_x=0.5,
-                default_lin_vel_y=0.0,
-                default_ang_vel_z=0.0,
-            )
+        actions={
+            "muscles": MuscleActivationActionCfg(
+                entity_name="",
+                actuator_names=MYO_MUSCLE_NAMES,
+            ),
         },
     )
 
 
-#: Project names; their directories in the build are `name2id(name)` (ADR 0006 §4).
-ROBOT_DESCRIPTIONS_PROJECT = "Robot Descriptions"
-PLAYGROUND_PROJECT = "MuJoCo Playground"
-MYOSUITE_PROJECT = "MyoSuite"
+def _add_showcase(builder: mjswan.Builder) -> None:
+    project = builder.add_project(name="Showcase")
+    _add_g1_on_street(project)
+    _add_myofinger(project)
 
 
-def _robot_description_scene_name(module: str) -> str:
-    """The scene name a `robot_descriptions` module gets (`go2_mj_description` → `Go2`)."""
-    stem = module.replace("_mj_description", "")
-    return " ".join(word.capitalize() for word in stem.split("_"))
-
-
-def _add_mjswan_demo_project(builder: mjswan.Builder) -> None:
-    project = builder.add_project(name="mjswan Demo")
-    _add_g1_scene(project)
-    _add_go2_scene(project)
-    _add_go1_scene(project)
-
-
-def _add_robot_descriptions_project(builder: mjswan.Builder) -> None:
-    project = builder.add_project(name=ROBOT_DESCRIPTIONS_PROJECT)
-
-    # ANYmal C Velocity from https://github.com/mujocolab/anymal_c_velocity
-    _add_anymal_c_scene(project)
-
-    def _rd_spec(module_name: str) -> mujoco.MjSpec:
-        from importlib import import_module
-
-        mjcf_path = Path(import_module(f"robot_descriptions.{module_name}").MJCF_PATH)
-        # Prefer scene.xml (floor + lights) over the robot-only MJCF when available.
-        scene_path = mjcf_path.parent / "scene.xml"
-        return mujoco.MjSpec.from_file(
-            str(scene_path if scene_path.exists() else mjcf_path)
-        )
-
-    for module, desc in DESCRIPTIONS.items():
-        if desc.has_mjcf:
-            project.add_scene(
-                name=_robot_description_scene_name(module), spec=_rd_spec(module)
-            )
-
-
-def _add_playground_project(builder: mjswan.Builder) -> None:
-    project = builder.add_project(name=PLAYGROUND_PROJECT)
-
-    # TEMPORARY PATCH:
-    # Force JAX backend for all environments: mujoco_playground inconsistently
-    # migrated to warp as the default — some envs pass impl via config, others
-    # call mjx.put_model() with no impl at all. Patching here covers both cases.
-    # TODO: Once mujoco_playground fixes all envs to respect config_overrides,
-    # replace this patch with simply: registry.load(env_name, config_overrides={"impl": "jax"})
-    _orig_put_model = _mjx.put_model
-    _mjx.put_model = lambda m, **kw: _orig_put_model(m, **{**kw, "impl": "jax"})
-
-    # TEMPORARY PATCH:
-    # reacher.py gates on `mujoco.__version__ >= "3.3.0"`, a string compare that is
-    # False for "3.10.0", so it calls the pre-3.3 spec.find_body() that mujoco has
-    # since renamed to spec.body(). Restore the old name as an alias.
-    if not hasattr(mujoco.MjSpec, "find_body"):
-        mujoco.MjSpec.find_body = mujoco.MjSpec.body
-    try:
-        for env_name in registry.ALL_ENVS:
-            if "Sparse" in env_name:
-                continue
-
-            env = registry.load(env_name)
-            with open(env.xml_path) as f:
-                xml_content = f.read()
-            spec = mujoco.MjSpec.from_string(xml_content, env.model_assets)
-
-            # model_assets is consumed at parse time but not stored in spec.assets, so remap its
-            # basename keys to the `dir/file` paths spec.to_xml() looks up.
-            mesh_dir = spec.meshdir or ""
-            tex_dir = spec.texturedir or ""
-
-            def _add(directory: str, filename: str) -> None:
-                if not filename:
-                    return
-                key = posixpath.join(directory, filename) if directory else filename
-                basename = os.path.basename(key)
-                if basename in env.model_assets:
-                    spec.assets[key] = env.model_assets[basename]
-
-            for mesh in spec.meshes:
-                _add(mesh_dir, mesh.file)
-            for texture in spec.textures:
-                _add(tex_dir, texture.file)
-                for cf in texture.cubefiles:
-                    _add(tex_dir, cf)
-            for hfield in spec.hfields:
-                _add("", hfield.file)
-
-            project.add_scene(name=env_name, spec=spec)
-    finally:
-        _mjx.put_model = _orig_put_model
-
-
-def _add_myosuite_project(builder: mjswan.Builder) -> None:
-    project = builder.add_project(name=MYOSUITE_PROJECT)
-
-    registry_specs = gym_registry_specs()
-
-    # (display_name, lookat, distance, elevation, azimuth)
-    target_envs = {
-        "myoChallengeDieReorientP2-v0": (
-            "mc22 Die Reorient",
-            (-0.1, -0.5, 1.4),
-            1.3,
-            -9.0,
-            -61.0,
-        ),
-        "myoChallengeBaodingP2-v1": (
-            "mc22 Baoding",
-            (-0.1, -0.5, 1.4),
-            1.3,
-            -9.0,
-            -61.0,
-        ),
-        "myoChallengeRelocateP2-v0": (
-            "mc23 Relocate",
-            (0.0, -0.1, 1.4),
-            1.7,
-            -7.0,
-            -90.0,
-        ),
-        "myoChallengeChaseTagP2-v0": (
-            "mc23 Chase Tag",
-            (0.0, 0.0, 1.4),
-            10.0,
-            -15.0,
-            -62.0,
-        ),
-        "myoChallengeBimanual-v0": (
-            "mc24 Bimanual",
-            (-0.1, -0.5, 1.4),
-            1.3,
-            -9.0,
-            -61.0,
-        ),
-        "myoChallengeOslRunRandom-v0": (
-            "mc24 OSL Run",
-            (0.0, 0.0, 1.4),
-            10.0,
-            -15.0,
-            -62.0,
-        ),
-        "myoChallengeTableTennisP2-v0": (
-            "mc25 Table Tennis",
-            (0.0, -1.0, 1.4),
-            3.3,
-            -11.0,
-            -129.0,
-        ),
-        "myoChallengeSoccerP2-v0": (
-            "mc25 Soccer",
-            (0.0, -3.0, 2.0),
-            14.7,
-            -16.0,
-            -172.0,
-        ),
-    }
-
-    for env_name, (
-        display_name,
-        lookat,
-        distance,
-        elevation,
-        azimuth,
-    ) in target_envs.items():
-        model_path = registry_specs[env_name].kwargs["model_path"]
-        mjspec = mujoco.MjSpec.from_file(model_path)
-        project.add_scene(name=display_name, spec=mjspec).set_viewer(
-            mjswan.ViewerConfig(
-                lookat=lookat,
-                distance=distance,
-                elevation=elevation,
-                azimuth=azimuth,
-                origin_type=mjswan.ViewerConfig.OriginType.WORLD,
-            )
-        )
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def setup_builder() -> mjswan.Builder:
-    """Set up and return the builder with all demo projects configured.
-
-    This function creates the builder and adds all projects, scenes, and policies
-    but does not build or launch the application. Useful for testing.
-
-    Returns:
-        Configured Builder instance ready to be built.
-    """
-    _fix_unitree_mujoco_macos()
-    # Ensure asset-relative paths resolve regardless of current working directory.
-    os.chdir(Path(__file__).resolve().parent)
-    base_path = os.getenv("MJSWAN_BASE_PATH", "/")
-    # Apache-2.0 like the repository; third-party model licenses are detected beside
-    # each model (ADR 0007 §2).
+    """Assemble the demo. Fetches from the Hub and from MyoHub; needs no credentials."""
     builder = mjswan.Builder(
-        base_path=base_path,
+        base_path=os.getenv("MJSWAN_BASE_PATH", "/"),
         gtm_id="GTM-W79HQ38W",
         license="Apache-2.0",
         copyright="mjswan Developers",
     )
-
-    _add_mjswan_demo_project(builder)
-    _add_robot_descriptions_project(builder)
-    _add_playground_project(builder)
-    _add_myosuite_project(builder)
-
+    _add_mjlab_tasks(builder)
+    _add_showcase(builder)
     return builder
 
 
-def main():
+def main() -> None:
     """Main entry point for the demo application.
 
     Environment variables:
@@ -684,8 +451,7 @@ def main():
     if os.getenv("MJSWAN_SKIP_BUILD") == "1":
         app = mjswan.MjswanApp(dist_dir)
     else:
-        builder = setup_builder()
-        app = builder.build()
+        app = setup_builder().build()
     if os.getenv("MJSWAN_NO_LAUNCH") != "1":
         app.launch()
 

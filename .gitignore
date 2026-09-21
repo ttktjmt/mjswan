@@ -42,8 +42,9 @@ Thumbs.db
 # Cache
 .cache
 .temp
-# Fetched from upstream MyoHub/myo_sim at demo run time, not vendored
-examples/demo/assets/myofinger/
+# Fetched from upstream at run time, never vendored. `examples/` holds no binary:
+# the pre-commit `no-binaries-in-examples` hook is what keeps it that way.
+examples/**/.cache/
 
 # Artifacts
 dist/
