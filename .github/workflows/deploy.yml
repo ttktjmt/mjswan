@@ -1,9 +1,24 @@
 name: deploy
 
+# Also builds on a PR, without deploying. The demo fetches every asset it shows —
+# mjlab tasks, the Hugging Face mirror, MyoHub — so "does it still build" is a real
+# question that only a real build answers, and finding out after the merge means
+# finding out from a broken live site.
+
 on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths:
+      - 'examples/demo/main.py'
+      - 'src/mjswan/**'
+      - 'pyproject.toml'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    branches: [main]
+    # Spelled out rather than shared with an anchor: this file has to parse the same
+    # way in GitHub's runner as it does locally, and a workflow that fails to parse
+    # takes the whole check with it.
     paths:
       - 'examples/demo/main.py'
       - 'src/mjswan/**'
@@ -14,8 +29,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  # Two deploys must never overlap, which is what the shared "pages" group is for.
+  # A PR build does not deploy, so it takes a group of its own per branch and
+  # cancels its own earlier run rather than queueing behind a deploy.
+  group: ${{ github.event_name == 'pull_request' && format('demo-build-{0}', github.ref) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   deploy:
@@ -30,8 +48,11 @@ jobs:
       with:
         python-version: '3.12'
 
+    # Only what `examples/demo/main.py` imports. The `examples` extra additionally
+    # pulls MyoSuite, Playground and robot_descriptions for the other example
+    # scripts, and none of them reaches this build any more.
     - name: Install Python dependencies
-      run: uv sync --extra examples
+      run: uv sync --extra hf --extra mjlab
 
     - name: Build demo application
       run: |
@@ -40,6 +61,7 @@ jobs:
         du -h -d 1 examples/demo/dist 2>/dev/null | sort -rh | head -20
 
     - name: Deploy to gh-pages branch
+      if: github.event_name != 'pull_request'
       uses: peaceiris/actions-gh-pages@v4
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
