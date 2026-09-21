@@ -88,13 +88,16 @@ python main.py
 mjswan demo [name] [--list]
 ```
 
-Run one of the bundled demos under `examples/`.
+Run one of the bundled demos under `examples/`. They fetch what they show — from
+mjlab, from the Hugging Face Hub, or from upstream — so the first run downloads and
+later ones read the cache. `simple` and `main` need `pip install 'mjswan[hf,mjlab]'`;
+`mjlab` reads a W&B run, so it needs `mjswan[wandb,mjlab]` and a login.
 
 | Demo | Source |
 |---|---|
-| `simple` (default) | `examples/demo/simple.py` |
-| `main` | `examples/demo/main.py` (the demo deployed to GitHub Pages) |
-| `mjlab` | `examples/mjlab/defaults/main.py` |
+| `simple` (default) | `examples/demo/simple.py` — one mjlab task, one checkpoint |
+| `main` | `examples/demo/main.py` — the demo deployed to GitHub Pages |
+| `mjlab` | `examples/mjlab/defaults/main.py` — the same tasks, read from W&B instead |
 
 Use `mjswan demo --list` to enumerate them.
 

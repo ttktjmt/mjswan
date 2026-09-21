@@ -93,10 +93,7 @@ mjswan is perfect for:
 
 ## Live Demos
 
-- [Main Demo](https://ttktjmt.github.io/mjswan){:target="_blank" rel="noopener noreferrer"} - Main mjswan demos
-- [MyoSuite](https://ttktjmt.github.io/mjswan/myosuite){:target="_blank" rel="noopener noreferrer"} - Musculoskeletal models
-- [MuJoCo Menagerie](https://ttktjmt.github.io/mjswan/menagerie){:target="_blank" rel="noopener noreferrer"} - Various high-quality robot models
-- [MuJoCo Playground](https://ttktjmt.github.io/mjswan/playground){:target="_blank" rel="noopener noreferrer"} - Interactive environments
+- [Main Demo](https://ttktjmt.github.io/mjswan){:target="_blank" rel="noopener noreferrer"} - mjlab's tasks with their trained checkpoints, plus a splat-backed G1 and muscle actuators
 - [GentleHumanoid](https://mjswan-gentlehumanoid.pages.dev/){:target="_blank" rel="noopener noreferrer"} - Motion-tracking humanoid, built on mjswan
 - [MuscleMimic](https://mjswan-musclemimic.pages.dev/){:target="_blank" rel="noopener noreferrer"} - Musculoskeletal motion imitation
 

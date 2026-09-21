@@ -411,7 +411,8 @@ message naming this call.
 |---|---|
 | [examples/tutorial/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/tutorial/minimum_policy.py){:target="_blank"} | Smallest complete policy — a hand-built two-node ONNX PD controller, one self-authored observation beside two of mjlab's, a `ui_command`, and `set_trace_env`. |
 | [examples/demo/gentle_humanoid/](https://github.com/ttktjmt/mjswan/tree/main/examples/demo/gentle_humanoid){:target="_blank"} | Real tracking policy: 11 traced terms reading a reference-trajectory window and a sparse proprioceptive history, 1590 observation values. |
-| [examples/mjlab/defaults/](https://github.com/ttktjmt/mjswan/tree/main/examples/mjlab/defaults){:target="_blank"} | Seven mjlab tasks with W&B checkpoints, custom command registrations, and per-task viewer configs. |
+| [examples/demo/main.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/main.py){:target="_blank"} | Eight mjlab tasks with their mirrored checkpoints, two third-party policies with sidecar configs on the same scene, and a muscle-driven policy — every asset fetched, none stored. |
+| [examples/mjlab/defaults/](https://github.com/ttktjmt/mjswan/tree/main/examples/mjlab/defaults){:target="_blank"} | The same tasks read from W&B rather than the Hub: `add_policy_wandb` converting every `model_*.pt` with mjlab and torch. |
 
 ## What an mjlab export already carries
 

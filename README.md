@@ -62,7 +62,9 @@ or with `npm`:
 npm install mjswan
 ```
 
-You can run the bundled demo with the `mjswan` CLI (after installing `mjswan[examples]`):
+You can run the bundled demo with the `mjswan` CLI (after installing
+`mjswan[hf,mjlab]`). It fetches the model from mjlab and the policy from the
+Hugging Face Hub, so there is nothing to download by hand:
 ``` sh
 mjswan demo          # runs the default demo
 mjswan demo --list   # see all available demos
@@ -86,9 +88,9 @@ For detailed instructions, visit the [documentation](https://mjswan.readthedocs.
 
 ## Third-Party Assets
 
-mjswan incorporates mujoco models from the external sources in its demo. See the respective submodule for full details, including individual model licenses and copyrights. All models are used under their respective licenses. Please review and comply with those terms for any use or redistribution.
+mjswan stores no third-party model in this repository: the demo fetches each one at build time, and a `LICENSE` that travels with a model is copied into the build beside it. See the respective upstream for full details, including individual model licenses and copyrights. All models are used under their respective licenses. Please review and comply with those terms for any use or redistribution.
 
-[Robot Descriptions License](https://github.com/robot-descriptions/robot_descriptions.py/blob/main/LICENSE) ･ [MuJoCo Playground License](https://github.com/google-deepmind/mujoco_playground/blob/main/LICENSE) ･ [MyoSuite License](https://github.com/MyoHub/myosuite/blob/main/LICENSE)
+[mjlab License](https://github.com/mujocolab/mjlab/blob/main/LICENSE) ･ [MuJoCo Menagerie License](https://github.com/google-deepmind/mujoco_menagerie/blob/main/LICENSE) ･ [myo_sim License](https://github.com/MyoHub/myo_sim/blob/main/LICENSE)
 
 
 ## Acknowledgments
