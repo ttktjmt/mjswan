@@ -14,6 +14,23 @@ shortcuts.
 
 ### Changed
 
+- **The two pieces of library code that lived in `examples/` move into the package.**
+  `examples/mjlab/defaults/{commands,terminations}/` were imported by a test, by a
+  sibling example, and by the `mjlab-to-mjswan` skill, which told an agent to *fetch the
+  file from the repo* — a layering inversion the reorganization of `examples/` (#128)
+  would otherwise carry forward.
+
+  - `register_custom_terminations` joins `mjswan.mjlab.termination`, where the rest of
+    the termination adapter is, and is exported from `mjswan.mjlab`. It is plain Python
+    with no mjlab import, so nothing about the soft dependency changes. Type checking it
+    for the first time turned up a guard pyright could not follow; the narrowing is now
+    direct and the behaviour is unchanged.
+  - The command registrations become `mjswan.mjlab.bindings`, and **nothing imports it
+    for you**. It is the one module under `mjswan.mjlab` that needs mjlab and torch at
+    *import* time rather than inside a function, so `mjswan.mjlab`'s `__init__` leaves it
+    alone and a caller names it: `import mjswan.mjlab.bindings`. That is what keeps
+    `import mjswan` at `mujoco` and `numpy` (ADR 0008).
+
 - **`wandb` is no longer a core dependency — `pip install mjswan` drops by about 108 MB.**
   It moves to its own `wandb` extra, beside `hf` and a new `mjlab` one, because it is the
   same kind of thing: a `source/` backend imported inside a function. `import mjswan`

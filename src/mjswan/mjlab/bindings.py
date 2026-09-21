@@ -1,9 +1,16 @@
-"""Mjlab-specific command registrations for mjswan examples. Import before
-``builder.build()``.
+"""Bindings for the command classes mjlab's own tasks ship. Import before ``build()``.
 
 ``LiftingCommandCfg`` is traced to ONNX and run by the shared ``OnnxCommand`` handler.
 ``MotionCommandCfg`` stays native, with only its reset jitter traced.
 ``UniformVelocityCommandCfg`` needs nothing here — mjswan itself binds it.
+
+**Importing this module is a deliberate act**, and :mod:`mjswan.mjlab` does not do it for
+you. Everything else under ``mjswan.mjlab`` reaches mjlab from inside a function, so that
+a build which never touches an mjlab task never pays for it (ADR 0008); registering a
+binding means *building* mjlab command terms, which needs mjlab and torch at import time.
+Keeping that in one module the caller names is what lets the rest stay soft::
+
+    import mjswan.mjlab.bindings  # noqa: F401 — registers the command bindings
 """
 
 from __future__ import annotations

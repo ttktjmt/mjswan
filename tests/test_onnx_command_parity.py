@@ -56,7 +56,7 @@ def _registrations() -> None:
     `g1_spinkick` its RSI jitter. `UniformVelocityCommandCfg` needs no import: mjswan
     binds that one itself.
     """
-    pytest.importorskip("examples.mjlab.defaults.commands")
+    pytest.importorskip("mjswan.mjlab.bindings")
 
 
 def _traced_command(task_id: str, command_name: str) -> tuple[Any, Any]:

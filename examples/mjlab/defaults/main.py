@@ -22,8 +22,8 @@ if __name__ == "__main__" and __package__ is None:
     sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
     __package__ = "examples.mjlab.defaults"
 
-from . import commands  # noqa: F401 - for command registrations
-from .terminations import register_custom_terminations
+import mjswan.mjlab.bindings  # noqa: F401 - registers the command bindings
+from mjswan.mjlab import register_custom_terminations
 
 # NOTE: Replace these with your own WandB entity and project.
 ENTITY = "ttktjmt-org"

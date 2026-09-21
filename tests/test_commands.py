@@ -163,7 +163,7 @@ class TestMotionRsiRegistration:
 
     `TrackingCommand.ts` used to jitter with `Math.random()`. ADR 0005 moved that
     into a traced graph whose body needs mjlab's own `sample_uniform` /
-    `quat_from_euler_xyz`, so it is registered from `examples/mjlab/defaults/
+    `quat_from_euler_xyz`, so it is registered from `mjswan/mjlab/
     commands` rather than from `mjswan.envs.mdp.commands` (which keeps mjlab a soft
     dependency). A task whose author never imported that module therefore got the
     plain binding — no graph — and quietly stopped jittering. These pin the

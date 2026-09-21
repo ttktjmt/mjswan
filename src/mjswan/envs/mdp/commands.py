@@ -247,7 +247,7 @@ def _motion_rsi_unregistered(cfg: Any) -> None:
     """Stand-in `reset_trace` that says the real one is not loaded.
 
     The reference-state-initialization jitter traces from mjlab's own helpers, so its
-    body lives author-side (`examples/mjlab/defaults/commands`), keeping mjlab a soft
+    body lives in `mjswan.mjlab.bindings`, which nothing imports for you, keeping mjlab a soft
     dependency here. Without it `TrackingCommand` starts every episode
     unjittered, which this warns about. Always returns `None`.
     """
@@ -262,7 +262,7 @@ def _motion_rsi_unregistered(cfg: Any) -> None:
         f"joint_position_range={joint_position_range}) but no traced reset graph is "
         "registered, so the browser will start every episode from the unjittered "
         "reference frame. Import the module that registers it — "
-        "`examples.mjlab.defaults.commands` for the bundled examples — or supply "
+        "`mjswan.mjlab.bindings` for the classes mjlab's own tasks ship — or supply "
         "your own via mjswan.register_command('MotionCommandCfg', ...).",
         category=RuntimeWarning,
         stacklevel=3,

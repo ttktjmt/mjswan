@@ -19,13 +19,14 @@ if __name__ == "__main__" and __package__ is None:
 
 import mjlab.tasks  # noqa: F401 - populates the mjlab task registry
 
-# `examples.mjlab.defaults.commands` registers the traced reset graph for
+import mjswan
+
+# `mjswan.mjlab.bindings` registers the traced reset graph for
 # `MotionCommandCfg` — the reference-state-initialization jitter (ADR 0005 §3).
 # Without it the command still builds, bound to the native `TrackingCommand`, but
 # with no jitter graph, so every episode would start from the unjittered reference
 # frame where mjlab's play config asks for `joint_position_range=(-0.1, 0.1)`.
-import examples.mjlab.defaults.commands  # noqa: F401
-import mjswan
+import mjswan.mjlab.bindings  # noqa: F401
 
 # The terminations need no registration: they trace straight from mjlab's own functions.
 

@@ -25,7 +25,7 @@ from .event import adapt_events, apply_terrain_spawn
 from .observation import DEFAULT_OBS_GROUP_KEY, adapt_observations
 from .runner import MjlabRunnerDefaults, resolve_runner_defaults
 from .sim import apply_mjlab_sim_options, ensure_mjlab_extensions
-from .termination import adapt_terminations
+from .termination import adapt_terminations, register_custom_terminations
 
 __all__ = [
     "DEFAULT_OBS_GROUP_KEY",
@@ -42,6 +42,7 @@ __all__ = [
     "default_viz",
     "ensure_mjlab_extensions",
     "is_from_mjlab",
+    "register_custom_terminations",
     "resolve_action_scales",
     "resolve_pd_gains",
     "resolve_runner_defaults",

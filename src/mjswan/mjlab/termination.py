@@ -2,6 +2,10 @@
 
 Same resolution order as :mod:`.observation`: a ``TerminationBinding`` passes through,
 then a ``register_termination`` override, then mjlab's own function, traced at build.
+
+:func:`register_custom_terminations` is the other direction: two of mjlab's own terrain
+terminations read constants the terrain *generator* holds rather than the term, so they
+have to be filled in before the build traces them.
 """
 
 from __future__ import annotations
@@ -97,4 +101,38 @@ def adapt_terminations(
     }
 
 
-__all__ = ["adapt_terminations"]
+def register_custom_terminations(env_cfg: Any) -> None:
+    """Inject terrain-generator-derived constants into env_cfg terminations.
+
+    Mutates ``env_cfg.terminations["out_of_terrain_bounds"].params`` and
+    ``env_cfg.terminations["terrain_edge_reached"].params`` in place so the
+    matching declarative built-ins receive their per-build limits.  Safe to
+    call when no terrain generator is present (no-op).
+    """
+    terrain = getattr(env_cfg.scene, "terrain", None)
+    # `getattr(None, …, None)` is None, so this also covers a scene with no terrain.
+    terrain_generator = getattr(terrain, "terrain_generator", None)
+    if terrain_generator is None:
+        return
+    if getattr(terrain, "terrain_type", None) != "generator":
+        return
+
+    out_term = env_cfg.terminations.get("out_of_terrain_bounds")
+    if out_term is not None:
+        out_params = dict(getattr(out_term, "params", None) or {})
+        margin = float(out_params.get("margin", 0.3))
+        half_x = 0.5 * terrain_generator.num_rows * terrain_generator.size[0]
+        half_y = 0.5 * terrain_generator.num_cols * terrain_generator.size[1]
+        out_params["limit_x"] = max(0.0, half_x - margin)
+        out_params["limit_y"] = max(0.0, half_y - margin)
+        out_term.params = out_params
+
+    edge_term = env_cfg.terminations.get("terrain_edge_reached")
+    if edge_term is not None:
+        edge_params = dict(getattr(edge_term, "params", None) or {})
+        edge_params["half_x"] = 0.5 * terrain_generator.size[0]
+        edge_params["half_y"] = 0.5 * terrain_generator.size[1]
+        edge_term.params = edge_params
+
+
+__all__ = ["adapt_terminations", "register_custom_terminations"]
