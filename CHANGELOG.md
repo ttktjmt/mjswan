@@ -30,6 +30,21 @@ shortcuts.
   knows every joint being driven; the rest pose is then read out of it per action.
   A metadata describing a different robot still warns and fills nothing.
 
+- **An action term's `actuator_names` are matched against actuator names.** mjlab
+  resolves that field against actuators — `JointPositionActionCfg(actuator_names=(".*",))`
+  selects actuators, not joints — and mjswan carried the field through to the manifest
+  but then tested each pattern against the *joint* name. That worked only because
+  menagerie names an actuator after the joint it drives; a model that does not
+  (`<motor name="thrust" joint="lift"/>`) silently matched nothing and left the term
+  unhooked.
+
+  The joint name is still accepted as a fallback, because mjswan took it before it took
+  the actuator's and dropping it would unhook the models that relied on it — including
+  `examples/tutorial/minimum_policy.py`, which now names its actuator instead.
+  `policy_joint_names` remains what fixes the *order*, and `".*"` still means "every
+  joint this policy drives" rather than "every actuator in the model", so a policy
+  driving four joints of a twelve-actuator model still gets four.
+
 - **`SceneHandle.actuated_joint_names()`** returns the joint each actuator drives, in
   actuator order — the order a policy's actions come out in, and what
   `policy_joint_names` wants. It is what the warning above now tells you to pass, which

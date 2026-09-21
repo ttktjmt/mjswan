@@ -138,7 +138,11 @@ def main():
         actions={
             "thrust": JointEffortActionCfg(
                 entity_name="",
-                actuator_names=("lift",),
+                # The actuator's name, not the joint's: mjlab resolves `actuator_names`
+                # against actuators, and so does mjswan. The joint name still matches,
+                # for models written before it did, but naming the actuator is the one
+                # that reads right beside `<motor name="thrust" joint="lift"/>`.
+                actuator_names=("thrust",),
             ),
         },
         commands={"target": target_cmd},
