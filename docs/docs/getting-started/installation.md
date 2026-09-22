@@ -117,8 +117,8 @@ uv sync --all-extras
 To run the bundled demo after cloning:
 
 ```bash
-mjswan demo          # runs the default demo
-mjswan demo --list   # see all available demos
+mjswan demo          # lists the bundled demos
+mjswan demo simple   # runs one of them
 ```
 
 Common Makefile targets while developing:

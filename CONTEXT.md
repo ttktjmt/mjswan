@@ -53,9 +53,10 @@ src/mjswan/          Python package source: the object model at the root, one pa
 examples/            Runnable examples. Python only: no asset is stored here, and the
                      `no-binaries-in-examples` pre-commit hook is what keeps it so
   demo/                main.py (the deployed app: mjlab Tasks + Showcase, everything
-                       from mjlab or the Hub), simple.py (one task, one checkpoint —
-                       what `mjswan demo` runs), minimum_policy.py (the smallest
-                       complete policy) and mujoco_models.py (a gallery, no policy)
+                       from mjlab or the Hub), simple.py (one task, one checkpoint),
+                       minimum_policy.py (the smallest complete policy) and
+                       mujoco_models.py (a gallery, no policy). `mjswan demo` runs
+                       the three named ones; minimum_policy.py is read, not run
   colab/               Google Colab notebooks (demo, anymal_c_velocity)
 
                      The W&B-driven examples — defaults, g1_spinkick, myosuite,
@@ -236,7 +237,7 @@ The primary CLI is `mjswan` (Typer-based, defined in `cli.py:app`). Subcommands:
 | `mjswan view <model.xml>` | Build and launch a viewer for a MuJoCo XML/MJCF file |
 | `mjswan serve <dist-dir \| document.swn>` | Serve a pre-built `dist/` directory, or a `.swn` document |
 | `mjswan new <name> [--template hello-world\|policy\|mjlab]` | Scaffold a new project from a template |
-| `mjswan demo [name]` / `--list` | Run a built-in demo (`simple`, `main`, `mjlab`) |
+| `mjswan demo [name]` | List the built-in demos, or run one (`main`, `simple`, `mujoco`) |
 | `mjswan info <dist-dir \| document.swn>` | Show a tree of projects/scenes/policies and asset sizes |
 | `mjswan publish <dist-dir>` | Upload a built dist's data files to mjswan Cloud (rejects custom-JS builds) |
 | `mjswan login` / `whoami` / `logout` | mjswan Cloud session (loopback GitHub OAuth) |
@@ -286,10 +287,9 @@ Extras, one per asset source plus tooling: `wandb`, `hf` (`huggingface-hub`), `m
 
 mjlab itself pulls in `mujoco-mjx==3.8.1` and `mujoco-warp>=3.8.0.3` (3.8.0.3 switched from `mjENBL_MULTICCD` to a `DisableBit`, restoring compat with stable mujoco 3.8.1).
 
-Python 3.10–3.12 only. The cap was taken for `labmaze` (transitive via myosuite →
-dm-control, no cp313 wheel); myosuite left the dependency set with the #128 examples
-cleanup and nothing in `uv.lock` pulls it any more, so the pin — and the `h5py` override
-beside it — is due a revisit rather than a standing rule.
+Python 3.10–3.13. The old `<3.13` cap was taken for `labmaze` (transitive via myosuite →
+dm-control, no cp313 wheel); myosuite left with the #128 examples cleanup, so the cap and
+the `h5py` override beside it are gone and the pytest matrix runs 3.13.
 
 
 ## Deployment

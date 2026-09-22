@@ -382,37 +382,43 @@ def new_cmd(
 
 # ── demo ──────────────────────────────────────────────────────
 
-_DEMOS: dict[str, str] = {
-    "simple": "examples.demo.simple",
-    "main": "examples.demo.main",
+#: Name → the module it runs and what that module builds. Every one lives under
+#: `examples/`, which a source checkout has and an installed wheel does not;
+#: `tests/test_cli_demo.py` fails if a name points at a file that is no longer there.
+_DEMOS: dict[str, tuple[str, str]] = {
+    "main": ("examples.demo.main", "Eight mjlab tasks and a showcase — as deployed"),
+    "simple": ("examples.demo.simple", "One mjlab task, one checkpoint"),
+    "mujoco": ("examples.demo.mujoco_models", "MuJoCo's replicate gallery — no policy"),
 }
 
 
 @app.command("demo")
 def demo_cmd(
     name: Annotated[
-        Optional[str], typer.Argument(help="Demo name. Omit to run 'simple'.")
+        Optional[str],
+        typer.Argument(help="Demo to run. Omit to list what there is."),
     ] = None,
-    list_: Annotated[
-        bool, typer.Option("--list", "-l", help="List available demos.")
-    ] = False,
 ) -> None:
-    """Run a built-in mjswan demo."""
-    if list_:
+    """Run a built-in mjswan demo, or list them."""
+    # No name lists rather than running: every demo fetches models and checkpoints over
+    # the network, which is not what to do to someone who typed the bare command to find
+    # out what exists.
+    if name is None:
         console.print("[bold]Available demos:[/bold]")
-        for demo_name in _DEMOS:
-            console.print(f"  {demo_name}")
+        width = max(len(demo) for demo in _DEMOS)
+        for demo, (_, description) in _DEMOS.items():
+            console.print(f"  [bold]{demo:<{width}}[/bold]  {description}")
+        console.print("\nRun one with [bold]mjswan demo <name>[/bold].")
         return
 
-    demo_name = name or "simple"
-    if demo_name not in _DEMOS:
+    if name not in _DEMOS:
         console.print(
-            f"[red]Error:[/red] Unknown demo '{demo_name}'. "
-            "Run [bold]mjswan demo --list[/bold] to see available demos."
+            f"[red]Error:[/red] Unknown demo '{name}'. "
+            "Run [bold]mjswan demo[/bold] to see what there is."
         )
         raise typer.Exit(1)
 
-    _run_module(_DEMOS[demo_name])
+    _run_module(_DEMOS[name][0])
 
 
 # ── info ──────────────────────────────────────────────────────

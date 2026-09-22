@@ -28,23 +28,17 @@ authors = [
 description = "Browser-based MuJoCo simulation with real-time policy control"
 readme = "README.md"
 license = { text="Apache-2.0" }
-# Taken for labmaze (transitive via myosuite -> dm-control), which has no pre-built
-# wheel for Python 3.13+ and forces a Bazel source build that fails with Bazel 8.x
-# (WORKSPACE support removed). https://github.com/google-deepmind/dm_control/issues/511
-# myosuite left the tree with the #128 examples cleanup and nothing resolves labmaze
-# now, so this cap is unverified rather than required — revisit it deliberately, with
-# a 3.13 resolve and a CI matrix to match.
-requires-python = ">=3.10, <3.13"
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3 :: Only",
     "Typing :: Typed",
     "Topic :: Scientific/Engineering",
@@ -189,10 +183,6 @@ override-dependencies = [
     "mujoco==3.10.0",
     "mujoco-mjx==3.10.0",
     "mujoco-warp>=3.10.0.3,<3.11",
-    # h5py 3.7.0 has no pre-built wheel for Python 3.12 / macOS arm64; newer ones do.
-    # It overrode the version myosuite pinned, and nothing resolves h5py since myosuite
-    # left the tree — kept only so removing it is its own, lockfile-touching change.
-    "h5py>=3.8.0",
 ]
 
 [tool.pytest.ini_options]

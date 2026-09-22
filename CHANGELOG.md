@@ -14,6 +14,25 @@ shortcuts.
 
 ### Changed
 
+- **`mjswan demo` lists the demos instead of running one.** Every demo downloads models
+  and checkpoints before it shows anything, which is not what to do to someone who typed
+  the bare command to find out what exists — `mjswan demo simple` is the old behaviour,
+  spelled out. `--list` goes with it, having become the same command. And `mujoco` joins
+  `main` and `simple`, running `examples/demo/mujoco_models.py`: the one demo that needs
+  no extra at all.
+
+  `_DEMOS` maps a name to a module path as a *string*, so a renamed or deleted example
+  leaves a command that fails only when someone types it. That is how `mjswan demo mjlab`
+  outlived `examples/mjlab/defaults/main.py`; `tests/test_cli_demo.py` now holds every
+  name to a module that is in the tree and has an entry point to reach.
+
+- **Python 3.13 is supported, and the test matrix runs it.** `requires-python` was capped
+  at `<3.13` for `labmaze`, which has no cp313 wheel and reached this tree only through
+  myosuite → dm-control — and myosuite left with the examples that imported it. The cap
+  and the `h5py>=3.8.0` override that came with it are both gone; `uv` resolves the whole
+  `dev` extra on 3.13, mjlab and torch included. The `3.9` classifier goes too: it had
+  contradicted `requires-python` since that became `>=3.10`.
+
 - **Inference ships ONNX Runtime's CPU build, so the engine's largest file is 13.3 MiB
   instead of 26.5 MiB.** Importing `onnxruntime-web` resolves to the JSEP build, whose
   WebAssembly carries the WebGPU kernels; `onnxruntime-web/wasm` is the same API without
@@ -496,8 +515,9 @@ shortcuts.
   examples as modules.
 - **`mjswan demo mjlab`**, which ran `examples/mjlab/defaults/main.py` — the same tasks
   read from a W&B run instead of the Hub. That example moves to `mjswan_playground`, and
-  with it the only demo needing a W&B login. `mjswan demo` and `mjswan demo main` are
-  unchanged.
+  with it the only demo needing a W&B login.
+- **`mjswan demo --list`** and **`mjswan demo` with no name running `simple`**: the bare
+  command now lists, which is what `--list` did.
 - **`config.json` and the per-policy `<policy>.json`**, replaced by the one root
   `manifest.json` (supersedes ADR 0005 §1). The per-project `index.html` / `logo.svg`
   copies and the `main/` special case for the first project go with them: a project's

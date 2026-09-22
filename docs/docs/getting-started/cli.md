@@ -15,7 +15,7 @@ mjswan --help
 | [`mjswan view`](#mjswan-view) | Build and launch a viewer for a MuJoCo XML / MJCF file |
 | [`mjswan serve`](#mjswan-serve) | Serve a pre-built `dist/` directory, or a `.swn` document |
 | [`mjswan new`](#mjswan-new) | Scaffold a new project from a template |
-| [`mjswan demo`](#mjswan-demo) | Run a built-in demo |
+| [`mjswan demo`](#mjswan-demo) | List the built-in demos, or run one |
 | [`mjswan info`](#mjswan-info) | Show a tree of projects / scenes / MDPs / policies and asset sizes, for a `dist/` or a `.swn` |
 | [`mjswan publish`](#mjswan-publish) | Upload a built `dist/` or a `.swn` to mjswan Cloud |
 | [`mjswan login`](#mjswan-login-whoami-logout) | Sign in to mjswan Cloud via GitHub |
@@ -85,19 +85,21 @@ python main.py
 ## `mjswan demo`
 
 ```bash
-mjswan demo [name] [--list]
+mjswan demo [name]
 ```
 
-Run one of the bundled demos under `examples/`. They fetch what they show — from
-mjlab, from the Hugging Face Hub, or from upstream — so the first run downloads and
-later ones read the cache. Both need `pip install 'mjswan[hf,mjlab]'`.
+With no name it lists the bundled demos; with one it runs that demo. They live under
+`examples/`, so this needs a source checkout, and they fetch what they show — from mjlab,
+from the Hugging Face Hub, or from upstream — so the first run downloads and later ones
+read the cache.
 
-| Demo | Source |
-|---|---|
-| `simple` (default) | `examples/demo/simple.py` — one mjlab task, one checkpoint |
-| `main` | `examples/demo/main.py` — the demo deployed to GitHub Pages |
+| Demo | Source | Needs |
+|---|---|---|
+| `main` | `examples/demo/main.py` — the demo deployed to GitHub Pages | `mjswan[hf,mjlab]` |
+| `simple` | `examples/demo/simple.py` — one mjlab task, one checkpoint | `mjswan[hf,mjlab]` |
+| `mujoco` | `examples/demo/mujoco_models.py` — MuJoCo's `<replicate>` gallery, no policy | core only |
 
-Use `mjswan demo --list` to enumerate them.
+The bare command lists rather than running one, because each of these downloads.
 
 ## `mjswan info`
 

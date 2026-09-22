@@ -66,8 +66,8 @@ You can run the bundled demo with the `mjswan` CLI (after installing
 `mjswan[hf,mjlab]`). It fetches the model from mjlab and the policy from the
 Hugging Face Hub, so there is nothing to download by hand:
 ``` sh
-mjswan demo          # runs the default demo
-mjswan demo --list   # see all available demos
+mjswan demo          # lists the bundled demos
+mjswan demo simple   # runs one of them
 ```
 
 The minimum python script for a sanity check:
