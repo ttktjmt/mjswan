@@ -21,7 +21,7 @@ Then invoke it with the target repo:
 
 Any other agent can follow `SKILL.md` directly, it is plain Markdown with no vendor-specific syntax.
 
-Either way the agent needs `git` and a Python 3.10-3.12 environment in which the target repo's task registrations import; it installs `mjswan[mjlab]` and `onnxruntime` into that environment itself, plus the `wandb` or `hf` extra when the checkpoints come from there.
+Either way the agent needs `git` and a Python 3.10-3.13 environment in which the target repo's task registrations import; it installs `mjswan[mjlab]` and `onnxruntime` into that environment itself, plus the `wandb` or `hf` extra when the checkpoints come from there.
 
 ## The pipeline
 

@@ -25,7 +25,7 @@ Then make mjswan importable from the **same interpreter** that can import the ta
 
 Every source is its own extra and `import mjswan` touches none of them, so install only the one the checkpoints come from: `wandb` for a W&B run path, `hf` for anything fetched from the Hub, e.g. `"mjswan[mjlab,wandb]"`.
 
-mjswan pins `mujoco` **exactly**, its `mjlab` extra pins `mjlab` **exactly**, and `requires-python` is bounded. A target that pins any of the three differently will not co-resolve. If the install fails on one, **stop and report the resolver's output verbatim**: resolving it is the user's call, not yours.
+mjswan pins `mujoco` **exactly**, its `mjlab` extra pins `mjlab` **exactly**, and the `mjlab` extra also brings mjlab's own bounded `requires-python` with it, so the interpreter mjswan alone accepts is not always the one this pipeline accepts. A target that pins either package differently will not co-resolve. If the install fails on one, **stop and report the resolver's output verbatim**: resolving it is the user's call, not yours.
 
 ## 2. Find the task ids
 
