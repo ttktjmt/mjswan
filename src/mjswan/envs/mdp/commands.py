@@ -145,11 +145,12 @@ def _resample_velocity_command(self: Any, env_ids: Any) -> None:
     )
 
 
-def _update_velocity_command(self: Any) -> None:
+def _update_velocity_command(self: Any, env_ids: Any = None) -> None:
     """``UniformVelocityCommand._update_command``, as one graph at ``N=1``.
 
     Heading tracking, then the world-frame rotation, then standing zeroed last — the
-    order mjlab applies them in.
+    order mjlab applies them in. ``env_ids`` is mjlab 1.6's partial-reset scope, which
+    a single-env graph has nothing to narrow.
     """
     cfg = self.cfg
     heading_w = self.robot.data.heading_w

@@ -350,7 +350,7 @@ def run_command_parity(
         with _RecordCommand(term, entity_attr_names, entity_name) as rec_env:
             with DrawRecorder(term._resample_command) as rec:
                 term._resample_command(env_ids)
-                term._update_command()
+                term._update_command(None)
             ref_writes = _flatten_captures(dict(rec_env.captures))[1]
         ref_next = {f: getattr(term, f).detach().clone() for f in state_fields}
         _restore_state(term, snap)
@@ -373,7 +373,7 @@ def run_command_parity(
     prev = {f: getattr(term, f).detach().clone() for f in state_fields}
     dyn_feeds = _dyn_feeds()
     with _RecordCommand(term, entity_attr_names, entity_name):
-        term._update_command()
+        term._update_command(None)
     ref_false = {f: getattr(term, f).detach().clone() for f in state_fields}
     _restore_state(term, snap)
 

@@ -48,7 +48,7 @@ classifiers = [
 # the assets came from. Where they come from is an extra;see `wandb` / `hf` / `mjlab`
 # below, one per module of `mjswan/source/` and `mjswan/mjlab/`.
 dependencies = [
-    "mujoco==3.8.1",
+    "mujoco==3.11.0",
     "nodeenv>=1.9.1",
     "onnx>=1.20.0",
     "rich>=13.0.0",
@@ -69,7 +69,7 @@ hf = [
 # branch, and term tracing. Kept out of `examples` so that "I convert mjlab
 # checkpoints" and "I run the bundled demos" can be asked for separately.
 mjlab = [
-    "mjlab==1.5.3",
+    "mjlab==1.6.0",
     "torch>=2.9.1",
 ]
 
@@ -178,11 +178,6 @@ exclude = [
 required-environments = [
     "sys_platform == 'darwin' and platform_machine == 'arm64'",
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
-]
-override-dependencies = [
-    "mujoco==3.10.0",
-    "mujoco-mjx==3.10.0",
-    "mujoco-warp>=3.10.0.3,<3.11",
 ]
 
 [tool.pytest.ini_options]

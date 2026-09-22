@@ -279,13 +279,13 @@ Rollout parity **replays** mjlab's states rather than co-simulating: mjlab integ
 
 ## Dependencies
 
-Core: `mujoco==3.8.1`, `onnx>=1.20.0`, `nodeenv>=1.9.1`, `rich>=13.0.0`, `typer>=0.12.0`.
+Core: `mujoco==3.11.0`, `onnx>=1.20.0`, `nodeenv>=1.9.1`, `rich>=13.0.0`, `typer>=0.12.0`.
 Dev extras: `pyright`, `ruff==0.16.0` (pinned), `pre-commit`, `pytest`.
-Extras, one per asset source plus tooling: `wandb`, `hf` (`huggingface-hub`), `mjlab` (`mjlab==1.5.3` + `torch>=2.9.1`), `check` (ruff/ty/pyright), `dev` (`check` + every source + pytest/pre-commit), `examples` (the sources + `onnxruntime`).
+Extras, one per asset source plus tooling: `wandb`, `hf` (`huggingface-hub`), `mjlab` (`mjlab==1.6.0` + `torch>=2.9.1`), `check` (ruff/ty/pyright), `dev` (`check` + every source + pytest/pre-commit), `examples` (the sources + `onnxruntime`).
 
 **`mjlab` + `torch` are build-time requirements for any policy carrying traced MDP terms** — tracing runs `torch.onnx.export` against a live mjlab env. Neither ships to the browser, and a model-only scene needs neither. `onnxruntime` (not `onnxruntime-web`) is the parity harness's runtime.
 
-mjlab itself pulls in `mujoco-mjx==3.8.1` and `mujoco-warp>=3.8.0.3` (3.8.0.3 switched from `mjENBL_MULTICCD` to a `DisableBit`, restoring compat with stable mujoco 3.8.1).
+The core `mujoco` pin is exact and follows mjlab's, which is what lets `mjswan[mjlab]` resolve at all: mjlab 1.6.0 requires `mujoco~=3.11.0` and brings `mujoco-warp` with it. Holding the core at 3.8.1 while mjlab moved to 3.10 and then 3.11 is what the `[tool.uv] override-dependencies` block existed for; aligning the pin retired it, and with it the resolution that only ever worked inside this repo. The browser's own engine (`@mujoco/mujoco` in the template) is separate and still on 3.8.1: a `.mjz` carries MJCF and assets, which the browser compiles itself, so the two versions need not match; a scene saved as `.mjb` is the binary model format and does.
 
 Python 3.10–3.13. The old `<3.13` cap was taken for `labmaze` (transitive via myosuite →
 dm-control, no cp313 wheel); myosuite left with the #128 examples cleanup, so the cap and

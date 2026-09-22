@@ -182,7 +182,7 @@ class _CommandModule(nn.Module):
                             prev[field_name],
                         ),
                     )
-                self._term._update_command()
+                self._term._update_command(None)
             outputs = [getattr(self._term, f) for f in self._state_fields]
             _, write_tensors = _flatten_captures(captures)
             return tuple(outputs) + tuple(write_tensors)
@@ -237,7 +237,7 @@ def trace_command_term(
     with _RecordCommand(term, entity_attr_names, entity_name) as rec_env:
         with DrawRecorder(term._resample_command) as rec:
             term._resample_command(torch.arange(term.num_envs))
-            term._update_command()
+            term._update_command(None)
         log = list(rec_env.log)
         captures = dict(rec_env.captures)
     ref_rand = rec.rand_vector

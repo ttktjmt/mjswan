@@ -799,7 +799,7 @@ class _StatefulTerm:
         # Only `command` is resampled; `bias`/`latched` carry over untouched.
         self.command = self.bias + rand.reshape(1, -1)[:, :3]
 
-    def _update_command(self):
+    def _update_command(self, env_ids):
         pass
 
 

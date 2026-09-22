@@ -22,6 +22,7 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import types
 from typing import Any
 
 import pytest
@@ -59,6 +60,24 @@ def _registrations() -> None:
     pytest.importorskip("mjswan.mjlab.bindings")
 
 
+def _lift_update_command(self: Any, env_ids: Any = None) -> None:
+    """A port's rewrite of mjlab 1.6's ``LiftingCommand._update_command``.
+
+    1.6 refreshes the live sim there after a timer-expiry teleport, which the tracer
+    refuses to bake. The command is ``_resample_command``'s alone, so dropping the
+    refresh changes no number, as this file's own comparison shows.
+    `examples/demo/main.py` registers this rewrite as a `trace_override`; the engine
+    binding this file resolves carries none, so the rewrite is supplied here too.
+    """
+    del env_ids
+
+
+def _apply_port_rewrite(task_id: str, term: Any) -> None:
+    """What a port writes for a term mjlab does not leave traceable."""
+    if task_id == "Mjlab-Lift-Cube-Yam":
+        term._update_command = types.MethodType(_lift_update_command, term)
+
+
 def _traced_command(task_id: str, command_name: str) -> tuple[Any, Any]:
     """The live term and its pending trace, resolved as the Builder resolves them."""
     from mjlab.envs import ManagerBasedRlEnv
@@ -83,6 +102,7 @@ def _traced_command(task_id: str, command_name: str) -> tuple[Any, Any]:
     term = pending.mjlab_cfg.build(env)
     if pending.trace_override is not None:
         pending.trace_override(term)
+    _apply_port_rewrite(task_id, term)
     return env, (term, pending)
 
 

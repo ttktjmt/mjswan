@@ -18,7 +18,9 @@ public host is the only thing it has to reach.
 
 import os
 import re
+import types
 from pathlib import Path
+from typing import Any
 
 import mujoco
 import onnx
@@ -121,6 +123,36 @@ TASK_VIEWER_CONFIG_MAP: dict[str, mjswan.ViewerConfig] = {
         body_name="torso_link",
     ),
 }
+
+
+def _lift_update_command(self: Any, env_ids: Any = None) -> None:
+    """``LiftingCommand._update_command`` with the live-sim refresh dropped.
+
+    mjlab 1.6 follows a timer-expiry teleport of the cube with ``env.sim.forward()``, so
+    that the rest of the step reads post-teleport kinematics. It writes nothing the
+    command emits (``target_pos`` is `_resample_command`'s alone), and the tracer refuses
+    ``env.sim`` rather than bake a trace-time value into the graph. The browser forwards
+    on its own next step, which is where the teleport that `_resample_command` wrote as an
+    `entity_write` lands.
+    """
+    del env_ids
+
+
+def _bind_lift_override(term: Any) -> None:
+    term._update_command = types.MethodType(_lift_update_command, term)
+
+
+# Re-registered over `mjswan.mjlab.bindings`, which binds this class for the mjlab it
+# pins: from 1.6 the term is no longer traceable as mjlab writes it, and making it
+# traceable again is this port's job, not the engine's.
+mjswan.register_command(
+    "LiftingCommandCfg",
+    mjswan.CommandBinding(
+        state_fields=["target_pos"],
+        command_field="target_pos",
+        trace_override=_bind_lift_override,
+    ),
+)
 
 
 def _checkpoints_for(task_id: str, repo_onnx: list[str]) -> list[str]:
