@@ -60,10 +60,10 @@ dependencies = [
 # `source/wandb.py` and `source/hf.py` import their client inside a function, and
 # `mjlab/` is a soft dependency throughout. `import mjswan` touches none of them.
 wandb = [
-    "wandb>=0.23.1",
+    "wandb>=0.28.2",
 ]
 hf = [
-    "huggingface-hub>=0.26.0",
+    "huggingface-hub>=1.32.0",
 ]
 # The PT->ONNX conversion path: `add_scene_mjlab`, `add_policy_wandb`'s checkpoint
 # branch, and term tracing. Kept out of `examples` so that "I convert mjlab

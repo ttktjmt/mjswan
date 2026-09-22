@@ -86,13 +86,6 @@ app.launch()
 For detailed instructions, visit the [documentation](https://mjswan.readthedocs.io).
 
 
-## Third-Party Assets
-
-mjswan stores no third-party model in this repository: the demo fetches each one at build time, and a `LICENSE` that travels with a model is copied into the build beside it. See the respective upstream for full details, including individual model licenses and copyrights. All models are used under their respective licenses. Please review and comply with those terms for any use or redistribution.
-
-[mjlab License](https://github.com/mujocolab/mjlab/blob/main/LICENSE) ･ [MuJoCo Menagerie License](https://github.com/google-deepmind/mujoco_menagerie/blob/main/LICENSE) ･ [myo_sim License](https://github.com/MyoHub/myo_sim/blob/main/LICENSE)
-
-
 ## Acknowledgments
 
 This project was greatly inspired by the [Facet project demo](https://facet.pages.dev/) from the research group at Tsinghua University.<br>
