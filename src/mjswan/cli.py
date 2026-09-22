@@ -385,7 +385,6 @@ def new_cmd(
 _DEMOS: dict[str, str] = {
     "simple": "examples.demo.simple",
     "main": "examples.demo.main",
-    "mjlab": "examples.mjlab.defaults.main",
 }
 
 

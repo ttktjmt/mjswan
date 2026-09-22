@@ -28,10 +28,12 @@ authors = [
 description = "Browser-based MuJoCo simulation with real-time policy control"
 readme = "README.md"
 license = { text="Apache-2.0" }
-# labmaze (transitive dep via myosuite -> dm-control) has no pre-built wheel for
-# Python 3.13+, forcing a Bazel source build that fails with Bazel 8.x (WORKSPACE
-# support removed). Pin to <3.13 until labmaze publishes a cp313 wheel.
-# https://github.com/google-deepmind/dm_control/issues/511
+# Taken for labmaze (transitive via myosuite -> dm-control), which has no pre-built
+# wheel for Python 3.13+ and forces a Bazel source build that fails with Bazel 8.x
+# (WORKSPACE support removed). https://github.com/google-deepmind/dm_control/issues/511
+# myosuite left the tree with the #128 examples cleanup and nothing resolves labmaze
+# now, so this cap is unverified rather than required — revisit it deliberately, with
+# a 3.13 resolve and a CI matrix to match.
 requires-python = ">=3.10, <3.13"
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -103,11 +105,10 @@ dev = [
     "pre-commit>=3.3.2",
 ]
 
-# What the bundled demos need on top of the sources they fetch from. MyoSuite,
-# Playground, robot_descriptions and gymnasium are gone: the demo's three model-gallery
-# projects went with the #128 rebuild, and the only scripts still importing them are
-# `examples/mjlab/{myosuite,musclemimic}`, each of which names its own in its README —
-# a git URL and a task package that no release of this project should have to pin.
+# What the four bundled scripts and two notebooks need on top of the sources they fetch
+# from. MyoSuite, Playground, robot_descriptions and gymnasium are gone with the examples
+# that imported them, which now live in mjswan_playground and pin their own. `wandb` stays
+# for `examples/colab/anymal_c_velocity.ipynb`, which trains and reads back a run.
 examples = [
     "mjswan[wandb,hf,mjlab]",
     "onnxruntime>=1.21.0",
@@ -121,10 +122,10 @@ mjswan = "mjswan.cli:app"
 
 [tool.pyright]
 extraPaths = []
-# The package. `examples/` is deliberately out: those scripts are written
-# against third-party APIs (mjlab, myosuite, playground), and checking them meant walking
-# every one of those dependency graphs — minutes per run — for diagnostics about code that
-# is not shipped. `**/.dep` keeps a repo an example clones at run time out of any glob.
+# The package. `examples/` is deliberately out: those scripts are written against
+# third-party APIs (mjlab and torch), and checking them meant walking that dependency
+# graph — minutes per run — for diagnostics about code that is not shipped. `**/.dep`
+# keeps a repo an example clones at run time out of any glob.
 include = ["src/mjswan"]
 exclude = ["**/.dep", "**/node_modules", "**/dist", "./src/mjswan/template/.nodeenv", "./build"]
 # `from torch import arange` and its siblings: torch's stubs re-export without `as`,
@@ -188,8 +189,9 @@ override-dependencies = [
     "mujoco==3.10.0",
     "mujoco-mjx==3.10.0",
     "mujoco-warp>=3.10.0.3,<3.11",
-    # h5py 3.7.0 has no pre-built wheel for Python 3.12 / macOS arm64.
-    # Newer versions do, so override the version pinned by myosuite.
+    # h5py 3.7.0 has no pre-built wheel for Python 3.12 / macOS arm64; newer ones do.
+    # It overrode the version myosuite pinned, and nothing resolves h5py since myosuite
+    # left the tree — kept only so removing it is its own, lockfile-touching change.
     "h5py>=3.8.0",
 ]
 

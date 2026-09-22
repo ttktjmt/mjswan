@@ -216,7 +216,7 @@ scene.add_policy(
 )
 ```
 
-See [examples/tutorial/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/tutorial/minimum_policy.py){:target="_blank"} for a complete runnable version — a hand-built two-node ONNX policy, one self-authored observation, and a slider, in one file.
+See [examples/demo/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/minimum_policy.py){:target="_blank"} for a complete runnable version — a hand-built two-node ONNX policy, one self-authored observation, and a slider, in one file.
 
 ## Multiple projects
 

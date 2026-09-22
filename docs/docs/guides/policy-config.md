@@ -196,9 +196,10 @@ when they differ from the defaults (`["actor"]`, `["action"]`), and a single-inp
 single-output network declares neither. A network with **several outputs** does need
 `out_keys` unless its action is the first one: the default table names only output 0, and
 the actuators would be driven from it. The build warns in that case rather than refusing,
-since output 0 may well be the action. `examples/demo/main.py` has the three multi-input
-Go2 policies; `examples/demo/gentle_humanoid/main.py` has a single-input network with
-eight outputs, whose `action` is the seventh.
+since output 0 may well be the action. `examples/demo/main.py` shows both tables in use on
+one policy: the motion-tracking network takes two inputs, so `in_keys` names them, and all
+seven outputs are spelled out even though `action` is already the first — the six after it
+are the reference pose the clip carries, named so the table lines up.
 
 ### Coming from mjlab
 
@@ -409,10 +410,9 @@ message naming this call.
 
 | Example | What it shows |
 |---|---|
-| [examples/tutorial/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/tutorial/minimum_policy.py){:target="_blank"} | Smallest complete policy — a hand-built two-node ONNX PD controller, one self-authored observation beside two of mjlab's, a `ui_command`, and `set_trace_env`. |
-| [examples/demo/gentle_humanoid/](https://github.com/ttktjmt/mjswan/tree/main/examples/demo/gentle_humanoid){:target="_blank"} | Real tracking policy: 11 traced terms reading a reference-trajectory window and a sparse proprioceptive history, 1590 observation values. |
-| [examples/demo/main.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/main.py){:target="_blank"} | Eight mjlab tasks with their mirrored checkpoints, two third-party policies with sidecar configs on the same scene, and a muscle-driven policy — every asset fetched, none stored. |
-| [examples/mjlab/defaults/](https://github.com/ttktjmt/mjswan/tree/main/examples/mjlab/defaults){:target="_blank"} | The same tasks read from W&B rather than the Hub: `add_policy_wandb` converting every `model_*.pt` with mjlab and torch. |
+| [examples/demo/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/minimum_policy.py){:target="_blank"} | Smallest complete policy — a hand-built two-node ONNX PD controller, one self-authored observation beside two of mjlab's, a `ui_command`, and `set_trace_env`. |
+| [examples/demo/main.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/main.py){:target="_blank"} | Eight mjlab tasks with their mirrored checkpoints, a motion-tracking policy with its reference clip, two third-party policies with sidecar configs on one scene, and a muscle-driven policy — every asset fetched, none stored. |
+| [examples/demo/simple.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/simple.py){:target="_blank"} | The same machinery at its smallest: one task, one checkpoint, nothing hand-written. |
 
 ## What an mjlab export already carries
 

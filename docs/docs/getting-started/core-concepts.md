@@ -214,7 +214,7 @@ scene.add_policy(
 Tracing needs a live environment to read shapes from and resolve entity patterns against.
 An [mjlab scene](../guides/mjlab.md) builds one from its task; a plain `add_scene` scene
 needs `set_trace_env(...)`. See [How the Build Works](../guides/how-it-works.md) and
-[examples/tutorial/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/tutorial/minimum_policy.py){:target="_blank"}.
+[examples/demo/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/minimum_policy.py){:target="_blank"}.
 
 ### Commands
 

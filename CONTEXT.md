@@ -52,14 +52,15 @@ src/mjswan/          Python package source: the object model at the root, one pa
 
 examples/            Runnable examples. Python only: no asset is stored here, and the
                      `no-binaries-in-examples` pre-commit hook is what keeps it so
-  demo/                the apps with a public URL. main.py (GitHub Pages: mjlab Tasks +
-                       Showcase, everything from mjlab or the Hub) and simple.py (one
-                       task, one checkpoint — what `mjswan demo` runs)
-  tutorial/            one file, one concept: hello_world, minimum_policy,
-                       mujoco_models, splat, muscle
-  mjlab/               defaults, g1_spinkick, myosuite, musclemimic, unitree_rl — the
-                       W&B-driven ones, bound for mjswan_playground (#128)
+  demo/                main.py (the deployed app: mjlab Tasks + Showcase, everything
+                       from mjlab or the Hub), simple.py (one task, one checkpoint —
+                       what `mjswan demo` runs), minimum_policy.py (the smallest
+                       complete policy) and mujoco_models.py (a gallery, no policy)
   colab/               Google Colab notebooks (demo, anymal_c_velocity)
+
+                     The W&B-driven examples — defaults, g1_spinkick, myosuite,
+                     musclemimic, unitree_rl, gentle_humanoid — live in
+                     mjswan_playground, which carries their pinned dependencies
 
 tests/               pytest suite + dump_*_fixture.py generators for the TS parity fixtures
 skills/              Agent skills this repo publishes (mjlab-to-mjswan: port an mjlab task)
@@ -277,15 +278,18 @@ Rollout parity **replays** mjlab's states rather than co-simulating: mjlab integ
 
 ## Dependencies
 
-Core: `mujoco==3.8.1`, `onnx>=1.20.0`, `nodeenv>=1.9.1`, `rich>=13.0.0`, `wandb>=0.23.1`, `typer>=0.12.0`.
+Core: `mujoco==3.8.1`, `onnx>=1.20.0`, `nodeenv>=1.9.1`, `rich>=13.0.0`, `typer>=0.12.0`.
 Dev extras: `pyright`, `ruff==0.16.0` (pinned), `pre-commit`, `pytest`.
-Extras, one per asset source plus tooling: `wandb`, `hf` (`huggingface-hub`), `mjlab` (`mjlab==1.5.3` + `torch>=2.9.1`), `check` (ruff/ty/pyright), `dev` (`check` + every source + pytest/pre-commit), `examples` (the sources + `onnxruntime`, `robot-descriptions`, `playground`, `myosuite`, `gymnasium`).
+Extras, one per asset source plus tooling: `wandb`, `hf` (`huggingface-hub`), `mjlab` (`mjlab==1.5.3` + `torch>=2.9.1`), `check` (ruff/ty/pyright), `dev` (`check` + every source + pytest/pre-commit), `examples` (the sources + `onnxruntime`).
 
 **`mjlab` + `torch` are build-time requirements for any policy carrying traced MDP terms** — tracing runs `torch.onnx.export` against a live mjlab env. Neither ships to the browser, and a model-only scene needs neither. `onnxruntime` (not `onnxruntime-web`) is the parity harness's runtime.
 
 mjlab itself pulls in `mujoco-mjx==3.8.1` and `mujoco-warp>=3.8.0.3` (3.8.0.3 switched from `mjENBL_MULTICCD` to a `DisableBit`, restoring compat with stable mujoco 3.8.1).
 
-Python 3.10–3.12 only (`labmaze`, transitive via myosuite → dm-control, has no cp313 wheel).
+Python 3.10–3.12 only. The cap was taken for `labmaze` (transitive via myosuite →
+dm-control, no cp313 wheel); myosuite left the dependency set with the #128 examples
+cleanup and nothing in `uv.lock` pulls it any more, so the pin — and the `h5py` override
+beside it — is due a revisit rather than a standing rule.
 
 
 ## Deployment

@@ -63,7 +63,7 @@ shortcuts.
 - **The demo stores no assets, and `examples/demo/assets/` is gone** — 116 MB of
   vendored meshes, policies and a `.mjz` scene, none of which had to be in a git
   repository ([#128](https://github.com/ttktjmt/mjswan/issues/128)). `examples/` is now
-  260 KB of Python. Where each asset went:
+  33 KB of Python across six files. Where each asset went:
 
   - Models: mjlab's own tasks supply G1, Go1, Yam and cartpole through
     `add_scene_mjlab`; the one G1 mjlab has no task for comes from the Hub as a
@@ -83,10 +83,26 @@ shortcuts.
   is the explanation — *mjlab Tasks* is mjlab taken as it is (8 scenes), *Showcase* is
   the same engine with mjswan-side work on top (a splat-backed G1, muscle actuators).
   The three model-gallery projects, about 120 scenes of viewer-only models, are dropped
-  along with the two upstream-API-drift patches they needed; `demo/simple.py` becomes
-  one task and one checkpoint, and `splat.py` / `muscle.py` move to `tutorial/` where a
-  file is one concept. A `no-binaries-in-examples` pre-commit hook keeps it this way,
-  because writing the rule down did not.
+  along with the two upstream-API-drift patches they needed, and `demo/simple.py` becomes
+  one task and one checkpoint. A `no-binaries-in-examples` pre-commit hook keeps it this
+  way, because writing the rule down did not.
+
+- **`examples/` holds six files, and every one of them builds with what a release of
+  this package installs.** Nothing here reaches for a git URL, a task package or a
+  training run of someone else's: `demo/main.py` and `demo/simple.py` (mjlab tasks and
+  mirrored checkpoints), `demo/minimum_policy.py` (a hand-built ONNX policy) and
+  `demo/mujoco_models.py` (a model gallery, no policy), plus the two Colab notebooks.
+  The last two move up from `tutorial/`, which is gone along with `hello_world.py`,
+  `splat.py` and `muscle.py` — the first duplicated the Quickstart, and the other two
+  showed one argument each, which the API docs already do without a file to maintain.
+
+  `examples/mjlab/` is gone whole. Its five projects — `defaults`, `g1_spinkick`,
+  `myosuite`, `musclemimic`, `unitree_rl` — and `demo/gentle_humanoid` belong to
+  `mjswan_playground`, which can pin `myosuite` from a git URL and hold W&B credentials
+  without either becoming this repository's problem. What they demonstrated about *this*
+  package already has a home: the library code they carried moved into `mjswan.mjlab`
+  (below), and the tasks and checkpoints they read are in `demo/main.py` by way of the
+  Hub.
 
 - **The two pieces of library code that lived in `examples/` move into the package.**
   `examples/mjlab/defaults/{commands,terminations}/` were imported by a test, by a
@@ -478,6 +494,10 @@ shortcuts.
 - The `main`, `simple`, `mjlab` and `serve` console scripts, which only launched a module
   under `examples/`. `mjswan serve <dist-dir | document.swn>` replaces the last; run the
   examples as modules.
+- **`mjswan demo mjlab`**, which ran `examples/mjlab/defaults/main.py` — the same tasks
+  read from a W&B run instead of the Hub. That example moves to `mjswan_playground`, and
+  with it the only demo needing a W&B login. `mjswan demo` and `mjswan demo main` are
+  unchanged.
 - **`config.json` and the per-policy `<policy>.json`**, replaced by the one root
   `manifest.json` (supersedes ADR 0005 §1). The per-project `index.html` / `logo.svg`
   copies and the `main/` special case for the first project go with them: a project's

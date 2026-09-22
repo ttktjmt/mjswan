@@ -563,7 +563,7 @@ class TestPolicyHandle:
             lambda run_path: ("motion_asset", b"npz-data"),
         )
 
-        # No `commands=`: exactly what the g1_spinkick example does now.
+        # No `commands=`: a motion-tracking policy takes its target from the clip.
         handles = scene.add_policy_wandb("demo-org/tracking/run1", only_latest=True)
 
         assert len(handles) == 1
