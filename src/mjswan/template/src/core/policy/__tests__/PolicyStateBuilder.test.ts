@@ -114,6 +114,19 @@ describe('getControlMappingFor', () => {
     expect(builder.getControlMappingFor(['elbow'], ['hip'])).toBeNull();
   });
 
+  it('has nothing to match when the policy names no joints', () => {
+    // A cartpole checkpoint carries no mjlab metadata, so `policy_joint_names` used to
+    // arrive empty here. The term's patterns then match nothing, the runtime skips the
+    // term and writes no control at all: the scene renders and the cart never moves.
+    // Python fills the names from the task's own action terms so this cannot happen.
+    const { mujoco, mjModel, mjData } = makeModel([
+      { joint: 'cartpole/slider', actuator: 'cartpole/slide_act' },
+    ]);
+    const builder = new PolicyStateBuilder(mujoco, mjModel, mjData, []);
+
+    expect(builder.getControlMappingFor(['cartpole/slider'], [])).toBeNull();
+  });
+
   it('anchors each pattern, so a partial name does not match', () => {
     const { mujoco, mjModel, mjData } = makeModel([
       { joint: 'hip_pitch', actuator: 'hip_pitch_act' },

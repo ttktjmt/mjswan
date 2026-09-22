@@ -551,6 +551,30 @@ shortcuts.
 
 ### Fixed
 
+- **Both cartpole scenes ran with no control at all.** mjlab attaches export metadata
+  from its velocity, manipulation and tracking runners only, and `get_base_metadata`
+  reads `scene["robot"]` and a `joint_pos` action term to build it. Cartpole's entity is
+  `cartpole` and its action term is `effort`, so its checkpoints carry none. The Hub path
+  had no other source for `policy_joint_names`, so it left them unset; the browser then
+  matched the term's joint patterns against an empty list, skipped the term, and wrote no
+  `ctrl`. The scene rendered and the cart never moved.
+
+  Only the two cartpole tasks are affected, and only since the demo moved from W&B to the
+  Hub in this release: `add_policy_wandb` read the names off the live action manager
+  rather than the file, which works for any task.
+
+  `add_policy_hf` now falls back to the task's own action terms, whose `actuator_names`
+  are joint patterns, resolved against the actuated joints in joint order (the order
+  `Entity.find_joints_by_actuator_names` produces, so the order the actions come out).
+  The width guard the metadata path has applies here too: a list the network's actions
+  cannot drive is refused and reported rather than used.
+
+  And when even that comes up empty, `add_policy_hf` now says so rather than returning a
+  policy that drives nothing. That is the check that was missing: both halves of this
+  failed silently, the Python side by returning nothing and the browser by a
+  `console.warn` a release bundle strips. A policy with no joint action term is inert by
+  design and a `config_path` sidecar may still carry the names, so neither is reported.
+
 - **A term reading `env.sim.data` is traced, and a termination that reads nothing fails
   instead of becoming the `time_out` rule**
   ([#129](https://github.com/ttktjmt/mjswan/issues/129)). `env.sim.data.<field>` and

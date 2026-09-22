@@ -6,6 +6,7 @@ ONNX policy configuration and command management.
 
 from __future__ import annotations
 
+import re
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -122,6 +123,73 @@ def actuated_joint_names(model: mujoco.MjModel | None) -> list[str] | None:
         if not name:
             return None
         names.append(name)
+    return names if len(set(names)) == len(names) else None
+
+
+def actuated_joints_in_joint_order(model: mujoco.MjModel | None) -> list[str] | None:
+    """Every joint an actuator drives, in the model's own **joint** order.
+
+    Not actuator order. mjlab resolves an action term through
+    ``Entity.find_joints_by_actuator_names``, which narrows ``joint_names`` to the
+    actuated ones and keeps their order, so this is the order actions come out in.
+
+    ``None`` on the same terms as :func:`actuated_joint_names`, which decides them.
+    """
+    if actuated_joint_names(model) is None or model is None:
+        return None
+    driven = {int(model.actuator_trnid[index, 0]) for index in range(model.nu)}
+    names = [
+        mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, joint)
+        for joint in range(model.njnt)
+        if joint in driven
+    ]
+    return None if any(not name for name in names) else names
+
+
+def drives_joints(actions: Mapping[str, Any] | None) -> bool:
+    """Whether any action term reaches its actuator through a joint.
+
+    A muscle term names actuators directly and needs no ``policy_joint_names``; every
+    other kind the browser looks up by joint name, so it needs them or it drives nothing.
+    """
+    return any(
+        type(term).__name__ != "MuscleActivationActionCfg"
+        for term in (actions or {}).values()
+    )
+
+
+def action_term_joint_names(
+    actions: Mapping[str, Any] | None, model: mujoco.MjModel | None
+) -> list[str] | None:
+    """The joints an adapted action-term set drives, in the order the actions come out.
+
+    What an mjlab export's ``joint_names`` would have said, recovered from the task's own
+    action terms instead. ``actuator_names`` holds *joint* patterns however it is named
+    (ADR 0006; ``JointPositionAction`` matches them against joint names), so each term's
+    are matched against the actuated joints in joint order, term by term.
+
+    ``None`` unless every term answers: a muscle term names actuators rather than joints,
+    a pattern matching nothing has no answer, and two terms claiming one joint make "the
+    i-th action drives this joint" untrue. A wrong answer here is silent at playback.
+    """
+    joints = actuated_joints_in_joint_order(model)
+    if not actions or joints is None:
+        return None
+    names: list[str] = []
+    for term in actions.values():
+        if type(term).__name__ == "MuscleActivationActionCfg":
+            return None
+        patterns = getattr(term, "actuator_names", None)
+        if not patterns:
+            return None
+        try:
+            regexes = [re.compile(f"(?:{pattern})") for pattern in patterns]
+        except re.error:
+            return None
+        matched = [name for name in joints if any(r.fullmatch(name) for r in regexes)]
+        if not matched:
+            return None
+        names.extend(matched)
     return names if len(set(names)) == len(names) else None
 
 

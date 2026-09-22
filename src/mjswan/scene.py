@@ -37,8 +37,10 @@ from .motion import attach_tracking_motion, tracking_motion_term
 from .policy import (
     PolicyConfig,
     PolicyHandle,
+    action_term_joint_names,
     actuated_joint_names,
     check_slot_tables,
+    drives_joints,
     onnx_output_width,
 )
 from .splat import SplatConfig, SplatHandle
@@ -1149,7 +1151,8 @@ class SceneHandle:
         ]
         # Compiled once, not once per file: every policy in a repository is checked
         # against the same scene.
-        actuated = actuated_joint_names(_get_scene_model(self._config))
+        scene_model = _get_scene_model(self._config)
+        actuated = actuated_joint_names(scene_model)
         driven = [
             _hf_driven_joints(meta, model, actuated)
             for meta, (_, model) in zip(metas, fetched)
@@ -1159,6 +1162,17 @@ class SceneHandle:
             task_id = self._config.mjlab_task_id
         observations, commands, actions, terminations, events = self._derive_term_sets(
             env_cfg, observations, commands, actions, terminations
+        )
+        # mjlab attaches export metadata from its velocity, manipulation and tracking
+        # runners only, so a cartpole checkpoint carries none and this path would leave
+        # the browser with no joint mapping at all. The task's own action terms name the
+        # joints, which is where `add_policy_wandb` reads them from too. Adapted on a
+        # copy: `_resolve_mdp` adapts the shared MDP itself, later and once.
+        adapted_actions = adapt_actions(actions)
+        fallback_joint_names = (
+            None
+            if policy_joint_names is not None
+            else action_term_joint_names(adapted_actions, scene_model)
         )
         first_meta = metas[0] if metas else None
         if actions is None and first_meta is not None and driven[0] is not None:
@@ -1193,6 +1207,9 @@ class SceneHandle:
                 repo_id=repo_id,
                 policy_joint_names=policy_joint_names,
                 default_joint_pos=default_joint_pos,
+                fallback_joint_names=fallback_joint_names,
+                drives_joints=drives_joints(adapted_actions),
+                has_sidecar=config_path is not None,
             )
             handles.append(
                 self.add_policy(
@@ -1225,12 +1242,17 @@ class SceneHandle:
         repo_id: str,
         policy_joint_names: list[str] | None,
         default_joint_pos: list[float] | None,
+        fallback_joint_names: list[str] | None = None,
+        drives_joints: bool = False,
+        has_sidecar: bool = False,
     ) -> dict[str, Any]:
         """``policy_joint_names`` / ``default_joint_pos`` for one policy.
 
-        The caller's values win outright. Metadata that exists but does not line up with
-        the scene is reported rather than dropped: it is the one case where someone who
-        expected the fetch to fill everything gets nothing and no reason why.
+        The caller's values win outright, then the checkpoint's own metadata, then
+        *fallback_joint_names* read off the task's action terms for an export that
+        carries no metadata. Metadata that exists but does not line up with the scene is
+        reported rather than dropped: it is the one case where someone who expected the
+        fetch to fill everything gets nothing and no reason why.
         """
         explicit = {
             key: value
@@ -1240,8 +1262,45 @@ class SceneHandle:
             )
             if value is not None
         }
-        if meta is None or len(explicit) == 2:
+        if len(explicit) == 2:
             return explicit
+
+        if meta is None:
+            if "policy_joint_names" in explicit:
+                return explicit
+            if fallback_joint_names is None:
+                # Nothing left to try. Silence here is what let both cartpole scenes
+                # ship driving nothing: the browser skips an action term it cannot map
+                # and says so in a `console.warn` a release bundle strips. A policy with
+                # no joint action term drives nothing by design, and a sidecar is read
+                # at build time and may still carry the names, so both are spared.
+                if drives_joints and not has_sidecar:
+                    warnings.warn(
+                        f"Policy {policy_name!r} from {repo_id!r} carries no mjlab "
+                        "metadata, and this scene's action terms do not say which "
+                        "joints it drives, so policy_joint_names is unset and the "
+                        "browser will write no control at all. mjlab attaches that "
+                        "metadata from its velocity, manipulation and tracking runners "
+                        "only. Pass policy_joint_names, in the order the actions come "
+                        "out.",
+                        category=RuntimeWarning,
+                        stacklevel=3,
+                    )
+                return explicit
+            # Same guard the metadata path gets: a list the actions cannot drive would
+            # misdrive them, which nothing downstream would say.
+            width = onnx_output_width(policy)
+            if width is not None and len(fallback_joint_names) != width:
+                warnings.warn(
+                    f"Policy {policy_name!r} from {repo_id!r} carries no mjlab metadata, "
+                    f"and the task's action terms name {len(fallback_joint_names)} joints "
+                    f"against the network's {width} actions, so policy_joint_names was "
+                    "left unset. Pass it explicitly, in the order the actions come out.",
+                    category=RuntimeWarning,
+                    stacklevel=3,
+                )
+                return explicit
+            return {"policy_joint_names": list(fallback_joint_names), **explicit}
 
         if driven is None:
             if meta.joint_names:

@@ -435,6 +435,17 @@ print(meta.joint_names, meta.action_scale, meta.observation_names)
 `None` means the file carries no mjlab metadata (a hand-built graph, or one from
 another framework), which is a normal case, not an error.
 
+!!! note "Not every mjlab task writes it"
+    mjlab attaches this block from its velocity, manipulation and tracking runners only,
+    and `get_base_metadata` reads `scene["robot"]` and a `joint_pos` action term to build
+    it. A task outside those families exports a bare graph: cartpole, whose entity is
+    `cartpole` and whose action term is an effort term, is the one in mjlab's own tree.
+    For a scene that knows its task, `add_policy_hf` then reads the joint names off the
+    action terms instead, in the order the actions come out. When even that comes up
+    empty it warns, because a policy whose action terms drive joints but which has no
+    `policy_joint_names` has no joint to map an action onto: the browser skips the term
+    and writes no control at all.
+
 Two limits are worth knowing. The encoding is **lossy**: mjlab formats list values with
 `{:.3f}`, so numbers come back rounded to three decimals (a scalar written outside a
 list keeps full precision). And `joint_names` lists **every joint of the robot in joint
