@@ -1,6 +1,6 @@
-# Package layout — one package per layer, imports point downward
+# Package layout: one package per layer, imports point downward
 
-> Status: **Accepted** — a pre-1.0 change to the *Python package's module layout*
+> Status: **Accepted**, a pre-1.0 change to the *Python package's module layout*
 > only. No build output, manifest key, traced graph or `format` value changes; the
 > public API in `mjswan/__init__.py` is unchanged. Earlier ADRs cite the paths of
 > their time and are not rewritten; §Old → new maps every moved module.
@@ -29,8 +29,8 @@ Four things were wrong with more than the names:
   and the four trace functions could only be read as one file.
 - **Fetching and converting were one module.** `wandb_io.py` downloaded `model_*.pt`
   files *and* rebuilt a live mjlab env to convert them with torch. When
-  `add_policy_hf` added a second source — the Hub, which holds the finished `.onnx`
-  and needs no conversion — the asymmetry had nowhere to live.
+  `add_policy_hf` added a second source (the Hub, which holds the finished `.onnx`
+  and needs no conversion), the asymmetry had nowhere to live.
 - **The base action cfg lived in the wrong package.** `ActionTermCfg` was defined in
   `envs/mdp/actions/actions.py` while `managers/action_manager.py` held only a
   serializer, the reverse of the mjlab layout `managers/` exists to mirror.
@@ -106,7 +106,7 @@ the document's naming rules.
   `CommandTermConfig` keeps its name: it is not mjlab's `CommandTermCfg`, since it also
   carries the browser-side UI and the pending trace.
 - **Speak** (`mjlab/`): everything that reads mjlab's own objects, one module per
-  concern — the per-manager adapters, `task.py` (what a scene takes from `env_cfg`),
+  concern: the per-manager adapters, `task.py` (what a scene takes from `env_cfg`),
   `runner.py` (playback defaults and `.pt` → ONNX export), `env.py` (the trace envs),
   `sim.py`, `gui.py`, `onnx_meta.py`, `detect.py`. mjlab itself is imported lazily
   inside the functions that need it.
@@ -166,7 +166,7 @@ migration guide.
 - `import mjswan` imports neither torch, mjlab, `onnx` nor `rich`: `builder.py` no
   longer imports the build pipeline at module level, and the three modules the
   object model does reach (`policy.py`, `scene.py`, `mjlab/runner.py`) take `onnx`
-  under `TYPE_CHECKING` — they annotate a `ModelProto` but read it duck-typed.
+  under `TYPE_CHECKING`: they annotate a `ModelProto` but read it duck-typed.
   Someone opening a MuJoCo model in the viewer with no policy pays for `mujoco` and
   `numpy` and nothing else.
 - A reader finds a manifest key in `build/manifest.py` or `build/mdp/<kind>.py` and
@@ -221,14 +221,14 @@ migration guide.
 
 ## Phased execution plan
 
-1. **Tidy the root** — `_version.py`; `_compat.py` and the legacy console scripts
+1. **Tidy the root**: `_version.py`; `_compat.py` and the legacy console scripts
    removed; `ActionTermCfg` into `managers/action_manager.py`.
-2. **The torch-free side** — `document/`, `cloud/`, `license/`.
-3. **The mjlab side** — `mjlab/` and `source/`; fetching split from converting.
-4. **`build/`** — `_onnx_build`, `_graph_io`, `compile/serialize`, the Builder's
+2. **The torch-free side**: `document/`, `cloud/`, `license/`.
+3. **The mjlab side**: `mjlab/` and `source/`; fetching split from converting.
+4. **`build/`**: `_onnx_build`, `_graph_io`, `compile/serialize`, the Builder's
    private methods, `utils.py`'s packer and `_build_client` under one package.
-5. **`compile/`** — `tracer.py` split by pass and by term kind.
-6. **The root finish** — `command.py` into the mirror packages, `cli.py`, this ADR,
+5. **`compile/`**: `tracer.py` split by pass and by term kind.
+6. **The root finish**: `command.py` into the mirror packages, `cli.py`, this ADR,
    `CONTEXT.md` and the changelog.
 
 Each phase kept ruff clean, left `ty` and `pyright` at or below their previous

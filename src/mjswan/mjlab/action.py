@@ -39,7 +39,7 @@ def _mjswan_action_class(term: Any) -> type[MjswanActionTermCfg] | None:
 
 
 def _has_mjswan_action(term: Any) -> bool:
-    """Whether *term* adapts by name — a task's own subclass is not in ``mjlab``."""
+    """Whether *term* adapts by name, a task's own subclass is not in ``mjlab``."""
     return _mjswan_action_class(term) is not None
 
 

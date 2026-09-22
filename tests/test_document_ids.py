@@ -1,4 +1,4 @@
-"""Tests for mjswan.document.ids — the slug a name becomes, and scoped unique ids.
+"""Tests for mjswan.document.ids: the slug a name becomes, and scoped unique ids.
 
 Layer: L1 (pure Python).
 """
@@ -24,7 +24,7 @@ NAME2ID_CASES = json.loads(
 
 
 # ===========================================================================
-# L1 — name2id
+# L1: name2id
 # ===========================================================================
 class TestName2Id:
     def test_spaces_become_underscores(self):
@@ -48,7 +48,7 @@ class TestName2Id:
 
 
 # ===========================================================================
-# L1 — unique_id
+# L1: unique_id
 # ===========================================================================
 class TestUniqueId:
     def test_free_base_is_returned_as_is(self):

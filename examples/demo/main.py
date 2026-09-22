@@ -4,15 +4,15 @@ A tour of what mjswan does, hosted on GitHub Pages: https://ttktjmt.github.io/mj
 
 Two projects, and the split is the explanation:
 
-- **mjlab Tasks** — mjlab's own tasks, taken as they are. Every scene here is
+- **mjlab Tasks**: mjlab's own tasks, taken as they are. Every scene here is
   ``add_scene_mjlab`` plus trained checkpoints; nothing is hand-written, so what you see
   is what mjlab gives you through mjswan.
-- **Showcase** — the same engine with mjswan-side work on top: a Gaussian Splat
+- **Showcase**, the same engine with mjswan-side work on top: a Gaussian Splat
   background, a model mjlab has no task for, muscle actuators.
 
 **No asset is stored in this repository.** Models come from mjlab or from the Hugging
 Face Hub, and policies from the Hub. The Hub repository is public, so a build needs no
-credentials of any kind — which is why the deploy workflow carries no secret, and one
+credentials of any kind, which is why the deploy workflow carries no secret, and one
 public host is the only thing it has to reach.
 """
 
@@ -41,7 +41,7 @@ from mjswan.source import hf
 HF_REPO = "ttktjmt/mjswan"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Project A — mjlab Tasks
+# Project A: mjlab Tasks
 # ─────────────────────────────────────────────────────────────────────────────
 
 #: mjlab's bundled tasks, in the order they appear in the scene list.
@@ -203,7 +203,7 @@ def _add_tracking_scene(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> 
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Project B — Showcase
+# Project B: Showcase
 # ─────────────────────────────────────────────────────────────────────────────
 
 G1_TERMINATIONS: dict[str, TerminationTermCfg] = {
@@ -219,8 +219,8 @@ G1_TERMINATIONS: dict[str, TerminationTermCfg] = {
 def _add_g1_on_street(project: mjswan.ProjectHandle) -> None:
     """A Hub-hosted model, Hub-hosted policies, and two captures to stand it in.
 
-    mjlab has no task for this G1 — the two policies are third-party, trained against
-    this XML — so the model itself comes from the Hub as a directory: the MJCF, the 35
+    mjlab has no task for this G1 (the two policies are third-party, trained against
+    this XML), so the model itself comes from the Hub as a directory: the MJCF, the 35
     meshes it names, and the `LICENSE` that mjswan copies into the build beside it.
     """
     # Cached by `huggingface_hub`, so `add_scene_hf` below re-uses this download rather
@@ -258,7 +258,7 @@ def _add_g1_on_street(project: mjswan.ProjectHandle) -> None:
 
     # Two separate calls, not one with a list: these policies were trained on different
     # observation sets, so they are two MDPs. Neither is an mjlab export, so neither
-    # carries metadata — the sidecar JSON beside it on the Hub supplies the PD gains.
+    # carries metadata: the sidecar JSON beside it on the Hub supplies the PD gains.
     scene.add_policy_hf(
         HF_REPO,
         filename="policies/locomotion.onnx",
@@ -314,7 +314,7 @@ def _add_g1_on_street(project: mjswan.ProjectHandle) -> None:
 
 
 # MyoFinger: 4 hinge joints (IFadb, IFmcp, IFpip, IFdip) driven by 5 MuJoCo muscle
-# actuators. mjlab has no task for it, so the model comes from the Hub — two XMLs, one
+# actuators. mjlab has no task for it, so the model comes from the Hub: two XMLs, one
 # including the other, which is why it is a directory like the G1.
 MYO_JOINT_NAMES = ("IFadb", "IFmcp", "IFpip", "IFdip")
 MYO_MUSCLE_NAMES = ("extn", "adabR", "adabL", "mflx", "dflx")
@@ -327,7 +327,7 @@ MYO_SCENE = "scenes/myofinger/myofinger_v0.xml"
 def _build_muscle_policy() -> onnx.ModelProto:
     """Random-uniform policy: ignores the observation, emits fresh [0, 1] samples.
 
-    The point is the action path, not the network — a muscle is excited by a value in
+    The point is the action path, not the network: a muscle is excited by a value in
     [0, 1], so a graph whose only op is `RandomUniform` drives every muscle with a new
     excitation each policy step and shows the actuator model doing its work.
     """
@@ -387,7 +387,7 @@ def _add_myofinger(project: mjswan.ProjectHandle) -> None:
     scene.add_policy(
         name="Random Action",
         policy=_build_muscle_policy(),
-        # A muscle is not a joint, so there is no mapping to declare — only a count.
+        # A muscle is not a joint, so there is no mapping to declare, only a count.
         policy_joint_names=[],
         policy_num_actions=len(MYO_MUSCLE_NAMES),
         initial_qpos=MYO_INITIAL_QPOS,

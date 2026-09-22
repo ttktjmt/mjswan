@@ -68,7 +68,7 @@ def resolved_params(params: dict[str, Any], env: Any) -> dict[str, Any]:
 
     mjlab's managers do this at ``_prepare_terms``, turning name patterns into concrete
     indices. The Builder serializes from the task config, whose cfgs are still
-    unresolved (``site_ids=slice(None)`` — every site), so tracing without this bakes a
+    unresolved (``site_ids=slice(None)``, every site), so tracing without this bakes a
     different function than mjlab runs.
 
     A copy is resolved, since resolution mutates the cfg. Duck-typed to keep mjlab a

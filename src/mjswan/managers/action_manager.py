@@ -40,8 +40,8 @@ class ActionTermCfg(abc.ABC):
     Keys are joint-name *patterns* (mjlab resolves them with ``re.fullmatch`` via
     ``resolve_matching_names_values``), values are ``(min, max)``. A target no
     pattern matches is unbounded. Mirrors ``BaseActionCfg.clip``: mjlab clamps
-    ``raw * scale + offset`` — the *processed* action, before any encoder-bias
-    subtraction — so the browser applies it at the same point."""
+    ``raw * scale + offset`` (the *processed* action, before any encoder-bias
+    subtraction), so the browser applies it at the same point."""
 
     unsupported_reason: str | None = None
     """If set, raises ``NotImplementedError`` at build time."""
@@ -49,7 +49,7 @@ class ActionTermCfg(abc.ABC):
     def _add_clip(self, entry: dict[str, Any]) -> None:
         """Attach ``clip`` to a serialized entry, if this term declares any.
 
-        Emitted as patterns and resolved browser-side with mjlab's fullmatch — unlike
+        Emitted as patterns and resolved browser-side with mjlab's fullmatch, unlike
         ``stiffness``/``damping``, which are mjswan's own and keyed by exact joint name.
         """
         if self.clip is not None:

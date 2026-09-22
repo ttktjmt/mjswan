@@ -3,8 +3,8 @@
 The shortest thing that still walks: one mjlab task, one trained policy, one browser
 window. This is what `mjswan demo` runs, so it is also the first mjswan most people see.
 
-Everything comes from somewhere else — the model from mjlab, the policy from the
-Hugging Face Hub — so there is nothing to download by hand and nothing to configure.
+Everything comes from somewhere else (the model from mjlab, the policy from the
+Hugging Face Hub), so there is nothing to download by hand and nothing to configure.
 `examples/demo/main.py` is the same idea at full size.
 
 Needs `pip install 'mjswan[hf,mjlab]'`.
@@ -29,8 +29,8 @@ def setup_builder() -> mjswan.Builder:
     builder = mjswan.Builder(base_path=os.getenv("MJSWAN_BASE_PATH", "/"))
     project = builder.add_project(name="mjswan Demo")
 
-    # The task carries the model and the whole MDP — observations, commands, actions,
-    # terminations — so nothing about them is repeated here.
+    # The task carries the model and the whole MDP (observations, commands, actions,
+    # terminations), so nothing about them is repeated here.
     scene = project.add_scene_mjlab(TASK_ID)
     scene.set_viewer(
         mjswan.ViewerConfig(

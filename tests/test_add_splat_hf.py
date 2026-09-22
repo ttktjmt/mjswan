@@ -2,7 +2,7 @@
 
 A splat is one opaque file, so unlike a scene there is nothing to compile and nothing
 to resolve beside it. What these cover is that the downloaded file reaches ``source=``
-— so the ``.spz`` is bundled and the deployed app needs no network — and that the
+(so the ``.spz`` is bundled and the deployed app needs no network), and that the
 placement arguments arrive unchanged.
 """
 

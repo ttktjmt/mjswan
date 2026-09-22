@@ -198,7 +198,7 @@ single-output network declares neither. A network with **several outputs** does 
 the actuators would be driven from it. The build warns in that case rather than refusing,
 since output 0 may well be the action. `examples/demo/main.py` shows both tables in use on
 one policy: the motion-tracking network takes two inputs, so `in_keys` names them, and all
-seven outputs are spelled out even though `action` is already the first — the six after it
+seven outputs are spelled out even though `action` is already the first, the six after it
 are the reference pose the clip carries, named so the table lines up.
 
 ### Coming from mjlab
@@ -410,14 +410,14 @@ message naming this call.
 
 | Example | What it shows |
 |---|---|
-| [examples/demo/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/minimum_policy.py){:target="_blank"} | Smallest complete policy — a hand-built two-node ONNX PD controller, one self-authored observation beside two of mjlab's, a `ui_command`, and `set_trace_env`. |
-| [examples/demo/main.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/main.py){:target="_blank"} | Eight mjlab tasks with their mirrored checkpoints, a motion-tracking policy with its reference clip, two third-party policies with sidecar configs on one scene, and a muscle-driven policy — every asset fetched, none stored. |
+| [examples/demo/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/minimum_policy.py){:target="_blank"} | Smallest complete policy: a hand-built two-node ONNX PD controller, one self-authored observation beside two of mjlab's, a `ui_command`, and `set_trace_env`. |
+| [examples/demo/main.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/main.py){:target="_blank"} | Eight mjlab tasks with their mirrored checkpoints, a motion-tracking policy with its reference clip, two third-party policies with sidecar configs on one scene, and a muscle-driven policy: every asset fetched, none stored. |
 | [examples/demo/simple.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/simple.py){:target="_blank"} | The same machinery at its smallest: one task, one checkpoint, nothing hand-written. |
 
 ## What an mjlab export already carries
 
-mjlab writes the checkpoint's own defaults into the `.onnx` itself — `joint_names`,
-`default_joint_pos`, `action_scale`, and a description of each observation term — so an
+mjlab writes the checkpoint's own defaults into the `.onnx` itself (`joint_names`,
+`default_joint_pos`, `action_scale`, and a description of each observation term), so an
 mjlab policy travels self-describing.
 [`add_policy_hf`](../getting-started/examples.md#a-policy-published-on-the-hugging-face-hub)
 reads that block and fills `policy_joint_names`, `default_joint_pos` and the
@@ -432,13 +432,13 @@ meta = read_mjlab_metadata(onnx.load("policy.onnx"))
 print(meta.joint_names, meta.action_scale, meta.observation_names)
 ```
 
-`None` means the file carries no mjlab metadata — a hand-built graph, or one from
-another framework — which is a normal case, not an error.
+`None` means the file carries no mjlab metadata (a hand-built graph, or one from
+another framework), which is a normal case, not an error.
 
 Two limits are worth knowing. The encoding is **lossy**: mjlab formats list values with
 `{:.3f}`, so numbers come back rounded to three decimals (a scalar written outside a
 list keeps full precision). And `joint_names` lists **every joint of the robot in joint
-order**, while the network emits one action per actuator in actuator order — the same
+order**, while the network emits one action per actuator in actuator order, the same
 list only when the robot has no passive joints and its actuators are declared in joint
 order. `add_policy_hf` therefore checks the metadata against your scene's own model
 before using any of it, and warns rather than guessing when they disagree.

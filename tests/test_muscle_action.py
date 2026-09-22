@@ -227,7 +227,7 @@ class TestValidateMuscleActuators:
 
 
 # ---------------------------------------------------------------------------
-# build.pipeline muscle validation — end-to-end at build time
+# build.pipeline muscle validation: end-to-end at build time
 # ---------------------------------------------------------------------------
 
 

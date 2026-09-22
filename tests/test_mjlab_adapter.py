@@ -1,4 +1,4 @@
-"""Tests for mjswan.mjlab — mjlab type conversion.
+"""Tests for mjswan.mjlab: mjlab type conversion.
 
 Layer: L1 (pure Python, no MuJoCo/ONNX/mjlab required).
 

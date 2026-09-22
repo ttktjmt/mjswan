@@ -1,6 +1,6 @@
 """``ProjectHandle.add_scene_hf`` end to end, with the Hub itself stubbed.
 
-A MuJoCo model is several files — the XML names meshes MuJoCo resolves relative to it —
+A MuJoCo model is several files (the XML names meshes MuJoCo resolves relative to it),
 so these cover the part `fetch_file` cannot do: bringing the whole directory down and
 compiling the spec where it lands.
 """

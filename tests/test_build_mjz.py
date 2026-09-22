@@ -1,4 +1,4 @@
-"""Tests for mjswan.build.mjz — path normalization, XML rewriting, PNG encoding, ZIP generation.
+"""Tests for mjswan.build.mjz: path normalization, XML rewriting, PNG encoding, ZIP generation.
 
 Layer breakdown:
   L1 (pure Python, no MuJoCo): TestStripLeadingDotdot, TestMakeZipSafePath,
@@ -26,7 +26,7 @@ from mjswan.build.mjz import (
 
 
 # ===========================================================================
-# L1 — _strip_leading_dotdot
+# L1: _strip_leading_dotdot
 # ===========================================================================
 class TestStripLeadingDotdot:
     def test_no_dotdot_unchanged(self):
@@ -62,7 +62,7 @@ class TestStripLeadingDotdot:
 
 
 # ===========================================================================
-# L1 — _make_zip_safe_path
+# L1: _make_zip_safe_path
 # ===========================================================================
 class TestMakeZipSafePath:
     def test_clean_relative_path_unchanged(self):
@@ -93,7 +93,7 @@ class TestMakeZipSafePath:
 
 
 # ===========================================================================
-# L1 — _rewrite_xml_paths
+# L1: _rewrite_xml_paths
 # ===========================================================================
 class TestRewriteXmlPaths:
     def test_meshdir_removed_from_compiler(self):
@@ -194,7 +194,7 @@ class TestRewriteXmlPaths:
 
 
 # ===========================================================================
-# L1 — _buffer_texture_to_png
+# L1: _buffer_texture_to_png
 # ===========================================================================
 class TestBufferTextureToPng:
     def test_rgb_output_has_png_signature(self):
@@ -219,7 +219,7 @@ class TestBufferTextureToPng:
 
 
 # ===========================================================================
-# L2 — to_zip_deflated (synthetic MjSpec, no external asset files)
+# L2: to_zip_deflated (synthetic MjSpec, no external asset files)
 # ===========================================================================
 class TestToZipDeflated:
     def test_compression_type_is_deflate(self, minimal_spec):
@@ -319,7 +319,7 @@ class TestToZipDeflated:
 
 
 # ===========================================================================
-# L2 — collect_spec_assets (synthetic MjSpec)
+# L2: collect_spec_assets (synthetic MjSpec)
 # ===========================================================================
 class TestCollectSpecAssets:
     def test_returns_empty_dict_for_spec_with_no_assets(self, minimal_spec):

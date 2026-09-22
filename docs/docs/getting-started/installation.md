@@ -50,7 +50,7 @@ mjswan can be installed as a Python package (the primary workflow) or as an npm 
 pip install mjswan
 ```
 
-That is the whole pipeline — `mujoco`, `onnx`, `typer`, `rich`, and `nodeenv` for the
+That is the whole pipeline: `mujoco`, `onnx`, `typer`, `rich`, and `nodeenv` for the
 frontend build. It bundles any MuJoCo model and any ONNX policy you already have on disk.
 
 **Where assets come from is an extra**, one per backend, because `import mjswan` touches
@@ -78,7 +78,7 @@ They combine: `pip install 'mjswan[wandb,mjlab]'` is the W&B checkpoint workflow
 Two more extras exist for working *on* mjswan rather than with it:
 
 ```bash
-pip install 'mjswan[check]'     # ruff, ty, pyright — what `make check` runs
+pip install 'mjswan[check]'     # ruff, ty, pyright, what `make check` runs
 pip install 'mjswan[dev]'       # the above, plus pytest, pre-commit, and every source
 pip install 'mjswan[examples]'  # what the bundled demos need: MyoSuite, Playground, …
 ```

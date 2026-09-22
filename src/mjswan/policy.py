@@ -103,7 +103,7 @@ def onnx_output_width(model: onnx.ModelProto) -> int | None:
 
 
 def actuated_joint_names(model: mujoco.MjModel | None) -> list[str] | None:
-    """The joint each actuator drives, in actuator order — the order actions come in.
+    """The joint each actuator drives, in actuator order, the order actions come in.
 
     ``None`` when the model does not give one unambiguously: no actuators, a
     transmission that is not a joint (tendon, site, body), an unnamed joint, or two
@@ -422,7 +422,7 @@ class PolicyHandle:
             filename: Path to the ``.npz`` within the repository.
             name: Display name. Defaults to the file's stem.
             revision: Branch, tag or commit. ``None`` takes the default branch.
-            repo_type: ``"dataset"`` by default — a clip is data, and the retargeted
+            repo_type: ``"dataset"`` by default: a clip is data, and the retargeted
                 sets published so far are dataset repositories.
             token: Hub token for a gated or private repository. Several public motion
                 datasets are gated behind an accepted licence, which needs one.

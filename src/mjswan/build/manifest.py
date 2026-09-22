@@ -317,7 +317,7 @@ def _require_control_dt(scene: SceneConfig) -> float:
     if scene.control_dt is None:
         raise ValueError(
             f"Scene {scene.name!r} has policies but no control_dt. Pass it to "
-            "add_scene(control_dt=...) as seconds per control step — mjlab's "
+            "add_scene(control_dt=...) as seconds per control step: mjlab's "
             "`timestep * decimation`, the rate the policy was trained to act at. The "
             "model carries only the physics timestep, so this cannot be inferred, and "
             "guessing it wrong is silent. add_scene_mjlab() fills it in from the task."

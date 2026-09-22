@@ -55,7 +55,7 @@ class GroupTermSpec:
     params: dict[str, Any]
     clip: tuple[float, float] | None = None
     scale: Any = None
-    """Per-term scale — a float, or a sequence broadcast over the term's width."""
+    """Per-term scale: a float, or a sequence broadcast over the term's width."""
     native_size: int | None = None
 
 
@@ -70,7 +70,7 @@ class GroupExport:
     input_names: list[str]
     input_shapes: list[list[int]]
     native_inputs: list[dict[str, Any]]
-    """Per native term: ``{name, native, input, size, ...}`` — fed by the runtime."""
+    """Per native term: ``{name, native, input, size, ...}``, fed by the runtime."""
     layout: list[dict[str, Any]]
     """``{name, size}`` per term, in concat order, for the runtime's group layout."""
     output_name: str
@@ -111,7 +111,7 @@ class _GroupModule(nn.Module):
         self._reader_fields = reader_fields
         self._sim_rows = sim_rows or {}
         self._const_buffers = _register_consts(self, constants)
-        # A term reading no dynamic state is a value, not a function — bake it.
+        # A term reading no dynamic state is a value, not a function: bake it.
         self._baked_buffers = _register_consts(self, baked, prefix="_baked")
 
     def forward(self, *args: torch.Tensor) -> torch.Tensor:
@@ -153,7 +153,7 @@ def _native_example(term: GroupTermSpec, env: Any) -> torch.Tensor:
     """
     try:
         value = term.func(env, **term.params).detach()
-    except Exception:  # noqa: BLE001 — a trace env legitimately has neither
+    except Exception:  # noqa: BLE001 (a trace env legitimately has neither)
         value = None
     if value is not None and value.reshape(1, -1).shape[-1] > 0:
         return value
@@ -164,7 +164,7 @@ def _native_example(term: GroupTermSpec, env: Any) -> torch.Tensor:
         "the policy config gives its width. Set the policy's "
         "`policy_joint_names`/`policy_num_actions` (for `last_action`), or declare "
         "the command's UI inputs (for `generated_commands`). A term-scoped "
-        "`last_action` has no config answer at all — it needs a trace env whose "
+        "`last_action` has no config answer at all: it needs a trace env whose "
         "action manager holds the term."
     )
 
@@ -192,7 +192,7 @@ def trace_observation_group(
     single node and the fixed per-``ort.run()`` cost then dominates (ADR 0005 §4).
 
     Inputs are the deduplicated union of the terms' dynamic slots, then one input per
-    native term. The output is the concatenated vector with clip/scale folded in —
+    native term. The output is the concatenated vector with clip/scale folded in,
     what the policy consumes, minus history.
     """
     # 1. Discovery, per term: what does each read, and is it native?
@@ -226,13 +226,13 @@ def trace_observation_group(
                 f"{type(recorded).__name__}, not a Tensor."
             )
         term_dynamic = _classify_slots(recorder._log, dynamic, constants)  # noqa: SLF001
-        sensors.update(recorder._sensors)  # noqa: SLF001 — internal proxy
-        commands.update(recorder._commands)  # noqa: SLF001 — internal proxy
-        sims.append(recorder._sim)  # noqa: SLF001 — internal proxy
+        sensors.update(recorder._sensors)  # noqa: SLF001 (internal proxy)
+        commands.update(recorder._commands)  # noqa: SLF001 (internal proxy)
+        sims.append(recorder._sim)  # noqa: SLF001 (internal proxy)
         size = int(recorded.reshape(1, -1).shape[-1])
         if not term_dynamic:
             # Nothing read means a constant; unfollowable reads mean live state.
-            if recorder._log:  # noqa: SLF001 — internal proxy
+            if recorder._log:  # noqa: SLF001 (internal proxy)
                 raise UntraceableTerm(
                     term.name,
                     sorted({slot_label(k) for k, _ in recorder._log}),  # noqa: SLF001
@@ -305,7 +305,7 @@ class TerminationGroupExport:
     input_names: list[str]
     input_shapes: list[list[int]]
     lanes: list[str]
-    """Term names, in output-lane order — lane *i* is `lanes[i]`'s verdict."""
+    """Term names, in output-lane order: lane *i* is `lanes[i]`'s verdict."""
     output_name: str
     reference_output: torch.Tensor
     constant_slots: list[SlotKey] = field(default_factory=list)
@@ -366,7 +366,7 @@ def trace_termination_group(
     """Fuse termination terms into one graph, one bool lane each.
 
     Same mechanics as :func:`trace_observation_group`, but the output is a bool vector
-    so the manager keeps its per-term reasons. `time_out` never reaches here — it is
+    so the manager keeps its per-term reasons. `time_out` never reaches here: it is
     classified native by name first (:func:`is_native_termination`).
     """
     dynamic: dict[SlotKey, torch.Tensor] = {}
@@ -385,12 +385,12 @@ def trace_termination_group(
                 f"{type(recorded).__name__}, not a Tensor."
             )
         term_dynamic = _classify_slots(recorder._log, dynamic, constants)  # noqa: SLF001
-        sensors.update(recorder._sensors)  # noqa: SLF001 — internal proxy
-        commands.update(recorder._commands)  # noqa: SLF001 — internal proxy
-        sims.append(recorder._sim)  # noqa: SLF001 — internal proxy
+        sensors.update(recorder._sensors)  # noqa: SLF001 (internal proxy)
+        commands.update(recorder._commands)  # noqa: SLF001 (internal proxy)
+        sims.append(recorder._sim)  # noqa: SLF001 (internal proxy)
         if not term_dynamic:
             # Never baked: a termination blind to state never fires or always does.
-            if not recorder._log:  # noqa: SLF001 — internal proxy
+            if not recorder._log:  # noqa: SLF001 (internal proxy)
                 raise ConstantTerm(term.name)
             raise UntraceableTerm(
                 term.name,

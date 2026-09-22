@@ -56,8 +56,8 @@ def native_observation_entry(
 def action_term_offset(env: Any, action_name: str) -> int:
     """Where *action_name*'s slice starts inside the policy's action vector.
 
-    ``last_action(action_name=...)`` is one action term's slice, so the browser — which
-    holds the policy output whole — needs this offset to reproduce it. Raises rather
+    ``last_action(action_name=...)`` is one action term's slice, so the browser (which
+    holds the policy output whole) needs this offset to reproduce it. Raises rather
     than falling back to the whole vector, which would look right until a scene has two
     action terms.
     """

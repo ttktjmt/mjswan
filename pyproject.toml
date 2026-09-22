@@ -45,7 +45,7 @@ classifiers = [
     "Natural Language :: English",
 ]
 # The pipeline: what turning a MuJoCo model into a browser application needs, whatever
-# the assets came from. Where they come from is an extra — see `wandb` / `hf` / `mjlab`
+# the assets came from. Where they come from is an extra;see `wandb` / `hf` / `mjlab`
 # below, one per module of `mjswan/source/` and `mjswan/mjlab/`.
 dependencies = [
     "mujoco==3.8.1",
@@ -92,7 +92,7 @@ check = [
 
 # What a contributor installs: every source, so the test suite actually runs. Without
 # `mjlab` here, 33 tests gate themselves off with `importorskip` and no CI job covers
-# them — `parity.yml` names five files and reaches only the rest.
+# them: `parity.yml` names five files and reaches only the rest.
 dev = [
     "mjswan[check,wandb,hf,mjlab]",
     "pytest>=9.0.2",
@@ -118,7 +118,7 @@ mjswan = "mjswan.cli:app"
 extraPaths = []
 # The package. `examples/` is deliberately out: those scripts are written against
 # third-party APIs (mjlab and torch), and checking them meant walking that dependency
-# graph — minutes per run — for diagnostics about code that is not shipped. `**/.dep`
+# graph (minutes per run) for diagnostics about code that is not shipped. `**/.dep`
 # keeps a repo an example clones at run time out of any glob.
 include = ["src/mjswan"]
 exclude = ["**/.dep", "**/node_modules", "**/dist", "./src/mjswan/template/.nodeenv", "./build"]

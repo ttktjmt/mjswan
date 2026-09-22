@@ -95,7 +95,7 @@ class Builder:
                 :meth:`add_project` → :meth:`~mjswan.project.ProjectHandle.add_scene_mjlab`
                 → :meth:`~mjswan.scene.SceneHandle.add_policy_wandb`.
             hf_repo_id: Optional Hugging Face Hub repository (``"<owner>/<name>"``) to
-                take the policy's exported ONNX from instead — no torch conversion, and
+                take the policy's exported ONNX from instead: no torch conversion, and
                 the joint names and rest pose come from the file's own metadata. May be
                 combined with ``run_path`` to show both on one scene. For finer control
                 (a specific file, a pinned revision) build manually and call

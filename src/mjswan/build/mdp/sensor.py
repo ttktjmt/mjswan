@@ -30,7 +30,7 @@ def contact_sensor_descriptor(env: Any, sensor_name: str) -> dict[str, Any] | No
     """What the browser needs to reproduce one ``ContactSensor``, or None if not one.
 
     mjlab adds a real MuJoCo sensor per ``(primary, field)`` pair, so the values are
-    already in ``sensordata`` — only the layout to read them back travels, plus the
+    already in ``sensordata``: only the layout to read them back travels, plus the
     ring buffer the runtime owns.
     """
     sensor = env.scene.sensors.get(sensor_name)
@@ -79,7 +79,7 @@ def raycast_sensor_descriptor(env: Any, sensor_name: str) -> dict[str, Any] | No
             {"type": obj_type, "name": _mj_element_name(env, obj_type, obj_id)}
             for obj_type, obj_id, _ in sensor._frame_infos
         ],
-        # "base" | "yaw" | "world" — how the frame's rotation reaches the rays.
+        # "base" | "yaw" | "world", how the frame's rotation reaches the rays.
         "ray_alignment": sensor.cfg.ray_alignment,
         "max_distance": float(sensor.cfg.max_distance),
         # mjlab excludes each frame's own parent body so a ray cannot self-hit.
@@ -117,7 +117,7 @@ def structured_sensor_descriptors(
             sensor = env.scene.sensors.get(sensor_name)
             raise ValueError(
                 f"{owner} reads {sensor_name!r}.{field}, but the browser has no "
-                f"implementation for a {type(sensor).__name__} — only raycast and "
+                f"implementation for a {type(sensor).__name__}: only raycast and "
                 "contact sensors can serve fields. Implement it in the runtime and emit "
                 "a descriptor here, hand the term to the browser as a TS class, or drop "
                 "it from the exported set."

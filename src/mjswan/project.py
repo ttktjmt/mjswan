@@ -223,8 +223,8 @@ class ProjectHandle:
     ) -> SceneHandle:
         """Add a scene whose MJCF and assets come from a Hugging Face Hub repository.
 
-        A MuJoCo model is rarely one file — the XML names meshes and textures that
-        MuJoCo resolves relative to it — so the XML's whole directory is downloaded and
+        A MuJoCo model is rarely one file (the XML names meshes and textures that
+        MuJoCo resolves relative to it), so the XML's whole directory is downloaded and
         the spec is compiled where it lands. Everything `add_scene(spec=…)` does then
         follows, license detection included: a ``LICENSE`` beside the model in the
         repository is copied into the scene directory (ADR 0007 §2).
@@ -239,8 +239,8 @@ class ProjectHandle:
             repo_type: ``"model"`` (default), ``"dataset"`` or ``"space"``.
             token: Hub token for a gated or private repository.
             allow_patterns: What to download, overriding "everything beside the XML".
-                Needed when the model reaches outside its own directory — a ``meshdir``
-                pointing at a shared folder — since the XML is not parsed to find out.
+                Needed when the model reaches outside its own directory (a ``meshdir``
+                pointing at a shared folder), since the XML is not parsed to find out.
             metadata: Optional metadata dictionary for the scene.
             control_dt: Seconds per control step. See :meth:`add_scene`.
             events: Default events for every policy's MDP on this scene.
@@ -263,7 +263,7 @@ class ProjectHandle:
         if not path.lower().endswith(".xml"):
             raise ValueError(
                 f"add_scene_hf({repo_id!r}) takes the path of the MJCF, not its "
-                f"directory — got {path!r}. The XML names the meshes beside it, so "
+                f"directory, got {path!r}. The XML names the meshes beside it, so "
                 "which one to compile cannot be guessed."
             )
         local_dir = fetch_dir(

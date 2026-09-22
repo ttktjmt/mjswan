@@ -2,7 +2,7 @@
 
 The last test here is the point of the file. `_DEMOS` maps a name to a module path as a
 string, so a renamed or deleted example leaves a command that fails only when someone
-types it — which is how `mjswan demo mjlab` outlived `examples/mjlab/defaults/main.py`.
+types it, which is how `mjswan demo mjlab` outlived `examples/mjlab/defaults/main.py`.
 """
 
 from pathlib import Path

@@ -38,7 +38,7 @@ repos:
         name: no binary assets under examples/
         language: fail
         entry: >-
-          binary assets do not belong in examples/ — fetch it at run time
+          binary assets do not belong in examples/;fetch it at run time
           (mjlab, add_*_hf, or a URL into a gitignored .cache/) instead
         files: ^examples/.*\.(onnx|stl|STL|obj|OBJ|spz|mjz|npz|png|jpg|jpeg|glb|pt|bin)$
 

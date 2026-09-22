@@ -103,7 +103,7 @@ No `base_path` change is needed on a `*.pages.dev` root domain.
 
 !!! warning "25 MiB per file"
     Cloudflare Pages refuses any single file above 25 MiB, and nothing the engine itself
-    ships comes near it — the largest is ONNX Runtime's WebAssembly at 13.3 MiB. One big
+    ships comes near it: the largest is ONNX Runtime's WebAssembly at 13.3 MiB. One big
     mesh, `.spz` splat or `.onnx` checkpoint will trip it; `mjswan info dist` finds which,
     and `url=` (splats) or a fetched checkpoint keeps it out of the build. Deleting
     oversized files in the build command is not the way out: the engine's own WebAssembly

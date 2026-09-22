@@ -43,7 +43,7 @@ def _native_observation_entry(
 
     try:
         width = _tensor_width(func(env, **params))
-    except Exception:  # noqa: BLE001 — best-effort; runtime resolves it instead
+    except Exception:  # noqa: BLE001 (best-effort; runtime resolves it instead)
         width = 0
     if width:
         # A zero width means "no action manager", not a term of no width.
@@ -153,7 +153,7 @@ def serialize_observation_term(
 
 
 def _effective_history(group: ObservationGroupCfg, term_cfg: ObservationTermCfg) -> int:
-    """Stack depth applied to one term — group level wins, as in mjlab.
+    """Stack depth applied to one term: group level wins, as in mjlab.
 
     Sparse offsets (``history_steps``) count as their own depth: they are per-term by
     construction, so a group level cannot override them.
@@ -287,7 +287,7 @@ def serialize_observation_group(
     *,
     scope: str | None = None,
 ) -> list[dict[str, Any]] | dict[str, Any]:
-    """Serialize an observation group — one fused graph where possible, else per term."""
+    """Serialize an observation group: one fused graph where possible, else per term."""
     from ...compile.group import ConstantGroup
 
     if _group_is_fusable(group):

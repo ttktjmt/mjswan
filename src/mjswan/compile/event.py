@@ -83,7 +83,7 @@ class EventExport:
     input_names: list[str]
     rand_dim: int
     rand_ranges: list[list[float]]
-    """Per-element ``[low, high]`` for ``rand`` — the runtime draws with these."""
+    """Per-element ``[low, high]`` for ``rand``, the runtime draws with these."""
     output_names: list[str]
     write_targets: list[dict[str, Any]]
     """Per write-kind descriptor: what the outputs target (entity, kind, fields)."""

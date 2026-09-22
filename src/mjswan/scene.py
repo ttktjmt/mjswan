@@ -191,7 +191,7 @@ def _hf_driven_joints(
     That order is *joint* order, not actuator order, and the field name misleads. Every
     mjlab task writes ``actuator_names=(".*",)``, but ``JointPositionAction`` resolves it
     through ``Entity.find_joints_by_actuator_names``, which filters ``joint_names`` down
-    to the actuated ones — "preserving natural order", meaning the model's joint order —
+    to the actuated ones ("preserving natural order", meaning the model's joint order)
     and then matches the patterns against those *joint* names. So the action list is the
     actuated joints in joint order, which is exactly ``meta.joint_names`` minus whatever
     this model does not actuate. The metadata's own order is therefore already right;
@@ -199,7 +199,7 @@ def _hf_driven_joints(
     actions, two fingers ganged into one gripper).
 
     ``actuated`` is used for two things only: to say which of the metadata's joints this
-    model drives, and to supply the model's spelling — namespaced as mjlab writes it
+    model drives, and to supply the model's spelling, namespaced as mjlab writes it
     into a scene, which is what the runtime resolves against. Its own order is the
     model's actuator block and is not the action order; the Unitree G1 is a robot where
     the two differ.
@@ -230,8 +230,8 @@ def _default_to_latest(handles: list[PolicyHandle], scene: SceneConfig) -> None:
     """Open the scene on the highest-step checkpoint these handles brought.
 
     Only when nothing on the scene is opening it already. A scene gathers policies from
-    as many calls as the author likes — two ``add_policy_hf`` calls, one per observation
-    set, is how a scene carries two differently-trained policies — and each call marking
+    as many calls as the author likes (two ``add_policy_hf`` calls, one per observation
+    set, is how a scene carries two differently-trained policies), and each call marking
     its own best would leave the scene with several defaults, which the build refuses
     (ADR 0006 §4). The first call to name one keeps it; a later call adds its policies
     without argument.
@@ -1043,8 +1043,8 @@ class SceneHandle:
         mjlab nor torch is needed, and ``task_id`` is optional.
 
         With ``use_metadata`` left on, an mjlab export fills what the caller did not:
-        ``policy_joint_names`` and ``default_joint_pos`` per policy, and — only when this
-        scene has no mjlab env config to take them from — the joint-position action term.
+        ``policy_joint_names`` and ``default_joint_pos`` per policy, and (only when this
+        scene has no mjlab env config to take them from) the joint-position action term.
         It is used only when **this scene's own model** presents the same joints in
         actuator order: mjlab records every joint of the robot in joint order, the
         network emits one action per actuator, and pairing lists that differ in length
@@ -1058,7 +1058,7 @@ class SceneHandle:
         Args:
             repo_id: Hub repository, ``"<owner>/<name>"``.
             filename: Path within the repository, or a list to add several policies from
-                one repository. ``None`` resolves it — ``policy.onnx``, then
+                one repository. ``None`` resolves it: ``policy.onnx``, then
                 ``final.onnx``, then the single ``.onnx`` if that is all there is.
             revision: Branch, tag or commit. ``None`` takes the default branch, so the
                 build follows the repository; pass a commit to pin it.
@@ -1104,7 +1104,7 @@ class SceneHandle:
             scene.add_policy_hf("my-org/g1-velocity-flat")
             ```
 
-        Example — several policies from one repository, pinned to a commit:
+        Example: several policies from one repository, pinned to a commit:
             ```python
             scene.add_policy_hf(
                 "my-org/microduck",
@@ -1162,8 +1162,8 @@ class SceneHandle:
         )
         first_meta = metas[0] if metas else None
         if actions is None and first_meta is not None and driven[0] is not None:
-            # Only reached when neither the caller nor an env config supplied actions —
-            # `_derive_term_sets` has already had its turn — so the metadata is the last
+            # Only reached when neither the caller nor an env config supplied actions (
+            # `_derive_term_sets` has already had its turn), so the metadata is the last
             # description of the action term there is, not a competing one. Guarded by
             # `driven`, so the scale is known to line up with the actions it scales.
             actions = (
@@ -1250,8 +1250,8 @@ class SceneHandle:
                     f"for {len(meta.joint_names)} joints ({meta.joint_names[:4]}…), of "
                     "which this scene's model actuates a different set than the "
                     f"network's {onnx_output_width(policy)} actions can drive. A "
-                    "metadata list longer than the action list would have been fine — "
-                    "an unactuated joint just drops out — but this is not that, so "
+                    "metadata list longer than the action list would have been fine ("
+                    "an unactuated joint just drops out), but this is not that, so "
                     "policy_joint_names / default_joint_pos were left unset. Pass them "
                     "explicitly, in the order the policy's actions come out.",
                     category=RuntimeWarning,
@@ -1272,7 +1272,7 @@ class SceneHandle:
         """The joint each of this scene's actuators drives, in **actuator** order.
 
         Useful for seeing what a model actuates, and as the starting point for a
-        ``policy_joint_names`` — but not as its value without thought, because actuator
+        ``policy_joint_names``, but not as its value without thought, because actuator
         order is a property of the model's actuator block, not of the network. An mjlab
         policy comes out in *joint* order (``Entity.find_joints_by_actuator_names``
         filters ``joint_names`` and keeps their order), and the Unitree G1 is a robot
@@ -1537,7 +1537,7 @@ class SceneHandle:
         Required for a plain :meth:`ProjectHandle.add_scene` scene with plain-callable
         term functions, which has no task env of its own. The env only has to satisfy
         ``env.scene[name].data.<field>`` (plus the entity write methods for write-side
-        terms) — see :func:`mjswan.mjlab.env.build_single_entity_trace_env` for a minimal
+        terms), see :func:`mjswan.mjlab.env.build_single_entity_trace_env` for a minimal
         one built from a single entity's spec.
 
         An :meth:`ProjectHandle.add_scene_mjlab` scene builds its own at build time;

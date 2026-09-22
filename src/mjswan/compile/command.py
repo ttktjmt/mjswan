@@ -118,7 +118,7 @@ class _CommandModule(nn.Module):
     and read back, the resample is gated by ``resample_mask``, ``_update_command``
     always runs, and any ``entity_write`` is captured.
 
-    The mask gates the state fields only — captured writes are a fresh draw every call
+    The mask gates the state fields only: captured writes are a fresh draw every call
     and are valid only when it is true, which ``OnnxCommand.step`` enforces.
     """
 
@@ -200,13 +200,13 @@ class CommandExport:
     name: str
     onnx_bytes: bytes
     state_fields: list[dict[str, Any]]
-    """Per state field: {name, shape, dtype} — declared in policy.json (§3a)."""
+    """Per state field: {name, shape, dtype}, declared in policy.json (§3a)."""
     command_field: str
     input_slots: list[SlotKey]
     input_names: list[str]
     rand_dim: int
     rand_ranges: list[list[float]]
-    """Per-element ``[low, high]`` for ``rand`` — the runtime draws with these."""
+    """Per-element ``[low, high]`` for ``rand``, the runtime draws with these."""
     output_names: list[str]
     write_targets: list[dict[str, Any]]
     reference_rand: torch.Tensor
@@ -225,7 +225,7 @@ def trace_command_term(
     """Trace a stateful CommandTerm to ONNX.
 
     Promotes ``state_fields`` to explicit graph I/O and threads randomness through
-    ``rand``. Only ``sample_uniform`` draws are supported — a term using tensor-method
+    ``rand``. Only ``sample_uniform`` draws are supported: a term using tensor-method
     RNG (``Tensor.uniform_``) needs a trace-friendly override.
     """
     entity_attr_names = _entity_attrs(term)

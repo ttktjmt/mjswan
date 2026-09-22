@@ -1960,7 +1960,7 @@ class TestFullBuild:
 
 
 # ===========================================================================
-# L1 — mt parameter: write_mt_headers / no-headers when mt=False
+# L1: mt parameter: write_mt_headers / no-headers when mt=False
 # ===========================================================================
 class TestMtHeaders:
     def test_mt_defaults_to_false(self):

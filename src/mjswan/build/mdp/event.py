@@ -51,7 +51,7 @@ def _dr_entity_names(env: Any, asset_cfg: Any, entity_type: str) -> list[str] | 
 def _dr_arg(func: Any, params: dict[str, Any], key: str) -> Any:
     """A DR keyword as mjlab would see it: the term's value, else *func*'s default.
 
-    Read off the signature, since mjlab's wrappers do not share defaults —
+    Read off the signature, since mjlab's wrappers do not share defaults,
     ``geom_friction`` is ``"abs"``, ``body_mass`` is ``"scale"``.
     """
     if key in params:
@@ -89,8 +89,8 @@ def model_field_dr_descriptor(
     """Describe a startup model-field randomization for the browser, or None.
 
     These events perturb ``mjModel`` rather than ``mjData``, so the tracer captures no
-    write. They need no graph either — draw a number per element per axis, combine it
-    with the base value, write it back — so the browser does it at startup from the
+    write. They need no graph either (draw a number per element per axis, combine it
+    with the base value, write it back), so the browser does it at startup from the
     seeded PRNG and a session still replays.
 
     Returns ``None`` for anything undescribable: an unknown entity type, or the
@@ -241,7 +241,7 @@ def _event_writes_nothing_reason(
         return reason
     if not func_name.startswith("reset_root_state"):
         return None
-    # A root write cannot move a fixed-base entity, in mjlab either — and its
+    # A root write cannot move a fixed-base entity, in mjlab either, and its
     # manipulation tasks still configure `reset_base` on their arms, leaving
     # `asset_cfg` to the signature default, hence `_dr_arg` and not `params`.
     entity_name = getattr(_dr_arg(term_cfg.func, params, "asset_cfg"), "name", None)
@@ -270,7 +270,7 @@ def serialize_event(
         raise ValueError(
             f'Event term {name!r} is mode="manual" and carries '
             f"interval_range_s={term_cfg.interval_range_s!r}. A manual term has no "
-            "schedule — the operator's button is its only trigger. Declare a second "
+            "schedule: the operator's button is its only trigger. Declare a second "
             'mode="interval" term if it should also fire on its own.'
         )
     from ...compile import trace_event_term

@@ -1,7 +1,7 @@
 """``SceneHandle.add_policy_hf`` end to end, with the Hub itself stubbed.
 
 Only ``source.hf._hub`` is replaced, so the filename resolution, the name derivation, the
-metadata read and the ``add_policy`` call all run for real — the network is the one
+metadata read and the ``add_policy`` call all run for real: the network is the one
 thing that does not.
 """
 
@@ -178,8 +178,8 @@ class TestSceneDefault:
     def test_two_calls_leave_one_default(self, scene, fake_hub):
         """A scene carrying two differently-trained policies takes two calls.
 
-        `examples/demo/main.py`'s G1 does exactly this — locomotion and balance were
-        trained on different observation sets, so they are two MDPs and two calls — and
+        `examples/demo/main.py`'s G1 does exactly this (locomotion and balance were
+        trained on different observation sets, so they are two MDPs and two calls), and
         each call marking its own best made the build refuse the scene.
         """
         fake_hub("locomotion.onnx", metadata=MJLAB_METADATA)
@@ -218,7 +218,7 @@ class TestJointMappingGuard:
     def test_a_passive_joint_is_skipped_rather_than_refused(self, scene, fake_hub):
         """mjlab lists every joint of the robot; the network drives the actuated ones.
 
-        mjlab's YAM is the real case — eight joints, seven actions, two fingers ganged
+        mjlab's YAM is the real case: eight joints, seven actions, two fingers ganged
         into one gripper. The metadata knowing about a joint this network does not drive
         costs nothing: the actuated list is already the action order, and each of its
         joints has a rest pose in there to look up.

@@ -2,7 +2,7 @@
 
 Both clients are optional dependencies imported inside a function, so the first thing a
 user without them sees is this message. A bare ``ModuleNotFoundError`` would leave them
-guessing which extra to install — and `wandb` moved out of the core dependencies, so
+guessing which extra to install, and `wandb` moved out of the core dependencies, so
 this is now the path an existing `add_policy_wandb` caller lands on.
 """
 

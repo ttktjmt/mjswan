@@ -195,7 +195,7 @@ class TestLibBuild:
     def test_ort_wasm_paths_names_the_file_never_a_prefix(self, lib_dist: Path):
         """`wasmPaths` names the wasm; a URL prefix would be a third-party script fetch.
 
-        Given a prefix, ORT dynamic-imports `ort-wasm-simd-threaded.mjs` from it —
+        Given a prefix, ORT dynamic-imports `ort-wasm-simd-threaded.mjs` from it,
         executable code, from whatever origin the prefix names, on every policy-driven
         scene — while naming only the wasm keeps ORT on the loader inlined in the bundle.
         """
@@ -225,7 +225,7 @@ class TestLibBuild:
         """Every emitted file fits what a static host will serve.
 
         Cloudflare Pages rejects a deploy carrying a file over 25 MiB, and a build command
-        that prunes the offender instead leaves the page fetching a wasm that 404s — the
+        that prunes the offender instead leaves the page fetching a wasm that 404s: the
         host answers with `index.html`, and the browser reports `expected magic word
         00 61 73 6d, found 3c 21 64 6f`. ORT's default (JSEP) build put us there at
         26.5 MiB, hence `onnxruntime-web/wasm`; this is the guard.

@@ -73,7 +73,7 @@ def point_env_cfg_at_bundled_motion(
     """Aim a tracking task's ``motion_file`` at the clip just written to the bundle.
 
     mjlab registers tracking tasks with ``motion_file=""`` and ``MotionLoader`` reads the
-    path when the env is constructed, so the bundled copy is what the trace env loads —
+    path when the env is constructed, so the bundled copy is what the trace env loads,
     no second copy anywhere.
     """
     env_cfg = scene.mjlab_env_cfg

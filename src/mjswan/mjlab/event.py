@@ -25,7 +25,7 @@ def _adapt_event_func(
 ) -> EventBinding | Callable[..., Any]:
     """Resolve the function an event term's ONNX graph is traced from.
 
-    See :func:`_adapt_obs_func` — same resolution order.
+    See :func:`_adapt_obs_func`, same resolution order.
     """
     if isinstance(func, EventBinding):
         return func

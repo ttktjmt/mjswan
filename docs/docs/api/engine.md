@@ -59,12 +59,12 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
     no CDN, and `script-src 'self'` covers it.
 
 !!! note "Where inference runs"
-    Every inference runs on **wasm** — the policy network and the traced MDP term graphs
-    alike — and there is nothing to configure. The engine ships ONNX Runtime's CPU build and
+    Every inference runs on **wasm** (the policy network and the traced MDP term graphs
+    alike), and there is nothing to configure. The engine ships ONNX Runtime's CPU build and
     asks for no other provider. Its WebAssembly is 13.3 MiB against 26.5 MiB for the build
     that adds WebGPU: over the 25 MiB per-file limit hosts such as Cloudflare Pages enforce,
     and spent on a GPU round trip per step that networks this size do not win back. Term
-    graphs make the case twice over — a step runs many of them, and every inference in the
+    graphs make the case twice over: a step runs many of them, and every inference in the
     page goes through one serialized queue.
 
 ### `MjswanEngine`

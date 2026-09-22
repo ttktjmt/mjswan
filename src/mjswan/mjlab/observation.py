@@ -29,7 +29,7 @@ def _adapt_obs_func(
     """Resolve the function an observation term's ONNX graph is traced from.
 
     An ``ObservationBinding`` passes through, then any ``register_observation``
-    override for this function or term name, then mjlab's own function — which the
+    override for this function or term name, then mjlab's own function, which the
     build traces directly.
     """
     if isinstance(func, ObservationBinding):
@@ -196,7 +196,7 @@ def adapt_observations(
     Accepts three shapes, because the caller should not have to know which slot the
     runtime will feed:
 
-    * a **single** group — mjlab's ``env_cfg.observations["actor"]`` — which lands
+    * a **single** group (mjlab's ``env_cfg.observations["actor"]``), which lands
       under :data:`DEFAULT_OBS_GROUP_KEY`;
     * mjlab's whole ``env_cfg.observations`` dict, from which the policy's group is
       selected (see :func:`_select_policy_group`) and the other networks' dropped;

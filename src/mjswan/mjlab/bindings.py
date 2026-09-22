@@ -2,7 +2,7 @@
 
 ``LiftingCommandCfg`` is traced to ONNX and run by the shared ``OnnxCommand`` handler.
 ``MotionCommandCfg`` stays native, with only its reset jitter traced.
-``UniformVelocityCommandCfg`` needs nothing here — mjswan itself binds it.
+``UniformVelocityCommandCfg`` needs nothing here: mjswan itself binds it.
 
 **Importing this module is a deliberate act**, and :mod:`mjswan.mjlab` does not do it for
 you. Everything else under ``mjswan.mjlab`` reaches mjlab from inside a function, so that
@@ -10,7 +10,7 @@ a build which never touches an mjlab task never pays for it (ADR 0008); register
 binding means *building* mjlab command terms, which needs mjlab and torch at import time.
 Keeping that in one module the caller names is what lets the rest stay soft::
 
-    import mjswan.mjlab.bindings  # noqa: F401 — registers the command bindings
+    import mjswan.mjlab.bindings  # noqa: F401 (registers the command bindings)
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ def motion_rsi_offset(
     mjlab perturbs the reference frame it is about to write; this perturbs the frame
     *already written*, in place. Numerically the same, but it needs no access to the
     motion clip, so it is ordinary term math over ``asset.data`` and traces like any
-    other reset event — its draws becoming the graph's ``rand`` input, fed from the
+    other reset event, its draws becoming the graph's ``rand`` input, fed from the
     seeded PRNG.
 
     Draws are ordered pose -> velocity -> joint, as mjlab's are.
@@ -101,7 +101,7 @@ def motion_rsi_offset(
     root_lin_vel = asset.data.root_link_lin_vel_w + velocity_samples[:, 0:3]
     root_ang_vel = asset.data.root_link_ang_vel_w + velocity_samples[:, 3:6]
 
-    # One offset per joint, then mjlab's clip — without it a large jitter starts out of range.
+    # One offset per joint, then mjlab's clip: without it a large jitter starts out of range.
     joint_pos = asset.data.joint_pos + sample_uniform(
         joint_position_range[0],
         joint_position_range[1],
@@ -125,7 +125,7 @@ def _motion_rsi_trace(cfg: Any) -> tuple[Any, dict[str, Any]] | None:
 
     mjlab's own play-mode override clears `pose_range`/`velocity_range` and leaves
     `joint_position_range` at (-0.1, 0.1), so a deployed tracking policy normally
-    gets exactly the joint jitter — but an author may keep any subset, and all
+    gets exactly the joint jitter, but an author may keep any subset, and all
     three go through the same graph.
     """
     pose_range = dict(getattr(cfg, "pose_range", None) or {})

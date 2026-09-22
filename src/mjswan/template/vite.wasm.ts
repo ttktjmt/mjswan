@@ -11,7 +11,7 @@
  */
 
 /**
- * The onnxruntime-web entry every module imports — the `./wasm` subpath, not the package
+ * The onnxruntime-web entry every module imports: the `./wasm` subpath, not the package
  * root. The root resolves to the JSEP build, whose wasm carries the WebGPU kernels and
  * weighs 26.5 MiB: over Cloudflare Pages' 25 MiB per-file limit, and twice this one for a
  * GPU path these policies do not want (see `src/core/onnx/session.ts`). Same API, CPU

@@ -9,7 +9,7 @@ def require_ts_src(kind: str, name: str, binding: Any) -> None:
     """A ``*Binding`` without ``ts_src`` names a class the browser does not have.
 
     mjswan ships no built-in TS term classes, so a binding is only ever the custom-TS
-    escape hatch — without the file the term goes missing from a bundle that reports
+    escape hatch: without the file the term goes missing from a bundle that reports
     itself complete.
     """
     if binding.ts_src:

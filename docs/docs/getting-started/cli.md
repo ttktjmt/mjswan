@@ -89,15 +89,15 @@ mjswan demo [name]
 ```
 
 With no name it lists the bundled demos; with one it runs that demo. They live under
-`examples/`, so this needs a source checkout, and they fetch what they show — from mjlab,
-from the Hugging Face Hub, or from upstream — so the first run downloads and later ones
+`examples/`, so this needs a source checkout, and they fetch what they show (from mjlab,
+from the Hugging Face Hub, or from upstream), so the first run downloads and later ones
 read the cache.
 
 | Demo | Source | Needs |
 |---|---|---|
-| `main` | `examples/demo/main.py` — the demo deployed to GitHub Pages | `mjswan[hf,mjlab]` |
-| `simple` | `examples/demo/simple.py` — one mjlab task, one checkpoint | `mjswan[hf,mjlab]` |
-| `mujoco` | `examples/demo/mujoco_models.py` — MuJoCo's `<replicate>` gallery, no policy | core only |
+| `main` | `examples/demo/main.py`, the demo deployed to GitHub Pages | `mjswan[hf,mjlab]` |
+| `simple` | `examples/demo/simple.py`, one mjlab task, one checkpoint | `mjswan[hf,mjlab]` |
+| `mujoco` | `examples/demo/mujoco_models.py`, MuJoCo's `<replicate>` gallery, no policy | core only |
 
 The bare command lists rather than running one, because each of these downloads.
 

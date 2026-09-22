@@ -16,7 +16,7 @@ shortcuts.
 
 - **`mjswan demo` lists the demos instead of running one.** Every demo downloads models
   and checkpoints before it shows anything, which is not what to do to someone who typed
-  the bare command to find out what exists — `mjswan demo simple` is the old behaviour,
+  the bare command to find out what exists: `mjswan demo simple` is the old behaviour,
   spelled out. `--list` goes with it, having become the same command. And `mujoco` joins
   `main` and `simple`, running `examples/demo/mujoco_models.py`: the one demo that needs
   no extra at all.
@@ -28,7 +28,7 @@ shortcuts.
 
 - **Python 3.13 is supported, and the test matrix runs it.** `requires-python` was capped
   at `<3.13` for `labmaze`, which has no cp313 wheel and reached this tree only through
-  myosuite → dm-control — and myosuite left with the examples that imported it. The cap
+  myosuite → dm-control, and myosuite left with the examples that imported it. The cap
   and the `h5py>=3.8.0` override that came with it are both gone; `uv` resolves the whole
   `dev` extra on 3.13, mjlab and torch included. The `3.9` classifier goes too: it had
   contradicted `requires-python` since that became `>=3.10`.
@@ -42,25 +42,25 @@ shortcuts.
   The 26.5 MiB is over the 25 MiB per-file limit Cloudflare Pages enforces, so a demo
   hosted there could not serve the file at all: the request fell through to the SPA's
   `index.html` and the page died on `expected magic word 00 61 73 6d, found 3c 21 64 6f`
-  — `<!do`. Dropping the provider also halves the wasm every visitor downloads and takes
-  330 KB of JSEP glue out of the bundle, against a GPU path whose benefit for networks
+  (that is `<!do`). Dropping the provider also halves the wasm every visitor downloads
+  and takes 330 KB of JSEP glue out of the bundle, against a GPU path whose benefit
   this size was never measured: a dispatch and readback per step, at 50 Hz, through the
   one serialized inference queue the page has.
 
   `vite.wasm.ts` now also states the per-file ceiling, and a unit test holds every
-  co-located wasm source under it — an upstream bump that crosses it would otherwise
+  co-located wasm source under it: an upstream bump that crosses it would otherwise
   build green and 404 at runtime.
 
 - **`add_policy_hf` uses an mjlab checkpoint's metadata when the model actuates a
   subset of it**, instead of requiring an exact match. The old guard wanted the
   metadata's joint list to equal the scene's actuated list, name for name and in the
-  same order, and refused otherwise — leaving those policies with no
+  same order, and refused otherwise, leaving those policies with no
   `policy_joint_names` at all, which is what the runtime resolves an actuator through.
   Warned-and-broken on 42 of the demo's policies.
 
   Two things made the lists differ, and neither is an obstacle. The metadata lists
   `robot.joint_names`, which may include a joint the model does not actuate (mjlab's YAM
-  has eight against seven actions, two fingers ganged into one gripper) — an unactuated
+  has eight against seven actions, two fingers ganged into one gripper), an unactuated
   joint simply drops out. And the *order* the old guard compared against was the
   model's actuator block, which is not the action order: `JointPositionAction` resolves
   `actuator_names` through `Entity.find_joints_by_actuator_names`, which narrows
@@ -76,10 +76,10 @@ shortcuts.
 - **Two `add_policy_*` calls on one scene no longer both claim the default.** Each call
   marked its own highest-step checkpoint as the one the scene opens on, which the build
   then refused for having several (ADR 0006 §4). A scene carrying two differently
-  trained policies takes two calls — they are two MDPs — so the first call to name a
+  trained policies takes two calls (they are two MDPs), so the first call to name a
   default now keeps it.
 
-- **The demo stores no assets, and `examples/demo/assets/` is gone** — 116 MB of
+- **The demo stores no assets, and `examples/demo/assets/` is gone**: 116 MB of
   vendored meshes, policies and a `.mjz` scene, none of which had to be in a git
   repository ([#128](https://github.com/ttktjmt/mjswan/issues/128)). `examples/` is now
   33 KB of Python across six files. Where each asset went:
@@ -88,18 +88,18 @@ shortcuts.
     `add_scene_mjlab`; the one G1 mjlab has no task for comes from the Hub as a
     directory, `LICENSE` included.
   - Policies: every W&B checkpoint is mirrored to the Hub, so the deploy workflow needs
-    no `WANDB_API_KEY` — the build is anonymous end to end.
-  - The MyoFinger XMLs, which mjlab has no task for, come from the Hub as a directory —
+    no `WANDB_API_KEY`: the build is anonymous end to end.
+  - The MyoFinger XMLs, which mjlab has no task for, come from the Hub as a directory,
     two files, one including the other, plus the `LICENSE`.
 
   The MyoFinger XMLs move to the Hub with everything else, after upstream relocated them
   from `finger/` to `myo_sim/models/legacy/finger/` and a branch URL took the build down
-  with a 404 — one public host to reach instead of two, and a version that only moves
+  with a 404: one public host to reach instead of two, and a version that only moves
   when someone moves it. The `examples` extra sheds MyoSuite, Playground,
   `robot_descriptions` and `gymnasium` with the gallery projects that imported them.
 
   `demo/main.py` is rebuilt around that: **two projects instead of four**, and the split
-  is the explanation — *mjlab Tasks* is mjlab taken as it is (8 scenes), *Showcase* is
+  is the explanation: *mjlab Tasks* is mjlab taken as it is (8 scenes), *Showcase* is
   the same engine with mjswan-side work on top (a splat-backed G1, muscle actuators).
   The three model-gallery projects, about 120 scenes of viewer-only models, are dropped
   along with the two upstream-API-drift patches they needed, and `demo/simple.py` becomes
@@ -112,11 +112,11 @@ shortcuts.
   mirrored checkpoints), `demo/minimum_policy.py` (a hand-built ONNX policy) and
   `demo/mujoco_models.py` (a model gallery, no policy), plus the two Colab notebooks.
   The last two move up from `tutorial/`, which is gone along with `hello_world.py`,
-  `splat.py` and `muscle.py` — the first duplicated the Quickstart, and the other two
+  `splat.py` and `muscle.py`: the first duplicated the Quickstart, and the other two
   showed one argument each, which the API docs already do without a file to maintain.
 
-  `examples/mjlab/` is gone whole. Its five projects — `defaults`, `g1_spinkick`,
-  `myosuite`, `musclemimic`, `unitree_rl` — and `demo/gentle_humanoid` belong to
+  `examples/mjlab/` is gone whole. Its five projects (`defaults`, `g1_spinkick`,
+  `myosuite`, `musclemimic`, `unitree_rl`) and `demo/gentle_humanoid` belong to
   `mjswan_playground`, which can pin `myosuite` from a git URL and hold W&B credentials
   without either becoming this repository's problem. What they demonstrated about *this*
   package already has a home: the library code they carried moved into `mjswan.mjlab`
@@ -126,7 +126,7 @@ shortcuts.
 - **The two pieces of library code that lived in `examples/` move into the package.**
   `examples/mjlab/defaults/{commands,terminations}/` were imported by a test, by a
   sibling example, and by the `mjlab-to-mjswan` skill, which told an agent to *fetch the
-  file from the repo* — a layering inversion the reorganization of `examples/` (#128)
+  file from the repo*, a layering inversion the reorganization of `examples/` (#128)
   would otherwise carry forward.
 
   - `register_custom_terminations` joins `mjswan.mjlab.termination`, where the rest of
@@ -140,26 +140,26 @@ shortcuts.
     alone and a caller names it: `import mjswan.mjlab.bindings`. That is what keeps
     `import mjswan` at `mujoco` and `numpy` (ADR 0008).
 
-- **`wandb` is no longer a core dependency — `pip install mjswan` drops by about 108 MB.**
+- **`wandb` is no longer a core dependency: `pip install mjswan` drops by about 108 MB.**
   It moves to its own `wandb` extra, beside `hf` and a new `mjlab` one, because it is the
   same kind of thing: a `source/` backend imported inside a function. `import mjswan`
-  never touched it — that loads `mujoco` and `numpy` and nothing else — so a user who
+  never touched it (that loads `mujoco` and `numpy` and nothing else), so a user who
   bundles an ONNX they already have was downloading a training-log client to not use it.
   **Callers of `add_policy_wandb` / `add_motion_wandb` must now install `mjswan[wandb]`**;
   without it the failure is a sentence naming the extra, as the Hub path already did.
 
-  The rest of the reshuffle follows one rule — core is the pipeline, extras are where the
+  The rest of the reshuffle follows one rule: core is the pipeline, extras are where the
   assets come from:
 
   - `mjlab` extra: `mjlab` and `torch`, split out of `examples` so that "I convert mjlab
     checkpoints" and "I run the bundled demos" can be asked for separately. The docs that
     said `mjswan[examples]` for a traced term now say `mjswan[mjlab]`.
-  - `check` extra: `ruff`, `ty`, `pyright` — what `make check` runs. The ruff workflow
+  - `check` extra: `ruff`, `ty`, `pyright`, what `make check` runs. The ruff workflow
     installs this alone, so a linter job no longer resolves a source backend.
   - `dev` extra: `check` plus every source, plus `pytest` and `pre-commit`. This closes a
     real hole rather than being tidiness: `pytest.yml` installs `.[dev]`, and 33 tests
     were gating themselves off with `importorskip("mjlab")` in a job that never had
-    mjlab, with no other job covering them — `parity.yml` names five files and reaches
+    mjlab, with no other job covering them: `parity.yml` names five files and reaches
     the rest. The two workflows that now resolve torch ask for the CPU wheel, since
     mjswan only ever calls `torch.onnx.export` and `torch.load(map_location="cpu")`.
 
@@ -167,7 +167,7 @@ shortcuts.
 
 - **Whole MuJoCo models load from the Hugging Face Hub**: `ProjectHandle.add_scene_hf()`
   beside `add_scene_mjlab`, and `source.hf.fetch_dir()` behind it. A model is rarely one
-  file — the MJCF names meshes MuJoCo resolves relative to it — so the XML's whole
+  file (the MJCF names meshes MuJoCo resolves relative to it), so the XML's whole
   directory comes down and the spec is compiled where it lands; `add_scene(spec=…)`'s
   license detection then finds a `LICENSE` that travelled with it (ADR 0007 §2). The
   scene is named after its directory when the XML's own stem only names a role
@@ -175,8 +175,8 @@ shortcuts.
   its own directory, since nothing parses the XML to find out.
 
 - **Splat backgrounds load from the Hugging Face Hub**: `SceneHandle.add_splat_hf()`,
-  beside `add_splat`. A splat is the opposite of a scene — one opaque file rather than an
-  MJCF and the meshes it resolves — so this downloads it and hands the local path to
+  beside `add_splat`. A splat is the opposite of a scene (one opaque file rather than an
+  MJCF and the meshes it resolves), so this downloads it and hands the local path to
   `source=`: the `.spz` is bundled into the build as a local one is, and the deployed app
   needs no network. The placement arguments (`scale`, the offsets, the rotations) describe
   how *this* capture lines up with *this* model, which no file on the Hub knows, so they
@@ -187,7 +187,7 @@ shortcuts.
   `add_project_mjlab()`, beside their `_wandb` counterparts. The two sources are not
   symmetric and the code says so: a W&B run holds *training state*, so `add_policy_wandb`
   rebuilds a live mjlab env and converts every `model_*.pt` with torch; a Hub repository
-  holds the *published artifact*, so `add_policy_hf` downloads the `.onnx` and stops —
+  holds the *published artifact*, so `add_policy_hf` downloads the `.onnx` and stops:
   neither mjlab nor torch is needed, and `task_id` is optional. `huggingface_hub` is the
   one dependency, in its own `hf` extra rather than `examples`, so `pip install
   mjswan[hf]` is the whole light path. With no filename given, `policy.onnx` then
@@ -200,7 +200,7 @@ shortcuts.
   presents the same joints in actuator order: mjlab records every joint of the robot in
   joint order while the network emits one action per actuator, and pairing lists that
   differ in length or order would misdrive every actuator with nothing at playback to
-  say so — a mismatch warns and fills nothing. Observation terms are never reconstructed;
+  say so: a mismatch warns and fills nothing. Observation terms are never reconstructed;
   the metadata names them but does not carry the functions mjswan traces. Reading needs
   no mjlab installed, the encoding being plain strings.
 - **License files travel with the build**
@@ -374,7 +374,7 @@ shortcuts.
 
 ### Changed
 
-- **`import mjswan` no longer imports `onnx`**, only `mujoco` and `numpy` — about 190 ms
+- **`import mjswan` no longer imports `onnx`**, only `mujoco` and `numpy`: about 190 ms
   down to 125 ms, 153 fewer modules. `policy.py`, `scene.py` and `mjlab/runner.py`
   annotate an `onnx.ModelProto` but never touch the module (they read `model.graph`
   duck-typed), so the import moves under `TYPE_CHECKING` and into the one function that
@@ -382,8 +382,8 @@ shortcuts.
   nothing for a policy format it never reads.
 
 - **The package is laid out by layer** ([ADR 0008](docs/adr/0008-package-layout.md)).
-  The root holds the object model — `Builder`, the `*Handle` / `*Config` pairs,
-  `MdpConfig`, `cli.py` — and everything else is a package with one job: `build/` (what
+  The root holds the object model (`Builder`, the `*Handle` / `*Config` pairs,
+  `MdpConfig`, `cli.py`) and everything else is a package with one job: `build/` (what
   `Builder.build()` does, and the one place that knows the manifest's shape), `compile/`
   (the tracer, one module per pass and per term kind), `mjlab/` (everything that reads
   mjlab's own objects: the adapters, the trace envs, the runner, the exported-ONNX
@@ -513,7 +513,7 @@ shortcuts.
 - The `main`, `simple`, `mjlab` and `serve` console scripts, which only launched a module
   under `examples/`. `mjswan serve <dist-dir | document.swn>` replaces the last; run the
   examples as modules.
-- **`mjswan demo mjlab`**, which ran `examples/mjlab/defaults/main.py` — the same tasks
+- **`mjswan demo mjlab`**, which ran `examples/mjlab/defaults/main.py`, the same tasks
   read from a W&B run instead of the Hub. That example moves to `mjswan_playground`, and
   with it the only demo needing a W&B login.
 - **`mjswan demo --list`** and **`mjswan demo` with no name running `simple`**: the bare

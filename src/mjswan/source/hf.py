@@ -3,7 +3,7 @@
 A W&B run holds training state, so its ``model_*.pt`` checkpoints (:mod:`.wandb`) go
 through a live mjlab env and torch to become ONNX (:mod:`mjswan.mjlab.runner`). A Hub
 repository holds the published artifact instead, so this module only downloads and
-loads — no mjlab, no torch. ``huggingface_hub`` is its one dependency, and it is
+loads: no mjlab, no torch. ``huggingface_hub`` is its one dependency, and it is
 optional: nothing here is imported until a caller asks for the Hub.
 """
 
@@ -66,7 +66,7 @@ def resolve_policy_filename(
 
     :data:`DEFAULT_POLICY_FILENAMES` first, then the single ``.onnx`` if that is all
     there is. Several unnamed candidates raise rather than pick one: picking wrong is
-    silent — the wrong policy loads and the robot merely misbehaves.
+    silent: the wrong policy loads and the robot merely misbehaves.
     """
     candidates = list_repo_onnx(
         repo_id, revision=revision, repo_type=repo_type, token=token
@@ -170,7 +170,7 @@ def fetch_dir(
 ) -> Path:
     """Download a directory of the repository and return its local path.
 
-    What :func:`fetch_file` is to one file, for an asset that is several — an MJCF and
+    What :func:`fetch_file` is to one file, for an asset that is several, an MJCF and
     the meshes it references, which MuJoCo resolves relative to the XML and so must land
     beside it.
 
@@ -183,8 +183,8 @@ def fetch_dir(
         token: Hub token for a gated or private repository.
         allow_patterns: Overrides what is downloaded, as repository-root-relative
             ``fnmatch`` patterns. The default takes everything under ``path``; pass this
-            when the asset reaches outside its own directory — an MJCF whose ``meshdir``
-            points at a shared folder, say — since nothing here parses the XML to find
+            when the asset reaches outside its own directory (an MJCF whose ``meshdir``
+            points at a shared folder, say), since nothing here parses the XML to find
             out.
 
     Returns:

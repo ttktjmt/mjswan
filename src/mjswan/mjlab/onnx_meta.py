@@ -3,7 +3,7 @@
 mjlab's ``attach_metadata_to_onnx`` writes the joint names, the rest pose, the action
 scale and a description of every observation term into the file's ``metadata_props``, so
 an mjlab policy travels self-describing. This module parses that block back out. It
-needs neither mjlab nor torch installed — the encoding is plain strings — which is what
+needs neither mjlab nor torch installed (the encoding is plain strings), which is what
 lets a Hub-fetched ONNX be added on the light path.
 
 **The encoding is lossy.** mjlab formats every number in a list with ``{:.3f}``, so the
@@ -71,7 +71,7 @@ class MjlabPolicyMetadata:
     """What mjlab wrote into one exported policy.
 
     ``joint_names`` and the two gain lists cover **every** joint of the robot, actuated
-    or not, while the network drives only the actuated ones — see
+    or not, while the network drives only the actuated ones, see
     :func:`joint_mapping_usable` before mapping one onto the other.
     """
 
@@ -88,7 +88,7 @@ class MjlabPolicyMetadata:
     """Velocity gain per joint. Informational, like :attr:`joint_stiffness`."""
 
     action_scale: float | list[float] | None = None
-    """The joint-position action term's scale — a scalar, or one value per action."""
+    """The joint-position action term's scale: a scalar, or one value per action."""
 
     command_names: list[str] = field(default_factory=list)
     """The task's active command terms, by name."""
@@ -116,7 +116,7 @@ class MjlabPolicyMetadata:
     """Tracking tasks only: the bodies the reference motion covers."""
 
     run_path: str | None = None
-    """Where the export came from — a W&B run name, or ``"local"``."""
+    """Where the export came from: a W&B run name, or ``"local"``."""
 
     raw: dict[str, str] = field(default_factory=dict)
     """Every ``metadata_props`` entry, unparsed, including keys this class has no field
@@ -126,8 +126,8 @@ class MjlabPolicyMetadata:
 def read_mjlab_metadata(model: onnx.ModelProto) -> MjlabPolicyMetadata | None:
     """Parse an mjlab export's ``metadata_props``, or ``None`` if it has none.
 
-    ``None`` means "not an mjlab export" — a hand-built graph, or one from a framework
-    that writes no metadata — which is a normal case, not an error.
+    ``None`` means "not an mjlab export" (a hand-built graph, or one from a framework
+    that writes no metadata), which is a normal case, not an error.
     """
     raw = {entry.key: entry.value for entry in model.metadata_props}
     if not all(key in raw for key in _REQUIRED_KEYS):
@@ -177,7 +177,7 @@ def joint_mapping_usable(
     mjlab writes every joint of the robot, the network outputs one action per *actuated*
     joint, and the two coincide only when the robot has no passive joints. Feeding a
     longer list to the runtime as ``policy_joint_names`` would shift every action onto
-    the wrong actuator, and nothing at playback would say so — so the counts have to
+    the wrong actuator, and nothing at playback would say so. The counts have to
     agree before the mapping is used.
 
     ``action_width`` unknown (a graph with a dynamic output shape) leaves only the

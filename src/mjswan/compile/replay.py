@@ -41,7 +41,7 @@ class _NarrowedField(_FieldProxy):
     """A raw field the graph takes already narrowed to ``rows``.
 
     The term still indexes it by the field's own ids; those are remapped here to
-    positions in the input. A read of exactly the rows, in order, is the input itself —
+    positions in the input. A read of exactly the rows, in order, is the input itself,
     no Gather enters the graph.
     """
 
@@ -132,7 +132,7 @@ class _ReplayData:
         object.__setattr__(self, "_traced", None)
 
     def _through(self) -> Any:
-        """A copy of the live ``EntityData`` — its indexing and constants — over the
+        """A copy of the live ``EntityData`` (its indexing and constants) over the
         replay sim proxy, built on first use."""
         if self._traced is None:
             real = self._real_env.scene[self._entity].data
@@ -153,7 +153,7 @@ class _ReplayData:
             return getattr(self._through(), name)
         raise AttributeError(
             f"Term read undeclared slot {key!r} during tracing. This field "
-            "was not seen in the discovery pass — the term's control flow is "
+            "was not seen in the discovery pass: the term's control flow is "
             "input-dependent, which is not traceable (ADR 0005 §Consequences)."
         )
 
@@ -222,7 +222,7 @@ class _ReplayCommandManager:
         if real is None:
             raise AttributeError(
                 f"Term read command {name!r} during tracing that the discovery pass "
-                "never saw — the term's control flow is input-dependent, which is "
+                "never saw: the term's control flow is input-dependent, which is "
                 "not traceable (ADR 0005 §Consequences)."
             )
         return _command_proxy(
@@ -297,7 +297,7 @@ class _EvReplayScene:
 
     def __getattr__(self, name: str) -> Any:
         if name == "entities":
-            # Static structure, so it comes from the real env, as `num_envs` does —
+            # Static structure, so it comes from the real env, as `num_envs` does,
             # only the entities' tensors are recorded slots.
             return {
                 key: _EvReplayEntity(key, self._served, self._captures)

@@ -159,7 +159,7 @@ def publish_cmd(
     from mjswan.cloud import auth
 
     if not token and not os.environ.get(TOKEN_ENV_VAR) and not auth.load_credentials():
-        console.print("[dim]Not logged in — signing in to mjswan Cloud first…[/dim]")
+        console.print("[dim]Not logged in: signing in to mjswan Cloud first…[/dim]")
         if not _do_login(open_browser=True):
             raise typer.Exit(1)
 
@@ -386,9 +386,9 @@ def new_cmd(
 #: `examples/`, which a source checkout has and an installed wheel does not;
 #: `tests/test_cli_demo.py` fails if a name points at a file that is no longer there.
 _DEMOS: dict[str, tuple[str, str]] = {
-    "main": ("examples.demo.main", "Eight mjlab tasks and a showcase — as deployed"),
+    "main": ("examples.demo.main", "Eight mjlab tasks and a showcase, as deployed"),
     "simple": ("examples.demo.simple", "One mjlab task, one checkpoint"),
-    "mujoco": ("examples.demo.mujoco_models", "MuJoCo's replicate gallery — no policy"),
+    "mujoco": ("examples.demo.mujoco_models", "MuJoCo's replicate gallery, no policy"),
 }
 
 
@@ -456,7 +456,7 @@ def info_cmd(
             version = manifest.get("version", "unknown")
             fmt = manifest.get("format", "?")
             tree = Tree(
-                f"[bold]mjswan {kind}[/bold] — {dist_dir}  "
+                f"[bold]mjswan {kind}[/bold]: {dist_dir}  "
                 f"[dim]v{version}, format {fmt}[/dim]"
             )
             total_bytes = _describe_projects(tree, root, manifest)

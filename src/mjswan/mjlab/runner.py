@@ -91,7 +91,7 @@ def create_pt_onnx_export_context(
     encoder bias) from the action manager.
     """
     try:
-        import mjlab.tasks  # noqa: F401 — populates the task registry
+        import mjlab.tasks  # noqa: F401 (populates the task registry)
         from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
         from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
 
@@ -190,7 +190,7 @@ def align_obs_normalizer(runner: Any, checkpoint: dict) -> None:
     The runner is built from the task's *current* rl config, but a checkpoint carries
     whichever normalizer its run trained with. A mismatch either fails the strict load
     (config normalizes, checkpoint does not) or silently drops the trained statistics,
-    and an untrained ``EmpiricalNormalization`` is not the identity — it still divides
+    and an untrained ``EmpiricalNormalization`` is not the identity: it still divides
     by ``std + eps``.
     """
     import torch

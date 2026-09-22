@@ -261,8 +261,8 @@ def _motion_rsi_unregistered(cfg: Any) -> None:
         f"(pose_range={pose_range or None}, velocity_range={velocity_range or None}, "
         f"joint_position_range={joint_position_range}) but no traced reset graph is "
         "registered, so the browser will start every episode from the unjittered "
-        "reference frame. Import the module that registers it — "
-        "`mjswan.mjlab.bindings` for the classes mjlab's own tasks ship — or supply "
+        "reference frame. Import the module that registers it ("
+        "`mjswan.mjlab.bindings` for the classes mjlab's own tasks ship), or supply "
         "your own via mjswan.register_command('MotionCommandCfg', ...).",
         category=RuntimeWarning,
         stacklevel=3,

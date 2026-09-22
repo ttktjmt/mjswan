@@ -69,8 +69,8 @@ def _index_rows(index: Any, size: int | None) -> list[int] | None:
 class _RowRecord:
     """Which rows of one raw field a term's reads touch.
 
-    ``None`` once any read cannot be narrowed — the whole field used as a value, or an
-    index that cannot be told statically — after which the slot ships whole.
+    ``None`` once any read cannot be narrowed (the whole field used as a value, or an
+    index that cannot be told statically), after which the slot ships whole.
     """
 
     def __init__(self, size: int | None):
@@ -123,8 +123,8 @@ class _RecordingField(_FieldProxy):
 
 
 class _RecordingSimData:
-    """Wraps the raw ``SimData`` — ``env.sim.data``, the object every
-    ``Entity.data.data`` is — logging each field read and the rows the reads touch.
+    """Wraps the raw ``SimData`` (``env.sim.data``, the object every
+    ``Entity.data.data`` is), logging each field read and the rows the reads touch.
 
     One sim object is shared by every entity, hence its own namespace rather than the
     entity's. Fields are warp-backed ``TorchArray`` proxies; the tensor view is what
@@ -154,14 +154,14 @@ class _RecordingSimData:
 def _merge_narrowing(sims: Sequence[_RecordingSimData]) -> SimRows:
     """The rows each sim field can be narrowed to, across every term that read it.
 
-    Terms index one field by different sets — ``cvel`` by the root body in one, by every
-    site's body in another — so the union is taken and the input carries it once. A
+    Terms index one field by different sets (``cvel`` by the root body in one, by every
+    site's body in another), so the union is taken and the input carries it once. A
     field any term used whole, or indexed in a way that cannot be told statically, ships
     whole.
     """
     merged: dict[str, tuple[set[int] | None, int | None]] = {}
     for sim in sims:
-        for name, record in sim._records.items():  # noqa: SLF001 — internal proxy
+        for name, record in sim._records.items():  # noqa: SLF001 (internal proxy)
             rows, size = merged.get(name, (set(), record.size))
             if rows is None or not record.rows:
                 merged[name] = (None, size)
@@ -198,7 +198,7 @@ class _RecordingData:
         object.__setattr__(self, "_traced", None)
 
     def _through(self) -> Any:
-        """The copy a traced-through property runs against, built on first use — a
+        """The copy a traced-through property runs against, built on first use, a
         stand-in ``Entity.data`` with no sim behind it never needs one."""
         if self._traced is None:
             object.__setattr__(self, "_traced", _with_sim_data(self._real, self._sim))
@@ -256,7 +256,7 @@ class _RecordingScene:
     def _read_sensor(self, name: str, real: Any) -> Any:
         value = real.data
         if isinstance(value, torch.Tensor):
-            # A builtin sensor is one `sensordata` window — one slot.
+            # A builtin sensor is one `sensordata` window, one slot.
             self._log.append(((_SENSOR_NS, name), value))
             return value
         # A structured sensor has no single tensor to be, so log the fields the term

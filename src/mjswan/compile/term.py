@@ -39,7 +39,7 @@ from .slot import (
 
 
 class ConstantTerm(ValueError):
-    """A term that read no simulation state at all — its value is a constant.
+    """A term that read no simulation state at all: its value is a constant.
 
     An observation so shaped is env-independent (a fixed-size padding term, say), so a
     caller may bake the value; a termination so shaped fires every step or never, so a
@@ -85,7 +85,7 @@ class UntraceableTerm(ValueError):
             "policy stale numbers. Three ways out: supply a trace-friendly "
             "replacement via mjswan.register_observation(); write the term as a TS "
             "class and register an ObservationBinding whose `ts_src` points at it; or "
-            "drop the term from the exported group and retrain — a shorter observation "
+            "drop the term from the exported group and retrain: a shorter observation "
             "vector is not interchangeable with the one the policy was trained on."
         )
 
@@ -97,7 +97,7 @@ class TermExport:
     name: str
     onnx_bytes: bytes
     input_slots: list[SlotKey]
-    """Dynamic input slots, in ONNX graph input order — ``(entity, field)`` each."""
+    """Dynamic input slots, in ONNX graph input order, ``(entity, field)`` each."""
     input_names: list[str]
     output_name: str
     reference_output: torch.Tensor
@@ -187,10 +187,10 @@ def trace_term(
     # 2. Classify accessed slots into dynamic inputs vs baked constants.
     dynamic: dict[SlotKey, torch.Tensor] = {}
     constants: dict[SlotKey, torch.Tensor] = {}
-    _classify_slots(recorder._log, dynamic, constants)  # noqa: SLF001 — internal proxy
+    _classify_slots(recorder._log, dynamic, constants)  # noqa: SLF001 (internal proxy)
 
     if not dynamic:
-        if recorder._log:  # noqa: SLF001 — internal proxy
+        if recorder._log:  # noqa: SLF001 (internal proxy)
             # State *was* read; the tracer just could not follow it into a tensor.
             raise UntraceableTerm(
                 name, sorted({slot_label(k) for k, _ in recorder._log})
@@ -203,8 +203,8 @@ def trace_term(
     example_inputs = tuple(dynamic[k] for k in dynamic_keys)
 
     # 3. Trace to ONNX.
-    sensors = dict(recorder._sensors)  # noqa: SLF001 — internal proxy
-    commands = dict(recorder._commands)  # noqa: SLF001 — internal proxy
+    sensors = dict(recorder._sensors)  # noqa: SLF001 (internal proxy)
+    commands = dict(recorder._commands)  # noqa: SLF001 (internal proxy)
     module = _TermModule(
         func,
         params,

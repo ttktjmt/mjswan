@@ -227,9 +227,9 @@ def slot_to_json(
     """Serialize one input slot for the manifest's MDP entry.
 
     Four shapes, told apart by which keys are present: ``{"entity", "field"}``,
-    ``{"sensor"}``, ``{"command", "field"}``, or ``{"sim"}`` (a raw ``mjData`` field —
+    ``{"sensor"}``, ``{"command", "field"}``, or ``{"sim"}`` (a raw ``mjData`` field,
     whole, or the ``rows`` of its element axis the graph takes, in order). All carry
-    ``input`` (the graph input name) and ``shape`` — the runtime feeds a flat array and
+    ``input`` (the graph input name) and ``shape``: the runtime feeds a flat array and
     cannot recover the rank without it.
     """
     namespace, name_part = key

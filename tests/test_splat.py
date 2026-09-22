@@ -183,7 +183,7 @@ class TestSplatHandle:
 
 
 # ===========================================================================
-# L1 — build.manifest.splat_entry()
+# L1: build.manifest.splat_entry()
 # ===========================================================================
 class TestBuildSplatConfigDict:
     def test_source_splat_adds_path_key(self):
