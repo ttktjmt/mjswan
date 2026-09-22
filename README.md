@@ -54,7 +54,7 @@
 
 mjswan can be installed with `pip`:
 ``` sh
-pip install mjswan  # or 'mjswan[wandb]', 'mjswan[hf]', 'mjswan[mjlab]', …
+pip install mjswan  # or 'mjswan[dev]', 'mjswan[examples]'
 ```
 
 or with `npm`:
@@ -62,12 +62,10 @@ or with `npm`:
 npm install mjswan
 ```
 
-You can run the bundled demo with the `mjswan` CLI (after installing
-`mjswan[hf,mjlab]`). It fetches the model from mjlab and the policy from the
-Hugging Face Hub, so there is nothing to download by hand:
+You can run the bundled demo with the `mjswan` CLI (after installing `mjswan[dev]`).
 ``` sh
 mjswan demo          # lists the bundled demos
-mjswan demo simple   # runs one of them
+mjswan demo simple   # runs the simple demo
 ```
 
 The minimum python script for a sanity check:
