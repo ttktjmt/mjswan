@@ -17,13 +17,15 @@ Port one mjlab task from a target repo into a browser app built by [mjswan](http
 
 A GitHub URL → `git clone <url> ./<repo-name>`, then work inside it. A local path → use it as is.
 
-Then make mjswan importable from the **same interpreter** that can import the target's task registrations:
+Then make mjswan importable from the **same interpreter** that can import the target's task registrations. What this pipeline needs is the `mjlab` extra (mjlab + torch: `add_scene_mjlab`, term tracing, `.pt` conversion) plus `onnxruntime`, which step 7 runs the exported graphs under:
 
-- Repo already has an environment → add to it: `uv pip install mjswan torch onnxruntime`.
-- Fresh clone with nothing → `uv venv && uv pip install -e . && uv pip install mjswan torch onnxruntime`.
+- Repo already has an environment → add to it: `uv pip install "mjswan[mjlab]" onnxruntime`.
+- Fresh clone with nothing → `uv venv && uv pip install -e . && uv pip install "mjswan[mjlab]" onnxruntime`.
 - No `uv` available → install into the interpreter that already runs the target, against its own `sys.prefix`.
 
-mjswan pins `mujoco` **exactly** and bounds `requires-python`. If the install fails on either, **stop and report the resolver's output verbatim**: resolving it is the user's call, not yours.
+Every source is its own extra and `import mjswan` touches none of them, so install only the one the checkpoints come from: `wandb` for a W&B run path, `hf` for anything fetched from the Hub, e.g. `"mjswan[mjlab,wandb]"`.
+
+mjswan pins `mujoco` **exactly**, its `mjlab` extra pins `mjlab` **exactly**, and `requires-python` is bounded. A target that pins any of the three differently will not co-resolve. If the install fails on one, **stop and report the resolver's output verbatim**: resolving it is the user's call, not yours.
 
 ## 2. Find the task ids
 
@@ -65,11 +67,12 @@ An action term with a non-`None` `unsupported_reason`, or one `adapt_actions` wa
 
 ## 4. Get the policy into ONNX
 
-- **W&B run path** → nothing to do here. `add_policy_wandb(run_path)` converts every `model_*.pt` itself and passes the metadata below on its own.
+- **W&B run path** → nothing to do here. `add_policy_wandb(run_path)` converts every `model_*.pt` itself and passes the metadata below on its own. Needs the `wandb` extra.
+- **Hugging Face repo** → `add_policy_hf(repo_id)`. Needs the `hf` extra and neither mjlab nor torch: a Hub repo holds the published artifact, so this path downloads the `.onnx` and reads what mjlab baked into it.
 - **Local `model_*.pt`** → copy `export_policy.py` (next to this file) into `<repo>/mjswan_app/` and run it. It writes one `<stem>.onnx` per checkpoint plus `policy_meta.json`.
-- **Pre-exported `.onnx`** → usable directly, but you have no metadata; see below.
+- **Pre-exported `.onnx` on disk** → usable directly, but plain `add_policy` reads nothing out of the file; see below.
 
-`policy_meta.json` carries `policy_joint_names`, `default_joint_pos` and `encoder_bias`. None of the three can be recovered from an ONNX file, and `add_policy` needs them to resolve action scales and the browser's external PD gains. **A port that omits them builds fine and moves wrongly**, so always pass them, and say so explicitly if a pre-exported `.onnx` left you without them.
+`policy_meta.json` carries `policy_joint_names`, `default_joint_pos` and `encoder_bias`, which `add_policy` needs to resolve action scales and the browser's external PD gains. **A port that omits them builds fine and moves wrongly.** An mjlab export does carry the first two in its `metadata_props`, rounded to three decimals, but only `add_policy_hf` reads that block, and `encoder_bias` is never in the file. So always pass all three on the local path, and say so explicitly if a pre-exported `.onnx` left you without them.
 
 ## 5. Generate the port
 
@@ -78,7 +81,7 @@ In the target repo:
 ```
 mjswan_app/
   main.py           builder wiring; the only entry point
-  terms.py          register_* replacements (only when step 6 needs one)
+  terms.py          upstream MDP terms, re-implemented traceably (only what step 6 needs)
   export_policy.py  the copied converter        (local .pt only)
   model_*.onnx      converted checkpoints       (local .pt only)
   policy_meta.json  checkpoint order + metadata (local .pt only)
@@ -86,6 +89,8 @@ mjswan_app/
 ```
 
 The directory is `mjswan_app/`, **not** `mjswan/`: a `mjswan/` in the repo root shadows the installed package for every `python` invoked from there.
+
+`terms.py` is the one place an MDP term gets rewritten. When a term will not trace, its re-implementation in a form `torch.onnx.export` accepts, and its `register_*` call, both go here, whichever kind it is: observation, termination, event or command. Such a re-implementation restates the upstream function's math and changes none of it, as the ground rules demand; what it drops is only what the exporter cannot follow, such as data-dependent control flow, `.item()`, Python RNG and per-env indexing. Write **only** the terms that actually failed: every function here is a second copy of upstream code that can silently drift from it, which is why a term mjlab already exports cleanly stays untouched and why step 7 checks each rewrite numerically.
 
 `main.py`, the shortest thing that works. `your_repo.tasks` stands for the registration module found in step 2, and `TASK_ID` is a real constant: substitute the value, never the name.
 
@@ -133,7 +138,7 @@ Canonical run command, from the repo root: `python -m mjswan_app.main`.
 
 `build()` writes `mjswan_app/dist/`: the engine, plus the simulation document it serves — `manifest.json` and one `<project-id>/<scene-id>/` per scene holding `scene.mjz`, `mdp/<mdp-id>/{obs,term,command,event}/*.onnx` and `policy/<policy-id>.onnx`. `app.save_document()` packs that document alone as `dist.swn`, engine excluded, and `mjswan serve` / `info` / `publish` each take either form. Keep the `app` the build returns rather than chaining off it, so the document is one call away.
 
-- W&B instead of local checkpoints: replace the loop with `scene.add_policy_wandb("entity/project/run_id")` and drop the meta plumbing.
+- W&B or the Hub instead of local checkpoints: replace the loop with `scene.add_policy_wandb("entity/project/run_id")` or `scene.add_policy_hf("owner/repo")` and drop the meta plumbing. When that is the whole app, `builder.add_project_mjlab(TASK_ID, run_path=..., hf_repo_id=...)` is the same project-plus-scene-plus-policies wiring in one call.
 - `add_policy` accepts the five MDP term sets — `observations=` / `actions=` / `terminations=` / `commands=` / `events=` — or one `mdp=mjswan.MdpConfig(...)` carrying all five, shared by every policy handed the same object. Leave them all out: `add_scene_mjlab` supplies `control_dt` and the trace env, each term set already defaults to the scene's env config (events included), and `add_policy_wandb` builds one `MdpConfig` per call so a run's checkpoints share one traced MDP. When looping over local checkpoints as above, build one `MdpConfig()` before the loop and pass `mdp=` to each `add_policy` for the same effect. To change a term set, mutate `env_cfg` instead (step 6) and pass `env_cfg=` to `add_scene_mjlab` *before* any policy is added, because a scene built first never sees the mutation.
 - A single-input network — every mjlab export — needs no `in_keys`: its one observation group lands under the default slot, `actor`. A network with several inputs declares `in_keys=` on `add_policy`, and the build refuses one that does not. `out_keys=` is the same table for the *outputs*, and a network with several of them needs it whenever the action is not the first: the runtime drives the actuators from `out_keys`' `action`, defaulting to output 0. The build warns; a checkpoint whose exporter sidecar lists `out_keys` is telling you what to pass.
 - When `terms.py` exists, import it in `main.py` for its side effects: `from mjswan_app import terms  # noqa: F401`.
@@ -148,7 +153,7 @@ python -m mjswan_app.main
 The build fails loudly by design and names the ways out. For each failure: read the exception, read the module it came from, then classify.
 
 - **Missing env-derived params**: mjlab's function needs a constant the config does not carry (terrain limits, a clip path, a threshold). Load `env_cfg` yourself, write the value into `env_cfg.<terms>[name].params`, and pass `env_cfg=` to `add_scene_mjlab`. This is the most common fix and needs no `terms.py` at all.
-- **Untraceable body**: the function draws with an untraceable RNG, indexes per-env tensors, or reads state the browser has no equivalent for. Write a traceable equivalent in `terms.py` and register it:
+- **Untraceable body**: the function draws with an untraceable RNG, indexes per-env tensors, or reads state the browser has no equivalent for, so `torch.onnx.export` refuses it. Re-implement it traceably in `terms.py` and register it:
 
   ```python
   # register_termination / register_event take the same two arguments.

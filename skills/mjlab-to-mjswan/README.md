@@ -21,11 +21,11 @@ Then invoke it with the target repo:
 
 Any other agent can follow `SKILL.md` directly, it is plain Markdown with no vendor-specific syntax.
 
-Either way the agent needs `git` and a Python 3.10-3.12 environment in which the target repo's task registrations import; it installs `mjswan torch onnxruntime` into that environment itself.
+Either way the agent needs `git` and a Python 3.10-3.12 environment in which the target repo's task registrations import; it installs `mjswan[mjlab]` and `onnxruntime` into that environment itself, plus the `wandb` or `hf` extra when the checkpoints come from there.
 
 ## The pipeline
 
-Eight stages, three of them gates. `03` costs seconds and answers "not portable" before anything expensive runs; `06` and `07` cost minutes.
+Nine stages, three of them gates. `03` costs seconds and answers "not portable" before anything expensive runs; `06` and `07` cost minutes. `08` runs only when what a gate blocked on is mjswan's own gap rather than the task's.
 
 ```mermaid
 ---
@@ -34,10 +34,14 @@ config:
 ---
 flowchart LR
   A1["01<br>acquire"] --> A2["02<br>find tasks"] --> A3["03<br>pre-flight"] --> A4["04<br>policy to ONNX"]
-  A4 --> A5["05<br>generate"] --> A6["06<br>build"] --> A7["07<br>parity"] --> A8["08<br>report"]
-  A3 -.- N3["stop and report<br>dependency clash / unsupported action term"]
-  A6 -.- N6["two tries, then skip and continue"]
-  A7 -.- N7["numeric mismatch is a defect"]
+  A4 --> A5["05<br>generate"] --> A6["06<br>build"] --> A7["07<br>parity"] --> A9["09<br>report"]
+  A3 -.- N3["dependency clash<br>unsupported action term"]
+  A6 -.- N6["rewrite in terms.py<br>two tries, then skip"]
+  A7 -.- N7["numeric mismatch<br>is a defect"]
+  N3 -.-> A8["08<br>mjswan PR<br>generic gaps only"]
+  N6 -.-> A8
+  N7 -.-> A8
+  A8 -.-> A9
   classDef hot stroke:#4db6c4,stroke-width:2px
   class A3,A6,A7 hot
 ```
@@ -53,13 +57,15 @@ The same raw state goes to both sides and the outputs are compared, so what is p
 ```
 mjswan_app/
   main.py           builder wiring; the only entry point
-  terms.py          register_* replacements (only when the build needs one)
+  terms.py          upstream MDP terms re-implemented traceably (only what the build needs)
   export_policy.py  .pt to ONNX converter   (local checkpoints only)
   model_*.onnx      converted checkpoints
   policy_meta.json  checkpoint order + metadata
   README.md         source URL, prerequisites, run command
   dist/             the build: engine + simulation document (written by main.py)
 ```
+
+`terms.py` is the single place an MDP term is rewritten: a term that `torch.onnx.export` will not trace gets a traceable re-implementation and its `register_*` call there, observation, termination, event or command alike. Only the terms that actually failed, because each one is a second copy of upstream math, and step `07` is what holds those copies to the original.
 
 Run it from the repo root with `python -m mjswan_app.main`. `mjswan info mjswan_app/dist` reads back what the build wrote — projects, scenes, MDPs, policies — and `app.save_document()` packs the document alone as `dist.swn`, one file that `mjswan serve`, `mjswan info` and `mjswan publish` all accept.
 
