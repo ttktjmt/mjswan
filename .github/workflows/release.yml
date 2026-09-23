@@ -54,7 +54,7 @@ jobs:
             exit 1
           fi
 
-      - name: Update version in __init__.py
+      - name: Update version in _version.py
         run: |
           sed -i "s/^__version__ = \".*\"/__version__ = \"${{ inputs.version }}\"/" src/mjswan/_version.py
 

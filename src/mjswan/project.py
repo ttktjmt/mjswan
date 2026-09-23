@@ -333,7 +333,7 @@ class ProjectHandle:
         except ImportError as e:
             raise ImportError(
                 "mjlab is required for add_scene_mjlab(). "
-                "Install it with: pip install mjlab"
+                "Install it with: pip install 'mjswan[mjlab]'"
             ) from e
 
         if env_cfg is not None and play is not None:

@@ -92,7 +92,7 @@ def create_pt_onnx_export_context(
     except ImportError as e:
         raise ImportError(
             "mjlab and torch are required for only_latest=False. "
-            "Install them with: pip install mjlab torch"
+            "Install them with: pip install 'mjswan[mjlab]'"
         ) from e
 
     env_cfg = (
