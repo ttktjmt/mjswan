@@ -51,13 +51,36 @@ MJLAB_METADATA = {
 }
 
 
-def _policy_onnx(path, *, action_width: int = 2, metadata: dict | None = None):
-    """An ONNX whose one output is ``action_width`` wide, written to ``path``."""
+def _policy_onnx(
+    path,
+    *,
+    action_width: int = 2,
+    metadata: dict | None = None,
+    value_head: int | None = None,
+):
+    """An ONNX whose action output is ``action_width`` wide, written to ``path``.
+
+    ``value_head`` puts an output that wide *before* the action.
+    """
     x = helper.make_tensor_value_info("X", TensorProto.FLOAT, [1, action_width])
     y = helper.make_tensor_value_info("Y", TensorProto.FLOAT, [1, action_width])
-    model = helper.make_model(
-        helper.make_graph([helper.make_node("Identity", ["X"], ["Y"])], "p", [x], [y])
-    )
+    nodes = [helper.make_node("Identity", ["X"], ["Y"])]
+    outputs = [y]
+    if value_head is not None:
+        nodes.append(
+            helper.make_node(
+                "Constant",
+                [],
+                ["V"],
+                value=helper.make_tensor(
+                    "v", TensorProto.FLOAT, [1, value_head], [0.0] * value_head
+                ),
+            )
+        )
+        outputs.insert(
+            0, helper.make_tensor_value_info("V", TensorProto.FLOAT, [1, value_head])
+        )
+    model = helper.make_model(helper.make_graph(nodes, "p", [x], outputs))
     for key, value in (metadata or {}).items():
         entry = model.metadata_props.add()
         entry.key, entry.value = key, value
@@ -226,7 +249,6 @@ class TestJointMappingGuard:
                 **MJLAB_METADATA,
                 "joint_names": "hip,knee,passive",
                 "default_joint_pos": "-0.312,0.669,0.000",
-                "action_scale": "0.500",
             },
         )
 
@@ -236,9 +258,23 @@ class TestJointMappingGuard:
 
         assert policy._config.policy_joint_names == ["hip", "knee"]
         assert policy._config.default_joint_pos == [-0.312, 0.669]
-        # The action term stays unset: its scale is per action and `action_scale` here
-        # is one value against three joints, which `joint_mapping_usable` refuses.
-        assert not policy._config.mdp.actions
+        # mjlab writes the scale per action, so it lines up with the actuated joints.
+        assert policy._config.mdp.actions["joint_pos"].scale == [0.5, 0.25]
+
+    def test_a_passive_joint_between_actuated_ones_drops_out(self, scene, fake_hub):
+        fake_hub(
+            "policy.onnx",
+            metadata={
+                **MJLAB_METADATA,
+                "joint_names": "hip,passive,knee",
+                "default_joint_pos": "-0.312,0.000,0.669",
+            },
+        )
+
+        (policy,) = scene.add_policy_hf("my-org/two-joint")
+
+        assert policy._config.policy_joint_names == ["hip", "knee"]
+        assert policy._config.default_joint_pos == [-0.312, 0.669]
 
     def test_actuator_order_does_not_become_the_action_order(self, fake_hub):
         """The actuator block's order is the model's; the actions come in joint order.
@@ -276,11 +312,24 @@ class TestJointMappingGuard:
             metadata={**MJLAB_METADATA, "joint_names": "hip,ankle"},
         )
 
-        with pytest.warns(RuntimeWarning, match="actuates a different set"):
+        with pytest.warns(RuntimeWarning, match="does not list every joint"):
             (policy,) = scene.add_policy_hf("my-org/two-joint")
 
         assert policy._config.policy_joint_names is None
         assert policy._config.default_joint_pos is None
+        assert not policy._config.mdp.actions
+
+    def test_the_action_output_is_the_one_out_keys_names(self, scene, fake_hub):
+        """A value head listed first is not the action, however wide it is."""
+        fake_hub("policy.onnx", metadata=MJLAB_METADATA, value_head=5)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            (policy,) = scene.add_policy_hf(
+                "my-org/two-joint", out_keys=["value", "action"]
+            )
+
+        assert policy._config.policy_joint_names == ["hip", "knee"]
 
     def test_joint_names_are_emitted_as_the_model_spells_them(self, fake_hub):
         """A scene from an mjlab task namespaces its joints; mjlab's export does not."""
@@ -299,6 +348,111 @@ class TestJointMappingGuard:
         (policy,) = namespaced.add_policy_hf("my-org/two-joint")
 
         assert policy._config.policy_joint_names == ["robot/hip", "robot/knee"]
+
+
+#: Three actuated joints in a row, for a joint-position term that covers two of them.
+THREE_JOINT_XML = """
+<mujoco model="three_joint">
+  <worldbody>
+    <body>
+      <joint name="hip" type="hinge" axis="0 1 0"/>
+      <geom type="capsule" size="0.05" fromto="0 0 0 0 0 -0.3"/>
+      <body pos="0 0 -0.3">
+        <joint name="knee" type="hinge" axis="0 1 0"/>
+        <geom type="capsule" size="0.05" fromto="0 0 0 0 0 -0.3"/>
+        <body pos="0 0 -0.3">
+          <joint name="ankle" type="hinge" axis="0 1 0"/>
+          <geom type="capsule" size="0.05" fromto="0 0 0 0 0 -0.1"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="hip_act" joint="hip"/>
+    <position name="knee_act" joint="knee"/>
+    <position name="ankle_act" joint="ankle"/>
+  </actuator>
+</mujoco>
+"""
+
+
+class TestActionOrder:
+    """mjlab's actions are its action terms', one after another, each in joint order."""
+
+    def test_the_task_terms_decide_it_over_the_metadata(self, scene, fake_hub):
+        """The metadata lists joints in joint order whatever the terms say."""
+        fake_hub("policy.onnx", metadata=MJLAB_METADATA)
+        actions = {
+            "knee": JointPositionActionCfg(actuator_names=("knee",)),
+            "hip": JointPositionActionCfg(actuator_names=("hip",)),
+        }
+
+        (policy,) = scene.add_policy_hf("my-org/two-joint", actions=actions)
+
+        assert policy._config.policy_joint_names == ["knee", "hip"]
+        assert policy._config.default_joint_pos == [0.669, -0.312]
+
+    def test_a_joint_position_term_short_of_the_actions_is_refused(self, fake_hub):
+        """With no terms to ask, the metadata cannot say where the others go."""
+        builder = mjswan.Builder()
+        three = builder.add_project(name="T").add_scene(
+            name="Robot",
+            spec=mujoco.MjSpec.from_string(THREE_JOINT_XML),
+            control_dt=0.02,
+        )
+        fake_hub(
+            "policy.onnx",
+            action_width=3,
+            metadata={
+                **MJLAB_METADATA,
+                "joint_names": "hip,knee,ankle",
+                "default_joint_pos": "-0.312,0.669,0.000",
+            },
+        )
+
+        with pytest.warns(RuntimeWarning, match="other action terms"):
+            (policy,) = three.add_policy_hf("my-org/three-joint")
+
+        assert policy._config.policy_joint_names is None
+        assert not policy._config.mdp.actions
+
+
+class TestRestPose:
+    """Looked up by joint name, so it follows whichever joint list won."""
+
+    def test_caller_names_take_the_metadata_pose_by_name(self, scene, fake_hub):
+        fake_hub("policy.onnx", metadata=MJLAB_METADATA)
+
+        (policy,) = scene.add_policy_hf(
+            "my-org/two-joint", policy_joint_names=["knee", "hip"]
+        )
+
+        assert policy._config.policy_joint_names == ["knee", "hip"]
+        assert policy._config.default_joint_pos == [0.669, -0.312]
+
+    def test_caller_names_do_not_hide_an_unusable_action_term(self, scene, fake_hub):
+        """The names are the caller's, but the action term was still the metadata's."""
+        fake_hub(
+            "policy.onnx",
+            metadata={**MJLAB_METADATA, "joint_names": "hip,ankle"},
+        )
+
+        with pytest.warns(RuntimeWarning, match="has no action term"):
+            (policy,) = scene.add_policy_hf(
+                "my-org/two-joint", policy_joint_names=["hip", "knee"]
+            )
+
+        assert not policy._config.mdp.actions
+
+    def test_a_caller_pose_is_taken_as_given(self, scene, fake_hub):
+        fake_hub("policy.onnx", metadata=MJLAB_METADATA)
+
+        (policy,) = scene.add_policy_hf(
+            "my-org/two-joint", default_joint_pos=[0.1, 0.2]
+        )
+
+        assert policy._config.policy_joint_names == ["hip", "knee"]
+        assert policy._config.default_joint_pos == [0.1, 0.2]
 
 
 class TestSeveralFiles:

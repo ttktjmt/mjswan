@@ -8,12 +8,7 @@ Copied rather than imported, since the reader has to work without mjlab installe
 import onnx
 import pytest
 
-from mjswan.mjlab.onnx_meta import (
-    action_cfg_from_metadata,
-    joint_mapping_usable,
-    policy_kwargs_from_metadata,
-    read_mjlab_metadata,
-)
+from mjswan.mjlab.onnx_meta import action_cfg_from_metadata, read_mjlab_metadata
 
 
 def _list_to_csv_str(arr, *, decimals=3, delimiter=",", sub_delimiter=";"):
@@ -126,59 +121,10 @@ class TestReadMjlabMetadata:
         assert meta.raw["task_extra"] == "x"
 
 
-class TestJointMappingUsable:
-    def test_accepts_a_matching_action_width(self):
-        meta = read_mjlab_metadata(_model_with(BASE_METADATA))
-        assert joint_mapping_usable(meta, action_width=2)
-
-    def test_rejects_a_wider_joint_list_than_the_network_drives(self):
-        """mjlab lists every joint; a passive one makes the lists different things."""
-        meta = read_mjlab_metadata(
-            _model_with(
-                {
-                    **BASE_METADATA,
-                    "joint_names": ["hip", "knee", "passive"],
-                    "default_joint_pos": [-0.312, 0.669, 0.0],
-                    "action_scale": 0.5,
-                }
-            )
-        )
-        assert not joint_mapping_usable(meta, action_width=2)
-
-    def test_rejects_internally_inconsistent_metadata(self):
-        meta = read_mjlab_metadata(
-            _model_with({**BASE_METADATA, "default_joint_pos": [-0.312]})
-        )
-        assert not joint_mapping_usable(meta)
-
-    def test_rejects_an_action_scale_of_the_wrong_length(self):
-        meta = read_mjlab_metadata(
-            _model_with({**BASE_METADATA, "action_scale": [0.5, 0.25, 0.1]})
-        )
-        assert not joint_mapping_usable(meta, action_width=2)
-
-    def test_unknown_action_width_checks_only_internal_consistency(self):
-        meta = read_mjlab_metadata(_model_with(BASE_METADATA))
-        assert joint_mapping_usable(meta, action_width=None)
-
-
-class TestPolicyKwargsFromMetadata:
-    def test_fills_joint_names_and_rest_pose(self):
-        meta = read_mjlab_metadata(_model_with(BASE_METADATA))
-        assert policy_kwargs_from_metadata(meta, action_width=2) == {
-            "policy_joint_names": ["hip", "knee"],
-            "default_joint_pos": [-0.312, 0.669],
-        }
-
-    def test_empty_when_the_mapping_is_not_usable(self):
-        meta = read_mjlab_metadata(_model_with(BASE_METADATA))
-        assert policy_kwargs_from_metadata(meta, action_width=12) == {}
-
-
 class TestActionCfgFromMetadata:
     def test_builds_a_joint_position_term(self):
         meta = read_mjlab_metadata(_model_with(BASE_METADATA))
-        actions = action_cfg_from_metadata(meta, action_width=2)
+        actions = action_cfg_from_metadata(meta, num_actions=2)
         assert list(actions) == ["joint_pos"]
         term = actions["joint_pos"]
         assert term.scale == [0.5, 0.25]
@@ -186,16 +132,32 @@ class TestActionCfgFromMetadata:
 
     def test_carries_a_scalar_scale_through(self):
         meta = read_mjlab_metadata(_model_with({**BASE_METADATA, "action_scale": 0.5}))
-        assert action_cfg_from_metadata(meta, action_width=2)["joint_pos"].scale == 0.5
+        assert action_cfg_from_metadata(meta, num_actions=2)["joint_pos"].scale == 0.5
+
+    def test_a_passive_joint_does_not_count(self):
+        """mjlab writes every joint but one scale per action, as for its YAM."""
+        meta = read_mjlab_metadata(
+            _model_with(
+                {
+                    **BASE_METADATA,
+                    "joint_names": ["hip", "knee", "passive"],
+                    "default_joint_pos": [-0.312, 0.669, 0.0],
+                }
+            )
+        )
+        assert action_cfg_from_metadata(meta, num_actions=2)["joint_pos"].scale == [
+            0.5,
+            0.25,
+        ]
 
     def test_empty_without_a_recorded_scale(self):
         metadata = {k: v for k, v in BASE_METADATA.items() if k != "action_scale"}
         meta = read_mjlab_metadata(_model_with(metadata))
-        assert action_cfg_from_metadata(meta, action_width=2) == {}
+        assert action_cfg_from_metadata(meta, num_actions=2) == {}
 
-    def test_empty_when_the_mapping_is_not_usable(self):
+    def test_empty_when_the_scale_is_not_one_per_action(self):
         meta = read_mjlab_metadata(_model_with(BASE_METADATA))
-        assert action_cfg_from_metadata(meta, action_width=12) == {}
+        assert action_cfg_from_metadata(meta, num_actions=12) == {}
 
 
 class TestMalformedMetadata:

@@ -118,7 +118,8 @@ def create_pt_onnx_export_context(
         wrapped_env.close()
         raise
 
-    # Joint names, default positions, and encoder bias from the action manager.
+    # Joint names, default positions, and encoder bias from the action manager, one
+    # term after another: that is mjlab's action order.
     joint_names: list[str] = []
     default_joint_pos: list[float] = []
     encoder_bias: list[float] = []
@@ -132,7 +133,8 @@ def create_pt_onnx_export_context(
                 continue
             entity_name = getattr(getattr(term, "cfg", None), "entity_name", None)
             prefix = f"{entity_name}/" if entity_name else ""
-            joint_names = [f"{prefix}{n}" for n in term.target_names]
+            names = [f"{prefix}{n}" for n in term.target_names]
+            offsets = [0.0] * len(names)
             if hasattr(term, "offset") and term.offset is not None:
                 offset = term.offset
                 if hasattr(offset, "tolist"):
@@ -140,8 +142,9 @@ def create_pt_onnx_export_context(
                 elif hasattr(offset, "__iter__"):
                     flat = list(offset)
                 else:
-                    flat = [float(offset)] * len(joint_names)
-                default_joint_pos = flat[: len(joint_names)]
+                    flat = [float(offset)] * len(names)
+                offsets = flat[: len(names)]
+            biases = [0.0] * len(names)
             if entity_name:
                 entity = inner_env.scene[entity_name]
                 bias = entity.data.encoder_bias
@@ -162,10 +165,12 @@ def create_pt_onnx_export_context(
                 if hasattr(bias, "__getitem__"):
                     selected_bias = bias[0, target_indices]
                     if hasattr(selected_bias, "tolist"):
-                        encoder_bias = selected_bias.tolist()
+                        biases = selected_bias.tolist()
                     else:
-                        encoder_bias = list(selected_bias)
-            break
+                        biases = list(selected_bias)
+            joint_names.extend(names)
+            default_joint_pos.extend(offsets)
+            encoder_bias.extend(biases)
 
     return PtOnnxExportContext(
         env=wrapped_env,

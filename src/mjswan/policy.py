@@ -92,11 +92,20 @@ def check_slot_tables(
     return checked_in, checked_out
 
 
-def onnx_output_width(model: onnx.ModelProto) -> int | None:
-    """The last dim of the graph's first output, or ``None`` when it is not static."""
-    if not model.graph.output:
+def onnx_output_width(
+    model: onnx.ModelProto, out_keys: Sequence[str | Sequence[str]] | None = None
+) -> int | None:
+    """The last dim of the action output, or ``None`` when it is not static.
+
+    The action is the output ``out_keys`` names ``"action"``, else the first, as at
+    runtime.
+    """
+    # The runtime joins a nested key with commas before it looks for "action".
+    keys = [k if isinstance(k, str) else ",".join(k) for k in out_keys or ()]
+    index = keys.index("action") if "action" in keys else 0
+    if index >= len(model.graph.output):
         return None
-    dims = model.graph.output[0].type.tensor_type.shape.dim
+    dims = model.graph.output[index].type.tensor_type.shape.dim
     if len(dims) < 2:
         return None
     width = dims[-1].dim_value

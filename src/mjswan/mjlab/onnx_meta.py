@@ -13,7 +13,7 @@ int) as ``"1.000"``/``"0.000"``. A scalar outside a list keeps its full precisio
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import onnx
 
@@ -69,7 +69,7 @@ class MjlabPolicyMetadata:
 
     ``joint_names`` and ``default_joint_pos`` cover **every** joint of the robot,
     actuated or not, while the network (like the two gain lists) covers only the
-    actuated ones: check :func:`joint_mapping_usable` before mapping one onto the other.
+    actuated ones, so the scene's own model decides which of them it drives.
     """
 
     joint_names: list[str]
@@ -85,7 +85,8 @@ class MjlabPolicyMetadata:
     """Velocity gain per actuated joint; informational too."""
 
     action_scale: float | list[float] | None = None
-    """The joint-position action term's scale: a scalar, or one value per action."""
+    """The ``joint_pos`` action term's scale: a scalar, or one value per action of that
+    term, which is every action unless the task has other action terms."""
 
     command_names: list[str] = field(default_factory=list)
     """The task's active command terms, by name."""
@@ -165,60 +166,18 @@ def read_mjlab_metadata(model: onnx.ModelProto) -> MjlabPolicyMetadata | None:
     )
 
 
-def joint_mapping_usable(
-    meta: MjlabPolicyMetadata, *, action_width: int | None = None
-) -> bool:
-    """Whether :attr:`~MjlabPolicyMetadata.joint_names` names what the network drives.
-
-    mjlab writes every joint of the robot, the network outputs one action per *actuated*
-    joint, and the two coincide only when the robot has no passive joints. A longer
-    ``policy_joint_names`` would silently shift every action onto the wrong actuator.
-
-    With ``action_width`` unknown (a dynamic output shape), only the metadata's own
-    consistency is checked.
-    """
-    if not meta.joint_names or not meta.default_joint_pos:
-        return False
-    if len(meta.joint_names) != len(meta.default_joint_pos):
-        return False
-    if action_width is not None and len(meta.joint_names) != action_width:
-        return False
-    if isinstance(meta.action_scale, list) and len(meta.action_scale) != len(
-        meta.joint_names
-    ):
-        return False
-    return True
-
-
-def policy_kwargs_from_metadata(
-    meta: MjlabPolicyMetadata, *, action_width: int | None = None
-) -> dict[str, Any]:
-    """The :meth:`~mjswan.scene.SceneHandle.add_policy` arguments this metadata fixes.
-
-    ``{}`` when :func:`joint_mapping_usable` says the joint list is not the action list.
-    The action term belongs to the MDP rather than the checkpoint, so it comes from
-    :func:`action_cfg_from_metadata` instead.
-    """
-    if not joint_mapping_usable(meta, action_width=action_width):
-        return {}
-    return {
-        "policy_joint_names": list(meta.joint_names),
-        "default_joint_pos": list(meta.default_joint_pos),
-    }
-
-
 def action_cfg_from_metadata(
-    meta: MjlabPolicyMetadata, *, action_width: int | None = None
+    meta: MjlabPolicyMetadata, *, num_actions: int
 ) -> dict[str, ActionTermCfg]:
     """The joint-position action term this metadata describes, or ``{}``.
 
     mjlab's ``JointPositionAction`` adds the rest pose to the scaled action, which is
-    mjswan's ``use_default_offset=True``. Guarded like
-    :func:`policy_kwargs_from_metadata`, and empty when the export recorded no scale.
+    mjswan's ``use_default_offset=True``. Empty when the export recorded no scale, or a
+    per-action scale whose length is not the ``num_actions`` the scene's model drives.
     """
     if meta.action_scale is None:
         return {}
-    if not joint_mapping_usable(meta, action_width=action_width):
+    if isinstance(meta.action_scale, list) and len(meta.action_scale) != num_actions:
         return {}
     from ..envs.mdp.actions import JointPositionActionCfg
 
@@ -235,7 +194,5 @@ def action_cfg_from_metadata(
 __all__ = [
     "MjlabPolicyMetadata",
     "action_cfg_from_metadata",
-    "joint_mapping_usable",
-    "policy_kwargs_from_metadata",
     "read_mjlab_metadata",
 ]

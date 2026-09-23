@@ -182,44 +182,72 @@ def _enrich_joint_observations(
 
 
 def _hf_driven_joints(
-    meta: Any | None, policy: onnx.ModelProto, actuated: list[str] | None
-) -> tuple[list[str], list[int]] | None:
-    """The joints the network drives, and where the metadata keeps each one's values.
+    meta: Any, width: int | None, actuated: list[str] | None
+) -> tuple[list[str] | None, str | None]:
+    """The joints an mjlab export drives in action order, or why its metadata cannot say.
 
-    Returns the scene's joint names **in action order**, each paired with its index in
-    ``meta.joint_names``; ``None`` when the metadata does not describe this network's
-    actions.
-
-    Action order is *joint* order, whatever ``actuator_names`` suggests:
-    ``JointPositionAction`` resolves it via ``Entity.find_joints_by_actuator_names``,
-    which keeps the actuated joints in the model's joint order. So the metadata's order
-    is already right; it can only list extra joints (mjlab's YAM lists eight against
-    seven actions, two fingers ganged into one gripper).
-
-    ``actuated`` only says which metadata joints this model drives and supplies the
-    model's namespaced spelling, which the runtime resolves against. Its own order is
-    the actuator block's, not the action order (the two differ on the Unitree G1).
+    Returns ``(names, None)`` spelled as this scene's model spells them, or
+    ``(None, reason)``. Action order is *joint* order: ``JointPositionAction`` resolves its
+    term through ``Entity.find_joints_by_actuator_names``, which keeps the actuated joints
+    in the model's joint order. So the metadata's order is right and it can only list
+    extra, unactuated joints (mjlab's YAM ties its second finger to the first), as long as
+    the task has a single action term. ``actuated`` supplies the model's spelling; its own
+    order is the actuator block's, not the action order (the two differ on the Unitree G1).
     """
-    if meta is None or actuated is None:
-        return None
+    if actuated is None:
+        return None, "this scene's model does not drive each actuator through one joint"
     if not meta.joint_names or len(meta.default_joint_pos) != len(meta.joint_names):
-        return None
+        return None, "its joint list and rest pose do not line up"
     # mjlab exports the bare joint name; a scene built from an mjlab task carries it
     # namespaced (`robot/hip`). Match on the tail, return the model's spelling.
     spelling = {name.rsplit("/", 1)[-1]: name for name in actuated}
     if len(spelling) != len(actuated):
-        return None
-    driven = [
-        (spelling[name], index)
-        for index, name in enumerate(meta.joint_names)
-        if name in spelling
-    ]
+        return None, "two joints this scene's model actuates share a bare name"
+    driven = [spelling[name] for name in meta.joint_names if name in spelling]
     if len(driven) != len(actuated):
-        return None
-    width = onnx_output_width(policy)
+        return None, "it does not list every joint this scene's model actuates"
     if width is not None and len(driven) != width:
+        return (
+            None,
+            f"the network has {width} actions for {len(driven)} actuated joints",
+        )
+    if isinstance(meta.action_scale, list) and len(meta.action_scale) != len(driven):
+        return None, (
+            f"it scales {len(meta.action_scale)} actions for {len(driven)} actuated "
+            "joints; fewer means the task has other action terms, whose order the "
+            "metadata does not record"
+        )
+    return driven, None
+
+
+def _metadata_rest_pose(meta: Any, names: list[str]) -> list[float] | None:
+    """``names``' rest pose from an mjlab export, matched on the bare joint name."""
+    if len(meta.default_joint_pos) != len(meta.joint_names):
         return None
-    return [name for name, _ in driven], [index for _, index in driven]
+    pose = dict(zip(meta.joint_names, meta.default_joint_pos))
+    try:
+        return [pose[name.rsplit("/", 1)[-1]] for name in names]
+    except KeyError:
+        return None
+
+
+def _model_rest_pose(
+    model: mujoco.MjModel | None, names: list[str]
+) -> list[float] | None:
+    """``names``' positions in the model's first keyframe (mjlab's ``init_state``)."""
+    if model is None:
+        return None
+    qpos = _get_default_qpos(model)
+    pose: list[float] = []
+    for name in names:
+        joint = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+        if joint < 0 or int(model.jnt_type[joint]) not in (
+            int(mujoco.mjtJoint.mjJNT_HINGE),
+            int(mujoco.mjtJoint.mjJNT_SLIDE),
+        ):
+            return None
+        pose.append(qpos[int(model.jnt_qposadr[joint])])
+    return pose
 
 
 def _default_to_latest(handles: list[PolicyHandle], scene: SceneConfig) -> None:
@@ -681,7 +709,7 @@ class SceneHandle:
         if policy_num_actions is None and not policy_joint_names:
             # A muscle policy has no joint transmission to count, so take the action
             # count from the network's own output width.
-            policy_num_actions = onnx_output_width(policy)
+            policy_num_actions = onnx_output_width(policy, slot_out)
 
         policy_config = PolicyConfig(
             name=name,
@@ -1021,13 +1049,17 @@ class SceneHandle:
         ``.onnx`` and reads the metadata mjlab baked into it, so neither mjlab nor torch
         is needed and ``task_id`` is optional.
 
-        With ``use_metadata`` on, an mjlab export fills what the caller did not:
-        ``policy_joint_names`` and ``default_joint_pos`` per policy, and (only when this
-        scene has no mjlab env config to take them from) the joint-position action term.
-        It is used only when every joint **this scene's own model** actuates is in the
-        metadata and their count matches the network's actions; anything else would
-        misdrive every actuator with nothing at playback to say so, so a mismatch warns
-        and fills nothing.
+        What the caller does not pass is filled as mjlab has it. ``policy_joint_names``
+        are the joints the task's action terms name, in mjlab's action order, when the
+        scene or ``env_cfg`` has those terms. Otherwise, with ``use_metadata`` on, they
+        come from an mjlab export's metadata, and so does the joint-position action term.
+        The metadata lists every joint of the robot, so it is used only when it covers
+        every joint **this scene's own model** actuates, one per action; anything else
+        would misdrive every actuator with nothing at playback to say so, so a mismatch
+        warns and fills nothing. It does not record the order of several action terms,
+        so such a task needs its env config. ``default_joint_pos`` is looked up by joint
+        name in the metadata, else in the scene model's first keyframe, which is mjlab's
+        ``init_state``.
 
         Observation terms are *never* reconstructed: the metadata names them but does
         not carry the functions mjswan traces, so ``observations`` stays the caller's
@@ -1061,8 +1093,9 @@ class SceneHandle:
             terminations: Termination terms applied to every fetched policy.
             in_keys: ONNX input slot table; see :meth:`add_policy`.
             out_keys: ONNX output slot table; see :meth:`add_policy`.
-            policy_joint_names: Overrides what the metadata would supply.
-            default_joint_pos: Overrides what the metadata would supply.
+            policy_joint_names: The joints the actions drive, in the order they come
+                out. Overrides what the action terms or the metadata would supply.
+            default_joint_pos: Their rest pose, in the same order. Overrides the lookup.
             encoder_bias: Per-joint encoder bias; the metadata carries none.
             clip_actions: Raw-action bound. Unset, it is read from ``task_id``'s runner
                 config when mjlab and that task are installed.
@@ -1124,39 +1157,43 @@ class SceneHandle:
         metas = [
             read_mjlab_metadata(model) if use_metadata else None for _, model in fetched
         ]
+        widths = [onnx_output_width(model, out_keys) for _, model in fetched]
         # Compiled once: every fetched policy is checked against the same scene.
         scene_model = _get_scene_model(self._config)
         actuated = actuated_joint_names(scene_model)
-        driven = [
-            _hf_driven_joints(meta, model, actuated)
-            for meta, (_, model) in zip(metas, fetched)
-        ]
 
         if task_id is None:
             task_id = self._config.mjlab_task_id
         observations, commands, actions, terminations, events = self._derive_term_sets(
             env_cfg, observations, commands, actions, terminations
         )
-        # mjlab attaches export metadata from its velocity, manipulation and tracking
-        # runners only (a cartpole export carries none), so fall back on the joints the
-        # task's action terms name. Adapted on a copy: `_resolve_mdp` adapts the shared
-        # MDP itself, later and once.
+        # mjlab's action order is its action terms', one after another, and the metadata
+        # records it only when there is one term, so the terms answer first. Adapted on
+        # a copy: `_resolve_mdp` adapts the shared MDP itself, later and once.
         adapted_actions = adapt_actions(actions)
-        fallback_joint_names = (
+        term_joint_names = (
             None
             if policy_joint_names is not None
             else action_term_joint_names(adapted_actions, scene_model)
         )
         first_meta = metas[0] if metas else None
-        if actions is None and first_meta is not None and driven[0] is not None:
+        if actions is None and first_meta is not None:
             # `_derive_term_sets` has run, so neither the caller nor an env config gave
-            # actions. `driven` guarantees the scale lines up with the actions.
-            actions = (
-                action_cfg_from_metadata(
-                    first_meta, action_width=onnx_output_width(fetched[0][1])
+            # actions, and the export's joint-position term is all there is.
+            names, reason = _hf_driven_joints(first_meta, widths[0], actuated)
+            if names is not None:
+                actions = (
+                    action_cfg_from_metadata(first_meta, num_actions=len(names)) or None
                 )
-                or None
-            )
+            elif policy_joint_names is not None and config_path is None:
+                # Without the caller's names, `_hf_joint_kwargs` reports this instead.
+                warnings.warn(
+                    f"Policy {fetched[0][0]!r} from {repo_id!r} carries mjlab metadata, "
+                    f"but {reason}, so its joint-position action term was not taken "
+                    "from it and the policy has no action term. Pass actions.",
+                    category=RuntimeWarning,
+                    stacklevel=2,
+                )
 
         # One MDP for all fetched policies: they describe one task, so share its graphs.
         shared_mdp = MdpConfig(
@@ -1168,16 +1205,17 @@ class SceneHandle:
         )
 
         handles: list[PolicyHandle] = []
-        for (policy_name, model), meta, policy_driven in zip(fetched, metas, driven):
+        for (policy_name, model), meta, width in zip(fetched, metas, widths):
             joint_kwargs = self._hf_joint_kwargs(
                 meta,
-                model,
-                policy_driven,
+                width,
+                actuated=actuated,
+                term_joint_names=term_joint_names,
+                scene_model=scene_model,
                 policy_name=policy_name,
                 repo_id=repo_id,
                 policy_joint_names=policy_joint_names,
                 default_joint_pos=default_joint_pos,
-                fallback_joint_names=fallback_joint_names,
                 drives_joints=drives_joints(adapted_actions),
                 has_sidecar=config_path is not None,
             )
@@ -1205,91 +1243,79 @@ class SceneHandle:
     @staticmethod
     def _hf_joint_kwargs(
         meta: Any | None,
-        policy: onnx.ModelProto,
-        driven: tuple[list[str], list[int]] | None,
+        width: int | None,
         *,
+        actuated: list[str] | None,
+        term_joint_names: list[str] | None,
+        scene_model: mujoco.MjModel | None,
         policy_name: str,
         repo_id: str,
         policy_joint_names: list[str] | None,
         default_joint_pos: list[float] | None,
-        fallback_joint_names: list[str] | None = None,
-        drives_joints: bool = False,
-        has_sidecar: bool = False,
+        drives_joints: bool,
+        has_sidecar: bool,
     ) -> dict[str, Any]:
-        """``policy_joint_names`` / ``default_joint_pos`` for one policy.
+        """``policy_joint_names`` / ``default_joint_pos`` for one policy, as mjlab has them.
 
-        Precedence: the caller's values, then the checkpoint's metadata, then
-        *fallback_joint_names* for an export without metadata. Metadata that does not
-        line up with the scene warns, or nothing would say why the fetch filled nothing.
+        The names are the caller's, else the joints the task's action terms name, else
+        the export's metadata. The rest pose is the caller's, else looked up by joint
+        name: in the metadata, then in the scene model's first keyframe, which is
+        mjlab's ``init_state``. Names that cannot be filled warn, or the policy would
+        drive the wrong actuators, or none, with nothing at playback to say so.
         """
-        explicit = {
-            key: value
-            for key, value in (
-                ("policy_joint_names", policy_joint_names),
-                ("default_joint_pos", default_joint_pos),
-            )
-            if value is not None
-        }
-        if len(explicit) == 2:
-            return explicit
-
-        if meta is None:
-            if "policy_joint_names" in explicit:
-                return explicit
-            if fallback_joint_names is None:
-                # Warn here: the browser skips an action term it cannot map with only a
-                # `console.warn`, which release bundles strip. Spared: a policy with no
-                # joint action term, and a sidecar, which may still carry the names.
-                if drives_joints and not has_sidecar:
-                    warnings.warn(
-                        f"Policy {policy_name!r} from {repo_id!r} carries no mjlab "
-                        "metadata, and this scene's action terms do not say which "
-                        "joints it drives, so policy_joint_names is unset and the "
-                        "browser will write no control at all. mjlab attaches that "
-                        "metadata from its velocity, manipulation and tracking runners "
-                        "only. Pass policy_joint_names, in the order the actions come "
-                        "out.",
-                        category=RuntimeWarning,
-                        stacklevel=3,
-                    )
-                return explicit
-            # A list off the action width would misdrive silently, as with metadata.
-            width = onnx_output_width(policy)
-            if width is not None and len(fallback_joint_names) != width:
+        names = policy_joint_names
+        if names is None and term_joint_names is not None:
+            if width is None or len(term_joint_names) == width:
+                names = list(term_joint_names)
+            else:
                 warnings.warn(
-                    f"Policy {policy_name!r} from {repo_id!r} carries no mjlab metadata, "
-                    f"and the task's action terms name {len(fallback_joint_names)} joints "
-                    f"against the network's {width} actions, so policy_joint_names was "
-                    "left unset. Pass it explicitly, in the order the actions come out.",
+                    f"Policy {policy_name!r} from {repo_id!r} has {width} actions, but "
+                    f"the task's action terms name {len(term_joint_names)} joints, so "
+                    "policy_joint_names was left unset. Pass it explicitly, in the "
+                    "order the actions come out.",
                     category=RuntimeWarning,
                     stacklevel=3,
                 )
-                return explicit
-            return {"policy_joint_names": list(fallback_joint_names), **explicit}
-
-        if driven is None:
-            if meta.joint_names:
+        elif names is None and meta is not None:
+            names, reason = _hf_driven_joints(meta, width, actuated)
+            # Spared: a sidecar, which may still carry the names.
+            if names is None and not has_sidecar:
                 warnings.warn(
-                    f"Policy {policy_name!r} from {repo_id!r} carries mjlab metadata "
-                    f"for {len(meta.joint_names)} joints ({meta.joint_names[:4]}…), of "
-                    "which this scene's model actuates a different set than the "
-                    f"network's {onnx_output_width(policy)} actions can drive. A "
-                    "metadata list longer than the action list would have been fine ("
-                    "an unactuated joint just drops out), but this is not that, so "
-                    "policy_joint_names / default_joint_pos were left unset. Pass them "
+                    f"Policy {policy_name!r} from {repo_id!r} carries mjlab metadata, "
+                    f"but {reason}, so policy_joint_names, default_joint_pos and the "
+                    "joint-position action term were not taken from it. Pass them "
                     "explicitly, in the order the policy's actions come out.",
                     category=RuntimeWarning,
                     stacklevel=3,
                 )
-            return explicit
+        elif names is None and drives_joints and not has_sidecar:
+            # Warn here: the browser skips an action term it cannot map with only a
+            # `console.warn`, which release bundles strip. Spared: a policy with no
+            # joint action term, and a sidecar, which may still carry the names.
+            warnings.warn(
+                f"Policy {policy_name!r} from {repo_id!r} carries no mjlab metadata, "
+                "and this scene's action terms do not say which joints it drives, so "
+                "policy_joint_names is unset and the browser will write no control at "
+                "all. mjlab attaches that metadata from its velocity, manipulation and "
+                "tracking runners only. Pass policy_joint_names, in the order the "
+                "actions come out.",
+                category=RuntimeWarning,
+                stacklevel=3,
+            )
 
-        names, order = driven
-        derived = {
-            "policy_joint_names": list(names),
-            # `order` maps each action to its entry in the metadata's per-joint pose.
-            "default_joint_pos": [meta.default_joint_pos[index] for index in order],
+        pose = default_joint_pos
+        if names is not None and pose is None and meta is not None:
+            pose = _metadata_rest_pose(meta, names)
+        if names is not None and pose is None:
+            pose = _model_rest_pose(scene_model, names)
+        return {
+            key: value
+            for key, value in (
+                ("policy_joint_names", names),
+                ("default_joint_pos", pose),
+            )
+            if value is not None
         }
-        return {**derived, **explicit}
 
     def actuated_joint_names(self) -> list[str] | None:
         """The joint each of this scene's actuators drives, in **actuator** order.

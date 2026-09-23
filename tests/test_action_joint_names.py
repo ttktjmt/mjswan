@@ -200,6 +200,26 @@ class TestMetadatalessExport:
 
         assert policy._config.policy_joint_names == ["cartpole/slider"]
 
+    def test_the_rest_pose_is_the_first_keyframe(self, fake_hub):
+        """mjlab writes its ``init_state`` there, and offsets each action from it."""
+        builder = mjswan.Builder()
+        keyed = builder.add_project(name="T").add_scene(
+            name="Cartpole",
+            spec=mujoco.MjSpec.from_string(
+                CARTPOLE_XML.replace(
+                    "</mujoco>",
+                    '<keyframe><key name="init_state" qpos="0.25 0.1"/></keyframe>\n'
+                    "</mujoco>",
+                )
+            ),
+            control_dt=0.05,
+        )
+        fake_hub("policy.onnx", action_width=1)
+
+        (policy,) = keyed.add_policy_hf("my-org/cartpole", actions=CARTPOLE_ACTIONS)
+
+        assert policy._config.default_joint_pos == [0.25]
+
     def test_a_count_the_actions_cannot_drive_is_refused_and_reported(
         self, cartpole, fake_hub
     ):
