@@ -44,9 +44,8 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Natural Language :: English",
 ]
-# The pipeline: what turning a MuJoCo model into a browser application needs, whatever
-# the assets came from. Where they come from is an extra;see `wandb` / `hf` / `mjlab`
-# below, one per module of `mjswan/source/` and `mjswan/mjlab/`.
+# What turning a MuJoCo model into a browser app needs, whatever the assets came from.
+# Each asset source is an extra below: `wandb`, `hf`, `mjlab`.
 dependencies = [
     "mujoco==3.11.0",
     "nodeenv>=1.9.1",
@@ -56,9 +55,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# --- Sources. One per backend, because that is how the code is laid out (ADR 0008):
-# `source/wandb.py` and `source/hf.py` import their client inside a function, and
-# `mjlab/` is a soft dependency throughout. `import mjswan` touches none of them.
+# --- Sources, one per backend (ADR 0008). Each is imported inside a function, so
+# `import mjswan` needs none of them.
 wandb = [
     "wandb>=0.28.2",
 ]
@@ -66,15 +64,14 @@ hf = [
     "huggingface-hub>=1.32.0",
 ]
 # The PT->ONNX conversion path: `add_scene_mjlab`, `add_policy_wandb`'s checkpoint
-# branch, and term tracing. Kept out of `examples` so that "I convert mjlab
-# checkpoints" and "I run the bundled demos" can be asked for separately.
+# branch, and term tracing.
 mjlab = [
     "mjlab==1.6.0",
     "torch>=2.9.1",
 ]
 
-# --- Tooling. What `make check` runs, and nothing else: the ruff workflow installs
-# this alone, so putting a source backend here would make a linter job download torch.
+# --- Tooling: only what `make check` runs. The ruff workflow installs this alone, so
+# a source backend here would make the lint job download torch.
 check = [
     # Pinned exactly, not floored. CI installs this fresh, so a floor resolves
     # to whatever ruff is newest that day — and a ruff release that stabilizes a
@@ -90,19 +87,16 @@ check = [
     "pyright>=1.1.407",
 ]
 
-# What a contributor installs: every source, so the test suite actually runs. Without
-# `mjlab` here, 33 tests gate themselves off with `importorskip` and no CI job covers
-# them: `parity.yml` names five files and reaches only the rest.
+# What a contributor and the pytest workflow install: every source, or the tests that
+# `importorskip` one silently skip.
 dev = [
     "mjswan[check,wandb,hf,mjlab]",
     "pytest>=9.0.2",
     "pre-commit>=3.3.2",
 ]
 
-# What the four bundled scripts and two notebooks need on top of the sources they fetch
-# from. MyoSuite, Playground, robot_descriptions and gymnasium are gone with the examples
-# that imported them, which now live in mjswan_playground and pin their own. `wandb` stays
-# for `examples/colab/anymal_c_velocity.ipynb`, which trains and reads back a run.
+# What `examples/` needs. `wandb` is for `examples/colab/anymal_c_velocity.ipynb`,
+# which trains and reads back a run.
 examples = [
     "mjswan[wandb,hf,mjlab]",
     "onnxruntime>=1.21.0",
@@ -116,10 +110,9 @@ mjswan = "mjswan.cli:app"
 
 [tool.pyright]
 extraPaths = []
-# The package. `examples/` is deliberately out: those scripts are written against
-# third-party APIs (mjlab and torch), and checking them meant walking that dependency
-# graph (minutes per run) for diagnostics about code that is not shipped. `**/.dep`
-# keeps a repo an example clones at run time out of any glob.
+# The package only: checking `examples/` means walking mjlab's and torch's dependency
+# graph (minutes per run) for code that is not shipped. `**/.dep` keeps a repo an
+# example clones at run time out of any glob.
 include = ["src/mjswan"]
 exclude = ["**/.dep", "**/node_modules", "**/dist", "./src/mjswan/template/.nodeenv", "./build"]
 # `from torch import arange` and its siblings: torch's stubs re-export without `as`,

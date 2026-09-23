@@ -176,7 +176,7 @@ def _group_is_fusable(group: ObservationGroupCfg) -> bool:
     for term_cfg in group.terms.values():
         if isinstance(term_cfg.func, ObservationBinding):
             return False
-        # Sparse offsets disqualify at any length: no fused output holds a delayed frame.
+        # Sparse offsets always disqualify: no fused output holds a delayed frame.
         if term_cfg.history_steps or _effective_history(group, term_cfg) > 1:
             return False
     return True
@@ -232,7 +232,6 @@ def _fused_group_entry(
     *,
     scope: str | None = None,
 ) -> dict[str, Any]:
-    """Trace the group as one graph and return the fused config entry."""
     from ...compile.group import GroupTermSpec, trace_observation_group
     from ...compile.slot import slots_json
 

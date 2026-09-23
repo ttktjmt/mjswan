@@ -1,5 +1,3 @@
-"""Tests for mjswan.mjlab.sim."""
-
 from __future__ import annotations
 
 import sys

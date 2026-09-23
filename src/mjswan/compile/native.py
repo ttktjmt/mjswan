@@ -1,24 +1,21 @@
 """Terms the runtime evaluates itself, so there is nothing to trace.
 
 Named by function: mjlab's ``last_action`` and ``generated_commands`` read env-level
-state the browser already holds every frame, and ``time_out`` compares a clock the
-runtime owns. Each becomes a marker entry carrying the selector it needs.
+state the browser already holds every frame, and ``time_out`` compares
+``episode_length_buf``, a clock the runtime owns, against the horizon. Each becomes a
+marker entry carrying the selector it needs.
 """
 
 from __future__ import annotations
 
 from typing import Any, Callable
 
-# mjlab funcs reading env-level state rather than `entity.data`: nothing to trace,
-# since the runtime already holds these values every frame.
 NATIVE_OBSERVATION_FUNCS: dict[str, str] = {
     "last_action": "prev_action",
     "generated_commands": "command",
 }
 
 
-# mjlab's `time_out` compares `episode_length_buf` against the horizon; the runtime
-# owns that clock, so the term is native by name, as the observations above are.
 NATIVE_TERMINATION_FUNCS: frozenset[str] = frozenset({"time_out"})
 
 
@@ -34,12 +31,12 @@ def is_native_termination(func: Any) -> bool:
 def native_observation_entry(
     name: str, func: Callable[..., Any], params: dict[str, Any], env: Any
 ) -> dict[str, Any] | None:
-    """The ``native`` marker for an observation the runtime already holds, else ``None``.
+    """The ``native`` marker for an observation the runtime holds, else ``None``.
 
-    Carries the kind and whichever selector it needs; the caller adds ``size`` (and, when
-    fusing, the graph ``input`` name) since the two paths resolve widths differently.
-    ``action_offset`` is resolved here rather than beside the caller's width probe, whose
-    swallowed failure would lose it.
+    Carries the kind and whichever selector it needs; the caller adds ``size`` (and,
+    when fusing, the graph ``input`` name) since the two paths resolve widths
+    differently. ``action_offset`` is resolved here, outside the caller's width probe:
+    that probe swallows exceptions, and a bad ``action_name`` must raise.
     """
     kind = _native_observation_kind(func)
     if kind is None:

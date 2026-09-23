@@ -104,12 +104,11 @@ def onnx_output_width(model: onnx.ModelProto) -> int | None:
 
 
 def actuated_joint_names(model: mujoco.MjModel | None) -> list[str] | None:
-    """The joint each actuator drives, in actuator order, the order actions come in.
+    """The joint each actuator drives, in actuator order.
 
     ``None`` when the model does not give one unambiguously: no actuators, a
     transmission that is not a joint (tendon, site, body), an unnamed joint, or two
-    actuators on the same joint. Each of those makes "the i-th action drives this joint"
-    untrue, and a wrong answer here is silent at playback.
+    actuators on the same joint. A wrong answer would be silent at playback.
     """
     if model is None or model.nu == 0:
         return None
@@ -129,9 +128,9 @@ def actuated_joint_names(model: mujoco.MjModel | None) -> list[str] | None:
 def actuated_joints_in_joint_order(model: mujoco.MjModel | None) -> list[str] | None:
     """Every joint an actuator drives, in the model's own **joint** order.
 
-    Not actuator order. mjlab resolves an action term through
-    ``Entity.find_joints_by_actuator_names``, which narrows ``joint_names`` to the
-    actuated ones and keeps their order, so this is the order actions come out in.
+    mjlab resolves an action term through ``Entity.find_joints_by_actuator_names``,
+    which narrows ``joint_names`` to the actuated ones and keeps their order, so this is
+    the order actions come out in.
 
     ``None`` on the same terms as :func:`actuated_joint_names`, which decides them.
     """
@@ -163,14 +162,13 @@ def action_term_joint_names(
 ) -> list[str] | None:
     """The joints an adapted action-term set drives, in the order the actions come out.
 
-    What an mjlab export's ``joint_names`` would have said, recovered from the task's own
-    action terms instead. ``actuator_names`` holds *joint* patterns however it is named
-    (ADR 0006; ``JointPositionAction`` matches them against joint names), so each term's
+    What an mjlab export's ``joint_names`` would say, recovered from the action terms.
+    ``actuator_names`` holds *joint* patterns despite its name (ADR 0006;
+    ``JointPositionAction`` matches them against joint names), so each term's patterns
     are matched against the actuated joints in joint order, term by term.
 
     ``None`` unless every term answers: a muscle term names actuators rather than joints,
-    a pattern matching nothing has no answer, and two terms claiming one joint make "the
-    i-th action drives this joint" untrue. A wrong answer here is silent at playback.
+    a pattern may match nothing, and two terms may claim one joint.
     """
     joints = actuated_joints_in_joint_order(model)
     if not actions or joints is None:
@@ -482,18 +480,16 @@ class PolicyHandle:
     ) -> MotionHandle:
         """Download a ``.npz`` reference motion from the Hugging Face Hub.
 
-        The Hub counterpart of :meth:`add_motion_wandb`, which finds its clip by walking
-        a run's artifacts; here the clip is named outright.
+        The Hub counterpart of :meth:`add_motion_wandb`, with the clip named by path.
 
         Args:
             repo_id: Hub repository, ``"<owner>/<name>"``.
             filename: Path to the ``.npz`` within the repository.
             name: Display name. Defaults to the file's stem.
             revision: Branch, tag or commit. ``None`` takes the default branch.
-            repo_type: ``"dataset"`` by default: a clip is data, and the retargeted
-                sets published so far are dataset repositories.
-            token: Hub token for a gated or private repository. Several public motion
-                datasets are gated behind an accepted licence, which needs one.
+            repo_type: ``"dataset"`` by default, as motion clips are usually published.
+            token: Hub token for a gated or private repository (several public motion
+                datasets are gated behind a license agreement).
             fps: Playback frame rate.
             anchor_body_name: Reference anchor body for the tracking observations.
             body_names: Ordered body names the clip covers.

@@ -1,11 +1,10 @@
 """Simple mjswan Demo
 
 The shortest thing that still walks: one mjlab task, one trained policy, one browser
-window. This is what `mjswan demo` runs, so it is also the first mjswan most people see.
+window. `mjswan demo simple` runs it.
 
-Everything comes from somewhere else (the model from mjlab, the policy from the
-Hugging Face Hub), so there is nothing to download by hand and nothing to configure.
-`examples/demo/main.py` is the same idea at full size.
+The model comes from mjlab and the policy from the Hugging Face Hub, so there is nothing
+to download by hand. `examples/demo/main.py` is the same idea at full size.
 
 Needs `pip install 'mjswan[hf,mjlab]'`.
 """
@@ -21,11 +20,7 @@ TASK_ID = "Mjlab-Velocity-Flat-Unitree-G1"
 
 
 def setup_builder() -> mjswan.Builder:
-    """Set up and return the builder, configured but not built.
-
-    Returns:
-        Configured Builder instance ready to be built.
-    """
+    """Return the configured builder, not yet built."""
     builder = mjswan.Builder(base_path=os.getenv("MJSWAN_BASE_PATH", "/"))
     project = builder.add_project(name="mjswan Demo")
 
@@ -43,8 +38,8 @@ def setup_builder() -> mjswan.Builder:
         )
     )
 
-    # The last checkpoint of the mirrored run. `main.py` adds all of them so you can
-    # watch training progress; one is enough to see the robot walk.
+    # The final checkpoint. `main.py` adds all of them so you can watch training
+    # progress; one is enough to see the robot walk.
     prefix = f"checkpoints/{TASK_ID.lower()}/"
     checkpoints = sorted(
         (name for name in hf.list_repo_onnx(HF_REPO) if name.startswith(prefix)),

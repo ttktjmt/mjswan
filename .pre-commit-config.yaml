@@ -31,9 +31,6 @@ repos:
         entry: (?i)(_auth|_password|username|token)
         files: (^|/)\.npmrc$
 
-      # `examples/` reached 116 MB of vendored meshes and policies before anyone
-      # noticed (#128). Writing the rule down did not hold; this does. Assets belong
-      # upstream, on the Hub, or in a gitignored `.cache/` the script fills at run time.
       - id: no-binaries-in-examples
         name: no binary assets under examples/
         language: fail

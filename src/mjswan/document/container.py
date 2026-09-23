@@ -1,12 +1,9 @@
 """The ``.swn`` container: a build's data as one file (ADR 0006 §8).
 
-A build is a directory, ``manifest.json`` over ``<project-id>/<scene-id>/``, and that
-directory is the document. Packaging it is a ZIP whose entries are the tree's paths, so
-unpacking one gives back exactly what a build wrote and nothing is described twice.
-
-In go the manifest and every file under a project directory. The engine
-(``index.html``, ``assets/*.js``, WASM) and the author's custom-term module do not: an
-app is the engine plus the expanded tree, and mjswan Cloud supplies its own engine.
+A ZIP whose entries are the build tree's own paths, so unpacking one gives back exactly
+what the build wrote. It holds the manifest and every file under a project directory,
+never the engine (``index.html``, ``assets/*.js``, WASM) or the author's custom-term
+module: an app is the engine plus the expanded tree, and mjswan Cloud brings its own.
 """
 
 from __future__ import annotations

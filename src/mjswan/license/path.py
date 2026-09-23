@@ -18,7 +18,6 @@ from typing import Literal
 #: The platform refuses a license or notice file larger than this.
 LICENSE_FILE_MAX_BYTES: int = 64 * 1024
 
-#: The Content-Type a license file is uploaded with.
 LICENSE_CONTENT_TYPE: str = "text/plain; charset=utf-8"
 
 _BASENAME = re.compile(r"^(LICENSE|NOTICE)(?:\.([A-Za-z0-9_-]{1,64}))?$")

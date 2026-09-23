@@ -1,8 +1,8 @@
 """The mjlab side of mjswan: mjlab's objects and output formats, in mjswan's terms.
 
-Not the real ``mjlab``. That is imported lazily, inside the functions that need it, so a
-build that never touches an mjlab task never pays for it, and :mod:`.onnx_meta` needs it
-not at all. Three kinds of things live here:
+Not the real ``mjlab``, which is imported lazily inside the functions that need it, so a
+build that never touches an mjlab task never pays for it (:mod:`.bindings` imports it
+eagerly, so only an explicit import loads it). Three kinds of things live here:
 
 - adapters, one per manager kind (:mod:`.observation`, :mod:`.termination`,
   :mod:`.command`, :mod:`.action`, :mod:`.event`): an env config's term sets become
@@ -13,8 +13,8 @@ not at all. Three kinds of things live here:
   (:mod:`.sim`), the viser GUI recorded as a control-panel descriptor (:mod:`.gui`), and
   the metadata mjlab bakes into an exported ``.onnx`` (:mod:`.onnx_meta`).
 
-``mjswan.managers`` and ``mjswan.envs.mdp`` are different: they *mirror* mjlab's import
-paths rather than translate its objects, and stay where mjlab has them.
+``mjswan.managers`` and ``mjswan.envs.mdp`` instead *mirror* mjlab's import paths, so
+they stay where mjlab has them.
 """
 
 from .action import adapt_actions, resolve_action_scales, resolve_pd_gains

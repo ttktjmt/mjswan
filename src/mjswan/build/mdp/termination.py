@@ -23,7 +23,6 @@ def serialize_termination(
     *,
     scope: str | None = None,
 ) -> dict[str, Any] | None:
-    """Serialize one termination term."""
     from ...compile import trace_term
     from ...compile.slot import slots_json
     from ...compile.term import ConstantTerm
@@ -99,7 +98,7 @@ def serialize_terminations(
     *,
     scope: str | None = None,
 ) -> dict[str, Any]:
-    """Serialize a policy's terminations, fusing the traced ones into one graph.
+    """Serialize an MDP's terminations, fusing two or more traced ones into one graph.
 
     Native markers (`time_out`) and `*Binding` terms stay as their own entries; the
     fused graph joins them under ``__fused__``.

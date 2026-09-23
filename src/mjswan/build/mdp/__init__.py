@@ -1,14 +1,13 @@
-"""The MDP half of a scene's manifest entry: one ``.onnx`` per traced term, and the
-JSON that names it.
+"""The MDP half of a scene's manifest entry: its terms' ``.onnx`` graphs, and the JSON
+that names them.
 
 Each module here serializes one kind of term. A plain-callable term body is traced
 against the scene's live env by :mod:`mjswan.compile`, written under
 ``<scene>/mdp/<mdp-id>/`` by :mod:`.graph`, and returned as the manifest-shaped entry
-the runtime consumes; a ``*Binding``-typed term (a custom TS class) keeps serializing
-through its own ``to_dict()``. Action terms trace nothing and only merge.
+the runtime consumes; a ``*Binding``-typed term (a custom TS class) serializes through
+its own ``to_dict()``. Action terms trace nothing and only merge.
 
-Called from :mod:`mjswan.build.manifest` once per MDP, after that scene's trace env
-and directory are both known.
+Called from :mod:`mjswan.build.manifest` once per MDP.
 """
 
 from __future__ import annotations

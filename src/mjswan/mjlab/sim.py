@@ -1,8 +1,7 @@
 """mjlab's simulation options, applied to the ``MjSpec`` a scene is built from.
 
-mjlab keeps its MuJoCo flags on ``SimulationCfg.mujoco`` and applies them to the compiled
-model; the browser compiles the spec itself, so the same flags are written into the spec
-here.
+mjlab applies the MuJoCo flags on ``SimulationCfg.mujoco`` to the compiled model; the
+browser compiles the spec itself, so the same flags are written into the spec here.
 """
 
 from __future__ import annotations

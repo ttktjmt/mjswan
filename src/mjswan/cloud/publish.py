@@ -352,8 +352,6 @@ def resolve_token(token: str | None) -> str:
     if resolved:
         return resolved
 
-    # Fall back to a stored `mjswan login` session (imported lazily so publish
-    # has no hard dependency on the auth flow).
     from . import auth
 
     try:
@@ -403,7 +401,8 @@ def publish_dist(
         title: Simulation title. Defaults to the first project's name.
         description: Optional description.
         tags: Optional list of tags.
-        token: Supabase access token. Falls back to ``$MJSWAN_TOKEN``.
+        token: Supabase access token. Falls back to ``$MJSWAN_TOKEN``, then the
+            ``mjswan login`` session.
         api_base: Cloud API base URL. Falls back to ``$MJSWAN_API_BASE``, then
             ``https://api.mjswan.com``.
         transport: HTTP transport (injectable for tests).

@@ -1,6 +1,6 @@
 """mjswan Cloud: signing in (``mjswan login``) and publishing a built document.
 
-Knows the document format and the license rules; knows nothing of how a build is made.
+Reads ``document/`` and ``license/``, never ``build/`` (ADR 0008 §1).
 """
 
 from .auth import (

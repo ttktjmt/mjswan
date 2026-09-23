@@ -51,23 +51,21 @@ COMMAND_TASKS = [
 
 @pytest.fixture(scope="module", autouse=True)
 def _registrations() -> None:
-    """`LiftingCommandCfg`'s traced body lives author-side; load it before resolving.
+    """`mjswan.mjlab.bindings` registers `LiftingCommandCfg`; load it before resolving.
 
-    Without it the adapter raises for an unregistered class: the footgun that cost a
-    spinkick policy its RSI jitter. `UniformVelocityCommandCfg` needs no import: mjswan
-    binds that one itself.
+    Without it the adapter raises for an unregistered class. `UniformVelocityCommandCfg`
+    needs no import: mjswan binds that one itself.
     """
     pytest.importorskip("mjswan.mjlab.bindings")
 
 
 def _lift_update_command(self: Any, env_ids: Any = None) -> None:
-    """A port's rewrite of mjlab 1.6's ``LiftingCommand._update_command``.
+    """``LiftingCommand._update_command`` without its live-sim refresh.
 
-    1.6 refreshes the live sim there after a timer-expiry teleport, which the tracer
-    refuses to bake. The command is ``_resample_command``'s alone, so dropping the
-    refresh changes no number, as this file's own comparison shows.
-    `examples/demo/main.py` registers this rewrite as a `trace_override`; the engine
-    binding this file resolves carries none, so the rewrite is supplied here too.
+    mjlab forwards the sim there after a timer-expiry teleport, which the tracer
+    refuses. The command is ``_resample_command``'s alone, so dropping the refresh
+    changes no number. The engine binding carries no such override
+    (`examples/demo/main.py` registers its own), so it is applied here.
     """
     del env_ids
 

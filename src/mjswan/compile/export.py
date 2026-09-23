@@ -82,8 +82,8 @@ def _narrow_slots(slots: dict[SlotKey, torch.Tensor], sim_rows: SimRows) -> None
 def _narrow_inputs(
     dynamic: dict[SlotKey, torch.Tensor], sims: Sequence[_RecordingSimData]
 ) -> SimRows:
-    """Narrow each sim example input to the rows the reads touched; see
-    :func:`_merge_narrowing`. Returns what was narrowed, for the module and the export."""
+    """Narrow each sim example input to the rows the reads touched (see
+    :func:`_merge_narrowing`); returns what was narrowed, for the module and export."""
     sim_rows = _merge_narrowing(sims)
     for key, (rows, _size) in sim_rows.items():
         dynamic[key] = dynamic[key][:, rows]
@@ -104,9 +104,9 @@ def _classify_slots(
 ) -> bool:
     """Split a recorded read log into graph inputs and baked constants.
 
-    Sensor, command-state and raw sim-data reads are live state by definition; an entity
-    data field is dynamic unless it is a model-derived constant. Returns whether *this* log
-    contributed a dynamic slot, which a group's caller needs per term.
+    Sensor, command-state and raw sim-data reads are live state by definition; an
+    entity data field is dynamic unless it is a model-derived constant. Returns whether
+    *this* log contributed a dynamic slot, which a group's caller needs per term.
     """
     saw_dynamic = False
     for key, value in log:

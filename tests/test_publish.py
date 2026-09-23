@@ -1,6 +1,6 @@
 """Tests for mjswan Cloud publishing (mjswan.cloud.publish + app.publish + CLI).
 
-L1 — pure Python, no MuJoCo/ONNX/network required (safe for pre-commit).
+Layer: L1 (pure Python, no MuJoCo/ONNX/network required; safe for pre-commit).
 The HTTP transport is faked, so no real requests are made.
 """
 

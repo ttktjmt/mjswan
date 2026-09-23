@@ -1,11 +1,10 @@
 """Command terms mjswan supplies, and its bindings for mjlab's.
 
-:func:`ui_command` and :func:`velocity_command` are the operator-driven presets: nothing
-resamples, the value is what the control panel says. The rest binds mjlab's command
-classes by cfg-class name. ``UniformVelocityCommandCfg`` is traced through a
-trace-friendly rewrite of its body; ``MotionCommandCfg`` stays native
-(``TrackingCommand``), with only its reset jitter traced, from an author-side
-registration.
+:func:`ui_command` and :func:`velocity_command` are operator-driven presets: nothing
+resamples, the value is what the control panel says. mjlab's command classes are bound
+by cfg-class name: ``UniformVelocityCommandCfg`` is traced through a trace-friendly
+rewrite of its body, and ``MotionCommandCfg`` stays native (``TrackingCommand``) with
+only its reset jitter traced, from an author-side registration.
 
 A command is a class, not a function, and mjlab's use constructs the tracer cannot
 follow: ``Tensor.uniform_`` draws its RNG spy cannot see, and per-``env_ids`` assignment
@@ -148,9 +147,9 @@ def _resample_velocity_command(self: Any, env_ids: Any) -> None:
 def _update_velocity_command(self: Any, env_ids: Any = None) -> None:
     """``UniformVelocityCommand._update_command``, as one graph at ``N=1``.
 
-    Heading tracking, then the world-frame rotation, then standing zeroed last — the
-    order mjlab applies them in. ``env_ids`` is mjlab 1.6's partial-reset scope, which
-    a single-env graph has nothing to narrow.
+    In mjlab's order: heading tracking, then the world-frame rotation, then standing
+    zeroed last. ``env_ids`` is mjlab's partial-reset scope, which a single-env graph
+    has nothing to narrow.
     """
     cfg = self.cfg
     heading_w = self.robot.data.heading_w
@@ -218,8 +217,7 @@ register_command(
 )
 
 
-# --- MotionCommand (tracking tasks): the clip lookup stays native, the RSI jitter is
-# traced author-side. ---
+# --- MotionCommand (mjlab's tracking tasks) ---
 
 
 def serialize_motion_command(cfg: Any) -> dict[str, Any]:
@@ -245,18 +243,18 @@ def serialize_motion_command(cfg: Any) -> dict[str, Any]:
 
 
 def _motion_rsi_unregistered(cfg: Any) -> None:
-    """Stand-in `reset_trace` that says the real one is not loaded.
+    """Stand-in ``reset_trace`` that warns the real one is not loaded.
 
     The reference-state-initialization jitter traces from mjlab's own helpers, so its
-    body lives in `mjswan.mjlab.bindings`, which nothing imports for you, keeping mjlab a soft
-    dependency here. Without it `TrackingCommand` starts every episode
-    unjittered, which this warns about. Always returns `None`.
+    body lives in ``mjswan.mjlab.bindings``, which is not auto-imported so that mjlab
+    stays a soft dependency. Without it ``TrackingCommand`` starts every episode
+    unjittered. Always returns ``None``.
     """
     pose_range = dict(getattr(cfg, "pose_range", None) or {})
     velocity_range = dict(getattr(cfg, "velocity_range", None) or {})
     joint_position_range = tuple(getattr(cfg, "joint_position_range", (0.0, 0.0)))
     if not pose_range and not velocity_range and joint_position_range == (0.0, 0.0):
-        return None  # Nothing to jitter; the plain binding is the whole story.
+        return None  # Nothing to jitter, so nothing to warn about.
     warnings.warn(
         "MotionCommandCfg declares reference-state-initialization jitter "
         f"(pose_range={pose_range or None}, velocity_range={velocity_range or None}, "
@@ -271,8 +269,8 @@ def _motion_rsi_unregistered(cfg: Any) -> None:
     return None
 
 
-# Bridges mjlab's MotionCommandCfg to TrackingCommand. `reset_trace` only diagnoses its
-# own absence; the real graph comes from an author-side re-registration.
+# `reset_trace` only warns of its own absence; the real graph comes from an author-side
+# re-registration (`mjswan.mjlab.bindings` for mjlab's own tasks).
 register_command(
     "MotionCommandCfg",
     CommandBinding(

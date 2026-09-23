@@ -1,9 +1,9 @@
 """mjlab action terms as mjswan's.
 
-Actions stay a fixed, native, non-traced set (ADR 0005 §7): ``type(cfg).__name__`` is
-looked up on ``mjswan.envs.mdp.actions`` and the dataclass fields are copied. The regex
-scale/offset patterns and the PD gains mjlab keeps on the actuator config are resolved
-here against the policy's joint names, since the browser looks joints up by exact name.
+Actions stay a fixed, native, non-traced set (ADR 0005 §7), matched by class name. The
+regex scale/offset patterns, and the PD gains mjlab keeps on the actuator config, are
+resolved against the policy's joint names, since the browser looks joints up by exact
+name.
 """
 
 from __future__ import annotations
@@ -30,7 +30,6 @@ _ACTION_CLASS_ALIASES: dict[str, str] = {
 
 
 def _mjswan_action_class(term: Any) -> type[MjswanActionTermCfg] | None:
-    """The mjswan action class matching *term*'s class name, or ``None``."""
     class_name = _ACTION_CLASS_ALIASES.get(type(term).__name__, type(term).__name__)
     cls = getattr(_actions_module, class_name, None)
     if isinstance(cls, type) and issubclass(cls, MjswanActionTermCfg):
@@ -39,19 +38,15 @@ def _mjswan_action_class(term: Any) -> type[MjswanActionTermCfg] | None:
 
 
 def _has_mjswan_action(term: Any) -> bool:
-    """Whether *term* adapts by name, a task's own subclass is not in ``mjlab``."""
+    """Whether *term*'s class name maps to an mjswan action, mjlab bases or not."""
     return _mjswan_action_class(term) is not None
 
 
 def _adapt_action_cfg(term: Any) -> MjswanActionTermCfg | None:
     """Convert a single mjlab ``ActionTermCfg`` to mjswan.
 
-    Looks up ``type(term).__name__`` on ``mjswan.envs.mdp.actions`` to
-    find the corresponding mjswan class, then copies all matching
-    dataclass fields automatically.
-
-    Returns ``None`` if no mjswan equivalent exists; the caller is
-    responsible for dropping the entry.
+    The class is looked up by name on ``mjswan.envs.mdp.actions`` and every field it
+    shares with *term* is copied. ``None`` if no mjswan equivalent exists.
     """
     class_name = _ACTION_CLASS_ALIASES.get(type(term).__name__, type(term).__name__)
     mjswan_cls = _mjswan_action_class(term)
@@ -108,14 +103,12 @@ def resolve_action_scales(
     actions: Mapping[str, MjswanActionTermCfg] | None,
     joint_names: list[str],
 ) -> None:
-    """Resolve regex-pattern scale/offset dicts in action configs to literal joint names.
+    """Expand regex-keyed scale/offset dicts in action configs to literal joint names.
 
-    mjlab stores per-joint scale as ``{".*_hip_joint": 0.37, ...}`` using regex
-    patterns.  The browser runtime does exact string lookups, so patterns are
-    expanded here against *joint_names* (the ordered list of joints the policy
-    controls, prefixed with the entity name, e.g. ``"robot/left_hip_joint"``).
-
-    Mutates the ``scale`` and ``offset`` fields of each action term in-place.
+    mjlab keys per-joint values by regex (``{".*_hip_joint": 0.37}``) and the browser
+    looks them up by exact name, so patterns are expanded against *joint_names*, the
+    policy's joints prefixed with the entity name (``"robot/left_hip_joint"``).
+    Mutates each term in place.
     """
     if not actions or not joint_names:
         return

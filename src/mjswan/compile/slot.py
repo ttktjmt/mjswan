@@ -1,12 +1,9 @@
 """What a term may read off ``env``, and how each read is named.
 
-A slot key identifies one tensor read off the env, as ``(namespace, name)``: an entity's
-``data`` field, a sensor, a command's state field, or a raw ``sim.data`` field. The
-browser's slot reader serves the ``EntityData`` fields in :data:`READER_FIELDS`
+The browser's slot reader serves the ``EntityData`` fields in :data:`READER_FIELDS`
 natively; any other property is traced through, so its raw reads become ``sim`` slots.
 A read that is neither a slot nor a forwarded constant raises
-:class:`UnsupportedEnvRead`, in discovery as in replay, so nothing bakes a constant by
-reaching the real env.
+:class:`UnsupportedEnvRead`, so nothing bakes a constant by reaching the real env.
 """
 
 from __future__ import annotations
@@ -43,6 +40,7 @@ def _is_dynamic_field(field_name: str) -> bool:
 # A slot key identifies one tensor read off the env, as ``(namespace, name)``:
 #   (entity_name, data_field)        -> env.scene[entity].data.<field>
 #   (_SENSOR_NS, sensor_name)        -> env.scene[sensor].data (a whole BuiltinSensor)
+#   (_SENSOR_NS, "sensor.field")     -> env.scene[sensor].data.<field> (structured)
 #   (_COMMAND_NS, "cmd.attr")        -> env.command_manager.get_term(cmd).<attr>
 #   (_SIM_NS, field)                 -> env.sim.data.<field> == entity.data.data.<field>
 #                                       (raw; maybe narrowed to rows)
@@ -51,9 +49,9 @@ SlotKey = tuple[str, str]
 
 # A tagged key identifies one value an event/command body reads off ``env``. Wider than
 # a SlotKey because those bodies also read scene-level tensors and control-flow scalars:
-#   ("data", entity, field)  -> entity.data.<field>   (tensor; dynamic or const)
-#   ("scene", attr)          -> env.scene.<attr>      (scene-level constant, e.g. env_origins)
-#   ("attr", entity, attr)   -> entity.<attr>         (control-flow scalar, e.g. is_fixed_base)
+#   ("data", entity, field)  -> entity.data.<field>  (tensor; dynamic or const)
+#   ("scene", attr)          -> env.scene.<attr>     (constant, e.g. env_origins)
+#   ("attr", entity, attr)   -> entity.<attr>        (scalar, e.g. is_fixed_base)
 TaggedKey = tuple
 
 
@@ -109,7 +107,6 @@ def _forward_env_attr(real_env: Any, name: str, served: Sequence[str]) -> Any:
 #: exactly this set and the browser's parity test refuses a dumped field it cannot read.
 READER_FIELDS: frozenset[str] = frozenset(
     {
-        # Root properties, their components, and the root velocities in the body frame.
         "root_link_pose_w",
         "root_link_vel_w",
         "root_com_pose_w",
@@ -126,7 +123,6 @@ READER_FIELDS: frozenset[str] = frozenset(
         "root_link_ang_vel_b",
         "root_com_lin_vel_b",
         "root_com_ang_vel_b",
-        # Body properties and their components.
         "body_link_pose_w",
         "body_link_vel_w",
         "body_com_pose_w",
@@ -142,33 +138,27 @@ READER_FIELDS: frozenset[str] = frozenset(
         "body_com_ang_vel_w",
         "body_external_force",
         "body_external_torque",
-        # Geom properties and their components.
         "geom_pose_w",
         "geom_vel_w",
         "geom_pos_w",
         "geom_quat_w",
         "geom_lin_vel_w",
         "geom_ang_vel_w",
-        # Site properties and their components.
         "site_pose_w",
         "site_vel_w",
         "site_pos_w",
         "site_quat_w",
         "site_lin_vel_w",
         "site_ang_vel_w",
-        # Joint properties.
         "joint_pos",
         "joint_pos_biased",
         "joint_vel",
         "joint_acc",
-        # Generalized forces.
         "actuator_force",
         "qfrc_actuator",
         "qfrc_external",
-        # Tendon properties.
         "tendon_len",
         "tendon_vel",
-        # Derived properties, and the constant they project.
         "gravity_vec_w",
         "projected_gravity_b",
         "heading_w",
@@ -194,8 +184,8 @@ def _sim_tensor(value: Any) -> Any:
 def _slot_input_name(key: SlotKey) -> str:
     """The ONNX graph input name for a slot.
 
-    A build-time detail: the name travels to the runtime in the slot's own ``input``
-    field (:func:`slot_to_json`) rather than being recomputed there.
+    Build-time only: the runtime takes it from the slot's ``input`` field
+    (:func:`slot_to_json`) and never recomputes it.
     """
     namespace, name_part = key
     if namespace == _SENSOR_NS:
@@ -266,7 +256,7 @@ def slot_to_json(
 def slots_json(export: Any) -> list[dict[str, Any]]:
     """Serialize the input slots the exported graph actually takes, shapes included.
 
-    Shared by all three export kinds. Slots the exporter folded into a constant (an
+    Shared by every export kind. Slots the exporter folded into a constant (an
     index tensor baked into the Gather it feeds) are dropped: ORT rejects a feed that
     is not a graph input.
     """
@@ -306,7 +296,7 @@ def _graph_input_names(onnx_bytes: bytes | None) -> set[str] | None:
 def read_slot(
     env: Any, key: SlotKey, rows: Sequence[int] | None = None
 ) -> torch.Tensor:
-    """Read an input slot's current value from ``env``; a sim slot narrowed to ``rows``."""
+    """Read a slot's current value off ``env``; a sim slot narrowed to ``rows``."""
     namespace, name_part = key
     if namespace == _SENSOR_NS:
         sensor_name, dot, sensor_field = name_part.partition(".")

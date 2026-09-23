@@ -1,15 +1,13 @@
 """Read the metadata mjlab bakes into an exported policy's ``.onnx``.
 
 mjlab's ``attach_metadata_to_onnx`` writes the joint names, the rest pose, the action
-scale and a description of every observation term into the file's ``metadata_props``, so
-an mjlab policy travels self-describing. This module parses that block back out. It
-needs neither mjlab nor torch installed (the encoding is plain strings), which is what
-lets a Hub-fetched ONNX be added on the light path.
+scale and every observation term into the file's ``metadata_props``. The encoding is
+plain strings, so parsing needs neither mjlab nor torch, which lets a Hub-fetched ONNX
+be added on the light path.
 
-**The encoding is lossy.** mjlab formats every number in a list with ``{:.3f}``, so the
-values read back are rounded to three decimals, and ints and bools arrive as ``"1.000"``
-/ ``"0.000"`` (``isinstance(True, int)`` is true in Python). A scalar written outside a
-list keeps its full precision, since only lists go through the formatter.
+**The encoding is lossy.** mjlab formats every number in a list with ``{:.3f}``, so
+values come back rounded to three decimals, and ints and bools (a Python bool is an
+int) as ``"1.000"``/``"0.000"``. A scalar outside a list keeps its full precision.
 """
 
 from __future__ import annotations
@@ -23,7 +21,6 @@ if TYPE_CHECKING:
     from ..managers.action_manager import ActionTermCfg
 
 #: Keys every mjlab export carries (``mjlab.rl.exporter_utils.get_base_metadata``).
-#: Both must be present for :func:`read_mjlab_metadata` to claim a model as mjlab's.
 _REQUIRED_KEYS = ("joint_names", "default_joint_pos")
 
 _DELIM = ","
@@ -70,9 +67,9 @@ def _pairs(value: str) -> list[tuple[float, float]]:
 class MjlabPolicyMetadata:
     """What mjlab wrote into one exported policy.
 
-    ``joint_names`` and the two gain lists cover **every** joint of the robot, actuated
-    or not, while the network drives only the actuated ones, see
-    :func:`joint_mapping_usable` before mapping one onto the other.
+    ``joint_names`` and ``default_joint_pos`` cover **every** joint of the robot,
+    actuated or not, while the network (like the two gain lists) covers only the
+    actuated ones: check :func:`joint_mapping_usable` before mapping one onto the other.
     """
 
     joint_names: list[str]
@@ -82,10 +79,10 @@ class MjlabPolicyMetadata:
     """The rest pose, aligned with :attr:`joint_names`. Rounded to three decimals."""
 
     joint_stiffness: list[float] = field(default_factory=list)
-    """Position gain per joint. Informational: mjswan resolves gains from the model."""
+    """Position gain per actuated joint; informational, gains come from the model."""
 
     joint_damping: list[float] = field(default_factory=list)
-    """Velocity gain per joint. Informational, like :attr:`joint_stiffness`."""
+    """Velocity gain per actuated joint; informational too."""
 
     action_scale: float | list[float] | None = None
     """The joint-position action term's scale: a scalar, or one value per action."""
@@ -94,8 +91,7 @@ class MjlabPolicyMetadata:
     """The task's active command terms, by name."""
 
     observation_names: list[str] = field(default_factory=list)
-    """The ``actor`` group's terms, in order. Names only: the functions behind them are
-    not in the file, which is why an observation group cannot be rebuilt from this."""
+    """The ``actor`` group's term names, in order; the functions are not in the file."""
 
     observation_terms_scale: list[float | list[float]] = field(default_factory=list)
     """Per term, aligned with :attr:`observation_names`."""
@@ -126,8 +122,8 @@ class MjlabPolicyMetadata:
 def read_mjlab_metadata(model: onnx.ModelProto) -> MjlabPolicyMetadata | None:
     """Parse an mjlab export's ``metadata_props``, or ``None`` if it has none.
 
-    ``None`` means "not an mjlab export" (a hand-built graph, or one from a framework
-    that writes no metadata), which is a normal case, not an error.
+    ``None`` (a hand-built graph, or a framework that writes no metadata) is a normal
+    case, not an error.
     """
     raw = {entry.key: entry.value for entry in model.metadata_props}
     if not all(key in raw for key in _REQUIRED_KEYS):
@@ -175,13 +171,11 @@ def joint_mapping_usable(
     """Whether :attr:`~MjlabPolicyMetadata.joint_names` names what the network drives.
 
     mjlab writes every joint of the robot, the network outputs one action per *actuated*
-    joint, and the two coincide only when the robot has no passive joints. Feeding a
-    longer list to the runtime as ``policy_joint_names`` would shift every action onto
-    the wrong actuator, and nothing at playback would say so. The counts have to
-    agree before the mapping is used.
+    joint, and the two coincide only when the robot has no passive joints. A longer
+    ``policy_joint_names`` would silently shift every action onto the wrong actuator.
 
-    ``action_width`` unknown (a graph with a dynamic output shape) leaves only the
-    internal consistency of the metadata to check.
+    With ``action_width`` unknown (a dynamic output shape), only the metadata's own
+    consistency is checked.
     """
     if not meta.joint_names or not meta.default_joint_pos:
         return False
@@ -202,9 +196,8 @@ def policy_kwargs_from_metadata(
     """The :meth:`~mjswan.scene.SceneHandle.add_policy` arguments this metadata fixes.
 
     ``{}`` when :func:`joint_mapping_usable` says the joint list is not the action list.
-    Only the per-policy half is returned; the action term is
-    :func:`action_cfg_from_metadata`, since that belongs to the MDP rather than the
-    checkpoint.
+    The action term belongs to the MDP rather than the checkpoint, so it comes from
+    :func:`action_cfg_from_metadata` instead.
     """
     if not joint_mapping_usable(meta, action_width=action_width):
         return {}

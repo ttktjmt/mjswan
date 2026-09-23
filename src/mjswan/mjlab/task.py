@@ -12,7 +12,7 @@ from ..viewer import ViewerConfig
 
 
 def env_cfg_control_dt(env_cfg: Any) -> float | None:
-    """An mjlab env config's seconds-per-control-step, or ``None`` if it carries neither.
+    """An mjlab env config's seconds per control step, or ``None`` if it lacks one.
 
     Mirrors ``ManagerBasedRlEnv.step_dt`` (``sim.mujoco.timestep * decimation``) so the
     rate can be read off a config without paying to construct the env.
@@ -24,22 +24,19 @@ def env_cfg_control_dt(env_cfg: Any) -> float | None:
 
 
 def extract_terrain_data(scene: Any) -> dict[str, Any] | None:
-    """Extract spawn positions from a mjlab Scene for browser-side event execution.
+    """Spawn positions from an mjlab Scene, for the browser's reset events.
 
-    Tries named flat_patches first (higher-quality sampled positions); falls back
-    to terrain_origins (one per sub-terrain tile) when flat_patch_sampling is not
-    configured on any sub-terrain.
+    The terrain's named ``flat_patches`` when it samples them, else one
+    ``terrain_origins`` point per sub-terrain tile.
     """
     terrain = getattr(scene, "terrain", None)
     if terrain is None:
         return None
 
-    # Try explicit flat_patches (only present when flat_patch_sampling is configured).
     flat_patches = getattr(terrain, "flat_patches", None)
     if flat_patches:
         serialized: dict[str, list[list[float]]] = {}
         for name, patches in flat_patches.items():
-            # patches: (num_rows, num_cols, num_patches, 3) tensor
             try:
                 arr = patches.cpu().numpy()
                 rows, cols, n, _ = arr.shape
@@ -50,12 +47,10 @@ def extract_terrain_data(scene: Any) -> dict[str, Any] | None:
         if serialized:
             return {"flat_patches": serialized}
 
-    # Fall back to terrain_origins (one spawn point per sub-terrain tile).
     terrain_origins = getattr(terrain, "terrain_origins", None)
     if terrain_origins is not None:
         try:
             arr = terrain_origins.cpu().numpy()
-            # shape: (num_rows, num_cols, 3)
             num_rows, num_cols, _ = arr.shape
             positions = arr.reshape(num_rows * num_cols, 3).tolist()
             return {"flat_patches": {"spawn": positions}}

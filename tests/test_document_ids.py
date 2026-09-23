@@ -23,9 +23,6 @@ NAME2ID_CASES = json.loads(
 )
 
 
-# ===========================================================================
-# L1: name2id
-# ===========================================================================
 class TestName2Id:
     def test_spaces_become_underscores(self):
         assert name2id("My Project") == "my_project"
@@ -47,9 +44,6 @@ class TestName2Id:
         assert name2id(name) == expected
 
 
-# ===========================================================================
-# L1: unique_id
-# ===========================================================================
 class TestUniqueId:
     def test_free_base_is_returned_as_is(self):
         assert unique_id("flat_terrain", set()) == "flat_terrain"

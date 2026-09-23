@@ -11,9 +11,8 @@ Writes one ``<stem>.onnx`` per checkpoint into ``--out-dir`` plus a
 file alone -- ``policy_joint_names``, ``default_joint_pos``, ``encoder_bias`` -- and
 the checkpoint order, numeric so ``model_50`` precedes ``model_100``.
 
-Mirrors ``mjswan.mjlab.runner.export_checkpoint`` minus the W&B download,
-``align_obs_normalizer`` included: without it the exported graph carries the wrong
-observation normalization.
+Mirrors ``mjswan.mjlab.runner.export_checkpoint``, ``align_obs_normalizer`` included:
+without it the exported graph carries the wrong observation normalization.
 """
 
 from __future__ import annotations

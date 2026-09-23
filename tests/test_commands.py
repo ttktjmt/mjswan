@@ -159,15 +159,13 @@ class TestCommandRegistry:
 
 
 class TestMotionRsiRegistration:
-    """The RSI jitter graph lives author-side; its absence must not be silent.
+    """The RSI jitter graph is registered separately; its absence must not be silent.
 
-    `TrackingCommand.ts` used to jitter with `Math.random()`. ADR 0005 moved that
-    into a traced graph whose body needs mjlab's own `sample_uniform` /
-    `quat_from_euler_xyz`, so it is registered from `mjswan/mjlab/
-    commands` rather than from `mjswan.envs.mdp.commands` (which keeps mjlab a soft
-    dependency). A task whose author never imported that module therefore got the
-    plain binding — no graph — and quietly stopped jittering. These pin the
-    diagnosis that replaced the silence.
+    The jitter is a traced graph (ADR 0005) whose body needs mjlab's own
+    `sample_uniform` / `quat_from_euler_xyz`, so it is registered from
+    `mjswan.mjlab.bindings` rather than `mjswan.envs.mdp.commands` (which keeps mjlab a
+    soft dependency). A task that never imports that module gets the plain binding
+    without the graph, so its reference frame is never jittered.
     """
 
     def test_warns_when_a_jittering_cfg_has_no_registered_graph(self):

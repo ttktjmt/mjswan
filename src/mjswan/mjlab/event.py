@@ -1,8 +1,6 @@
-"""mjlab event terms as mjswan's, covering all three modes.
+"""mjlab event terms as mjswan's, in all three modes, and the terrain spawn swap.
 
-Same resolution order as :mod:`.observation`. Also :func:`apply_terrain_spawn`: mjlab
-spreads many envs over its terrain, so its uniform reset only jitters each around its own
-origin; the browser runs one env, so the reset is swapped for mjswan's patch-based one.
+Same resolution order as :mod:`.observation`.
 """
 
 from __future__ import annotations
@@ -23,10 +21,7 @@ from .detect import is_from_mjlab
 def _adapt_event_func(
     func: Any, term_name: str | None = None
 ) -> EventBinding | Callable[..., Any]:
-    """Resolve the function an event term's ONNX graph is traced from.
-
-    See :func:`_adapt_obs_func`, same resolution order.
-    """
+    """Resolve the function an event term's ONNX graph is traced from."""
     if isinstance(func, EventBinding):
         return func
     name = getattr(func, "__name__", None)
@@ -69,8 +64,7 @@ def _sanitize_event_params(params: dict[str, Any]) -> dict[str, Any]:
 def _adapt_event_cfg(term: Any, term_name: str | None = None) -> MjswanEventTermCfg:
     """Convert a single mjlab ``EventTermCfg`` to mjswan.
 
-    Covers all three modes. As in :func:`_adapt_obs_term`, params are sanitized only
-    for the binding path.
+    As in :func:`_adapt_obs_term`, params are sanitized only for the binding path.
     """
     func = _adapt_event_func(term.func, term_name=term_name)
     raw_params = dict(getattr(term, "params", None) or {})
@@ -115,9 +109,8 @@ def apply_terrain_spawn(scene: Any) -> None:
     """Swap a scene's ``reset_root_state_uniform`` for patch-based spawning, in place.
 
     mjlab spreads many envs over the terrain, so its uniform reset only jitters each
-    around its own origin; the browser has one env, so drawing a patch is what covers
-    the terrain at all. A no-op unless the scene has both a flat-patch table and that
-    mjlab term.
+    around its own origin; with the browser's one env, only drawing a patch covers the
+    terrain. A no-op unless the scene has both a flat-patch table and that mjlab term.
     """
     flat_patches = (scene.terrain_data or {}).get("flat_patches", {})
     events = scene.events

@@ -1,4 +1,4 @@
-"""The manifest entries below the document header, and the one write of ``manifest.json``.
+"""The manifest entries below the document header, and the write of ``manifest.json``.
 
 The one place that knows the shape of a project, scene, MDP and policy entry (ADR 0006).
 Every key is ``snake_case``; a path resolves against the directory of the level that
@@ -73,7 +73,7 @@ def load_sidecar(policy: PolicyConfig) -> dict[str, Any]:
 def _strip_slot_tables(sidecar: dict, config_src: Path) -> dict:
     """Drop a sidecar's ``onnx`` block and slot tables; those are declared in Python.
 
-    ``in_keys`` / ``out_keys`` (top-level or under ``onnx.meta``) belong on ``add_policy``,
+    ``in_keys``/``out_keys``, top-level or under ``onnx.meta``, belong on ``add_policy``
     where the build checks them against the network (ADR 0006 §5). Found here they are
     ignored with a warning, so a stale table cannot quietly win over the code.
     """
@@ -103,7 +103,7 @@ def mdp_entry(
     scene_dir: Path,
     on_term: Callable[[str], None],
 ) -> dict[str, Any]:
-    """Trace one MDP's five term sets into ``<scene>/mdp/<mdp_id>/`` and return its entry.
+    """Trace one MDP's terms into ``<scene>/mdp/<mdp_id>/`` and return its entry.
 
     ``owners`` are the policies that run against it, in order. The first supplies the
     per-policy context a trace needs: its joint names fix the native widths, its
@@ -290,7 +290,7 @@ def _input_slots(policy: PolicyConfig, obs_keys: list[str]) -> list[str]:
 def scene_entry(
     scene: SceneConfig, mdps: list[dict[str, Any]], policies: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """A scene's manifest entry; every path in it resolves against the scene directory."""
+    """A scene's manifest entry; its paths resolve against the scene directory."""
     return {
         "id": scene.id,
         "name": scene.name,
@@ -343,12 +343,7 @@ def write_manifest(
     projects: list[ProjectConfig],
     scene_entries: dict[tuple[str, str], dict[str, Any]],
 ) -> None:
-    """Write the one descriptor of the document, ``manifest.json``, at its root.
-
-    Every key is ``snake_case``; a path resolves against the directory of the level
-    that declares it: the scene directory for everything under a scene entry, the
-    document root for the top-level ``plugins`` (ADR 0006, manifest rules 1 and 2).
-    """
+    """Write the document's one descriptor, ``manifest.json``, at its root."""
     custom_js = uses_custom_js()
     manifest = {
         "format": DOCUMENT_FORMAT,

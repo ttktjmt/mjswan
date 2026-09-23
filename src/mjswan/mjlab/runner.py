@@ -1,8 +1,7 @@
-"""What mjswan takes from an mjlab task's *runner*: the two rl-config fields playback
-needs, and the runner's own exporter for turning a ``model_*.pt`` checkpoint into ONNX.
+"""An mjlab task's *runner*: the rl-config fields playback needs, and its ONNX exporter.
 
-Building the runner means building the task's env, so the export context is created
-once per scene and reused for every checkpoint of every run.
+Building the runner means building the task's env, so one export context serves every
+checkpoint of every run.
 """
 
 from __future__ import annotations
@@ -83,13 +82,7 @@ class PtOnnxExportContext:
 def create_pt_onnx_export_context(
     task_id: str, *, env_cfg: Any | None = None
 ) -> PtOnnxExportContext:
-    """Create a reusable mjlab export context for PT->ONNX conversion.
-
-    Builds the mjlab environment and runner once so that multiple
-    checkpoints can be loaded and exported without repeated startup cost.
-    Extracts core policy metadata (joint names, default joint positions,
-    encoder bias) from the action manager.
-    """
+    """Build the task's env and runner once, to export any number of checkpoints."""
     try:
         import mjlab.tasks  # noqa: F401 (populates the task registry)
         from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
@@ -114,8 +107,7 @@ def create_pt_onnx_export_context(
 
     wrapped_env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
-    # rsl-rl prints 29 lines from this constructor with no flag to turn them off;
-    # buffered so a failure can still show them.
+    # rsl-rl's constructor always prints; buffered so a failure can still show it.
     chatter = io.StringIO()
     try:
         runner_cls = load_runner_cls(task_id) or MjlabOnPolicyRunner

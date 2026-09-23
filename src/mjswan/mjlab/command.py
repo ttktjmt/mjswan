@@ -2,9 +2,7 @@
 
 A command is a class, so ``type(cfg).__name__`` is looked up in the command registry
 (:func:`mjswan.register_command`), which either traces the built term or maps it to a
-permanently-native TS class. mjlab's ``_debug_vis_impl`` runs Python every frame, so the
-browser cannot; :func:`default_viz` restates what each mjlab command class draws as data
-``core/command/debugViz.ts`` evaluates.
+permanently-native TS class.
 """
 
 from __future__ import annotations
@@ -79,8 +77,7 @@ def adapt_commands(
         if isinstance(term, MjswanCommandTermConfig):
             adapted[key] = term
             continue
-        # A registered name adapts wherever its class lives: a task's own
-        # `CommandTermCfg` subclass is not in the `mjlab` package.
+        # A registered name adapts wherever its class lives, even with no mjlab base.
         if is_from_mjlab(term) or type(term).__name__ in _custom_command_registry:
             try:
                 adapted[key] = _adapt_command_cfg(term)
@@ -96,16 +93,14 @@ def adapt_commands(
 
 
 # --- Debug visualization ---
-
-#
-# mjlab's `_debug_vis_impl` runs Python every frame, so the browser cannot. These restate
-# what each mjlab command class draws, as data `core/command/debugViz.ts` evaluates.
+# mjlab's `_debug_vis_impl` runs Python every frame, so the browser cannot use it.
+# These restate what each command class draws, as data `core/command/debugViz.ts` reads.
 
 _ARROW_WIDTH = 0.015  # As mjlab passes to every `add_arrow`.
 
 
 def _velocity_viz(cfg: Any) -> list[dict[str, Any]]:
-    """`UniformVelocityCommand`'s four arrows: commanded and actual, linear and angular."""
+    """`UniformVelocityCommand`'s arrows: commanded and actual, linear and angular."""
     entity = getattr(cfg, "entity_name", None) or "robot"
     viz = getattr(cfg, "viz", None)
     scale = float(getattr(viz, "scale", 0.5))
@@ -171,7 +166,7 @@ _default_viz_builders: dict[str, Callable[[Any], list[dict[str, Any]]]] = {
 def default_viz(mjlab_cfg: Any) -> list[dict[str, Any]] | None:
     """The debug drawing mjswan knows for an mjlab command cfg, or ``None``.
 
-    Keyed by cfg class, so any task built on one of mjlab's own command classes gets it.
+    Keyed by cfg class name, so any task using one of mjlab's own command cfgs gets it.
     """
     builder = _default_viz_builders.get(type(mjlab_cfg).__name__)
     return builder(mjlab_cfg) if builder is not None else None

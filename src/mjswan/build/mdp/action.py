@@ -15,9 +15,9 @@ def serialize_actions(
 ) -> dict[str, Any]:
     """The MDP entry's ``actions`` block, keyed by term name.
 
-    Each term's ``to_dict()`` is merged field-wise over what the policy's ``config_path``
-    sidecar authored for the same term, where a motor robot's PD gains live, so a scene
-    can tweak the offset without restating them.
+    Each term's ``to_dict()`` is merged field-wise over what the ``config_path`` sidecar
+    authored for the same term, where a motor robot's PD gains live, so a scene can
+    tweak the offset without restating them.
     """
     authored = authored or {}
     return {

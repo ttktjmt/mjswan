@@ -51,8 +51,8 @@ def _dr_entity_names(env: Any, asset_cfg: Any, entity_type: str) -> list[str] | 
 def _dr_arg(func: Any, params: dict[str, Any], key: str) -> Any:
     """A DR keyword as mjlab would see it: the term's value, else *func*'s default.
 
-    Read off the signature, since mjlab's wrappers do not share defaults,
-    ``geom_friction`` is ``"abs"``, ``body_mass`` is ``"scale"``.
+    Read off the signature, since mjlab's wrappers differ in defaults (``operation`` is
+    ``"abs"`` for ``geom_friction``, ``"scale"`` for ``body_mass``).
     """
     if key in params:
         return params[key]
@@ -74,7 +74,7 @@ def _dr_name_of(value: Any, fallback: str) -> str:
 def _dr_target_axes(
     func: Any, params: dict[str, Any], ranges: Any, default_axes: list[int]
 ) -> list[int]:
-    """mjlab's ``_determine_target_axes`` precedence: explicit, then int keys, then default."""
+    """As mjlab's ``_determine_target_axes``: explicit, int keys, then the default."""
     axes = _dr_arg(func, params, "axes")
     if axes is not None:
         return [int(a) for a in axes]
@@ -178,11 +178,11 @@ def _require_primitive_geoms(env: Any, names: list[str]) -> None:
         )
 
 
-# mjlab's `Operation.uses_defaults`: `abs` reads the live value, `add`/`scale` the default.
+# mjlab's `Operation.uses_defaults`: `abs` reads the live value, the rest the default.
 _DR_OPS_USING_DEFAULTS = frozenset({"add", "scale"})
 
 
-# Fallback when a DR func lacks `requires_model_fields`: fields that invalidate constants.
+# For a DR func without `requires_model_fields`: the fields that invalidate constants.
 _SET_CONST_FIELDS = frozenset(
     {"body_ipos", "body_mass", "body_inertia", "dof_armature"}
 )
@@ -265,7 +265,7 @@ def serialize_event(
     scope: str | None = None,
 ) -> dict[str, Any] | None:
     """Serialize one event term, or ``None`` if there is genuinely nothing to emit."""
-    # Before the torch import below: a config mistake should not need a tracer to report.
+    # Before the tracer import: a config mistake should not need a tracer to report.
     if term_cfg.mode == "manual" and term_cfg.interval_range_s is not None:
         raise ValueError(
             f'Event term {name!r} is mode="manual" and carries '
@@ -343,8 +343,10 @@ def serialize_event(
 
 
 def _check_disabled_when(events: Mapping[str, EventTermCfg]) -> None:
-    """Refuse a `disabled_when` naming no `mode="interval"` term: a gate that resolves to
-    nothing greys its button out forever, or never."""
+    """Refuse a `disabled_when` unless a manual term names a `mode="interval"` term.
+
+    A gate that resolves to nothing greys its button out forever, or never.
+    """
     for name, term_cfg in events.items():
         gate = getattr(term_cfg, "disabled_when", None)
         if gate is None:

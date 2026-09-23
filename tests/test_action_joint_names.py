@@ -1,11 +1,10 @@
 """Joint names for a policy whose export carries none.
 
 mjlab attaches export metadata from its velocity, manipulation and tracking runners
-only, so a cartpole checkpoint arrives with no ``joint_names`` at all. The Hub path used
-to have nothing else to read them from, which left the browser matching the task's joint
-patterns against an empty list, skipping the action term, and writing no control: the
-scene rendered and the cart never moved. The task's own action terms name the joints, so
-they are read from there, and the call says so when even that comes up empty.
+only, so a cartpole checkpoint arrives with no ``joint_names`` at all. Matched against
+an empty list, the task's joint patterns drive nothing and the browser writes no
+control. The task's own action terms name the joints, so they are read from there, and
+the call warns when even that comes up empty.
 """
 
 from __future__ import annotations
@@ -44,8 +43,7 @@ CARTPOLE_XML = """
 </mujoco>
 """
 
-#: Two joints whose actuator block is in the opposite order, which is the whole reason
-#: joint order and actuator order have to be told apart.
+#: Two joints whose actuator block is in the opposite order, so the two orders differ.
 REORDERED_XML = """
 <mujoco model="reordered">
   <worldbody>
@@ -258,7 +256,7 @@ class TestNothingLeftToTry:
             cartpole.add_policy_hf("my-org/cartpole", actions=actions)
 
     def test_a_sidecar_may_still_carry_them(self, cartpole, fake_hub, tmp_path):
-        """It is read at build time, so this call cannot know yet and must not cry."""
+        """It is read at build time, so this call cannot know yet and must not warn."""
         fake_hub("policy.onnx", action_width=1)
         sidecar = tmp_path / "policy.json"
         sidecar.write_text('{"policy_joint_names": ["cartpole/slider"]}')

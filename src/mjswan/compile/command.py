@@ -200,18 +200,18 @@ class CommandExport:
     name: str
     onnx_bytes: bytes
     state_fields: list[dict[str, Any]]
-    """Per state field: {name, shape, dtype}, declared in policy.json (§3a)."""
+    """Per state field: ``{name, shape, dtype}``, written to the manifest entry."""
     command_field: str
     input_slots: list[SlotKey]
     input_names: list[str]
     rand_dim: int
     rand_ranges: list[list[float]]
-    """Per-element ``[low, high]`` for ``rand``, the runtime draws with these."""
+    """Per-element ``[low, high]`` the runtime draws ``rand`` from."""
     output_names: list[str]
     write_targets: list[dict[str, Any]]
     reference_rand: torch.Tensor
     input_shapes: list[list[int]] = field(default_factory=list)
-    """Traced shape of each input slot, parallel to ``input_slots`` (see :func:`slots_json`)."""
+    """Traced shape of each input slot, parallel to ``input_slots``."""
 
 
 def trace_command_term(
@@ -233,7 +233,6 @@ def trace_command_term(
     snap = _snapshot_state(term)
     state_example = tuple(getattr(term, f).detach().clone() for f in state_fields)
 
-    # 1. Discovery: swap to recording proxies; log reads, capture writes, spy draws.
     with _RecordCommand(term, entity_attr_names, entity_name) as rec_env:
         with DrawRecorder(term._resample_command) as rec:
             term._resample_command(torch.arange(term.num_envs))
@@ -258,14 +257,12 @@ def trace_command_term(
         for entity, kind in captures
     ]
 
-    # 2. Classify reads: dynamic data inputs vs baked tensor/scalar constants.
     dynamic, tensor_consts, scalar_consts = _classify_tagged(log)
 
     dynamic_keys = sorted(dynamic)
     dyn_names = [_slot_input_name(k) for k in dynamic_keys]
     prev_names = [f"prev_{f}" for f in state_fields]
 
-    # 3. Trace: dynamic + prev_state + resample_mask=True + rand -> next_state + writes.
     mask = torch.ones(term.num_envs, dtype=torch.bool)
     example = (*(dynamic[k] for k in dynamic_keys), *state_example, mask, ref_rand)
     input_names = [*dyn_names, *prev_names, "resample_mask", "rand"]
@@ -300,7 +297,7 @@ def trace_command_term(
             "shape": list(getattr(term, f).shape),
             "dtype": str(getattr(term, f).dtype).replace("torch.", ""),
             "init": [
-                # bool/int state round-trips as a number; the reader rebuilds dtype.
+                # Plain JSON values; the reader rebuilds the typed array from `dtype`.
                 bool(v) if getattr(term, f).dtype == torch.bool else v
                 for v in getattr(term, f).detach().reshape(-1).tolist()
             ],

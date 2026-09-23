@@ -35,9 +35,9 @@ def _resolve_motion_source(source: str) -> Path:
 def write_scene_motions(scene: SceneConfig, scene_dir: Path) -> dict[str, str]:
     """Write each distinct clip in the scene once; return content key -> filename.
 
-    Scene-scoped rather than per-policy: the checkpoints of one run share a clip, and a
-    copy per policy meant N copies of the same megabytes. Same name and same content
-    collapse to one file; same name and different content get a ``_1``/``_2`` suffix.
+    Scene-scoped, since the checkpoints of one run share a clip. Equal content collapses
+    to one file whatever its name; a name clash with different content gets a
+    ``_1``/``_2`` suffix.
     """
     files: dict[str, str] = {}
     used: set[str] = set()
@@ -72,9 +72,8 @@ def point_env_cfg_at_bundled_motion(
 ) -> None:
     """Aim a tracking task's ``motion_file`` at the clip just written to the bundle.
 
-    mjlab registers tracking tasks with ``motion_file=""`` and ``MotionLoader`` reads the
-    path when the env is constructed, so the bundled copy is what the trace env loads,
-    no second copy anywhere.
+    mjlab registers tracking tasks with ``motion_file=""`` and ``MotionLoader`` reads
+    the path when the env is constructed, so the trace env loads the bundled copy.
     """
     env_cfg = scene.mjlab_env_cfg
     if env_cfg is None or scene.mjlab_env is not None or not motion_files:
@@ -90,7 +89,7 @@ def point_env_cfg_at_bundled_motion(
 
 
 def write_scene_splats(scene: SceneConfig, scene_dir: Path) -> None:
-    """Copy each file-backed splat to ``<scene_dir>/<splat-id>.spz``; URL splats stay put."""
+    """Copy each file-backed splat to ``<scene_dir>/<id>.spz``; URL splats stay put."""
     for splat in scene.splats:
         if splat.source is None:
             continue

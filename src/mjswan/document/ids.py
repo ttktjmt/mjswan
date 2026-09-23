@@ -11,11 +11,9 @@ from collections.abc import Collection
 def name2id(name: str) -> str:
     """Convert a name to a URL-friendly identifier.
 
-    Lowercases, then collapses every run of non-alphanumeric characters into a
-    single underscore. Anything outside ``[a-z0-9]`` (spaces, hyphens, and also
-    apostrophes/parentheses/accents) is normalized so the result is safe as a
-    storage object key: an unescaped ``'`` in an R2/S3 key breaks the presigned
-    SigV4 upload signature.
+    After lowercasing, every run of characters outside ``[a-z0-9]`` becomes one
+    underscore, so the id is safe as a storage object key: an unescaped ``'`` in an
+    R2/S3 key breaks the presigned SigV4 upload signature.
 
     Examples:
         >>> name2id("My Project")

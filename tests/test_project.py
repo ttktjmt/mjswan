@@ -55,8 +55,8 @@ def _install_fake_mjlab(monkeypatch, minimal_spec) -> tuple[list[tuple], _FakeEn
             self.terrain = None
 
     class FakeManagerBasedRlEnv:
-        """Stands in for mjlab's real env — ADR 0005 needs a live env to trace term
-        bodies, built lazily at build time by `mjswan.build.pipeline`."""
+        """Stands in for mjlab's real env: ADR 0005 traces term bodies against a live
+        env, which `mjswan.build.pipeline` builds lazily."""
 
         def __init__(self, env_cfg, device: str):
             calls.append(("env", env_cfg, device))
@@ -581,8 +581,7 @@ class TestPolicyHandle:
 
         `tracking_motion_term` recognises the term by class name, else by
         `anchor_body_name` + `body_names`. Both are upstream's spelling, so a rename there
-        would silently stop the clip being found — the same playback-only failure as
-        scanning the wrong `commands`.
+        would silently stop the clip being found, a failure that shows only at playback.
         """
         pytest.importorskip("mjlab")
         import mjlab.tasks  # noqa: F401 — populates the registry

@@ -15,11 +15,6 @@ Output structure (ADR 0006 §2, license files ADR 0007 §1)::
             ├── policy/<policy-id>.onnx
             ├── assets/    (<motion>.npz, <splat>.spz)
             └── LICENSE.<component>, NOTICE.<component>  (third-party)
-
-The frontend build (:mod:`.frontend`) runs first and reuses a cached SPA when it
-matches. Each scene is then packed (:mod:`.mjz`), its clips and splats copied
-(:mod:`.asset`), its MDPs traced (:mod:`.mdp`) and its manifest entries assembled
-(:mod:`.manifest`); the one ``manifest.json`` is written last.
 """
 
 from __future__ import annotations
@@ -80,11 +75,9 @@ def write_app(
 
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Copy template directory
     template_dir = TEMPLATE_DIR
     client_builder: ClientBuilder | None = None
     if template_dir.exists():
-        # Build client first (reuses a cached SPA build when it matches)
         package_json = template_dir / "package.json"
         if package_json.exists():
             print("Building the mjswan application...")
@@ -113,12 +106,11 @@ def write_app(
     assets_dir = output_path / "assets"
     assets_dir.mkdir(exist_ok=True)
 
-    # Author custom-MDP terms compile to a runtime ESM the manifest points at, via esbuild.
+    # Custom-MDP terms compile to the runtime ESM the manifest's `plugins` points at.
     if uses_custom_js() and client_builder is not None:
         print("Compiling custom-MDP term module (plugins.js)...")
         client_builder.build_plugins_module(assets_dir / "plugins.js")
 
-    # Write COOP/COEP headers for multi-threaded MuJoCo (SharedArrayBuffer)
     if mt:
         write_mt_headers(output_path)
 
@@ -172,14 +164,14 @@ def write_app(
                 steps.on("packaging scene")
                 if scene.spec is not None:
                     scene.spec.assets.update(collect_spec_assets(scene.spec))
-                    to_zip_deflated(scene.spec, str(scene_path))  # Saves as .mjz
+                    to_zip_deflated(scene.spec, str(scene_path))
                     scene.spec = None
                 else:
                     if scene.model is None:
                         raise RuntimeError(
                             f"Scene '{scene.name}' has no model to save as .mjb"
                         )
-                    mujoco.mj_saveModel(scene.model, str(scene_path))  # Saves as .mjb
+                    mujoco.mj_saveModel(scene.model, str(scene_path))
                     scene.model = None
                 gc.collect()
 
@@ -260,12 +252,11 @@ def write_app(
 
 
 def write_mt_headers(output_path: Path) -> None:
-    """Write COOP/COEP response headers needed by multi-threaded MuJoCo.
+    """Write the COOP/COEP ``_headers`` multi-threaded MuJoCo needs (SharedArrayBuffer).
 
-    Two mechanisms are written so the output works on any static host:
-    - ``_headers``: honored by Netlify, Cloudflare Pages, and Vercel.
-    - ``coi-serviceworker.js`` (emitted by the Vite build only when mt=True): used by the
-      injected inline script for GitHub Pages, which cannot set response headers.
+    Netlify, Cloudflare Pages and Vercel honor ``_headers``. GitHub Pages cannot set
+    headers, so there the ``coi-serviceworker.js`` the Vite build emits for mt=True
+    stands in.
     """
     headers_content = (
         "/*\n"
@@ -322,12 +313,9 @@ def _check_defaults(projects: list[ProjectConfig]) -> None:
 
 
 def _validate_muscle_action_terms(scene: SceneConfig) -> None:
-    """Validate every ``MuscleActivationActionCfg`` in the scene's policies.
+    """Check every ``MuscleActivationActionCfg`` names muscle actuators of the model.
 
-    Each term's ``actuator_names`` must resolve to muscle-dyntype actuators
-    in the scene's MuJoCo model. Raises ``ValueError`` on the first violation
-    so users see configuration mistakes before deployment rather than at
-    runtime in the browser.
+    Raises ``ValueError`` on the first violation: at build time, not in the browser.
     """
     muscle_terms: list[tuple[str, MuscleActivationActionCfg]] = []
     for policy in scene.policies:

@@ -1,10 +1,10 @@
 """Trace one value-returning term body to ONNX, and the two ways that can fail.
 
-A term is ``func(env, **params)`` returning a tensor. It is run once against the
-recording env to discover its reads, those are classified into graph inputs and baked
-constants, and the term is exported as an ``nn.Module`` whose ``forward`` takes the
-dynamic tensors. A term that read nothing is a :class:`ConstantTerm`; one whose reads
-the tracer could not follow into a tensor is an :class:`UntraceableTerm`.
+A term ``func(env, **params)`` runs once against the recording env to discover its
+reads, which are split into graph inputs and baked constants; it is then exported as an
+``nn.Module`` whose ``forward`` takes the dynamic tensors. A term that read nothing is a
+:class:`ConstantTerm`; one whose reads the tracer could not follow into a tensor is an
+:class:`UntraceableTerm`.
 """
 
 from __future__ import annotations
@@ -56,8 +56,8 @@ class ConstantTerm(ValueError):
 
 
 def warn_constant_observation(name: str, size: int) -> None:
-    """Name a baked term: right for a padding term, wrong for anything else, and the
-    tracer cannot tell the two apart."""
+    """Warn that a term is baked: right for a padding term, wrong for anything else,
+    and the tracer cannot tell which."""
     warnings.warn(
         f"Observation term {name!r} reads no simulation state, so its {size} value(s) "
         "are baked into the build and the policy sees the same numbers every step. "
@@ -104,7 +104,7 @@ class TermExport:
     """The term's output on the discovery step (for a trace-time sanity check)."""
     constant_slots: list[SlotKey] = field(default_factory=list)
     input_shapes: list[list[int]] = field(default_factory=list)
-    """Traced shape of each input slot, parallel to ``input_slots`` (see :func:`slots_json`)."""
+    """Traced shape of each input slot, parallel to ``input_slots``."""
     input_rows: list[list[int] | None] = field(default_factory=list)
     """Per input slot, the rows of the raw field it carries; None for a whole field."""
 

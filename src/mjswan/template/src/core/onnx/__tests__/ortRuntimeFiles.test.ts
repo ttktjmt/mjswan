@@ -50,8 +50,6 @@ describe('co-located WASM sources', () => {
     expect(existsSync(join(NODE_MODULES, source))).toBe(true);
   });
 
-  // A file over the limit uploads nowhere: Cloudflare Pages rejects the deploy, and a
-  // build command that prunes it instead leaves the page fetching a wasm that 404s.
   it.each(UPSTREAM_WASM)('%s stays inside a static host per-file limit', (source) => {
     expect(statSync(join(NODE_MODULES, source)).size).toBeLessThanOrEqual(MAX_ASSET_BYTES);
   });

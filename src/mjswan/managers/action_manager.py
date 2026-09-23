@@ -1,8 +1,7 @@
-"""Action manager configuration for mjswan.
+"""The base ``ActionTermCfg``, mirroring ``mjlab.managers.action_manager``.
 
-Mirrors ``mjlab.managers.action_manager``: the base ``ActionTermCfg`` lives here, and the
-concrete action-term configs in ``mjswan.envs.mdp.actions`` derive from it, the same
-way mjlab's do. Example::
+The concrete action-term configs in ``mjswan.envs.mdp.actions`` derive from it, as
+mjlab's do. Example::
 
     from mjswan.envs.mdp.actions import JointPositionActionCfg
 
@@ -31,17 +30,14 @@ class ActionTermCfg(abc.ABC):
     """
 
     entity_name: str = "robot"
-    """Name of the entity in the scene.  Accepted for mjlab compatibility;
-    mjswan targets the single policy entity."""
+    """Accepted for mjlab compatibility; mjswan targets the single policy entity."""
 
     clip: dict[str, tuple] | None = None
-    """Per-target clipping bounds, applied after scale/offset.
+    """Per-target ``(min, max)`` bounds, applied after scale/offset.
 
-    Keys are joint-name *patterns* (mjlab resolves them with ``re.fullmatch`` via
-    ``resolve_matching_names_values``), values are ``(min, max)``. A target no
-    pattern matches is unbounded. Mirrors ``BaseActionCfg.clip``: mjlab clamps
-    ``raw * scale + offset`` (the *processed* action, before any encoder-bias
-    subtraction), so the browser applies it at the same point."""
+    Keys are joint-name patterns, resolved with ``re.fullmatch`` as mjlab does; a
+    target no pattern matches is unbounded. As in mjlab's ``BaseActionCfg.clip``, the
+    clamp hits ``raw * scale + offset``, before any encoder-bias subtraction."""
 
     unsupported_reason: str | None = None
     """If set, raises ``NotImplementedError`` at build time."""

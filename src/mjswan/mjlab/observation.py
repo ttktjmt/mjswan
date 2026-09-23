@@ -1,9 +1,7 @@
 """mjlab observation groups as mjswan's.
 
 mjlab's own term function is kept and traced at build time (ADR 0005); an author's
-``register_observation`` override replaces it by function or term name. Params are
-sanitized only for an ``ObservationBinding``, whose params go verbatim into the browser
-JSON.
+``register_observation`` override replaces it by function or term name.
 """
 
 from __future__ import annotations
@@ -26,12 +24,7 @@ from .detect import is_from_mjlab
 def _adapt_obs_func(
     func: Any, term_name: str | None = None
 ) -> ObservationBinding | Callable[..., Any]:
-    """Resolve the function an observation term's ONNX graph is traced from.
-
-    An ``ObservationBinding`` passes through, then any ``register_observation``
-    override for this function or term name, then mjlab's own function, which the
-    build traces directly.
-    """
+    """Resolve the function an observation term's ONNX graph is traced from."""
     if isinstance(func, ObservationBinding):
         return func
     name = getattr(func, "__name__", None)
@@ -43,13 +36,7 @@ def _adapt_obs_func(
 
 
 def _sanitize_obs_params(params: dict[str, Any]) -> dict[str, Any]:
-    """Strip mjlab-specific params that are not JSON-serializable.
-
-    ``asset_cfg`` (a ``SceneEntityCfg``) is removed.  When it carries
-    entity-scoping information, it is promoted into JSON-friendly fields so
-    browser-side observation classes can resolve the correct MuJoCo entities
-    at runtime.
-    """
+    """Swap the non-JSON ``asset_cfg`` for the entity, joint and site names it holds."""
     if "asset_cfg" not in params:
         return params
     result = {k: v for k, v in params.items() if k != "asset_cfg"}
@@ -85,8 +72,7 @@ def _adapt_obs_term(
     """Convert a single mjlab ``ObservationTermCfg`` to mjswan.
 
     Params are sanitized only for an ``ObservationBinding``, whose params go verbatim
-    into the browser JSON. A traced func keeps the real ``SceneEntityCfg`` mjlab's own
-    function expects.
+    into the browser JSON; a traced func needs the real ``SceneEntityCfg``.
     """
     raw_params = dict(getattr(term, "params", None) or {})
     func = _adapt_obs_func(term.func, term_name=term_name)
@@ -118,19 +104,17 @@ def _adapt_obs_group(group: Any) -> MjswanObservationGroupCfg:
     )
 
 
-#: Groups belonging to networks that never leave training. Only the actor is exported,
-#: so these have no input to feed and are dropped rather than traced and bundled.
+#: Groups of networks that never leave training: only the actor is exported, so no ONNX
+#: input consumes them.
 _TRAINING_ONLY_OBS_GROUPS = frozenset({"critic"})
 
-#: The slot a single observation group lands under, derived so it cannot drift from the
-#: runtime's default ``in_keys``. It is mjlab's own name for the group its actor network
-#: reads, so the common case needs no key at all (ADR 0006 §5). The TypeScript runtime
-#: holds the same default, pinned to Python by ``default_slots.json``.
+#: The slot a single observation group lands under: the runtime's default ``in_keys``,
+#: which is mjlab's name for the actor's group, so the common case needs no key
+#: (ADR 0006 §5). The TypeScript copy is pinned to this one by ``default_slots.json``.
 DEFAULT_OBS_GROUP_KEY = DEFAULT_IN_KEYS[0]
 
-#: mjlab's name for the network whose group the exported policy reads. The same word as
-#: the default slot, by design, but a different namespace: this one is looked up in
-#: ``rl_cfg.obs_groups``, the other in ``in_keys``.
+#: mjlab's name for the exported policy's network, a key of ``rl_cfg.obs_groups``. Same
+#: word as the default slot by design, but that one is a key of ``in_keys``.
 _MJLAB_ACTOR_NETWORK = "actor"
 
 
@@ -138,7 +122,6 @@ def _is_obs_group(value: Any) -> bool:
     """Whether *value* is a single observation group rather than a dict of them."""
     if isinstance(value, MjswanObservationGroupCfg):
         return True
-    # A group carries `terms`; a dict of groups does not.
     return not isinstance(value, Mapping) and hasattr(value, "terms")
 
 
@@ -148,16 +131,14 @@ def _select_policy_group(
 ) -> Mapping[str, Any]:
     """Reduce mjlab's network-keyed group dict to what the exported actor reads.
 
-    mjlab keys ``env_cfg.observations`` by *network* (``"actor"``, ``"critic"``); mjswan
-    keys it by *slot*, the name the policy's ``in_keys`` table uses. The default slot is
-    also called ``actor``, so mjlab's own dict needs no renaming, only the other
-    networks' groups dropped. A runner that names the actor's group something else
-    (``obs_groups == {"actor": ("proprio",), ...}``) has that group moved to the default
-    slot.
+    mjlab keys ``env_cfg.observations`` by *network* (``"actor"``, ``"critic"``), mjswan
+    by *slot* (the policy's ``in_keys``). The default slot is also ``actor``, so mjlab's
+    own dict only loses the other networks' groups; a runner naming the actor's group
+    otherwise (``obs_groups == {"actor": ("proprio",), ...}``) has it moved there.
 
-    Only groups the runner attributes to a network are touched. A key it does not know
-    (``"command_"`` on a multi-input policy) is a slot the author added and stays, and a
-    dict sharing no key with the actor's is not the task's dict and is left alone.
+    A key the runner attributes to no network (``"command_"`` on a multi-input policy)
+    is an author-added slot and stays, and a dict sharing no key with the actor's is not
+    the task's and is left alone.
     """
     if not observations:
         return observations
@@ -193,22 +174,19 @@ def adapt_observations(
 ) -> dict[str, MjswanObservationGroupCfg] | None:
     """Adapt observation groups, converting mjlab types if detected.
 
-    Accepts three shapes, because the caller should not have to know which slot the
-    runtime will feed:
+    Accepts three shapes, so the caller need not know which slot the runtime feeds:
 
     * a **single** group (mjlab's ``env_cfg.observations["actor"]``), which lands
       under :data:`DEFAULT_OBS_GROUP_KEY`;
-    * mjlab's whole ``env_cfg.observations`` dict, from which the policy's group is
-      selected (see :func:`_select_policy_group`) and the other networks' dropped;
-    * a dict already keyed by slot name (the names the policy's ``in_keys`` table
-      uses), passed through as-is.
+    * mjlab's whole ``env_cfg.observations`` dict, reduced by
+      :func:`_select_policy_group`;
+    * a dict already keyed by slot name (the policy's ``in_keys``), passed through.
 
-    mjlab groups convert transparently, mjswan ones pass through, and a group named for
-    a training-only network (:data:`_TRAINING_ONLY_OBS_GROUPS`) is dropped: silently
-    beside an ``actor`` group, since the pair is mjlab's own dict, with a warning
-    otherwise.
+    A group named for a training-only network (:data:`_TRAINING_ONLY_OBS_GROUPS`) is
+    dropped: silently beside an ``actor`` group, since the pair is mjlab's own dict,
+    with a warning otherwise.
 
-    *obs_groups* is the runner's ``rl_cfg.obs_groups``, consulted only for the dict form.
+    *obs_groups* is the runner's ``rl_cfg.obs_groups``, read only for the dict form.
     """
     if observations is None:
         return None

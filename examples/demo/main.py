@@ -2,18 +2,15 @@
 
 A tour of what mjswan does, hosted on GitHub Pages: https://ttktjmt.github.io/mjswan/
 
-Two projects, and the split is the explanation:
+Two projects:
 
-- **mjlab Tasks**: mjlab's own tasks, taken as they are. Every scene here is
-  ``add_scene_mjlab`` plus trained checkpoints; nothing is hand-written, so what you see
-  is what mjlab gives you through mjswan.
-- **Showcase**, the same engine with mjswan-side work on top: a Gaussian Splat
-  background, a model mjlab has no task for, muscle actuators.
+- **mjlab Tasks**: mjlab's own tasks, taken as they are. Every scene is
+  ``add_scene_mjlab`` plus trained checkpoints; nothing is hand-written.
+- **Showcase**: what mjswan adds on top of the same engine, namely a Gaussian Splat
+  background, a model mjlab has no task for, and muscle actuators.
 
-**No asset is stored in this repository.** Models come from mjlab or from the Hugging
-Face Hub, and policies from the Hub. The Hub repository is public, so a build needs no
-credentials of any kind, which is why the deploy workflow carries no secret, and one
-public host is the only thing it has to reach.
+No asset is stored in this repository. Models come from mjlab or the Hugging Face Hub,
+policies from the Hub. The Hub repository is public, so a build needs no credentials.
 """
 
 import os
@@ -42,9 +39,7 @@ from mjswan.source import hf
 #: Every asset this demo does not get from mjlab. Public, so the build is anonymous.
 HF_REPO = "ttktjmt/mjswan"
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Project A: mjlab Tasks
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: mjlab's bundled tasks, in the order they appear in the scene list.
 MJLAB_TASKS = (
@@ -126,14 +121,13 @@ TASK_VIEWER_CONFIG_MAP: dict[str, mjswan.ViewerConfig] = {
 
 
 def _lift_update_command(self: Any, env_ids: Any = None) -> None:
-    """``LiftingCommand._update_command`` with the live-sim refresh dropped.
+    """``LiftingCommand._update_command`` without its ``env.sim.forward()`` call.
 
-    mjlab 1.6 follows a timer-expiry teleport of the cube with ``env.sim.forward()``, so
-    that the rest of the step reads post-teleport kinematics. It writes nothing the
-    command emits (``target_pos`` is `_resample_command`'s alone), and the tracer refuses
-    ``env.sim`` rather than bake a trace-time value into the graph. The browser forwards
-    on its own next step, which is where the teleport that `_resample_command` wrote as an
-    `entity_write` lands.
+    mjlab forwards after a timer-expiry teleport of the cube so the rest of the step
+    reads post-teleport kinematics. That writes nothing the command emits
+    (``target_pos`` is ``_resample_command``'s alone), and the tracer refuses
+    ``env.sim``. The browser forwards on its own next step, which is where the teleport
+    (an ``entity_write``) lands.
     """
     del env_ids
 
@@ -142,9 +136,7 @@ def _bind_lift_override(term: Any) -> None:
     term._update_command = types.MethodType(_lift_update_command, term)
 
 
-# Re-registered over `mjswan.mjlab.bindings`, which binds this class for the mjlab it
-# pins: from 1.6 the term is no longer traceable as mjlab writes it, and making it
-# traceable again is this port's job, not the engine's.
+# Replaces the `mjswan.mjlab.bindings` entry, adding the trace override above.
 mjswan.register_command(
     "LiftingCommandCfg",
     mjswan.CommandBinding(
@@ -158,10 +150,9 @@ mjswan.register_command(
 def _checkpoints_for(task_id: str, repo_onnx: list[str]) -> list[str]:
     """A task's mirrored checkpoints, oldest first.
 
-    ``list_repo_onnx`` sorts as strings, which puts ``model_1000`` before ``model_500``.
-    The viewer lists checkpoints in the order they are added, so training has to be
-    re-sorted numerically to read as progress. Which one opens is separate and does not
-    depend on this: ``add_policy_hf`` defaults to the highest step either way.
+    ``list_repo_onnx`` sorts as strings (``model_1000`` before ``model_500``), and the
+    viewer lists checkpoints in the order they are added, so sort by step to show
+    training progress. ``add_policy_hf`` opens the highest step either way.
     """
     prefix = f"checkpoints/{task_id.lower()}/"
     named = [name for name in repo_onnx if name.startswith(prefix)]
@@ -184,9 +175,8 @@ def _add_mjlab_tasks(builder: mjswan.Builder) -> None:
         scene = project.add_scene_mjlab(task_id, env_cfg=env_cfg)
         if viewer_cfg := TASK_VIEWER_CONFIG_MAP.get(task_id):
             scene.set_viewer(viewer_cfg)
-        # Everything but the files comes from the task: observations, commands, actions,
-        # terminations and events are read off `env_cfg`, and the joint mapping and rest
-        # pose off the metadata mjlab baked into each `.onnx`.
+        # Only the files are named here: the MDP is read off `env_cfg`, and the joint
+        # mapping and rest pose off the metadata mjlab bakes into each `.onnx`.
         scene.add_policy_hf(HF_REPO, filename=_checkpoints_for(task_id, repo_onnx))
 
     _add_tracking_scene(project, repo_onnx)
@@ -200,10 +190,9 @@ def _add_tracking_scene(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> 
     if viewer_cfg := TASK_VIEWER_CONFIG_MAP.get(TRACKING_TASK):
         scene.set_viewer(viewer_cfg)
 
-    # Both slot tables are positional, so a two-input, seven-output export cannot be
-    # read off the network's own tensor names (ADR 0006 §5). The runtime drives the
-    # actuators from the slot called `action`; the six after it are the reference pose
-    # the clip already carries, named here so the table lines up rather than to be read.
+    # Slot tables are positional and the export's own tensor names do not say which
+    # slot is which (ADR 0006 §5). Only `action` is read; the six after it are the
+    # reference pose the clip already carries, named so the table lines up.
     policies = scene.add_policy_hf(
         HF_REPO,
         filename=_checkpoints_for(TRACKING_TASK, repo_onnx),
@@ -219,10 +208,8 @@ def _add_tracking_scene(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> 
         ],
     )
 
-    # `add_policy_wandb` finds the clip in the run's artifacts; the Hub holds published
-    # files and knows nothing about which clip a policy was trained against, so the
-    # tracking scene names it. The anchor and the body list come from the task itself,
-    # which is where the training read them from too.
+    # Unlike a W&B run, the Hub does not record which clip a policy trained against, so
+    # the scene names it. The anchor and body list come from the task, as in training.
     for policy in policies:
         policy.add_motion_hf(
             HF_REPO,
@@ -234,9 +221,7 @@ def _add_tracking_scene(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> 
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Project B: Showcase
-# ─────────────────────────────────────────────────────────────────────────────
 
 G1_TERMINATIONS: dict[str, TerminationTermCfg] = {
     "bad_orientation": TerminationTermCfg(
@@ -249,15 +234,14 @@ G1_TERMINATIONS: dict[str, TerminationTermCfg] = {
 
 
 def _add_g1_on_street(project: mjswan.ProjectHandle) -> None:
-    """A Hub-hosted model, Hub-hosted policies, and two captures to stand it in.
+    """A Hub-hosted model and policies, standing in a Gaussian Splat capture.
 
     mjlab has no task for this G1 (the two policies are third-party, trained against
-    this XML), so the model itself comes from the Hub as a directory: the MJCF, the 35
-    meshes it names, and the `LICENSE` that mjswan copies into the build beside it.
+    this XML), so the model comes from the Hub as a directory: the MJCF, its meshes,
+    and the `LICENSE` mjswan copies into the build beside it.
     """
-    # Cached by `huggingface_hub`, so `add_scene_hf` below re-uses this download rather
-    # than fetching the tree twice. The robot-only XML is what the tracer needs; the
-    # scene XML that includes it is what the viewer shows.
+    # Cached by `huggingface_hub`, so `add_scene_hf` below does not fetch it again. The
+    # tracer wants the robot-only `g1.xml`; the viewer shows `scene.xml` around it.
     g1_dir = hf.fetch_dir(HF_REPO, "scenes/unitree_g1")
 
     scene = project.add_scene_hf(
@@ -282,15 +266,14 @@ def _add_g1_on_street(project: mjswan.ProjectHandle) -> None:
         )
     )
 
-    # The placement values line this capture up with this model. They belong to the
-    # capture rather than to the file, so no part of the Hub knows them.
+    # Placement aligns this capture with this model; the `.spz` does not carry it.
     scene.add_splat_hf(
         HF_REPO, "splats/street.spz", name="Street", scale=3.275, z_offset=0.708, yaw=40
     )
 
-    # Two separate calls, not one with a list: these policies were trained on different
-    # observation sets, so they are two MDPs. Neither is an mjlab export, so neither
-    # carries metadata: the sidecar JSON beside it on the Hub supplies the PD gains.
+    # Two calls, not one with a list: the policies read different observation sets, so
+    # they are two MDPs. Neither is an mjlab export, so the sidecar JSON beside each on
+    # the Hub supplies the joint mapping, rest pose and action term (PD gains included).
     scene.add_policy_hf(
         HF_REPO,
         filename="policies/locomotion.onnx",
@@ -345,9 +328,8 @@ def _add_g1_on_street(project: mjswan.ProjectHandle) -> None:
     )
 
 
-# MyoFinger: 4 hinge joints (IFadb, IFmcp, IFpip, IFdip) driven by 5 MuJoCo muscle
-# actuators. mjlab has no task for it, so the model comes from the Hub: two XMLs, one
-# including the other, which is why it is a directory like the G1.
+# MyoFinger: 4 hinge joints driven by 5 MuJoCo muscle actuators. mjlab has no task
+# for it, so the model comes from the Hub as a directory (one XML includes the other).
 MYO_JOINT_NAMES = ("IFadb", "IFmcp", "IFpip", "IFdip")
 MYO_MUSCLE_NAMES = ("extn", "adabR", "adabL", "mflx", "dflx")
 MYO_OBS_DIM = 2 * len(MYO_JOINT_NAMES)  # joint_pos + joint_vel
@@ -359,9 +341,8 @@ MYO_SCENE = "scenes/myofinger/myofinger_v0.xml"
 def _build_muscle_policy() -> onnx.ModelProto:
     """Random-uniform policy: ignores the observation, emits fresh [0, 1] samples.
 
-    The point is the action path, not the network: a muscle is excited by a value in
-    [0, 1], so a graph whose only op is `RandomUniform` drives every muscle with a new
-    excitation each policy step and shows the actuator model doing its work.
+    The point is the action path, not the network: muscle excitation lives in [0, 1], so
+    a lone `RandomUniform` op drives every muscle with a new excitation each step.
     """
     obs_in = helper.make_tensor_value_info("actor", TensorProto.FLOAT, [1, MYO_OBS_DIM])
     act_out = helper.make_tensor_value_info(
@@ -391,7 +372,7 @@ def _build_muscle_policy() -> onnx.ModelProto:
 
 
 def _add_myofinger(project: mjswan.ProjectHandle) -> None:
-    """Muscle actuators: no joint mapping, an overridden rest pose, sigmoid activation."""
+    """Muscle actuators: no joint mapping, overridden rest pose, sigmoid activation."""
     # Cached, so `add_scene_hf` below re-uses this rather than fetching twice.
     myofinger_path = str(hf.fetch_dir(HF_REPO, "scenes/myofinger") / "myofinger_v0.xml")
     scene = project.add_scene_hf(
@@ -451,11 +432,8 @@ def _add_showcase(builder: mjswan.Builder) -> None:
     _add_myofinger(project)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 def setup_builder() -> mjswan.Builder:
-    """Assemble the demo. Fetches from the Hub and from MyoHub; needs no credentials."""
+    """Assemble the demo. Fetches from mjlab and the public Hub, with no credentials."""
     builder = mjswan.Builder(
         base_path=os.getenv("MJSWAN_BASE_PATH", "/"),
         gtm_id="GTM-W79HQ38W",

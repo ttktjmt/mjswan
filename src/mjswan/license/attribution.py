@@ -14,8 +14,6 @@ from typing import Any, Iterable
 from .path import LicenseLocation, component_id, parse_license_path
 from .spdx import Tier, display_name, generate_license_text, identify_license
 
-# ── Attributions: what a scene carries ────────────────────────────────────────
-
 
 @dataclass
 class Attribution:
@@ -45,9 +43,6 @@ class Attribution:
         if self.notice is not None:
             out[f"NOTICE.{self.component}"] = self.notice
         return out
-
-
-# ── Known assets: models that ship without a license file beside them ─────────
 
 
 @dataclass(frozen=True)
@@ -137,8 +132,6 @@ def known_attribution(*names: str | None) -> Attribution | None:
         origin=f"known asset ({asset.url})",
     )
 
-
-# ── Detection: license files beside a model on disk ───────────────────────────
 
 # `LICENSE`, `LICENSE.txt`, `LICENSE-APACHE`, `COPYING.LESSER`; not `LICENSING.md`.
 _LICENSE_NAMES = re.compile(r"^(LICENSE|LICENCE|COPYING)([.-].*)?$", re.IGNORECASE)
@@ -244,9 +237,6 @@ def detect_attributions(
                 )
             break
     return attributions
-
-
-# ── The build's declaration, as `publish` and `info` read it back ─────────────
 
 
 @dataclass(frozen=True)

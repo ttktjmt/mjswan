@@ -1,9 +1,7 @@
 """Fuse an observation group, or a set of terminations, into one ONNX graph.
 
 One graph per group rather than one per term, since a per-term graph can be a single
-node and the fixed per-``ort.run()`` cost then dominates (ADR 0005 §4). The terms share
-one replay env, so a slot two of them read is marshalled once; native terms become
-graph inputs the runtime feeds, and a constant observation is baked.
+node and the fixed per-``ort.run()`` cost then dominates (ADR 0005 §4).
 """
 
 from __future__ import annotations
@@ -41,8 +39,7 @@ from .term import ConstantTerm, UntraceableTerm, warn_constant_observation
 class ConstantGroup(ValueError):
     """Every term in a group is native or constant, so the group has no graph.
 
-    Not an error: the caller falls back to the per-term path rather than fusing an
-    empty graph.
+    Not an error: the caller falls back to the per-term path.
     """
 
 
@@ -148,8 +145,8 @@ class _GroupModule(nn.Module):
 def _native_example(term: GroupTermSpec, env: Any) -> torch.Tensor:
     """Example value fixing a native term's graph-input width.
 
-    The live env is asked first. A bare trace env has no action terms and no command
-    manager, so the build hands the width down as ``native_size`` instead.
+    The env is asked first; a bare trace env has no action terms or command manager, so
+    the build hands the width down as ``native_size``.
     """
     try:
         value = term.func(env, **term.params).detach()
@@ -188,14 +185,10 @@ def trace_observation_group(
 ) -> GroupExport:
     """Fuse an observation group's terms into one ONNX graph.
 
-    One graph per group rather than one per term, since a per-term graph can be a
-    single node and the fixed per-``ort.run()`` cost then dominates (ADR 0005 §4).
-
     Inputs are the deduplicated union of the terms' dynamic slots, then one input per
     native term. The output is the concatenated vector with clip/scale folded in,
     what the policy consumes, minus history.
     """
-    # 1. Discovery, per term: what does each read, and is it native?
     dynamic: dict[SlotKey, torch.Tensor] = {}
     constants: dict[SlotKey, torch.Tensor] = {}
     sensors: dict[str, Any] = {}
@@ -247,8 +240,7 @@ def trace_observation_group(
             "native or constant, so there is no graph to run."
         )
 
-    # 2. Fuse and export. Slots sorted for determinism, then natives in declaration
-    #    order.
+    # Slots sorted for determinism, then natives in declaration order.
     sim_rows = _narrow_inputs(dynamic, sims)
     dynamic_keys = sorted(dynamic)
     slot_names = [_slot_input_name(k) for k in dynamic_keys]
@@ -365,9 +357,8 @@ def trace_termination_group(
 ) -> TerminationGroupExport:
     """Fuse termination terms into one graph, one bool lane each.
 
-    Same mechanics as :func:`trace_observation_group`, but the output is a bool vector
-    so the manager keeps its per-term reasons. `time_out` never reaches here: it is
-    classified native by name first (:func:`is_native_termination`).
+    Same mechanics as :func:`trace_observation_group`. ``time_out`` never reaches here:
+    it is classified native by name first (:func:`is_native_termination`).
     """
     dynamic: dict[SlotKey, torch.Tensor] = {}
     constants: dict[SlotKey, torch.Tensor] = {}

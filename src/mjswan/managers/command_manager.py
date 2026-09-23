@@ -1,11 +1,10 @@
 """Command-term configuration and registration.
 
-Named after ``mjlab.managers.command_manager``, where mjlab keeps a command term's
-config. Commands follow the mjlab model: each policy owns a dictionary of command terms,
-and each term produces a vector consumed by observations. The browser UI is metadata on
-top of them: manual slider/button/checkbox controls are one built-in ``UiCommand`` term
-(:func:`mjswan.envs.mdp.commands.ui_command`) rather than a separate command system,
-and an mjlab command class is bound by cfg-class name through :func:`register_command`.
+Named after ``mjlab.managers.command_manager``. As in mjlab, each policy owns a
+dictionary of command terms, each producing a vector observations consume. The browser
+UI is metadata on top: manual slider/button/checkbox controls are one built-in
+``UiCommand`` term (:func:`mjswan.envs.mdp.commands.ui_command`), and an mjlab command
+class is bound by cfg-class name through :func:`register_command`.
 """
 
 from __future__ import annotations
@@ -222,7 +221,7 @@ class CommandBinding:
     - **Native**: ``ts_name`` names a permanently-native TS class and ``serializer``
       builds its params from the mjlab cfg. It may still declare ``reset_trace``, a
       ``(mjlab_cfg) -> (func, params) | None`` hook naming one reset-time body to trace
-      (see :class:`PendingResetTrace`) — the class stays native, its randomization does
+      (see :class:`PendingResetTrace`): the class stays native, its randomization does
       not.
     - **ONNX-traced**: ``state_fields``/``command_field`` set, so the term is built and
       traced at build time and served by the shared ``OnnxCommand`` handler. Set

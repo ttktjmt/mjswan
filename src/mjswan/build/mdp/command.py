@@ -1,10 +1,9 @@
-"""Command terms: the ``policy.json`` entry and ``.onnx`` graph of a traced command.
+"""Command terms: the manifest entry and ``.onnx`` graph of a traced command.
 
 One generic ``OnnxCommand`` runtime handler interprets every command from this data,
 so the entry has to declare everything it needs to allocate state, supply ``rand``,
 thread dynamic reads, and apply any ``entity_write``. The shape is defined by
-:func:`command_config` and consumed by ``core/command/OnnxCommand.ts``; both sides are
-covered by tests, so there is no third restatement of it here.
+:func:`command_config` and consumed by ``core/command/OnnxCommand.ts``.
 """
 
 from __future__ import annotations
@@ -31,10 +30,10 @@ def command_config(
     ui: dict[str, Any] | None = None,
     viz: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Build the ``OnnxCommand`` config entry for ``policy.json`` from a trace.
+    """Build the ``OnnxCommand`` config entry from a trace.
 
-    The term's own id is the outer key the author gives this entry in
-    ``PolicyConfig.commands``; ``term_id`` here is only for diagnostics.
+    The term's own id is its key in the MDP's ``commands``; ``term_id`` here is only
+    for diagnostics.
 
     ``ui`` (control-panel inputs) and ``viz`` (what mjlab's ``_debug_vis_impl`` draws,
     shown while ``debug_vis`` is on) are not derivable from the trace.
@@ -100,7 +99,7 @@ def write_command_artifact(
 ) -> dict[str, Any]:
     """Write ``<out_dir>/[<scope>/]command/<name>.onnx`` and return its config entry.
 
-    *scope* is the owning policy's id; see :func:`.graph.onnx_ref`. *meta*
+    *scope* is the owning MDP's directory; see :func:`.graph.onnx_ref`. *meta*
     is stamped into the graph (:func:`.graph.stamp_provenance`).
     """
     ref = graph.onnx_ref("command", export.name, scope)

@@ -4,8 +4,8 @@ import type { MainModule, MjData, MjModel } from 'mujoco';
 import { PolicyStateBuilder } from '../PolicyStateBuilder';
 
 /**
- * A MuJoCo model is read here through raw typed arrays, so a fake is enough: the code
- * under test only walks `names` by address and follows `actuator_trnid` to a joint.
+ * A fake is enough: the code under test only walks `names` by address and follows
+ * `actuator_trnid` to a joint.
  */
 function makeModel(
   joints: { joint: string; actuator: string }[]
@@ -46,11 +46,10 @@ function makeModel(
 }
 
 /**
- * These pin the behaviour to mjlab's, which the field name `actuator_names` argues
- * against: `JointPositionAction` resolves it through
- * `Entity.find_joints_by_actuator_names`, which narrows `joint_names` to the actuated
- * ones and then matches the patterns against those *joint* names. So a pattern here is
- * a joint pattern, whatever the field is called.
+ * A pattern here is a joint pattern, whatever `actuator_names` suggests: mjlab's
+ * `JointPositionAction` resolves it through `Entity.find_joints_by_actuator_names`,
+ * which narrows to the actuated joints and matches the patterns against their *joint*
+ * names.
  */
 describe('getControlMappingFor', () => {
   it('matches the joint name, as mjlab does', () => {
@@ -95,9 +94,9 @@ describe('getControlMappingFor', () => {
       { joint: 'knee', actuator: 'knee_act' },
       { joint: 'ankle', actuator: 'ankle_act' },
     ]);
-    // A policy that drives two of the model's three actuators. `.*` must stay "every
+    // A policy that drives two of the model's three actuators. `.*` must mean "every
     // joint this policy drives", or a four-action policy on a twelve-actuator model
-    // would suddenly be asked for twelve.
+    // would be asked for twelve.
     const builder = new PolicyStateBuilder(mujoco, mjModel, mjData, ['hip', 'knee']);
 
     expect(builder.getControlMappingFor(['.*'], ['hip', 'knee'])).toMatchObject({
@@ -115,10 +114,9 @@ describe('getControlMappingFor', () => {
   });
 
   it('has nothing to match when the policy names no joints', () => {
-    // A cartpole checkpoint carries no mjlab metadata, so `policy_joint_names` used to
-    // arrive empty here. The term's patterns then match nothing, the runtime skips the
-    // term and writes no control at all: the scene renders and the cart never moves.
-    // Python fills the names from the task's own action terms so this cannot happen.
+    // Empty `policy_joint_names` leaves every pattern unmatched, so the runtime writes
+    // no control and the cart never moves. Python fills the names from the task's own
+    // action terms because a cartpole checkpoint carries no mjlab metadata.
     const { mujoco, mjModel, mjData } = makeModel([
       { joint: 'cartpole/slider', actuator: 'cartpole/slide_act' },
     ]);

@@ -1,10 +1,6 @@
-"""The Python side of ``template/``: Node.js environment setup and the client build.
+"""The Python side of ``template/``: its nodeenv Node.js, the SPA build, ``plugins.js``.
 
-``template/`` itself stays where npm, Vite, CI and hatch expect it. This module handles:
-- Creating isolated Node.js environments using nodeenv
-- Installing dependencies
-- Building TypeScript/JavaScript clients
-- Cross-platform compatibility (Windows/macOS/Linux)
+``template/`` sits in the package root, where npm, Vite, CI and hatch expect it.
 """
 
 from __future__ import annotations

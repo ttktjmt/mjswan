@@ -1,8 +1,7 @@
 """The `mjswan demo` surface: what it lists, what it runs, and what it refuses.
 
-The last test here is the point of the file. `_DEMOS` maps a name to a module path as a
-string, so a renamed or deleted example leaves a command that fails only when someone
-types it, which is how `mjswan demo mjlab` outlived `examples/mjlab/defaults/main.py`.
+`_DEMOS` maps a name to a module path as a string, so a renamed or deleted example
+leaves a command that fails only when someone types it. The last two tests catch that.
 """
 
 from pathlib import Path
@@ -50,7 +49,7 @@ class TestDemoCommand:
     def test_unknown_name_fails_and_says_where_to_look(
         self, runner: CliRunner, ran: list[str]
     ):
-        # `mjlab` specifically: it was a demo until its example moved out of this repo.
+        # A former demo name, the likeliest to be typed from old docs.
         result = runner.invoke(app, ["demo", "mjlab"])
 
         assert result.exit_code == 1

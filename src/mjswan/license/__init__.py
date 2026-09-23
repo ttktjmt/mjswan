@@ -1,18 +1,9 @@
 """License files in a build (ADR 0007): where they sit, what they say, and what
 ``publish`` does about them.
 
-Files sit under a project directory, never at the build root, whose ``LICENSE`` is the
-engine's:
-
-- ``<project-id>/LICENSE`` and ``NOTICE``: the work's;
-- ``<project-id>/<scene-id>/LICENSE.<component>`` / ``NOTICE.<component>``: one
-  third-party component the scene contains (a bare scene-level ``LICENSE`` is labelled
-  with the scene id).
-
 The naming rule, identifier and tier table mirror mjswan Cloud's ``@mjswan/licenses``
 and are kept in step by hand; the platform's copy decides what a publish is accepted
-with. Nothing here verifies a claim: a text is classified when it can be and otherwise
-left alone.
+with.
 """
 
 from .attribution import (

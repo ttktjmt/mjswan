@@ -1,7 +1,6 @@
 """Where a traced MDP graph lands in the bundle, and the one write that puts it there.
 
-The ref the manifest carries *is* the path on disk, resolved against the scene directory.
-Kept free of the tracer, and so of torch, since both ends of a build import it.
+The ref the manifest carries *is* the path on disk, relative to the scene directory.
 """
 
 from __future__ import annotations

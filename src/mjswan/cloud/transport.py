@@ -1,10 +1,8 @@
-"""The one header both Cloud clients send.
+"""The ``User-Agent`` both Cloud clients send.
 
 The API is fronted by Cloudflare, which rejects the stdlib's default
 ``Python-urllib/X.Y`` agent with HTTP 403 (error 1010, "banned by browser signature").
-Any real agent string passes, so the CLI identifies itself explicitly. :mod:`.publish`
-and :mod:`.auth` both send it, and share it from here rather than one importing the
-other for it.
+Any real agent string passes.
 """
 
 from __future__ import annotations

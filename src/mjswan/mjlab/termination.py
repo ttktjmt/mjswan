@@ -1,11 +1,8 @@
 """mjlab termination terms as mjswan's.
 
-Same resolution order as :mod:`.observation`: a ``TerminationBinding`` passes through,
-then a ``register_termination`` override, then mjlab's own function, traced at build.
-
-:func:`register_custom_terminations` is the other direction: two of mjlab's own terrain
-terminations read constants the terrain *generator* holds rather than the term, so they
-have to be filled in before the build traces them.
+Same resolution order as :mod:`.observation`. :func:`register_custom_terminations`
+fills the terrain generator's limits into the params of mjlab's two terrain
+terminations, for a ``TerminationBinding`` registered under their names.
 """
 
 from __future__ import annotations
@@ -26,8 +23,7 @@ def _adapt_term_func(
 ) -> TerminationBinding | Callable[..., Any]:
     """Resolve the function a termination term's ONNX graph is traced from.
 
-    Same resolution order as :func:`_adapt_obs_func`. *term_name* also covers closures,
-    which can only be registered by their dict key.
+    *term_name* also covers closures, which can only be registered by their dict key.
     """
     if isinstance(func, TerminationBinding):
         return func
@@ -40,7 +36,7 @@ def _adapt_term_func(
 
 
 def _sanitize_termination_params(params: dict[str, Any]) -> dict[str, Any]:
-    """Strip mjlab-only termination params while keeping useful scope data."""
+    """Strip mjlab-only params, keeping ``asset_cfg``'s entity and body names."""
     if not params:
         return params
 
@@ -102,12 +98,12 @@ def adapt_terminations(
 
 
 def register_custom_terminations(env_cfg: Any) -> None:
-    """Inject terrain-generator-derived constants into env_cfg terminations.
+    """Fill the terrain generator's limits into the terrain terminations, in place.
 
-    Mutates ``env_cfg.terminations["out_of_terrain_bounds"].params`` and
-    ``env_cfg.terminations["terrain_edge_reached"].params`` in place so the
-    matching declarative built-ins receive their per-build limits.  Safe to
-    call when no terrain generator is present (no-op).
+    Sets ``limit_x``/``limit_y`` on ``out_of_terrain_bounds`` and ``half_x``/``half_y``
+    on ``terrain_edge_reached``, for a ``TerminationBinding`` registered under those
+    names: mjlab's own functions read the generator themselves and take no such params.
+    A no-op without a generator terrain.
     """
     terrain = getattr(env_cfg.scene, "terrain", None)
     # `getattr(None, …, None)` is None, so this also covers a scene with no terrain.

@@ -1,8 +1,7 @@
 """``SceneHandle.add_policy_hf`` end to end, with the Hub itself stubbed.
 
-Only ``source.hf._hub`` is replaced, so the filename resolution, the name derivation, the
-metadata read and the ``add_policy`` call all run for real: the network is the one
-thing that does not.
+Only ``source.hf._hub`` is replaced, so filename resolution, name derivation, the
+metadata read and the ``add_policy`` call all run for real.
 """
 
 from __future__ import annotations
@@ -176,11 +175,9 @@ class TestSceneDefault:
     """At most one policy on a scene may open it, across however many calls made them."""
 
     def test_two_calls_leave_one_default(self, scene, fake_hub):
-        """A scene carrying two differently-trained policies takes two calls.
+        """Two MDPs on one scene take two calls, which must not both claim the default.
 
-        `examples/demo/main.py`'s G1 does exactly this (locomotion and balance were
-        trained on different observation sets, so they are two MDPs and two calls), and
-        each call marking its own best made the build refuse the scene.
+        The build refuses a scene with two defaults.
         """
         fake_hub("locomotion.onnx", metadata=MJLAB_METADATA)
         fake_hub("balance.onnx", metadata=MJLAB_METADATA)
@@ -218,10 +215,9 @@ class TestJointMappingGuard:
     def test_a_passive_joint_is_skipped_rather_than_refused(self, scene, fake_hub):
         """mjlab lists every joint of the robot; the network drives the actuated ones.
 
-        mjlab's YAM is the real case: eight joints, seven actions, two fingers ganged
-        into one gripper. The metadata knowing about a joint this network does not drive
-        costs nothing: the actuated list is already the action order, and each of its
-        joints has a rest pose in there to look up.
+        mjlab's YAM is the real case: eight joints, seven actions (two fingers ganged
+        into one gripper). The extra joint is harmless: the actuated list is already the
+        action order, and each of its joints has a rest pose to look up.
         """
         fake_hub(
             "policy.onnx",
@@ -247,10 +243,9 @@ class TestJointMappingGuard:
     def test_actuator_order_does_not_become_the_action_order(self, fake_hub):
         """The actuator block's order is the model's; the actions come in joint order.
 
-        The real case is the Unitree G1, whose actuator block is not in joint order.
-        mjlab resolves the action term through `find_joints_by_actuator_names`, which
-        keeps `joint_names`' order, so the metadata is already in the action order and
-        the model's actuator block must not be allowed to reorder it.
+        They differ on the Unitree G1. mjlab resolves the action term through
+        `find_joints_by_actuator_names`, which keeps `joint_names`' order, so the
+        metadata is already in action order and the actuator block must not reorder it.
         """
         builder = mjswan.Builder()
         reversed_scene = builder.add_project(name="T").add_scene(

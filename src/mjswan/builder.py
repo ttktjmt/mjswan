@@ -94,19 +94,16 @@ class Builder:
                 observations/actions), build manually with
                 :meth:`add_project` → :meth:`~mjswan.project.ProjectHandle.add_scene_mjlab`
                 → :meth:`~mjswan.scene.SceneHandle.add_policy_wandb`.
-            hf_repo_id: Optional Hugging Face Hub repository (``"<owner>/<name>"``) to
-                take the policy's exported ONNX from instead: no torch conversion, and
-                the joint names and rest pose come from the file's own metadata. May be
-                combined with ``run_path`` to show both on one scene. For finer control
-                (a specific file, a pinned revision) build manually and call
-                :meth:`~mjswan.scene.SceneHandle.add_policy_hf`.
+            hf_repo_id: Optional Hugging Face Hub repository (``"<owner>/<name>"``)
+                whose exported ONNX is added as a policy, with no torch conversion: the
+                joint names and rest pose come from the file's metadata. May be combined
+                with ``run_path``. For finer control (a specific file, a pinned
+                revision), call :meth:`~mjswan.scene.SceneHandle.add_policy_hf`.
             project_name: Name for the auto-created project. Defaults to ``"mjlab"``.
             play: Which of the task's two registered configs to load; unset means play.
                 Mutually exclusive with ``env_cfg``. See
                 :meth:`~mjswan.project.ProjectHandle.add_scene_mjlab`.
-            env_cfg: Pre-loaded (and possibly edited) env config, for a task whose
-                registered one is incomplete — mjlab's tracking tasks ship
-                ``commands["motion"].motion_file = ""``. See
+            env_cfg: Pre-loaded (and possibly edited) env config. See
                 :meth:`~mjswan.project.ProjectHandle.add_scene_mjlab`.
             base_path: Base path for the application (e.g., ``"/mjswan/"``).
             gtm_id: Optional Google Tag Manager container ID.

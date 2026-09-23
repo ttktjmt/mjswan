@@ -382,9 +382,9 @@ def new_cmd(
 
 # ── demo ──────────────────────────────────────────────────────
 
-#: Name → the module it runs and what that module builds. Every one lives under
-#: `examples/`, which a source checkout has and an installed wheel does not;
-#: `tests/test_cli_demo.py` fails if a name points at a file that is no longer there.
+#: Name → (module it runs, what it builds). The modules live under `examples/`, which a
+#: source checkout has and an installed wheel does not; `tests/test_cli_demo.py` checks
+#: each one exists.
 _DEMOS: dict[str, tuple[str, str]] = {
     "main": ("examples.demo.main", "Eight mjlab tasks and a showcase, as deployed"),
     "simple": ("examples.demo.simple", "One mjlab task, one checkpoint"),
@@ -400,9 +400,7 @@ def demo_cmd(
     ] = None,
 ) -> None:
     """Run a built-in mjswan demo, or list them."""
-    # No name lists rather than running: every demo fetches models and checkpoints over
-    # the network, which is not what to do to someone who typed the bare command to find
-    # out what exists.
+    # No name lists instead of running one: every demo downloads models and checkpoints.
     if name is None:
         console.print("[bold]Available demos:[/bold]")
         width = max(len(demo) for demo in _DEMOS)
@@ -517,6 +515,3 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
                     f"[dim]mdp={policy.get('mdp')}{size_str}[/dim]"
                 )
     return total_bytes
-
-
-# ── Legacy entry points (backward compatibility) ──────────────

@@ -36,11 +36,7 @@ def param_json(value: Any) -> Any:
 
 
 def term_provenance(func: Any, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    """``func`` / ``doc`` / ``params`` for a term entry.
-
-    The manifest says what a term reads and how wide it is; only the build knows which
-    function it is.
-    """
+    """``func`` / ``doc`` / ``params`` for a term entry."""
     out: dict[str, Any] = {}
     module = getattr(func, "__module__", None)
     qualname = getattr(func, "__qualname__", None) or getattr(func, "__name__", None)
@@ -55,7 +51,7 @@ def term_provenance(func: Any, params: dict[str, Any] | None = None) -> dict[str
 
 
 def graph_meta(kind: str, term: str, func: Any = None) -> dict[str, str]:
-    """The ``metadata_props`` a written graph carries; see :func:`.graph.stamp_provenance`."""
+    """A written graph's ``metadata_props``; see :func:`.graph.stamp_provenance`."""
     meta = {"kind": kind, "term": term}
     path = term_provenance(func).get("func") if func is not None else None
     if path:

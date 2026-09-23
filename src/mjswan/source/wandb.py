@@ -1,11 +1,8 @@
 """Weights & Biases as a source: a run path or an artifact path in, files out.
 
-A run's ``model_*.pt`` checkpoints are training state; turning one into ONNX is
-:func:`mjswan.mjlab.runner.export_checkpoint`'s business, not this module's. A run's
-latest ``.onnx`` and the motion clip it used or logged come back as they are.
-
-``wandb`` is its one dependency, and it is optional (the ``wandb`` extra): nothing here
-is imported until a caller asks for a run.
+Files come back as stored; a ``model_*.pt`` becomes ONNX in
+:func:`mjswan.mjlab.runner.export_checkpoint`. ``wandb`` is optional (the ``wandb``
+extra) and imported lazily.
 """
 
 from __future__ import annotations
@@ -88,18 +85,13 @@ def resolve_artifact_path(
 
 
 def fetch_onnx(run_path: str) -> tuple[str, onnx.ModelProto]:
-    """Download the latest ONNX policy file from a W&B run.
-
-    Finds the most recently updated ``.onnx`` file attached to the run and
-    loads it into memory as an :class:`onnx.ModelProto`.  The policy name is
-    the filename with its extension removed (e.g. ``"2026-02-25_04-30-08.onnx"``
-    becomes ``"2026-02-25_04-30-08"``).
+    """Download the most recently updated ``.onnx`` of a W&B run.
 
     Args:
         run_path: W&B run path in the format ``"entity/project/run_id"``.
 
     Returns:
-        A ``(policy_name, onnx_model)`` tuple for the latest ``.onnx`` file.
+        A ``(policy_name, onnx_model)`` tuple, the name being the file's stem.
 
     Raises:
         ValueError: If no ``.onnx`` files are found in the run.
@@ -168,8 +160,8 @@ def fetch_motion_npz_from_artifact(
 def fetch_checkpoints(run_path: str) -> Iterator[list[tuple[str, Path]]]:
     """Every ``model_*.pt`` of a run as ``(name, path)`` pairs, sorted by training step.
 
-    The files sit in a temporary directory that lives for the ``with`` block. Sorted so
-    the caller sees ``model_0``, ``model_50``, ``model_100``, … in that order.
+    The files sit in a temporary directory that lives for the ``with`` block. The sort
+    is numeric: ``model_50`` before ``model_100``.
 
     Raises:
         ValueError: If the run holds no ``model_*.pt`` file.

@@ -1,8 +1,8 @@
 """The ``.swn`` simulation document (ADR 0006): what the manifest says, how the tree is
 named, and the container that packages it as one file.
 
-This package knows nothing of torch or mjlab: it is the side of the format that
-``app``, ``cli`` and ``cloud`` read, and that ``build`` writes.
+Torch- and mjlab-free, so ``app``, ``cli`` and ``cloud`` can read what ``build`` writes
+without them (ADR 0008 §1).
 """
 
 from .container import (

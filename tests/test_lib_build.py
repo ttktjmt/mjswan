@@ -44,8 +44,7 @@ _DYNAMIC_IMPORT = re.compile(
 _ORT_WASM_FILE = "ort-wasm-simd-threaded.wasm"
 _ORT_WASM_GLOB = "ort-wasm-simd-threaded-*.wasm"
 
-#: Cloudflare Pages refuses a file above this, and a host that takes one still makes every
-#: visitor download it. Mirrors MAX_ASSET_BYTES in vite.wasm.ts.
+#: Cloudflare Pages' per-file limit. Mirrors MAX_ASSET_BYTES in vite.wasm.ts.
 _MAX_ASSET_BYTES = 25 * 1024 * 1024
 
 
@@ -195,9 +194,9 @@ class TestLibBuild:
     def test_ort_wasm_paths_names_the_file_never_a_prefix(self, lib_dist: Path):
         """`wasmPaths` names the wasm; a URL prefix would be a third-party script fetch.
 
-        Given a prefix, ORT dynamic-imports `ort-wasm-simd-threaded.mjs` from it,
-        executable code, from whatever origin the prefix names, on every policy-driven
-        scene — while naming only the wasm keeps ORT on the loader inlined in the bundle.
+        Given a prefix, ORT dynamic-imports `ort-wasm-simd-threaded.mjs` from it:
+        executable code from whatever origin the prefix names. Naming only the wasm
+        keeps ORT on the loader inlined in the bundle.
         """
         code = (lib_dist / "mjswan.js").read_text()
         emitted = list(lib_dist.glob(f"assets/{_ORT_WASM_GLOB}"))
@@ -222,13 +221,11 @@ class TestLibBuild:
         )
 
     def test_nothing_emitted_exceeds_a_static_host_file_limit(self, lib_dist: Path):
-        """Every emitted file fits what a static host will serve.
+        """Every emitted file fits Cloudflare Pages' 25 MiB per-file limit.
 
-        Cloudflare Pages rejects a deploy carrying a file over 25 MiB, and a build command
-        that prunes the offender instead leaves the page fetching a wasm that 404s: the
-        host answers with `index.html`, and the browser reports `expected magic word
-        00 61 73 6d, found 3c 21 64 6f`. ORT's default (JSEP) build put us there at
-        26.5 MiB, hence `onnxruntime-web/wasm`; this is the guard.
+        Over it the deploy fails, or, if the build prunes the file, the host answers the
+        wasm fetch with `index.html` and the browser reports `expected magic word
+        00 61 73 6d, found 3c 21 64 6f`.
         """
         oversized = {
             path.relative_to(lib_dist).as_posix(): path.stat().st_size

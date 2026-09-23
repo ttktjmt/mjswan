@@ -186,25 +186,19 @@ def _hf_driven_joints(
 ) -> tuple[list[str], list[int]] | None:
     """The joints the network drives, and where the metadata keeps each one's values.
 
-    Returns the scene's joint names **in the order the actions come out**, paired with,
-    for each of them, its index in ``meta.joint_names``. ``None`` when the metadata does
-    not describe this network's actions.
+    Returns the scene's joint names **in action order**, each paired with its index in
+    ``meta.joint_names``; ``None`` when the metadata does not describe this network's
+    actions.
 
-    That order is *joint* order, not actuator order, and the field name misleads. Every
-    mjlab task writes ``actuator_names=(".*",)``, but ``JointPositionAction`` resolves it
-    through ``Entity.find_joints_by_actuator_names``, which filters ``joint_names`` down
-    to the actuated ones ("preserving natural order", meaning the model's joint order)
-    and then matches the patterns against those *joint* names. So the action list is the
-    actuated joints in joint order, which is exactly ``meta.joint_names`` minus whatever
-    this model does not actuate. The metadata's own order is therefore already right;
-    what it can carry too much of is joints (mjlab's YAM lists eight against seven
-    actions, two fingers ganged into one gripper).
+    Action order is *joint* order, whatever ``actuator_names`` suggests:
+    ``JointPositionAction`` resolves it via ``Entity.find_joints_by_actuator_names``,
+    which keeps the actuated joints in the model's joint order. So the metadata's order
+    is already right; it can only list extra joints (mjlab's YAM lists eight against
+    seven actions, two fingers ganged into one gripper).
 
-    ``actuated`` is used for two things only: to say which of the metadata's joints this
-    model drives, and to supply the model's spelling, namespaced as mjlab writes it
-    into a scene, which is what the runtime resolves against. Its own order is the
-    model's actuator block and is not the action order; the Unitree G1 is a robot where
-    the two differ.
+    ``actuated`` only says which metadata joints this model drives and supplies the
+    model's namespaced spelling, which the runtime resolves against. Its own order is
+    the actuator block's, not the action order (the two differ on the Unitree G1).
     """
     if meta is None or actuated is None:
         return None
@@ -231,12 +225,9 @@ def _hf_driven_joints(
 def _default_to_latest(handles: list[PolicyHandle], scene: SceneConfig) -> None:
     """Open the scene on the highest-step checkpoint these handles brought.
 
-    Only when nothing on the scene is opening it already. A scene gathers policies from
-    as many calls as the author likes (two ``add_policy_hf`` calls, one per observation
-    set, is how a scene carries two differently-trained policies), and each call marking
-    its own best would leave the scene with several defaults, which the build refuses
-    (ADR 0006 §4). The first call to name one keeps it; a later call adds its policies
-    without argument.
+    Skipped when the scene already has a default: several calls may add policies to one
+    scene, and each marking its own best would leave several defaults, which the build
+    refuses (ADR 0006 §4).
     """
     if not handles or any(policy.default for policy in scene.policies):
         return
@@ -321,36 +312,25 @@ class SceneConfig:
     """Optional terrain data (e.g. flat_patches) for browser-side event execution."""
 
     control_dt: float | None = None
-    """Seconds per control step — mjlab's ``env.step_dt`` (``timestep * decimation``).
+    """Seconds per control step, mjlab's ``env.step_dt`` (``timestep * decimation``).
 
-    The rate the policy was trained to act at, and the ``dt`` every timer in the
-    runtime counts in: the physics substep count per step, the command resample
-    schedule, the interval-event triggers. It cannot be inferred from the model,
-    which carries only the physics ``timestep``.
-
-    Set automatically by :meth:`ProjectHandle.add_scene_mjlab` from the task's live
-    env. **Required** for a scene built via plain :meth:`ProjectHandle.add_scene`
-    that carries a policy — the build fails rather than defaulting, because a wrong
-    control rate raises no error at playback, it just runs the policy at a speed it
-    was not trained for. Deliberately *not* read from a trace env: the one
-    :func:`mjswan.mjlab.env.build_single_entity_trace_env` builds declares
-    ``decimation=1`` as a tracing placeholder, which is not anybody's control rate."""
+    The rate the policy acts at, and the ``dt`` every runtime timer counts in (physics
+    substeps per step, command resampling, interval events). Set by
+    :meth:`ProjectHandle.add_scene_mjlab`. The model carries only ``timestep``, so a
+    plain :meth:`ProjectHandle.add_scene` scene with a policy must set it; the build
+    refuses to guess, as a wrong rate plays without error at the wrong speed. Never
+    read from a trace env, whose ``decimation=1`` is a tracing placeholder."""
 
     mjlab_env: Any = field(default=None, repr=False, compare=False)
-    """Live env ONNX tracing (ADR 0005) runs authored observation/termination/
-    event/command term bodies against. Built at build time from
-    :attr:`mjlab_env_cfg` when the scene came from a task (see
-    ``mjswan.build.pipeline``), so a tracking task's env is constructed only once
-    its clip is in the bundle — unless :meth:`SceneHandle.add_policy_wandb` already
-    built one to export the checkpoints, which it hands over rather than closing. A
-    scene built via plain :meth:`ProjectHandle.add_scene` (no mjlab task) has none by
-    default — set
-    one explicitly with :meth:`SceneHandle.set_trace_env` if it uses
-    plain-callable (non-``Binding``) term functions. Only needs
-    ``env.scene[name].data.<field>`` (and, for events, entity write methods) —
-    doesn't have to be a full ``ManagerBasedRlEnv``, see
-    :func:`mjswan.mjlab.env.build_single_entity_trace_env`. Python-build-time-
-    only state; never part of the scene's serialized JSON output."""
+    """Live env the ONNX tracer (ADR 0005) runs term bodies against. Build-time only.
+
+    Built lazily from :attr:`mjlab_env_cfg` (see ``mjswan.build.pipeline``), so a
+    tracking task's env exists only once its clip is bundled, unless
+    :meth:`SceneHandle.add_policy_wandb` hands over the one it built for export. A
+    plain :meth:`ProjectHandle.add_scene` scene has none: set one with
+    :meth:`SceneHandle.set_trace_env` if it uses plain-callable (non-``Binding``)
+    terms. It needs only ``env.scene[name].data.<field>`` (and entity write methods
+    for events), see :func:`mjswan.mjlab.env.build_single_entity_trace_env`."""
 
     mjlab_env_cfg: Any = field(default=None, repr=False, compare=False)
     """The mjlab env config this scene was built from, when it came from a task.
@@ -370,9 +350,8 @@ class SceneConfig:
     mjlab_task_id: str | None = field(default=None, repr=False, compare=False)
     """The mjlab task id behind this scene, when it came from one.
 
-    Used to reach the task's *runner* config for the two things playback needs from it
-    (which observation group the actor reads, and ``clip_actions``) — see
-    :func:`mjswan.mjlab.resolve_runner_defaults`."""
+    Reaches the task's runner config for the actor's observation group and
+    ``clip_actions``, see :func:`mjswan.mjlab.resolve_runner_defaults`."""
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -1038,20 +1017,17 @@ class SceneHandle:
     ) -> list[PolicyHandle]:
         """Add ONNX policies fetched from a Hugging Face Hub repository.
 
-        The light counterpart of :meth:`add_policy_wandb`. A W&B run holds *training
-        state*, so that method rebuilds a live mjlab env and converts every
-        ``model_*.pt`` with torch; a Hub repository holds the *published artifact*, so
-        this one downloads the ``.onnx`` and reads what mjlab baked into it. Neither
-        mjlab nor torch is needed, and ``task_id`` is optional.
+        The light counterpart of :meth:`add_policy_wandb`: it downloads the exported
+        ``.onnx`` and reads the metadata mjlab baked into it, so neither mjlab nor torch
+        is needed and ``task_id`` is optional.
 
-        With ``use_metadata`` left on, an mjlab export fills what the caller did not:
+        With ``use_metadata`` on, an mjlab export fills what the caller did not:
         ``policy_joint_names`` and ``default_joint_pos`` per policy, and (only when this
         scene has no mjlab env config to take them from) the joint-position action term.
-        It is used only when **this scene's own model** presents the same joints in
-        actuator order: mjlab records every joint of the robot in joint order, the
-        network emits one action per actuator, and pairing lists that differ in length
-        or order would misdrive every actuator with nothing at playback to say so. A
-        mismatch warns and fills nothing rather than guessing.
+        It is used only when every joint **this scene's own model** actuates is in the
+        metadata and their count matches the network's actions; anything else would
+        misdrive every actuator with nothing at playback to say so, so a mismatch warns
+        and fills nothing.
 
         Observation terms are *never* reconstructed: the metadata names them but does
         not carry the functions mjswan traces, so ``observations`` stays the caller's
@@ -1087,10 +1063,9 @@ class SceneHandle:
             out_keys: ONNX output slot table; see :meth:`add_policy`.
             policy_joint_names: Overrides what the metadata would supply.
             default_joint_pos: Overrides what the metadata would supply.
-            encoder_bias: Per-joint encoder bias; mjlab records none, so it is the
-                caller's to pass when the checkpoint needs one.
-            clip_actions: Raw-action bound. This path never loads mjlab, so a task's
-                runner config is read only if ``task_id`` names one that is installed.
+            encoder_bias: Per-joint encoder bias; the metadata carries none.
+            clip_actions: Raw-action bound. Unset, it is read from ``task_id``'s runner
+                config when mjlab and that task are installed.
             extras: Optional extra JSON payload applied to every fetched policy.
 
         Returns:
@@ -1149,8 +1124,7 @@ class SceneHandle:
         metas = [
             read_mjlab_metadata(model) if use_metadata else None for _, model in fetched
         ]
-        # Compiled once, not once per file: every policy in a repository is checked
-        # against the same scene.
+        # Compiled once: every fetched policy is checked against the same scene.
         scene_model = _get_scene_model(self._config)
         actuated = actuated_joint_names(scene_model)
         driven = [
@@ -1164,10 +1138,9 @@ class SceneHandle:
             env_cfg, observations, commands, actions, terminations
         )
         # mjlab attaches export metadata from its velocity, manipulation and tracking
-        # runners only, so a cartpole checkpoint carries none and this path would leave
-        # the browser with no joint mapping at all. The task's own action terms name the
-        # joints, which is where `add_policy_wandb` reads them from too. Adapted on a
-        # copy: `_resolve_mdp` adapts the shared MDP itself, later and once.
+        # runners only (a cartpole export carries none), so fall back on the joints the
+        # task's action terms name. Adapted on a copy: `_resolve_mdp` adapts the shared
+        # MDP itself, later and once.
         adapted_actions = adapt_actions(actions)
         fallback_joint_names = (
             None
@@ -1176,10 +1149,8 @@ class SceneHandle:
         )
         first_meta = metas[0] if metas else None
         if actions is None and first_meta is not None and driven[0] is not None:
-            # Only reached when neither the caller nor an env config supplied actions (
-            # `_derive_term_sets` has already had its turn), so the metadata is the last
-            # description of the action term there is, not a competing one. Guarded by
-            # `driven`, so the scale is known to line up with the actions it scales.
+            # `_derive_term_sets` has run, so neither the caller nor an env config gave
+            # actions. `driven` guarantees the scale lines up with the actions.
             actions = (
                 action_cfg_from_metadata(
                     first_meta, action_width=onnx_output_width(fetched[0][1])
@@ -1187,8 +1158,7 @@ class SceneHandle:
                 or None
             )
 
-        # One MDP across the repository's policies, as `add_policy_wandb` does for a
-        # run's checkpoints: they describe one task, so they share its graphs.
+        # One MDP for all fetched policies: they describe one task, so share its graphs.
         shared_mdp = MdpConfig(
             observations=observations,
             commands=commands,
@@ -1248,11 +1218,9 @@ class SceneHandle:
     ) -> dict[str, Any]:
         """``policy_joint_names`` / ``default_joint_pos`` for one policy.
 
-        The caller's values win outright, then the checkpoint's own metadata, then
-        *fallback_joint_names* read off the task's action terms for an export that
-        carries no metadata. Metadata that exists but does not line up with the scene is
-        reported rather than dropped: it is the one case where someone who expected the
-        fetch to fill everything gets nothing and no reason why.
+        Precedence: the caller's values, then the checkpoint's metadata, then
+        *fallback_joint_names* for an export without metadata. Metadata that does not
+        line up with the scene warns, or nothing would say why the fetch filled nothing.
         """
         explicit = {
             key: value
@@ -1269,11 +1237,9 @@ class SceneHandle:
             if "policy_joint_names" in explicit:
                 return explicit
             if fallback_joint_names is None:
-                # Nothing left to try. Silence here is what let both cartpole scenes
-                # ship driving nothing: the browser skips an action term it cannot map
-                # and says so in a `console.warn` a release bundle strips. A policy with
-                # no joint action term drives nothing by design, and a sidecar is read
-                # at build time and may still carry the names, so both are spared.
+                # Warn here: the browser skips an action term it cannot map with only a
+                # `console.warn`, which release bundles strip. Spared: a policy with no
+                # joint action term, and a sidecar, which may still carry the names.
                 if drives_joints and not has_sidecar:
                     warnings.warn(
                         f"Policy {policy_name!r} from {repo_id!r} carries no mjlab "
@@ -1287,8 +1253,7 @@ class SceneHandle:
                         stacklevel=3,
                     )
                 return explicit
-            # Same guard the metadata path gets: a list the actions cannot drive would
-            # misdrive them, which nothing downstream would say.
+            # A list off the action width would misdrive silently, as with metadata.
             width = onnx_output_width(policy)
             if width is not None and len(fallback_joint_names) != width:
                 warnings.warn(
@@ -1321,8 +1286,7 @@ class SceneHandle:
         names, order = driven
         derived = {
             "policy_joint_names": list(names),
-            # Read into action order: the metadata's rest pose is per joint, in joint
-            # order, and `order` says which of its entries each action belongs to.
+            # `order` maps each action to its entry in the metadata's per-joint pose.
             "default_joint_pos": [meta.default_joint_pos[index] for index in order],
         }
         return {**derived, **explicit}
@@ -1330,17 +1294,13 @@ class SceneHandle:
     def actuated_joint_names(self) -> list[str] | None:
         """The joint each of this scene's actuators drives, in **actuator** order.
 
-        Useful for seeing what a model actuates, and as the starting point for a
-        ``policy_joint_names``, but not as its value without thought, because actuator
-        order is a property of the model's actuator block, not of the network. An mjlab
-        policy comes out in *joint* order (``Entity.find_joints_by_actuator_names``
-        filters ``joint_names`` and keeps their order), and the Unitree G1 is a robot
-        where the two differ.
+        A starting point for ``policy_joint_names``, not its value: an mjlab policy's
+        actions come out in *joint* order (``Entity.find_joints_by_actuator_names``
+        keeps ``joint_names`` order), and on some robots (Unitree G1) the two differ.
 
         ``None`` when the model does not answer unambiguously: no model, no actuators, a
         transmission that is not a joint (a tendon, a site, a body), an unnamed joint, or
-        two actuators on one joint. Each of those makes "the i-th actuator drives this
-        joint" untrue, and a wrong answer here is silent at playback.
+        two actuators on one joint.
         """
         return actuated_joint_names(_get_scene_model(self._config))
 
@@ -1463,13 +1423,10 @@ class SceneHandle:
     ) -> SplatHandle:
         """Add a Gaussian Splat background fetched from a Hugging Face Hub repository.
 
-        The Hub counterpart of :meth:`add_splat`. A splat is a single opaque file, so
-        this only downloads it and hands the local path to ``source=``: the ``.spz`` is
-        bundled into the build as a local one is, and the deployed app needs no network.
-
-        The placement arguments are the same as :meth:`add_splat`'s and mean the same
-        thing. They describe how *this* capture lines up with *this* model, which no
-        file on the Hub knows, so they stay the caller's to supply.
+        The Hub counterpart of :meth:`add_splat`: the ``.spz`` is downloaded and bundled
+        like a local ``source=``, so the deployed app needs no network. The placement
+        arguments mean what they do in :meth:`add_splat` and stay the caller's to
+        supply, since no file on the Hub says how a capture lines up with a model.
 
         Args:
             repo_id: Hub repository, ``"<owner>/<name>"``.
@@ -1596,8 +1553,8 @@ class SceneHandle:
         Required for a plain :meth:`ProjectHandle.add_scene` scene with plain-callable
         term functions, which has no task env of its own. The env only has to satisfy
         ``env.scene[name].data.<field>`` (plus the entity write methods for write-side
-        terms), see :func:`mjswan.mjlab.env.build_single_entity_trace_env` for a minimal
-        one built from a single entity's spec.
+        terms); :func:`mjswan.mjlab.env.build_single_entity_trace_env` builds a minimal
+        one from a single entity's spec.
 
         An :meth:`ProjectHandle.add_scene_mjlab` scene builds its own at build time;
         setting one here pre-empts that.

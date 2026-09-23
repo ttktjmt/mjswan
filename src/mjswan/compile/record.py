@@ -3,9 +3,8 @@
 A value-returning term reads through :class:`_RecordingEnv`, which logs each read
 under a slot key and, for a raw sim field, the rows the read touches, so the graph
 input can be narrowed to them. An event or command body reads through
-:class:`_EventCaptureEnv`, which logs under tagged keys (those bodies also read
-scene-level tensors and control-flow scalars) and captures the ``write_*_to_sim``
-calls whose tensors become the graph outputs.
+:class:`_EventCaptureEnv`, which logs under tagged keys and captures the
+``write_*_to_sim`` calls whose tensors become the graph outputs.
 """
 
 from __future__ import annotations
@@ -69,8 +68,8 @@ def _index_rows(index: Any, size: int | None) -> list[int] | None:
 class _RowRecord:
     """Which rows of one raw field a term's reads touch.
 
-    ``None`` once any read cannot be narrowed (the whole field used as a value, or an
-    index that cannot be told statically), after which the slot ships whole.
+    ``rows`` turns ``None`` once any read cannot be narrowed (the whole field used as a
+    value, or an index that cannot be told statically); the slot then ships whole.
     """
 
     def __init__(self, size: int | None):
@@ -175,11 +174,11 @@ def _merge_narrowing(sims: Sequence[_RecordingSimData]) -> SimRows:
 
 
 class _RecordingData:
-    """Wraps a real ``Entity.data``, logging every field access.
+    """Wraps a real ``Entity.data`` for discovery.
 
-    A reader-served field is logged as one slot, value and all; any other property runs
-    against a copy whose ``data`` is the recording sim proxy, so the raw fields it reads
-    are what get logged.
+    A reader-served field or plain attribute is logged as one slot, value and all; any
+    other property runs against a copy whose ``data`` is the recording sim proxy, so the
+    raw fields it reads are what get logged.
     """
 
     def __init__(
@@ -198,8 +197,8 @@ class _RecordingData:
         object.__setattr__(self, "_traced", None)
 
     def _through(self) -> Any:
-        """The copy a traced-through property runs against, built on first use, a
-        stand-in ``Entity.data`` with no sim behind it never needs one."""
+        """The copy a traced-through property runs against. Built lazily: a stand-in
+        ``Entity.data`` with no sim behind it never needs one."""
         if self._traced is None:
             object.__setattr__(self, "_traced", _with_sim_data(self._real, self._sim))
         return self._traced
@@ -259,8 +258,7 @@ class _RecordingScene:
             # A builtin sensor is one `sensordata` window, one slot.
             self._log.append(((_SENSOR_NS, name), value))
             return value
-        # A structured sensor has no single tensor to be, so log the fields the term
-        # touches and let each become its own slot.
+        # A structured sensor has no single tensor; each field read becomes a slot.
         return _RecordingSensorData(value, name, self._log)
 
 
@@ -480,8 +478,9 @@ class _EvRecScene:
 
 
 class _EventCaptureEnv:
-    """Proxy env for event tracing: records reads, captures writes, no sim mutation.
-    Same contract as :class:`_EventReplayEnv`: any other read raises."""
+    """Proxy env for event and command tracing: records reads, captures writes,
+    never mutates the sim. Same contract as :class:`_EventReplayEnv`: any other read
+    raises."""
 
     def __init__(self, real, log, captures):
         object.__setattr__(self, "_real", real)

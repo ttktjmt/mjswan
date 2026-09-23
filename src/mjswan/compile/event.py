@@ -83,7 +83,7 @@ class EventExport:
     input_names: list[str]
     rand_dim: int
     rand_ranges: list[list[float]]
-    """Per-element ``[low, high]`` for ``rand``, the runtime draws with these."""
+    """Per-element ``[low, high]`` the runtime draws ``rand`` from."""
     output_names: list[str]
     write_targets: list[dict[str, Any]]
     """Per write-kind descriptor: what the outputs target (entity, kind, fields)."""
@@ -91,7 +91,7 @@ class EventExport:
     reference_rand: torch.Tensor
     constant_slots: list[str] = field(default_factory=list)
     input_shapes: list[list[int]] = field(default_factory=list)
-    """Traced shape of each input slot, parallel to ``input_slots`` (see :func:`slots_json`)."""
+    """Traced shape of each input slot, parallel to ``input_slots``."""
 
 
 def trace_event_term(
@@ -109,7 +109,6 @@ def trace_event_term(
     Time-varying ``entity.data`` fields become graph inputs; everything else the term
     reads (scene tensors, control-flow scalars) is baked in.
     """
-    # 1. Discovery on the live env: record draws + reads + written values.
     log: list[tuple[TaggedKey, Any]] = []
     captures: WriteCaptures = {}
     proxy = _EventCaptureEnv(env, log, captures)
@@ -127,7 +126,6 @@ def trace_event_term(
     rand_dim = rec.rand_dim
     rand_ranges = rec.rand_ranges
 
-    # 2. Classify recorded reads: dynamic data-field inputs vs baked constants.
     dynamic, tensor_consts, scalar_consts = _classify_tagged(log)
 
     dynamic_keys = sorted(dynamic)
@@ -135,7 +133,6 @@ def trace_event_term(
     example = tuple(dynamic[k] for k in dynamic_keys) + (ref_rand,)
     input_names = [*dyn_input_names, "rand"]
 
-    # 3. Trace: rand replayed as an explicit input; written values captured.
     module = _EventModule(
         func, params, dynamic_keys, tensor_consts, scalar_consts, real_env=env
     ).eval()

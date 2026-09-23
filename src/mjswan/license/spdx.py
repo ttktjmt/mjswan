@@ -37,9 +37,6 @@ _SPDX_ID = re.compile(r"^[A-Za-z0-9.+-]+$")
 Tier = Literal["notice", "restricted", "blocked"]
 
 
-# ── Identification ────────────────────────────────────────────────────────────
-
-
 @dataclass(frozen=True)
 class Identification:
     spdx: str
@@ -141,9 +138,6 @@ def _identify_text(t: str) -> str:
     return CUSTOM
 
 
-# ── What publish says ─────────────────────────────────────────────────────────
-
-
 def display_name(spdx: str) -> str:
     return "Custom" if spdx == CUSTOM else spdx
 
@@ -194,8 +188,6 @@ def blocked_refusal(path: str, spdx: str) -> str:
         "redistribution; it cannot be published to mjswan Cloud"
     )
 
-
-# ── Generation ────────────────────────────────────────────────────────────────
 
 #: Licenses whose standard text is bundled, so an SPDX id alone produces the file.
 GENERATABLE_LICENSES: tuple[str, ...] = (

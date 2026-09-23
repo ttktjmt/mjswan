@@ -1,6 +1,6 @@
 """Tests for mjswan Cloud authentication (mjswan.cloud.auth + login/logout CLI).
 
-L1 — pure Python, no network. The Supabase token endpoint is faked, and the
+Layer: L1 (pure Python, no network). The Supabase token endpoint is faked, and the
 interactive browser round-trip is replaced by a fake transport, so no real
 requests or browser windows are made.
 """

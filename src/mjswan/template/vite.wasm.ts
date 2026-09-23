@@ -11,11 +11,9 @@
  */
 
 /**
- * The onnxruntime-web entry every module imports: the `./wasm` subpath, not the package
- * root. The root resolves to the JSEP build, whose wasm carries the WebGPU kernels and
- * weighs 26.5 MiB: over Cloudflare Pages' 25 MiB per-file limit, and twice this one for a
- * GPU path these policies do not want (see `src/core/onnx/session.ts`). Same API, CPU
- * backend only.
+ * The onnxruntime-web entry every module imports. Not the package root: that resolves
+ * to the JSEP build, whose WebGPU-carrying wasm (26.5 MiB) is over Cloudflare Pages'
+ * 25 MiB per-file limit. Same API, CPU backend only.
  */
 export const ORT_ENTRY = 'onnxruntime-web/wasm';
 
@@ -37,9 +35,8 @@ export const ORT_WASM_FILE = 'ort-wasm-simd-threaded.wasm';
 export const ORT_BUNDLED_ENTRY = './dist/ort.wasm.bundle.min.mjs';
 
 /**
- * Cloudflare Pages refuses any file above this, and a host that takes one still makes
- * every visitor download it. Asserted per source in `__tests__/ortRuntimeFiles.test.ts`,
- * because an upgrade that crosses it deploys green and 404s the wasm at runtime.
+ * Cloudflare Pages' per-file limit. Asserted per source in `ortRuntimeFiles.test.ts`: a
+ * wasm over it fails the deploy, or, if the build prunes it, deploys green and 404s.
  */
 export const MAX_ASSET_BYTES = 25 * 1024 * 1024;
 

@@ -2,8 +2,7 @@
 
 ``_list_to_csv_str`` below mirrors ``mjlab.rl.exporter_utils.list_to_csv_str``
 verbatim, so these tests encode the way mjlab does and decode the way mjswan does.
-Copied rather than imported: the reader's whole point is to work without mjlab
-installed, and the suite runs without the examples extras.
+Copied rather than imported, since the reader has to work without mjlab installed.
 """
 
 import onnx

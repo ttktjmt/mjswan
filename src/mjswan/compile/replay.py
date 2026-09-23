@@ -42,7 +42,7 @@ class _NarrowedField(_FieldProxy):
 
     The term still indexes it by the field's own ids; those are remapped here to
     positions in the input. A read of exactly the rows, in order, is the input itself,
-    no Gather enters the graph.
+    so no Gather enters the graph.
     """
 
     _rows: list[int]
@@ -297,8 +297,8 @@ class _EvReplayScene:
 
     def __getattr__(self, name: str) -> Any:
         if name == "entities":
-            # Static structure, so it comes from the real env, as `num_envs` does,
-            # only the entities' tensors are recorded slots.
+            # Static structure, so the keys come from the real env; only the
+            # entities' tensors are recorded slots.
             return {
                 key: _EvReplayEntity(key, self._served, self._captures)
                 for key in self._real_env.scene.entities
@@ -317,5 +317,5 @@ class _EventReplayEnv:
         self._real_env = real_env
 
     def __getattr__(self, name: str) -> Any:
-        # Forwarded, not defaulted: replay must see the same N discovery ran against.
+        # Forwarded, so replay sees the same `num_envs` discovery ran against.
         return _forward_env_attr(self._real_env, name, _EVENT_ENV_READS)

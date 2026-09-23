@@ -1,10 +1,7 @@
 """The Hugging Face Hub as a source: a repository id in, files out.
 
-A W&B run holds training state, so its ``model_*.pt`` checkpoints (:mod:`.wandb`) go
-through a live mjlab env and torch to become ONNX (:mod:`mjswan.mjlab.runner`). A Hub
-repository holds the published artifact instead, so this module only downloads and
-loads: no mjlab, no torch. ``huggingface_hub`` is its one dependency, and it is
-optional: nothing here is imported until a caller asks for the Hub.
+A Hub repository holds exported artifacts, so this module only downloads and loads (no
+mjlab, no torch). ``huggingface_hub`` is optional (the ``hf`` extra), imported lazily.
 """
 
 from __future__ import annotations
@@ -14,13 +11,12 @@ from typing import Any
 
 import onnx
 
-#: Tried in order when a caller names no file. These are the two names Hub repositories
-#: publishing mjlab policies converged on, and the ones the Hub's own mjlab download
-#: query counts at the repository root (huggingface/huggingface.js#2473).
+#: Tried in order when a caller names no file: the names mjlab policy repositories use,
+#: and the ones the Hub's mjlab download query counts at the repository root
+#: (huggingface/huggingface.js#2473).
 DEFAULT_POLICY_FILENAMES = ("policy.onnx", "final.onnx")
 
-#: Stems that name the file's role rather than the policy. A repository whose policy is
-#: called one of these is better labelled by the repository itself.
+#: Stems that name the file's role rather than the policy, so the repository names it.
 _GENERIC_STEMS = frozenset({"policy", "final", "model", "actor"})
 
 #: The same for a scene, whose identity is its directory rather than its XML's name.
@@ -65,7 +61,7 @@ def resolve_policy_filename(
     """The one ``.onnx`` to take from a repository the caller named no file in.
 
     :data:`DEFAULT_POLICY_FILENAMES` first, then the single ``.onnx`` if that is all
-    there is. Several unnamed candidates raise rather than pick one: picking wrong is
+    there is. Several candidates raise rather than pick one, since a wrong pick is
     silent: the wrong policy loads and the robot merely misbehaves.
     """
     candidates = list_repo_onnx(
@@ -104,29 +100,20 @@ def _named_by_file_or_repo(filename: str, generic: frozenset[str], repo_id: str)
 
 
 def policy_name_for(repo_id: str, filename: str) -> str:
-    """The display name a fetched policy gets: its stem, or the repository's own name.
-
-    ``policy.onnx`` names the file's role, not the policy, so a repository whose file is
-    called that is labelled by its own last path segment instead.
-    """
+    """A fetched policy's display name: its stem, or the repository's own name."""
     return _named_by_file_or_repo(filename, _GENERIC_STEMS, repo_id)
 
 
 def splat_name_for(repo_id: str, filename: str) -> str:
-    """The display name a fetched splat gets, by the rule :func:`policy_name_for` uses.
-
-    A splat is one file, so unlike a scene there is no directory to fall back on:
-    ``background.spz`` is labelled by the repository.
-    """
+    """A fetched splat's display name, by the rule :func:`policy_name_for` uses."""
     return _named_by_file_or_repo(filename, _GENERIC_SPLAT_STEMS, repo_id)
 
 
 def scene_name_for(repo_id: str, path: str) -> str:
-    """The display name a fetched scene gets, by the rule :func:`policy_name_for` uses.
+    """A fetched scene's display name: its stem, or for a generic stem its directory.
 
-    A scene is several files, so its directory is what identifies it:
-    ``scenes/unitree_g1/scene.xml`` is the G1, not "scene". A stem that names something
-    is kept.
+    ``scenes/unitree_g1/scene.xml`` is ``unitree_g1``; at the repository root, the
+    repository's name.
     """
     stem = Path(path).stem
     if stem.lower() not in _GENERIC_SCENE_STEMS:
@@ -145,8 +132,8 @@ def fetch_file(
 ) -> Path:
     """Download one file and return its local path.
 
-    ``huggingface_hub`` caches under ``~/.cache/huggingface``, so a repeated build of
-    the same revision re-uses the download rather than fetching it again.
+    ``huggingface_hub`` caches under ``~/.cache/huggingface``, so a rebuild of the same
+    revision downloads nothing.
     """
     return Path(
         _hub().hf_hub_download(
@@ -170,26 +157,22 @@ def fetch_dir(
 ) -> Path:
     """Download a directory of the repository and return its local path.
 
-    What :func:`fetch_file` is to one file, for an asset that is several, an MJCF and
-    the meshes it references, which MuJoCo resolves relative to the XML and so must land
-    beside it.
+    For a multi-file asset such as an MJCF and its meshes, which MuJoCo resolves
+    relative to the XML and so must land beside it.
 
     Args:
         repo_id: Hub repository, ``"<owner>/<name>"``.
-        path: Directory within the repository. ``None`` takes the whole repository,
-            which for a repository holding several assets is rarely what you want.
+        path: Directory within the repository. ``None`` takes the whole repository.
         revision: Branch, tag or commit. ``None`` takes the default branch.
         repo_type: ``"model"`` (default), ``"dataset"`` or ``"space"``.
         token: Hub token for a gated or private repository.
-        allow_patterns: Overrides what is downloaded, as repository-root-relative
-            ``fnmatch`` patterns. The default takes everything under ``path``; pass this
-            when the asset reaches outside its own directory (an MJCF whose ``meshdir``
-            points at a shared folder, say), since nothing here parses the XML to find
-            out.
+        allow_patterns: Repository-root-relative ``fnmatch`` patterns replacing the
+            default of everything under ``path``. Pass them when the asset reaches
+            outside its directory (an MJCF whose ``meshdir`` points at a shared folder),
+            since nothing here parses the XML.
 
     Returns:
-        The local directory for ``path``: a subdirectory of the Hub cache, so a repeated
-        build of the same revision re-uses it rather than downloading again.
+        The local directory for ``path``, inside the Hub cache.
     """
     if allow_patterns is None and path is not None:
         # `fnmatch`'s `*` crosses `/`, so one pattern takes the whole subtree.
@@ -256,9 +239,8 @@ def fetch_motion_npz(
 ) -> tuple[str, bytes]:
     """Download a ``.npz`` reference motion from the Hub.
 
-    ``repo_type`` defaults to ``"dataset"``: a clip is data, and the retargeted sets
-    published so far are dataset repositories. Returns ``(motion_name, payload)``, the
-    name being the file's stem.
+    ``repo_type`` defaults to ``"dataset"``, where retargeted motion sets are published.
+    Returns ``(motion_name, payload)``, the name being the file's stem.
     """
     local_path = fetch_file(
         repo_id, filename, revision=revision, repo_type=repo_type, token=token
