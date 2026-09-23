@@ -32,7 +32,6 @@ import mjswan.mjlab.bindings  # noqa: F401 - registers the mjlab command binding
 from mjswan.envs.mdp.actions import MuscleActivationActionCfg
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjswan.managers.termination_manager import TerminationTermCfg
-from mjswan.mjlab import register_custom_terminations
 from mjswan.mjlab.env import build_single_entity_trace_env
 from mjswan.source import hf
 
@@ -171,7 +170,6 @@ def _add_mjlab_tasks(builder: mjswan.Builder) -> None:
 
     for task_id in MJLAB_TASKS:
         env_cfg = load_env_cfg(task_id, play=True)
-        register_custom_terminations(env_cfg)
         scene = project.add_scene_mjlab(task_id, env_cfg=env_cfg)
         if viewer_cfg := TASK_VIEWER_CONFIG_MAP.get(task_id):
             scene.set_viewer(viewer_cfg)

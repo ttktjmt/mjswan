@@ -120,20 +120,23 @@ shortcuts.
   `mjswan_playground`, which can pin `myosuite` from a git URL and hold W&B credentials
   without either becoming this repository's problem. What they demonstrated about *this*
   package already has a home: the library code they carried moved into `mjswan.mjlab`
-  (below), and the tasks and checkpoints they read are in `demo/main.py` by way of the
-  Hub.
+  or was deleted (below), and the tasks and checkpoints they read are in `demo/main.py`
+  by way of the Hub.
 
-- **The two pieces of library code that lived in `examples/` move into the package.**
+- **The library code that lived in `examples/` moves into the package, or goes.**
   `examples/mjlab/defaults/{commands,terminations}/` were imported by a test, by a
   sibling example, and by the `mjlab-to-mjswan` skill, which told an agent to *fetch the
   file from the repo*, a layering inversion the reorganization of `examples/` (#128)
   would otherwise carry forward.
 
-  - `register_custom_terminations` joins `mjswan.mjlab.termination`, where the rest of
-    the termination adapter is, and is exported from `mjswan.mjlab`. It is plain Python
-    with no mjlab import, so nothing about the soft dependency changes. Type checking it
-    for the first time turned up a guard pyright could not follow; the narrowing is now
-    direct and the behaviour is unchanged.
+  - `register_custom_terminations` is deleted, not moved. It wrote `limit_x`/`limit_y`
+    and `half_x`/`half_y` into mjlab's `out_of_terrain_bounds` and
+    `terrain_edge_reached` for the browser-side classes that read them, which went with
+    the built-in MDP engine. mjlab's own functions take no such params: on a config
+    that still has the term, the build stops with `TypeError: got an unexpected keyword
+    argument 'limit_x'`, and the limits it computed were not mjlab's anyway (no
+    `border_width`, `num_cols` where a curriculum grid has one column per sub-terrain).
+    On the demo's play configs, which drop `out_of_terrain_bounds`, it changed nothing.
   - The command registrations become `mjswan.mjlab.bindings`, and **nothing imports it
     for you**. It is the one module under `mjswan.mjlab` that needs mjlab and torch at
     *import* time rather than inside a function, so `mjswan.mjlab`'s `__init__` leaves it
