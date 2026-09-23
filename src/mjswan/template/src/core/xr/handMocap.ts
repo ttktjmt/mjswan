@@ -44,7 +44,7 @@ export function eqActive(mjData: MjData, count: number): Uint8Array {
   const start = before.byteOffset + before.byteLength;
   const after = mjData.mocap_pos as Float64Array;
   if (after.byteLength > 0 && after.byteOffset < start + count) {
-    throw new Error('[HandMocap] eq_active is not after xfrc_applied in this MuJoCo build');
+    throw new Error('mjData.eq_active is not after xfrc_applied in this MuJoCo build.');
   }
   return new Uint8Array(before.buffer, start, count);
 }
