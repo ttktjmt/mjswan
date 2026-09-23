@@ -146,6 +146,12 @@ def _matching(directory: Path, names: re.Pattern[str]) -> list[Path]:
     return [p for p in entries if p.is_file() and names.match(p.name)]
 
 
+def _absolute(path: str) -> Path:
+    """``path`` made absolute with its symlinks kept: the Hub cache links each file
+    into ``blobs/``, away from the license beside the link."""
+    return Path(os.path.abspath(os.path.expanduser(path)))
+
+
 def spec_asset_directories(spec: Any) -> list[Path]:
     """The model's own directory, then those its meshes, textures, heightfields and
     skins resolve to (as :func:`mjswan.build.mjz.collect_spec_assets` resolves them).
@@ -156,13 +162,13 @@ def spec_asset_directories(spec: Any) -> list[Path]:
     base = spec.modelfiledir or ""
     if not base:
         return []
-    base_dir = Path(base).expanduser().resolve()
+    base_dir = _absolute(base)
     found: list[Path] = [base_dir]
 
     def add(dir_hint: str, filename: str) -> None:
         if not filename:
             return
-        full = Path(os.path.join(base, dir_hint, filename)).expanduser().resolve()
+        full = _absolute(os.path.join(base, dir_hint, filename))
         if full.parent not in found:
             found.append(full.parent)
 
