@@ -212,7 +212,7 @@ migration guide.
 | `hf_io.py` | `source/hf.py` (`fetch_onnx`, `fetch_motion_npz`, `fetch_file`) |
 | `command.py` (configs, `CommandBinding`, `register_command`) | `managers/command_manager.py` |
 | `command.py` (`ui_command`, `velocity_command`, the `MotionCommandCfg` binding) | `envs/mdp/commands.py` |
-| `command.py` (`default_viz`) | `mjlab/command.py` |
+| `command.py` (`default_viz`) | each binding's `viz` (`envs/mdp/commands.py`) |
 | `envs/mdp/events.apply_terrain_spawn` | `mjlab/event.py` |
 | `envs/mdp/actions/actions.ActionTermCfg` | `managers/action_manager.py` (re-exported from `envs/mdp/actions`) |
 | `scene.py` (ONNX slot / width checks) | `policy.py` |

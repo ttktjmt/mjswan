@@ -161,8 +161,7 @@ The build fails loudly by design and names the ways out. For each failure: read 
   ```
 
   Resolution goes by the mjlab function's `__name__` first, then the term's dict key, so a closure can only be reached by its key. The annotations on `register_event` / `register_termination` say `*Binding`, but the adapter accepts a plain traceable callable, which is what you want here; a `*Binding` means TypeScript and is out of scope.
-- **Unbound command cfg class**: `mjswan.register_command("CfgClassName", CommandBinding(...))`, keyed by the *class* name, not a function name. Read `managers/command_manager.py` in the installed package for which shape applies (traced `state_fields` / `command_field`, versus native `ts_name` + `serializer`).
-- **`MotionCommandCfg` reset-jitter warning** (tracking tasks): import `mjswan.mjlab.bindings`, never re-derive the quaternion math, because `run_command_parity` traces the override itself and a mistake there is invisible to the parity gate. If you cannot fetch it, leave the warning in place and report it.
+- **Unbound command cfg class**: `mjswan.register_command("CfgClassName", CommandBinding(...))`, keyed by the *class* name, not a function name. Read `managers/command_manager.py` in the installed package for which shape applies (traced `state_fields` / `command_field`, versus native `ts_name` + `serializer`). mjswan binds only the classes mjlab's task families share (`UniformVelocityCommandCfg`, `MotionCommandCfg`); a class only one task uses is the port's to register, as `examples/demo/main.py` does for `LiftingCommandCfg`.
 - **Missing asset or credential**: stop and hand the user the exact command (`wandb login`, `hf auth login`, a licence to accept, an env var to set).
 
 Rebuild after each fix. A term skipped because mjswan cannot express it, rather than because the task is unusual, goes to step 8.

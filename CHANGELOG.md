@@ -119,9 +119,9 @@ shortcuts.
   `myosuite`, `musclemimic`, `unitree_rl`) and `demo/gentle_humanoid` belong to
   `mjswan_playground`, which can pin `myosuite` from a git URL and hold W&B credentials
   without either becoming this repository's problem. What they demonstrated about *this*
-  package already has a home: the library code they carried moved into `mjswan.mjlab`
-  or was deleted (below), and the tasks and checkpoints they read are in `demo/main.py`
-  by way of the Hub.
+  package already has a home: the library code they carried moved into the package or
+  was deleted (below), and the tasks and checkpoints they read are in `demo/main.py` by
+  way of the Hub.
 
 - **The library code that lived in `examples/` moves into the package, or goes.**
   `examples/mjlab/defaults/{commands,terminations}/` were imported by a test, by a
@@ -137,11 +137,12 @@ shortcuts.
     argument 'limit_x'`, and the limits it computed were not mjlab's anyway (no
     `border_width`, `num_cols` where a curriculum grid has one column per sub-terrain).
     On the demo's play configs, which drop `out_of_terrain_bounds`, it changed nothing.
-  - The command registrations become `mjswan.mjlab.bindings`, and **nothing imports it
-    for you**. It is the one module under `mjswan.mjlab` that needs mjlab and torch at
-    *import* time rather than inside a function, so `mjswan.mjlab`'s `__init__` leaves it
-    alone and a caller names it: `import mjswan.mjlab.bindings`. That is what keeps
-    `import mjswan` at `mujoco` and `numpy` (ADR 0008).
+  - The command registrations do not move as a module. mjswan binds the classes mjlab's
+    task families share, `UniformVelocityCommandCfg` and `MotionCommandCfg`, and now
+    traces the latter's reset jitter with no import of your own. `LiftingCommandCfg`,
+    which only Lift-Cube-Yam uses, is registered by `examples/demo/main.py`, with the
+    trace override mjlab 1.6 needs (its `_update_command` calls `env.sim.forward()`)
+    and its target sphere. `mjswan.mjlab` holds nothing specific to one task.
 
 - **`wandb` is no longer a core dependency: `pip install mjswan` drops by about 108 MB.**
   It moves to its own `wandb` extra, beside `hf` and a new `mjlab` one, because it is the
@@ -324,7 +325,7 @@ shortcuts.
   drawing: a `CubeTexture` background is rendered as a box mesh, and MuJoCo's infinite
   plane is a full-screen quad. The button is mjswan's rather than three's `ARButton`, which
   pins the session to the `local` reference space and would leave the floor at eye height.
-- Debug visualisation for command terms, mirroring mjlab's `debug_vis`: `default_viz()`
+- Debug visualisation for command terms, mirroring mjlab's `debug_vis`: a binding's `viz`
   emits arrows and markers as data, toggled via `engine.debugVis.set`, on by default.
 - **`UniformVelocityCommandCfg` binds to a traced command term in mjswan itself**, so a
   task built on mjlab's locomotion commands migrates with no registration of its own;

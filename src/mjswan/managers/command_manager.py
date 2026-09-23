@@ -167,8 +167,7 @@ class PendingCommandTrace:
     """Author-authored control-panel descriptor, already resolved to a concrete dict."""
 
     viz: list[dict[str, Any]] | None = None
-    """Debug-vis primitives; :func:`mjswan.mjlab.command.default_viz` fills these in
-    when none are given."""
+    """Debug-vis primitives, or ``None`` to draw nothing."""
 
 
 @dataclass
@@ -226,8 +225,7 @@ class CommandBinding:
     - **ONNX-traced**: ``state_fields``/``command_field`` set, so the term is built and
       traced at build time and served by the shared ``OnnxCommand`` handler. Set
       ``trace_override`` when it needs a trace-friendly rewrite first. ``ui`` and ``viz``
-      may each be a value or a ``(mjlab_cfg) -> value`` callable; an omitted ``viz``
-      falls back to :func:`mjswan.mjlab.command.default_viz`.
+      may each be a value or a ``(mjlab_cfg) -> value`` callable.
     - **``ts_src`` escape hatch**: a hand-written TS command term.
     """
 

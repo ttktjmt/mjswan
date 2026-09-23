@@ -28,7 +28,6 @@ from mjlab.tasks.registry import load_env_cfg
 from onnx import TensorProto, helper
 
 import mjswan
-import mjswan.mjlab.bindings  # noqa: F401 - registers the mjlab command bindings
 from mjswan.envs.mdp.actions import MuscleActivationActionCfg
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjswan.managers.termination_manager import TerminationTermCfg
@@ -135,13 +134,27 @@ def _bind_lift_override(term: Any) -> None:
     term._update_command = types.MethodType(_lift_update_command, term)
 
 
-# Replaces the `mjswan.mjlab.bindings` entry, adding the trace override above.
+def _lift_viz(cfg: Any) -> list[dict[str, Any]]:
+    """`LiftingCommand`'s target sphere, colored from the task's own cfg."""
+    color = list(getattr(cfg.viz, "target_color", (1.0, 0.0, 0.0, 1.0)))
+    return [
+        {
+            "shape": "sphere",
+            "radius": 0.03,
+            "color": color,
+            "origin": {"state": "target_pos"},
+        }
+    ]
+
+
+# mjswan binds no command class that only one task uses, so this task registers its own.
 mjswan.register_command(
     "LiftingCommandCfg",
     mjswan.CommandBinding(
         state_fields=["target_pos"],
         command_field="target_pos",
         trace_override=_bind_lift_override,
+        viz=_lift_viz,
     ),
 )
 

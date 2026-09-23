@@ -1,8 +1,8 @@
 """The mjlab side of mjswan: mjlab's objects and output formats, in mjswan's terms.
 
 Not the real ``mjlab``, which is imported lazily inside the functions that need it, so a
-build that never touches an mjlab task never pays for it (:mod:`.bindings` imports it
-eagerly, so only an explicit import loads it). Three kinds of things live here:
+build that never touches an mjlab task never pays for it. Nothing here is specific to one
+of mjlab's own tasks. Three kinds of things live here:
 
 - adapters, one per manager kind (:mod:`.observation`, :mod:`.termination`,
   :mod:`.command`, :mod:`.action`, :mod:`.event`): an env config's term sets become
@@ -18,7 +18,7 @@ they stay where mjlab has them.
 """
 
 from .action import adapt_actions, resolve_action_scales, resolve_pd_gains
-from .command import adapt_commands, default_viz
+from .command import adapt_commands
 from .detect import is_from_mjlab
 from .env import build_mjlab_env, build_single_entity_trace_env
 from .event import adapt_events, apply_terrain_spawn
@@ -39,7 +39,6 @@ __all__ = [
     "apply_terrain_spawn",
     "build_mjlab_env",
     "build_single_entity_trace_env",
-    "default_viz",
     "ensure_mjlab_extensions",
     "is_from_mjlab",
     "resolve_action_scales",

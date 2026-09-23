@@ -159,71 +159,44 @@ class TestCommandRegistry:
 
 
 class TestMotionRsiRegistration:
-    """The RSI jitter graph is registered separately; its absence must not be silent.
+    """`MotionCommandCfg` stays native, with its reset jitter traced from mjlab's math."""
 
-    The jitter is a traced graph (ADR 0005) whose body needs mjlab's own
-    `sample_uniform` / `quat_from_euler_xyz`, so it is registered from
-    `mjswan.mjlab.bindings` rather than `mjswan.envs.mdp.commands` (which keeps mjlab a
-    soft dependency). A task that never imports that module gets the plain binding
-    without the graph, so its reference frame is never jittered.
-    """
+    class MotionCommandCfg:
+        # mjlab's play override: pose/velocity cleared, joint jitter kept.
+        entity_name = "robot"
+        pose_range: dict = {}
+        velocity_range: dict = {}
+        joint_position_range = (-0.1, 0.1)
 
-    def test_warns_when_a_jittering_cfg_has_no_registered_graph(self):
-        from mjswan.envs.mdp.commands import _motion_rsi_unregistered
-
-        class MotionCommandCfg:
-            # mjlab's play override: pose/velocity cleared, joint jitter kept.
-            pose_range: dict = {}
-            velocity_range: dict = {}
-            joint_position_range = (-0.1, 0.1)
-
-        with pytest.warns(RuntimeWarning, match="unjittered reference frame"):
-            assert _motion_rsi_unregistered(MotionCommandCfg()) is None
-
-    def test_stays_quiet_when_the_cfg_jitters_nothing(self):
-        """A task with every range cleared is not missing anything."""
-        import warnings
-
-        from mjswan.envs.mdp.commands import _motion_rsi_unregistered
-
-        class MotionCommandCfg:
-            pose_range: dict = {}
-            velocity_range: dict = {}
-            joint_position_range = (0.0, 0.0)
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            assert _motion_rsi_unregistered(MotionCommandCfg()) is None
-
-    def test_warns_for_a_pose_or_velocity_range_too(self):
-        from mjswan.envs.mdp.commands import _motion_rsi_unregistered
-
-        class PoseOnly:
-            pose_range = {"x": (-0.1, 0.1)}
-            velocity_range: dict = {}
-            joint_position_range = (0.0, 0.0)
-
-        class VelocityOnly:
-            pose_range: dict = {}
-            velocity_range = {"z": (-0.2, 0.2)}
-            joint_position_range = (0.0, 0.0)
-
-        for cfg in (PoseOnly(), VelocityOnly()):
-            with pytest.warns(RuntimeWarning):
-                _motion_rsi_unregistered(cfg)
-
-    def test_the_builtin_binding_carries_the_diagnosis(self):
-        """Registered on the binding, or nothing would ever call it."""
-        from mjswan.envs.mdp.commands import _motion_rsi_unregistered
-        from mjswan.managers.command_manager import _custom_registry
+    def test_the_builtin_binding_carries_the_jitter_graph(self):
+        from mjswan.envs.mdp.commands import _motion_rsi_trace
 
         spec = _custom_registry["MotionCommandCfg"]
-        # An author-side re-registration replaces this, so only pin the diagnosing default.
-        assert spec.reset_trace in (_motion_rsi_unregistered, spec.reset_trace)
         assert spec.ts_name == "TrackingCommand"
+        assert spec.reset_trace is _motion_rsi_trace
+
+    def test_a_joint_jitter_alone_is_traced(self):
+        pytest.importorskip("mjlab")
+        from mjswan.envs.mdp.commands import _motion_rsi_trace, motion_rsi_offset
+
+        func, params = _motion_rsi_trace(self.MotionCommandCfg())
+        assert func is motion_rsi_offset
+        assert params["joint_position_range"] == (-0.1, 0.1)
+        assert params["asset_cfg"].name == "robot"
+
+    def test_a_cfg_that_jitters_nothing_has_no_graph(self):
+        pytest.importorskip("mjlab")
+        from mjswan.envs.mdp.commands import _motion_rsi_trace
+
+        class MotionCommandCfg:
+            pose_range: dict = {}
+            velocity_range: dict = {}
+            joint_position_range = (0.0, 0.0)
+
+        assert _motion_rsi_trace(MotionCommandCfg()) is None
 
 
-class TestDefaultViz:
+class TestVelocityViz:
     """The drawing restated from mjlab's `_debug_vis_impl`, pinned against its source.
 
     A drift in scale, axis, or source field still draws a plausible arrow — pointing
@@ -237,14 +210,13 @@ class TestDefaultViz:
             z_offset = 0.2
             scale = 0.5
 
-    class LiftingCommandCfg:
-        class viz:
-            target_color = (1.0, 0.5, 0.0, 0.3)
+    def _viz(self) -> list:
+        return _custom_registry["UniformVelocityCommandCfg"].viz(
+            self.UniformVelocityCommandCfg()
+        )
 
     def test_velocity_draws_mjlabs_four_arrows(self):
-        from mjswan.mjlab.command import default_viz
-
-        primitives = default_viz(self.UniformVelocityCommandCfg())
+        primitives = self._viz()
         assert [p["shape"] for p in primitives] == ["arrow"] * 4
         # Commanded pair reads the term's state; actual pair reads the entity.
         assert [p["vector"].get("state") for p in primitives[:2]] == [
@@ -260,29 +232,25 @@ class TestDefaultViz:
 
     def test_velocity_scales_base_and_vector_as_mjlab_does(self):
         """mjlab scales `([0, 0, z_offset] + v) * scale`, so the base rises too."""
-        from mjswan.mjlab.command import default_viz
-
-        primitive = default_viz(self.UniformVelocityCommandCfg())[0]
+        primitive = self._viz()[0]
         assert primitive["origin"] == {"const": [0.0, 0.0, 0.1]}
         assert primitive["vector"]["scale"] == 0.5
         assert primitive["frame"]["entity"] == "robot"
 
-    def test_lifting_takes_its_color_from_the_task_cfg(self):
-        from mjswan.mjlab.command import default_viz
-
-        assert default_viz(self.LiftingCommandCfg()) == [
-            {
-                "shape": "sphere",
-                "radius": 0.03,
-                "color": [1.0, 0.5, 0.0, 0.3],
-                "origin": {"state": "target_pos"},
-            }
-        ]
-
-    def test_an_unknown_cfg_class_gets_nothing(self):
-        from mjswan.mjlab.command import default_viz
+    def test_a_binding_without_viz_draws_nothing(self):
+        """mjswan draws nothing it was not told to, whatever the class is called."""
+        from mjswan.mjlab.command import _adapt_command_cfg
 
         class CustomCommandCfg:
             debug_vis = True
 
-        assert default_viz(CustomCommandCfg()) is None
+        register_command(
+            "CustomCommandCfg",
+            CommandBinding(state_fields=["target"], command_field="target"),
+        )
+        try:
+            pending = _adapt_command_cfg(CustomCommandCfg()).pending_trace
+        finally:
+            _custom_registry.pop("CustomCommandCfg", None)
+        assert pending is not None
+        assert pending.viz is None

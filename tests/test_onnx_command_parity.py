@@ -49,31 +49,44 @@ COMMAND_TASKS = [
 ]
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _registrations() -> None:
-    """`mjswan.mjlab.bindings` registers `LiftingCommandCfg`; load it before resolving.
-
-    Without it the adapter raises for an unregistered class. `UniformVelocityCommandCfg`
-    needs no import: mjswan binds that one itself.
-    """
-    pytest.importorskip("mjswan.mjlab.bindings")
-
-
 def _lift_update_command(self: Any, env_ids: Any = None) -> None:
     """``LiftingCommand._update_command`` without its live-sim refresh.
 
     mjlab forwards the sim there after a timer-expiry teleport, which the tracer
     refuses. The command is ``_resample_command``'s alone, so dropping the refresh
-    changes no number. The engine binding carries no such override
-    (`examples/demo/main.py` registers its own), so it is applied here.
+    changes no number.
     """
     del env_ids
 
 
-def _apply_port_rewrite(task_id: str, term: Any) -> None:
-    """What a port writes for a term mjlab does not leave traceable."""
-    if task_id == "Mjlab-Lift-Cube-Yam":
-        term._update_command = types.MethodType(_lift_update_command, term)
+def _bind_lift_override(term: Any) -> None:
+    term._update_command = types.MethodType(_lift_update_command, term)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _registrations():
+    """Register `LiftingCommandCfg` as a port does, as `examples/demo/main.py` does.
+
+    mjswan binds no command class that only one task uses. `UniformVelocityCommandCfg`
+    needs nothing: mjswan binds that one itself.
+    """
+    from mjswan import CommandBinding, register_command
+    from mjswan.managers.command_manager import _custom_registry
+
+    previous = _custom_registry.get("LiftingCommandCfg")
+    register_command(
+        "LiftingCommandCfg",
+        CommandBinding(
+            state_fields=["target_pos"],
+            command_field="target_pos",
+            trace_override=_bind_lift_override,
+        ),
+    )
+    yield
+    if previous is None:
+        _custom_registry.pop("LiftingCommandCfg", None)
+    else:
+        _custom_registry["LiftingCommandCfg"] = previous
 
 
 def _traced_command(task_id: str, command_name: str) -> tuple[Any, Any]:
@@ -100,7 +113,6 @@ def _traced_command(task_id: str, command_name: str) -> tuple[Any, Any]:
     term = pending.mjlab_cfg.build(env)
     if pending.trace_override is not None:
         pending.trace_override(term)
-    _apply_port_rewrite(task_id, term)
     return env, (term, pending)
 
 
