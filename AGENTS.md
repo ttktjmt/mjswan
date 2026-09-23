@@ -22,8 +22,7 @@ See [CONTEXT.md](CONTEXT.md) for a full codebase map, object model, module descr
 - [src/mjswan/](src/mjswan/): package source, with the object model at the root (`Builder`, the `*Handle` / `*Config` pairs, `cli.py`) over one package per layer (`build/`, `compile/`, `mjlab/`, `source/`, `document/`, `cloud/`, `license/`, and the mjlab-mirror `managers/` / `envs/mdp/`). [docs/adr/0008](docs/adr/0008-package-layout.md) gives the rules: imports point downward, mjswan's own names are singular, a file never repeats its package's name.
 - [src/mjswan/template/](src/mjswan/template/): frontend source (Vite + React + three.js + mujoco-wasm).
 - [examples/](examples/): runnable examples, `demo` and `colab`.
-  Python only: assets are fetched at run time, and a pre-commit hook rejects a
-  binary committed under `examples/`.
+  Python only: assets are fetched at run time rather than committed.
 - [tests/](tests/): pytest suite. `slow`-marked tests are opt-out (see below).
 - [docs/](docs/): zensical (MkDocs-based) site published to Read the Docs. Build with `make docs-build`; serve locally with `make docs-serve`.
 

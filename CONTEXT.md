@@ -50,8 +50,7 @@ src/mjswan/          Python package source: the object model at the root, one pa
                        commands.py (ui_command presets, trace-friendly rewrites, mjlab bindings)
   template/            TypeScript frontend (Vite + React + three.js + mujoco-wasm)
 
-examples/            Runnable examples. Python only: no asset is stored here, and the
-                     `no-binaries-in-examples` pre-commit hook is what keeps it so
+examples/            Runnable examples. Python only: assets are fetched at run time
   demo/                main.py (the deployed app: mjlab Tasks + Showcase, everything
                        from mjlab or the Hub), simple.py (one task, one checkpoint),
                        minimum_policy.py (the smallest complete policy) and

@@ -103,8 +103,7 @@ shortcuts.
   the same engine with mjswan-side work on top (a splat-backed G1, muscle actuators).
   The three model-gallery projects, about 120 scenes of viewer-only models, are dropped
   along with the two upstream-API-drift patches they needed, and `demo/simple.py` becomes
-  one task and one checkpoint. A `no-binaries-in-examples` pre-commit hook keeps it this
-  way, because writing the rule down did not.
+  one task and one checkpoint.
 
 - **`examples/` holds six files, and every one of them builds with what a release of
   this package installs.** Nothing here reaches for a git URL, a task package or a
