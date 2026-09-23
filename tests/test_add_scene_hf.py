@@ -132,6 +132,45 @@ class TestAddSceneHf:
             project.add_scene_hf("org/assets", "scenes/unitree_g1")
 
 
+@pytest.fixture
+def root_hub(monkeypatch, tmp_path):
+    """A Hub stub whose repository keeps its MJCF at the root, laid out as the cache."""
+    snapshot = tmp_path / "models--org--unitree_g1" / "snapshots" / "0a1b2c3"
+    (snapshot / "meshes").mkdir(parents=True)
+    (snapshot / "scene.xml").write_text(SCENE_XML)
+    (snapshot / "meshes/link.stl").write_bytes(TETRAHEDRON_STL)
+    (snapshot / "LICENSE").write_text("BSD-3-Clause\n\nExample text.\n")
+    calls: dict[str, object] = {}
+
+    class _Hub:
+        @staticmethod
+        def snapshot_download(
+            repo_id, revision=None, repo_type=None, token=None, allow_patterns=None
+        ):
+            calls["allow_patterns"] = allow_patterns
+            return str(snapshot)
+
+    monkeypatch.setattr("mjswan.source.hf._hub", lambda: _Hub)
+    return calls
+
+
+class TestRootModel:
+    def test_the_whole_repository_is_downloaded(self, project, root_hub):
+        scene = project.add_scene_hf("org/unitree_g1", "scene.xml")
+
+        assert root_hub["allow_patterns"] is None
+        assert scene._config.spec.modelname == "two_joint"
+
+    def test_the_scene_and_its_license_are_named_after_the_repository(
+        self, project, root_hub
+    ):
+        """Not after the snapshot directory, which is named for a commit."""
+        scene = project.add_scene_hf("org/unitree_g1", "scene.xml")
+
+        assert scene._config.name == "unitree_g1"
+        assert [a.component for a in scene._config.attributions] == ["unitree_g1"]
+
+
 class TestFetchDir:
     def test_returns_the_named_subdirectory(self, fake_hub):
         from mjswan.source.hf import fetch_dir

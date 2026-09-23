@@ -224,9 +224,10 @@ class ProjectHandle:
         """Add a scene whose MJCF and assets come from a Hugging Face Hub repository.
 
         The XML's whole directory is downloaded, since MuJoCo resolves meshes and
-        textures relative to it, and the spec is compiled in place. It is then added as
-        by :meth:`add_scene` with ``spec=``, license detection included: a ``LICENSE``
-        beside the model is copied into the scene directory (ADR 0007 §2).
+        textures relative to it (for an XML at the root, the whole repository), and the
+        spec is compiled in place. It is then added as by :meth:`add_scene` with
+        ``spec=``, license detection included: a ``LICENSE`` beside the model is copied
+        into the scene directory (ADR 0007 §2).
 
         Args:
             repo_id: Hub repository, ``"<owner>/<name>"``.

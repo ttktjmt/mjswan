@@ -185,6 +185,14 @@ def spec_asset_directories(spec: Any) -> list[Path]:
     return found
 
 
+def _component_name(directory: Path) -> str:
+    """The directory's name, or at a Hub snapshot's root the repository's: the
+    snapshot is named for its commit (``models--<owner>--<name>/snapshots/<sha>``)."""
+    if directory.parent.name == "snapshots" and "--" in directory.parent.parent.name:
+        return directory.parent.parent.name.rsplit("--", 1)[-1]
+    return directory.name
+
+
 def detect_attributions(
     directories: Iterable[Path], *, max_parents: int = 2
 ) -> list[Attribution]:
@@ -221,7 +229,7 @@ def detect_attributions(
             if not licenses and not notices:
                 continue
             seen_dirs.add(candidate)
-            component = component_id(candidate.name)
+            component = component_id(_component_name(candidate))
             paired = min(len(licenses), len(notices))
             pairs: list[tuple[Path | None, Path | None]] = [
                 *zip(licenses[:paired], notices[:paired]),

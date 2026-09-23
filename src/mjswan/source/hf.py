@@ -162,7 +162,8 @@ def fetch_dir(
 
     Args:
         repo_id: Hub repository, ``"<owner>/<name>"``.
-        path: Directory within the repository. ``None`` takes the whole repository.
+        path: Directory within the repository. ``None`` or ``"."`` takes the whole
+            repository.
         revision: Branch, tag or commit. ``None`` takes the default branch.
         repo_type: ``"model"`` (default), ``"dataset"`` or ``"space"``.
         token: Hub token for a gated or private repository.
@@ -174,6 +175,9 @@ def fetch_dir(
     Returns:
         The local directory for ``path``, inside the Hub cache.
     """
+    if path in ("", "."):
+        # The root, which as a pattern (`./*`) would match nothing.
+        path = None
     if allow_patterns is None and path is not None:
         # `fnmatch`'s `*` crosses `/`, so one pattern takes the whole subtree.
         allow_patterns = [f"{path.rstrip('/')}/*"]
