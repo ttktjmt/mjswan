@@ -62,7 +62,8 @@ or with `npm`:
 npm install mjswan
 ```
 
-You can run the bundled demo with the `mjswan` CLI (after installing `mjswan[dev]`).
+The demos live in `examples/`, which the wheel does not ship, so run them with the
+`mjswan` CLI from a clone of this repository (after `pip install -e '.[examples]'`):
 ``` sh
 mjswan demo          # lists the bundled demos
 mjswan demo simple   # runs the simple demo

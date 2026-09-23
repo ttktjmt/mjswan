@@ -95,10 +95,10 @@ class Builder:
                 :meth:`add_project` → :meth:`~mjswan.project.ProjectHandle.add_scene_mjlab`
                 → :meth:`~mjswan.scene.SceneHandle.add_policy_wandb`.
             hf_repo_id: Optional Hugging Face Hub repository (``"<owner>/<name>"``)
-                whose exported ONNX is added as a policy, with no torch conversion: the
-                joint names and rest pose come from the file's metadata. May be combined
+                whose exported ONNX is added as a policy, with no torch conversion, as
+                :meth:`~mjswan.scene.SceneHandle.add_policy_hf` adds it. May be combined
                 with ``run_path``. For finer control (a specific file, a pinned
-                revision), call :meth:`~mjswan.scene.SceneHandle.add_policy_hf`.
+                revision), call that directly.
             project_name: Name for the auto-created project. Defaults to ``"mjlab"``.
             play: Which of the task's two registered configs to load; unset means play.
                 Mutually exclusive with ``env_cfg``. See

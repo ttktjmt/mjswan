@@ -44,6 +44,7 @@ def from_mjlab(
     task_id: str,
     *,
     run_path: str | list[str] | None = None,
+    hf_repo_id: str | None = None,
     project_name: str = "mjlab",
     play: bool | None = None,
     env_cfg: Any | None = None,
@@ -60,6 +61,8 @@ Convenience factory that creates a `Builder` pre-configured with a single mjlab 
 
 When `run_path` is supplied, every `model_*.pt` checkpoint from each W&B run is fetched and converted to ONNX via mjlab + torch (both required). Each attached policy configures itself from the task — observations, commands, actions and terminations from its `env_cfg`, `clip_actions` from its runner config. For finer control, build manually with `add_project` → `ProjectHandle.add_scene_mjlab` → `SceneHandle.add_policy_wandb`.
 
+`hf_repo_id` (`"<owner>/<name>"`) adds a Hugging Face Hub repository's exported ONNX the same way, with no conversion, as [`SceneHandle.add_policy_hf`](#scenehandleadd_policy_hf) does; it may be combined with `run_path`.
+
 **Returns** — `Builder`
 
 ### Builder.add_project_mjlab
@@ -69,6 +72,7 @@ def add_project_mjlab(
     task_id: str,
     *,
     run_path: str | list[str] | None = None,
+    hf_repo_id: str | None = None,
     project_name: str = "mjlab",
     play: bool | None = None,
     env_cfg: Any | None = None,
@@ -198,6 +202,45 @@ Load an mjlab task's MuJoCo spec from the task registry and add it as a scene. R
 **Returns** — `SceneHandle`
 
 **Raises** — `ImportError` if `mjlab` is not installed.
+
+### ProjectHandle.add_scene_hf
+
+```python
+def add_scene_hf(
+    repo_id: str,
+    path: str,
+    *,
+    name: str | None = None,
+    revision: str | None = None,
+    repo_type: str = "model",
+    token: str | None = None,
+    allow_patterns: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+    control_dt: float | None = None,
+    events: Mapping[str, Any] | None = None,
+) -> SceneHandle
+```
+
+Add a scene whose MJCF and assets come from a Hugging Face Hub repository. MuJoCo resolves meshes and textures relative to the XML, so its whole directory is downloaded (for an XML at the root, the whole repository) and the spec is compiled where it lands. It is then added as by [`add_scene`](#projecthandleadd_scene) with `spec=`, license detection included: a `LICENSE` beside the model or its meshes is copied into the scene directory. Needs the `hf` extra.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `repo_id` | `str` | — | Hub repository, `"<owner>/<name>"`. |
+| `path` | `str` | — | The MJCF within the repository, e.g. `"scenes/unitree_g1/scene.xml"`. |
+| `name` | `str \| None` | `None` | Scene name. Defaults to the XML's stem, or to its directory (the repository at the root) when the stem only names a role (`scene.xml`, `model.xml`). |
+| `revision` | `str \| None` | `None` | Branch, tag or commit. Unset takes the default branch, so the build follows the repository; pass a commit to pin it. |
+| `repo_type` | `str` | `"model"` | `"model"`, `"dataset"` or `"space"`. |
+| `token` | `str \| None` | `None` | Hub token for a gated or private repository. |
+| `allow_patterns` | `list[str] \| None` | `None` | What to download, replacing "everything beside the XML". Needed when the model reaches outside its own directory (a `meshdir` pointing at a shared folder), since the XML is not parsed to find out. |
+| `metadata` | `dict[str, Any] \| None` | `None` | Optional scene metadata. |
+| `control_dt` | `float \| None` | `None` | Seconds per control step, as on `add_scene`. |
+| `events` | `Mapping[str, Any] \| None` | `None` | Default events for every policy's MDP on this scene. |
+
+**Returns** — `SceneHandle`
+
+**Raises** — `ImportError` if `huggingface_hub` is not installed; `ValueError` if `path` does not name an XML file.
 
 ### ProjectHandle.set_license
 
@@ -337,6 +380,46 @@ Every term set defaults to the scene's mjlab env config (or to `env_cfg=`, when 
 
 **Raises** — `ValueError` if `only_latest=False` and `task_id` is missing; `ImportError` if `mjlab`/`torch` are missing.
 
+### SceneHandle.add_policy_hf
+
+```python
+def add_policy_hf(
+    repo_id: str,
+    *,
+    filename: str | list[str] | None = None,
+    revision: str | None = None,
+    repo_type: str = "model",
+    token: str | None = None,
+    name: str | None = None,
+    use_metadata: bool = True,
+    task_id: str | None = None,
+    config_path: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    env_cfg: Any | None = None,
+    observations: ObservationGroupCfg | dict[str, ObservationGroupCfg] | None = None,
+    commands: Mapping[str, Any] | None = None,
+    actions: Mapping[str, ActionTermCfg] | None = None,
+    terminations: dict[str, TerminationTermCfg] | None = None,
+    in_keys: Sequence[str] | None = None,
+    out_keys: Sequence[str | Sequence[str]] | None = None,
+    policy_joint_names: list[str] | None = None,
+    default_joint_pos: list[float] | None = None,
+    encoder_bias: list[float] | None = None,
+    clip_actions: float | None = None,
+    extras: dict[str, Any] | None = None,
+) -> list[PolicyHandle]
+```
+
+Fetch exported ONNX policies from a Hugging Face Hub repository and attach them to the scene. The light counterpart of `add_policy_wandb`: nothing is converted, so neither mjlab nor torch is needed and `task_id` is optional. Needs the `hf` extra.
+
+With no `filename`, it takes `policy.onnx`, then `final.onnx`, then the repository's single `.onnx`, and raises when several are left to choose from. A list adds one policy per file, sharing one MDP. Each policy is named after its file, or after the repository when the stem only names a role (`policy`).
+
+Term sets default as on `add_policy_wandb`. What the caller does not pass is filled as mjlab has it: `policy_joint_names` are the joints the task's action terms name, in mjlab's action order, when the scene or `env_cfg` has those terms; otherwise, with `use_metadata` on, they come from the metadata mjlab bakes into an export, and so does the joint-position action term. The metadata lists every joint of the robot, so it is used only where it lists every joint the scene's own model actuates, one per action, and a task with several action terms needs its env config. `default_joint_pos` is looked up by joint name, in the metadata and then in the scene model's first keyframe, which is mjlab's `init_state`. Whatever cannot be filled warns. Observation terms are never reconstructed from the metadata. See [What an mjlab export already carries](../guides/policy-config.md#what-an-mjlab-export-already-carries).
+
+**Returns** — `list[PolicyHandle]`, one per file in the order given. The highest `_<step>` opens the scene, unless the scene already has a default.
+
+**Raises** — `ImportError` if `huggingface_hub` is not installed; `ValueError` if `name` is given for several files, or the repository has no unambiguous `.onnx` and none was named.
+
 ### SceneHandle.add_splat
 
 ```python
@@ -379,6 +462,33 @@ Add a Gaussian Splat background to the scene. Exactly one of `source` or `url` m
 **Returns** — `SplatHandle`
 
 **Raises** — `ValueError` if both or neither of `source`/`url` are provided.
+
+### SceneHandle.add_splat_hf
+
+```python
+def add_splat_hf(
+    repo_id: str,
+    filename: str,
+    *,
+    name: str | None = None,
+    revision: str | None = None,
+    repo_type: str = "model",
+    token: str | None = None,
+    scale: float = 1.0,
+    x_offset: float = 0.0,
+    y_offset: float = 0.0,
+    z_offset: float = 0.0,
+    roll: float = 0.0,
+    pitch: float = 0.0,
+    yaw: float = 0.0,
+    collider_url: str | None = None,
+    control: bool = False,
+) -> SplatHandle
+```
+
+The Hub counterpart of `add_splat`: the `.spz` at `filename` is downloaded and bundled like a local `source=`, so the deployed app needs no network. The placement arguments mean what they do on `add_splat` and stay the caller's, since no file on the Hub says how a capture lines up with a model. `name` defaults to the file's stem, or to the repository's name when the stem only names a role (`background`). A collider is not bundled, so one on the Hub is named by its `resolve` URL. `revision`, `repo_type` and `token` are as on `add_policy_hf`. Needs the `hf` extra.
+
+**Returns** — `SplatHandle`
 
 ### SceneHandle.enable_splat_section
 
@@ -605,6 +715,30 @@ defaults to the artifact's own name; every other parameter behaves as on
     and points mjlab's empty `commands["motion"].motion_file` at it. See
     [Using mjlab → Tracking tasks](../guides/mjlab.md#tracking-tasks).
 
+### PolicyHandle.add_motion_hf
+
+```python
+def add_motion_hf(
+    repo_id: str,
+    filename: str,
+    *,
+    name: str | None = None,
+    revision: str | None = None,
+    repo_type: str = "dataset",
+    token: str | None = None,
+    fps: float = 50.0,
+    anchor_body_name: str,
+    body_names: tuple[str, ...] | list[str],
+    dataset_joint_names: list[str] | None = None,
+    default: bool = False,
+    loop: bool = True,
+) -> MotionHandle
+```
+
+The Hub counterpart of `add_motion_wandb`, with the `.npz` clip named by its path in the repository. `repo_type` defaults to `"dataset"`, as motion clips are usually published, and `token` covers the public datasets gated behind a license agreement. `name` defaults to the file's stem; every other parameter behaves as on [`add_motion`](#policyhandleadd_motion). Needs the `hf` extra.
+
+**Returns** — `MotionHandle`
+
 ### PolicyHandle.set_metadata
 
 ```python
@@ -624,7 +758,7 @@ Set a metadata entry for the policy. Returns `self` for chaining.
 
 ## SplatHandle
 
-Returned by `SceneHandle.add_splat()`.
+Returned by `SceneHandle.add_splat()` and `add_splat_hf()`.
 
 ### SplatHandle.set_metadata
 
@@ -652,7 +786,7 @@ Set a metadata entry for the splat. Returns `self` for chaining.
 
 ## MotionHandle
 
-Returned by `PolicyHandle.add_motion()` and `add_motion_wandb()`.
+Returned by `PolicyHandle.add_motion()`, `add_motion_wandb()` and `add_motion_hf()`.
 
 ### MotionHandle.set_metadata
 

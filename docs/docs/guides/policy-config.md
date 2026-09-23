@@ -421,8 +421,9 @@ mjlab writes the checkpoint's own defaults into the `.onnx` itself (`joint_names
 mjlab policy travels self-describing.
 [`add_policy_hf`](../getting-started/examples.md#a-policy-published-on-the-hugging-face-hub)
 reads that block and fills `policy_joint_names`, `default_joint_pos` and the
-joint-position action term from it, leaving anything you pass explicitly alone. To read
-one yourself:
+joint-position action term from it where the scene does not already say (a scene from
+`add_scene_mjlab` names the joints through its action terms), leaving anything you pass
+explicitly alone. To read one yourself:
 
 ```python
 import onnx
@@ -437,22 +438,25 @@ another framework), which is a normal case, not an error.
 
 !!! note "Not every mjlab task writes it"
     mjlab attaches this block from its velocity, manipulation and tracking runners only,
-    and `get_base_metadata` reads `scene["robot"]` and a `joint_pos` action term to build
-    it. A task outside those families exports a bare graph: cartpole, whose entity is
-    `cartpole` and whose action term is an effort term, is the one in mjlab's own tree.
-    For a scene that knows its task, `add_policy_hf` then reads the joint names off the
-    action terms instead, in the order the actions come out. When even that comes up
-    empty it warns, because a policy whose action terms drive joints but which has no
-    `policy_joint_names` has no joint to map an action onto: the browser skips the term
-    and writes no control at all.
+    and `get_base_metadata` reads `scene["robot"]` and a `joint_pos` action term to
+    build it. A task outside those families exports a bare graph: cartpole, whose entity
+    is `cartpole` and whose action term is an effort term, is the one in mjlab's own
+    tree. Such a checkpoint needs none on a scene that knows its task: `add_policy_hf`
+    reads the joint names off the action terms, in the order the actions come out, and
+    the rest pose off the scene model's first keyframe, which is mjlab's `init_state`.
+    When even that comes up empty it warns, because a policy whose action terms drive
+    joints but which has no `policy_joint_names` has no joint to map an action onto: the
+    browser skips the term and writes no control at all.
 
 Two limits are worth knowing. The encoding is **lossy**: mjlab formats list values with
 `{:.3f}`, so numbers come back rounded to three decimals (a scalar written outside a
-list keeps full precision). And `joint_names` lists **every joint of the robot in joint
-order**, while the network emits one action per actuator in actuator order, the same
-list only when the robot has no passive joints and its actuators are declared in joint
-order. `add_policy_hf` therefore checks the metadata against your scene's own model
-before using any of it, and warns rather than guessing when they disagree.
+list keeps full precision). And `joint_names` lists **every joint of the robot**, while
+the network emits one action per *actuated* joint: each action term's joints in joint
+order, one term after another. `add_policy_hf` therefore uses the metadata only where it
+lists every joint your scene's own model actuates, dropping the rest, and warns rather
+than guessing when they disagree. It does not record where a second action term's
+actions go, so a task with several needs its env config (`add_scene_mjlab`, or
+`env_cfg=`).
 
 Observation terms are named but not reconstructable: the metadata carries each term's
 scale, clip and history length, but not the function behind the name, and mjswan traces

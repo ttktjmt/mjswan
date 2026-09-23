@@ -89,11 +89,12 @@ scene.add_policy_hf("<owner>/<name>")
 
 With no filename given it takes `policy.onnx`, then `final.onnx`, then the repository's
 single `.onnx`; pass `filename=` for anything else, or a list of them to add several
-policies at once. The metadata is used only when your scene's model presents the same
-joints in actuator order: a mismatch warns and fills nothing rather than misdriving the
-actuators. Observation terms are never reconstructed from it: the file names them but
-does not carry the functions mjswan traces, so `observations=` is still yours to supply
-(or the task's, on a scene from `add_scene_mjlab`).
+policies at once. The metadata fills what the scene does not already say (on a scene
+from `add_scene_mjlab`, the task's action terms name the joints), and only where it
+lists every joint your scene's model actuates: a mismatch warns and fills nothing rather
+than misdriving the actuators. Observation terms are never reconstructed from it: the
+file names them but does not carry the functions mjswan traces, so `observations=` is
+still yours to supply (or the task's, on a scene from `add_scene_mjlab`).
 
 ## Policy with velocity command sliders
 

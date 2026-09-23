@@ -142,11 +142,10 @@ the module already says which.
 
 ### 7. No compatibility layer
 
-`_compat.py` and its aliases go, as do the legacy console scripts (`mjswan-main`,
-`mjswan-simple`, `mjswan-mjlab`, `mjswan-serve`; `mjswan demo` and `mjswan serve`
-remain). Old module paths are not kept importable: this is a pre-1.0 restructure, and
-keeping shims would mean keeping the layout they point at. The table below is the
-migration guide.
+`_compat.py` and its aliases go, as do the legacy console scripts (`main`, `simple`,
+`mjlab`, `serve`; `mjswan demo` and `mjswan serve` remain). Old module paths are not
+kept importable: this is a pre-1.0 restructure, and keeping shims would mean keeping the
+layout they point at. The table below is the migration guide.
 
 ## Considered options
 

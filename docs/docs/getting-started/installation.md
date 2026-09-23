@@ -36,13 +36,10 @@ mjswan can be installed as a Python package (the primary workflow) or as an npm 
 
 | Requirement | Version |
 |---|---|
-| Python | 3.10 – 3.12 (3.13+ not yet supported) |
+| Python | 3.10 – 3.13 |
 | Platform | macOS (Apple Silicon) or Linux (x86-64) |
 | Browser | Any modern browser with WebAssembly and WebGL |
 | Node.js | 24+ (npm installation only) |
-
-!!! note "Python 3.13"
-    A transitive dependency (`labmaze`, pulled in via MyoSuite) does not yet publish a Python 3.13 wheel. Until it does, mjswan requires Python ≤ 3.12.
 
 ## Python Installation
 
@@ -53,8 +50,8 @@ pip install mjswan
 That is the whole pipeline: `mujoco`, `onnx`, `typer`, `rich`, and `nodeenv` for the
 frontend build. It bundles any MuJoCo model and any ONNX policy you already have on disk.
 
-**Where assets come from is an extra**, one per backend, because `import mjswan` touches
-none of them:
+**Where assets come from is an extra**, one per backend, and `import mjswan` needs none
+of them:
 
 ```bash
 pip install 'mjswan[wandb]'  # add_policy_wandb / add_motion_wandb
@@ -80,12 +77,11 @@ Two more extras exist for working *on* mjswan rather than with it:
 ```bash
 pip install 'mjswan[check]'     # ruff, ty, pyright, what `make check` runs
 pip install 'mjswan[dev]'       # the above, plus pytest, pre-commit, and every source
-pip install 'mjswan[examples]'  # what the bundled demos need: MyoSuite, Playground, …
+pip install 'mjswan[examples]'  # what examples/ needs: every source, plus onnxruntime
 ```
 
-`examples` pulls in MyoSuite, MuJoCo Playground, `robot_descriptions`, `onnxruntime`
-(for the numeric parity checks), and `gymnasium`. It can take several minutes to install
-and requires Python ≤ 3.12.
+`examples` is `wandb`, `hf` and `mjlab` together, plus `onnxruntime` for the numeric
+parity checks. torch makes it a large download.
 
 ## JavaScript Installation
 
