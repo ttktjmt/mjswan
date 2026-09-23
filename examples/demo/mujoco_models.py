@@ -3,7 +3,7 @@
 Loads every model from MuJoCo's official `<replicate>` example gallery
 (scene.xml is a shared background scene, not a standalone model, so it's
 skipped):
-https://github.com/google-deepmind/mujoco/tree/main/model/replicate
+https://github.com/google-deepmind/mujoco/tree/3.11.0/model/replicate
 """
 
 import os
@@ -14,8 +14,11 @@ import mujoco
 
 import mjswan
 
+#: The MuJoCo release mjswan pins, not `main`, whose models may need a newer one.
+MUJOCO_TAG = "3.11.0"
 REPO_RAW = (
-    "https://raw.githubusercontent.com/google-deepmind/mujoco/main/model/replicate"
+    "https://raw.githubusercontent.com/google-deepmind/mujoco/"
+    f"{MUJOCO_TAG}/model/replicate"
 )
 
 MODEL_NAMES = [

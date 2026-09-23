@@ -12,6 +12,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT_TOML = PROJECT_ROOT / "pyproject.toml"
 TEMPLATE_PACKAGE_JSON = PROJECT_ROOT / "src" / "mjswan" / "template" / "package.json"
+MODEL_GALLERY = PROJECT_ROOT / "examples" / "demo" / "mujoco_models.py"
 
 
 def _read_python_mujoco_version() -> str:
@@ -69,3 +70,12 @@ class TestMuJoCoDependencyVersions:
             f"keeping these versions aligned is strongly recommended "
             f"(Python: {python_version}, npm: {npm_version})."
         )
+
+    def test_the_model_gallery_is_fetched_at_the_pinned_release(self):
+        """`mjswan demo mujoco` compiles upstream's XML with the installed MuJoCo."""
+        match = re.search(
+            r'^MUJOCO_TAG = "(?P<tag>[^"]+)"$', MODEL_GALLERY.read_text(), re.MULTILINE
+        )
+
+        assert match is not None, f"No MUJOCO_TAG in {MODEL_GALLERY}"
+        assert match.group("tag") == _read_python_mujoco_version()
