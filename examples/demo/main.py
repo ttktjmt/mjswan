@@ -36,6 +36,11 @@ from mjswan.source import hf
 
 #: Every asset this demo does not get from mjlab. Public, so the build is anonymous.
 HF_REPO = "ttktjmt/mjswan"
+# Its checkpoints mirror W&B runs, so the build needs no W&B key. To add a task's:
+#   1. fetch each `model_<step>.pt` of its runs (`mjswan.source.wandb.fetch_checkpoints`);
+#   2. export each through the task's runner, as `add_policy_wandb` does
+#      (`mjswan.mjlab.runner.export_checkpoint`), so it keeps any metadata mjlab adds;
+#   3. upload it as `checkpoints/<task id, lower-cased>/model_<step>.onnx`.
 
 # Project A: mjlab Tasks
 
@@ -167,13 +172,16 @@ def _checkpoints_for(task_id: str, repo_onnx: list[str]) -> list[str]:
     training progress. ``add_policy_hf`` opens the highest step either way.
     """
     prefix = f"checkpoints/{task_id.lower()}/"
-    named = [name for name in repo_onnx if name.startswith(prefix)]
-    if not named:
+    step = re.compile(rf"{re.escape(prefix)}.*_(\d+)\.onnx")
+    steps = sorted(
+        (int(match[1]), name) for name in repo_onnx if (match := step.fullmatch(name))
+    )
+    if not steps:
         raise ValueError(
             f"No checkpoints under {prefix!r} in {HF_REPO!r}. The mirror is a snapshot "
-            "of the W&B runs; re-run scripts/mirror_wandb_to_hf.py if a task was added."
+            "of the W&B runs; mirror the task's as the comment at HF_REPO lists."
         )
-    return sorted(named, key=lambda name: int(re.search(r"_(\d+)\.onnx$", name)[1]))
+    return [name for _, name in steps]
 
 
 def _add_mjlab_tasks(builder: mjswan.Builder) -> None:
@@ -186,8 +194,8 @@ def _add_mjlab_tasks(builder: mjswan.Builder) -> None:
         scene = project.add_scene_mjlab(task_id, env_cfg=env_cfg)
         if viewer_cfg := TASK_VIEWER_CONFIG_MAP.get(task_id):
             scene.set_viewer(viewer_cfg)
-        # Only the files are named here: the MDP is read off `env_cfg`, and the joint
-        # mapping and rest pose off the metadata mjlab bakes into each `.onnx`.
+        # Only the files are named here: the MDP and the action order come from
+        # `env_cfg`, the rest pose from the metadata mjlab bakes into each `.onnx`.
         scene.add_policy_hf(HF_REPO, filename=_checkpoints_for(task_id, repo_onnx))
 
     _add_tracking_scene(project, repo_onnx)

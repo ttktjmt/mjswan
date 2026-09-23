@@ -40,12 +40,15 @@ def setup_builder() -> mjswan.Builder:
 
     # The final checkpoint. `main.py` adds all of them so you can watch training
     # progress; one is enough to see the robot walk.
-    prefix = f"checkpoints/{TASK_ID.lower()}/"
+    step = re.compile(rf"checkpoints/{re.escape(TASK_ID.lower())}/.*_(\d+)\.onnx")
     checkpoints = sorted(
-        (name for name in hf.list_repo_onnx(HF_REPO) if name.startswith(prefix)),
-        key=lambda name: int(re.search(r"_(\d+)\.onnx$", name)[1]),
+        (int(match[1]), name)
+        for name in hf.list_repo_onnx(HF_REPO)
+        if (match := step.fullmatch(name))
     )
-    scene.add_policy_hf(HF_REPO, filename=checkpoints[-1])
+    if not checkpoints:
+        raise ValueError(f"No checkpoints for {TASK_ID!r} in {HF_REPO!r}.")
+    scene.add_policy_hf(HF_REPO, filename=checkpoints[-1][1])
 
     return builder
 
