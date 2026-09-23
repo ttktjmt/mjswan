@@ -16,6 +16,19 @@ interface HeadlightSpec {
   specular?: number[];
 }
 
+/**
+ * One light's `mjtBool` flag. `@mujoco/mujoco` throws on every `mjtBool` array, but its
+ * `light(l)` accessor returns the value.
+ */
+function lightFlag(mjModel: MjModel, l: number, field: 'active' | 'castshadow'): boolean {
+  try {
+    const flags = field === 'active' ? mjModel.light_active : mjModel.light_castshadow;
+    return Boolean(flags?.[l]);
+  } catch {
+    return Boolean(mjModel.light(l)[field]);
+  }
+}
+
 /** The wasm build exposes `mjModel.vis`; older builds spell it `visual`. */
 function headlightSpec(mjModel: MjModel): HeadlightSpec | undefined {
   const model = mjModel as unknown as {
@@ -38,7 +51,7 @@ export function lightSpecularRatio(mjModel: MjModel): number {
   let specular = 0;
 
   for (let l = 0; l < (mjModel.nlight ?? 0); l++) {
-    if (!mjModel.light_active?.[l]) {
+    if (!lightFlag(mjModel, l, 'active')) {
       continue;
     }
     diffuse += peak(mjModel.light_diffuse, l);
@@ -64,7 +77,7 @@ export function createLights({
 
   if (mjModel.nlight > 0) {
     for (let l = 0; l < mjModel.nlight; l++) {
-      if (!mjModel.light_active[l]) {
+      if (!lightFlag(mjModel, l, 'active')) {
         continue;
       }
 
@@ -116,7 +129,7 @@ export function createLights({
       );
       ambientSum.add(ambientColor);
 
-      light.castShadow = mjModel.light_castshadow[l];
+      light.castShadow = lightFlag(mjModel, l, 'castshadow');
       if (light.castShadow) {
         light.shadow!.mapSize.width = 1024;
         light.shadow!.mapSize.height = 1024;

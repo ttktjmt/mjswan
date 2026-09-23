@@ -25,6 +25,30 @@ import { quatApplyInv, quatInverse, quatMultiply } from '../observation/math';
 
 type Quat = readonly [number, number, number, number];
 
+/** Whether `mjData.eq_active` throws, as every `mjtBool` array does in `@mujoco/mujoco`. */
+let eqActiveThrows = false;
+
+/**
+ * `mjData.eq_active`, at least `count` long. Where the bindings cannot return it, it is
+ * read off the heap: MuJoCo lays it out right after `xfrc_applied`.
+ */
+export function eqActive(mjData: MjData, count: number): Uint8Array {
+  if (!eqActiveThrows) {
+    try {
+      return mjData.eq_active as Uint8Array;
+    } catch {
+      eqActiveThrows = true;
+    }
+  }
+  const before = mjData.xfrc_applied as Float64Array;
+  const start = before.byteOffset + before.byteLength;
+  const after = mjData.mocap_pos as Float64Array;
+  if (after.byteLength > 0 && after.byteOffset < start + count) {
+    throw new Error('[HandMocap] eq_active is not after xfrc_applied in this MuJoCo build');
+  }
+  return new Uint8Array(before.buffer, start, count);
+}
+
 /** One bone: a capsule spanning two adjacent WebXR joints. */
 type Segment = {
   from: XRHandJoint;
@@ -463,12 +487,12 @@ export class HandMocap {
     mjModel.eq_data[at + 10] = 1;
     mjModel.eq_obj1id[hand.weldId] = palm;
     mjModel.eq_obj2id[hand.weldId] = target;
-    mjData.eq_active[hand.weldId] = 1;
+    eqActive(mjData, hand.weldId + 1)[hand.weldId] = 1;
     hand.grabbed = true;
   }
 
   private release(mjData: MjData, hand: BoundHand): void {
-    if (hand.weldId >= 0) mjData.eq_active[hand.weldId] = 0;
+    if (hand.weldId >= 0) eqActive(mjData, hand.weldId + 1)[hand.weldId] = 0;
     hand.grabbed = false;
   }
 }

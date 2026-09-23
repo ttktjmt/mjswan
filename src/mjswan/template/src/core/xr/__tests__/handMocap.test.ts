@@ -6,7 +6,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 
-import { HAND_SEGMENTS, injectHandMocapXml, quatFromZ, HandMocap } from '../handMocap';
+import { HAND_SEGMENTS, eqActive, injectHandMocapXml, quatFromZ, HandMocap } from '../handMocap';
 
 type MainModule = import('mujoco').MainModule;
 type MjModel = import('mujoco').MjModel;
@@ -278,10 +278,10 @@ describe('HandMocap against the real WASM', () => {
     const held = mjData.xpos[cubeId * 3 + 2] - before;
 
     const grabId = mujoco.mj_name2id(mjModel, mujoco.mjtObj.mjOBJ_EQUALITY.value, 'mjswan_xr0_grab');
-    const weldHeld = mjData.eq_active[grabId];
+    const weldHeld = eqActive(mjData, grabId + 1)[grabId];
     hand.pinch(false);
     step(base + 0.25);
-    return { lifted, held, weldHeld, weldReleased: mjData.eq_active[grabId] };
+    return { lifted, held, weldHeld, weldReleased: eqActive(mjData, grabId + 1)[grabId] };
   }
 
   // The whole point of the dynamic twin. A plain mocap hand scores 0 here, at any mass.
