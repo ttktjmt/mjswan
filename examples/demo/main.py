@@ -36,10 +36,10 @@ from mjswan.source import hf
 
 #: Every asset this demo does not get from mjlab. Public, so the build is anonymous.
 HF_REPO = "ttktjmt/mjswan"
-# Its checkpoints mirror W&B runs, so the build needs no W&B key. To add a task's:
+# Its checkpoints mirror W&B runs. To add a task's:
 #   1. fetch each `model_<step>.pt` of its runs (`mjswan.source.wandb.fetch_checkpoints`);
-#   2. export each through the task's runner, as `add_policy_wandb` does
-#      (`mjswan.mjlab.runner.export_checkpoint`), so it keeps any metadata mjlab adds;
+#   2. export each with `mjswan.mjlab.runner.export_checkpoint`, as `add_policy_wandb`
+#      does, so it keeps the metadata mjlab adds;
 #   3. upload it as `checkpoints/<task id, lower-cased>/model_<step>.onnx`.
 
 # Project A: mjlab Tasks

@@ -56,10 +56,10 @@ def _base_id(name: str, kind: str) -> str:
 def assign_id(
     name: str, taken: Collection[str], *, kind: str, stacklevel: int = 3
 ) -> str:
-    """``name2id(name)``, made unique among ``taken``; warns when it had to be renamed.
+    """``name2id(name)``, made unique among ``taken``; warns when it had to be suffixed.
 
-    ``kind`` names the level in the warning ("scene", "policy", …). For an object the
-    viewer lists, use :func:`assign_name`, which renames the name along with the id.
+    ``kind`` names the level in the warning. For an object the viewer lists, use
+    :func:`assign_name`, which renames the name along with the id.
     """
     base = _base_id(name, kind)
     ident = unique_id(base, taken)

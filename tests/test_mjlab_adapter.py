@@ -600,11 +600,7 @@ class TestAdaptCommands:
         assert command.params["body_names"] == ["pelvis", "torso_link"]
 
     def test_a_traced_command_draws_what_its_binding_declares(self):
-        """`viz` is called with the task's own cfg; without one, nothing is drawn.
-
-        mjswan keeps no drawing per mjlab class: a class only one task uses is that
-        task's to register, its drawing included, as `examples/demo/main.py` does Lift's.
-        """
+        """`viz` is called with the task's own cfg; without one, nothing is drawn."""
         from mjswan.managers.command_manager import (
             CommandBinding,
             _custom_registry,

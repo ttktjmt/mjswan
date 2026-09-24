@@ -643,7 +643,7 @@ class TestPolicyHandle:
     def test_a_resumed_run_repeating_a_checkpoint_is_skipped_with_a_warning(
         self, minimal_model, minimal_onnx, monkeypatch
     ):
-        """mjlab's resumed run saves the step the earlier run stopped at, first."""
+        """A resumed mjlab run first saves the step its predecessor stopped at."""
         scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
         monkeypatch.setattr(
             "mjswan.source.wandb.fetch_onnx", lambda _path: ("model_1000", minimal_onnx)

@@ -1,8 +1,7 @@
 """The mjlab side of mjswan: mjlab's objects and output formats, in mjswan's terms.
 
-Not the real ``mjlab``, which is imported lazily inside the functions that need it, so a
-build that never touches an mjlab task never pays for it. Nothing here is specific to one
-of mjlab's own tasks. Three kinds of things live here:
+Not the real ``mjlab``, which is imported only inside the functions that need it. Nothing
+here is specific to one of mjlab's own tasks. Three kinds of things live here:
 
 - adapters, one per manager kind (:mod:`.observation`, :mod:`.termination`,
   :mod:`.command`, :mod:`.action`, :mod:`.event`): an env config's term sets become

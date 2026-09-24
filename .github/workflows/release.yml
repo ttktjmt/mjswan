@@ -58,8 +58,6 @@ jobs:
         run: |
           sed -i "s/^__version__ = \".*\"/__version__ = \"${{ inputs.version }}\"/" src/mjswan/_version.py
 
-      # The lockfile repeats the version at its root and under `packages[""]`;
-      # left behind, the next `npm install` rewrites it in an unrelated commit.
       - name: Update version in package.json and package-lock.json
         run: |
           cd src/mjswan/template

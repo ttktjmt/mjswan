@@ -1,9 +1,7 @@
 """What ``pip install mjswan`` alone promises: the pipeline, and a sentence per source.
 
-Every source backend is an extra imported inside a function, so a core install must
-import, build a model-only scene, and answer each source's call with the extra to
-install. These run in the ``core`` job of ``pytest.yml``, which installs no extra;
-anywhere an extra is installed they skip, since there is nothing missing to test.
+Run by the ``core`` job of ``pytest.yml``, which installs no extra; they skip wherever
+an extra is installed.
 """
 
 from __future__ import annotations

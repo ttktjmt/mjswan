@@ -1,7 +1,7 @@
 /**
- * The engine imports the bare `mujoco` specifier, and a `.mjb` scene loads only in the
- * MuJoCo that wrote it, so that specifier must resolve to the package package.json pins.
- * A transitive dependency can alias another package to the same name.
+ * The engine imports the bare `mujoco` specifier, which must resolve to the version
+ * package.json pins, since a `.mjb` loads only in the MuJoCo that wrote it. A transitive
+ * dependency can alias another package to that name.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

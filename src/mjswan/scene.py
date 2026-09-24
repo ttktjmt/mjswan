@@ -256,11 +256,9 @@ def _default_to_latest(
 ) -> None:
     """Open the scene on the highest-step checkpoint these handles brought.
 
-    The step is read from ``names``, what each handle was asked to be called, where
-    given: a collision renames ``walk`` to ``walk_1``, and that ``_1`` is no step.
-    Skipped when the scene already has a default: several calls may add policies to one
-    scene, and each marking its own best would leave several defaults, which the build
-    refuses (ADR 0006 §4).
+    Steps are read from ``names``, what the handles were asked to be called, where
+    given: a collision's ``_1`` is no step. Skipped when the scene already has a
+    default, since the build refuses two (ADR 0006 §4).
     """
     if not handles or any(policy.default for policy in scene.policies):
         return
@@ -1092,16 +1090,16 @@ class SceneHandle:
         is needed and ``task_id`` is optional.
 
         What the caller does not pass is filled as mjlab has it. ``policy_joint_names``
-        are the joints the task's action terms name, in mjlab's action order, when the
-        scene or ``env_cfg`` has those terms. Otherwise, with ``use_metadata`` on, they
-        come from an mjlab export's metadata, and so does the joint-position action term.
-        The metadata lists every joint of the robot, so it is used only when it covers
-        every joint **this scene's own model** actuates, one per action; anything else
-        would misdrive every actuator with nothing at playback to say so, so a mismatch
-        warns and fills nothing. It does not record the order of several action terms,
-        so such a task needs its env config. ``default_joint_pos`` is looked up by joint
-        name in the metadata, else in the scene model's first keyframe, which is mjlab's
-        ``init_state``.
+        are the joints the action terms name (those passed, else the scene's or
+        ``env_cfg``'s), in mjlab's action order. Otherwise, with ``use_metadata`` on,
+        they come from an mjlab export's metadata, which also supplies the
+        joint-position action term when there are no action terms at all. The metadata
+        lists every joint of the robot, so it is used only when it covers every joint
+        **this scene's own model** actuates, one per action; a mismatch warns and fills
+        nothing rather than misdrive every actuator silently. It does not record the
+        order of several action terms, so such a task needs its env config.
+        ``default_joint_pos`` is looked up by joint name in the metadata, else in the
+        scene model's first keyframe, which is mjlab's ``init_state``.
 
         Observation terms are *never* reconstructed: the metadata names them but does
         not carry the functions mjswan traces, so ``observations`` stays the caller's
@@ -1300,11 +1298,11 @@ class SceneHandle:
     ) -> dict[str, Any]:
         """``policy_joint_names`` / ``default_joint_pos`` for one policy, as mjlab has them.
 
-        The names are the caller's, else the joints the task's action terms name, else
-        the export's metadata. The rest pose is the caller's, else looked up by joint
-        name: in the metadata, then in the scene model's first keyframe, which is
-        mjlab's ``init_state``. Names that cannot be filled warn, or the policy would
-        drive the wrong actuators, or none, with nothing at playback to say so.
+        The names are the caller's, else the joints the action terms name, else the
+        export's metadata. The rest pose is the caller's, else looked up by joint name:
+        in the metadata, then in the scene model's first keyframe, which is mjlab's
+        ``init_state``. Names it cannot fill warn, since nothing at playback would say
+        the policy drives the wrong actuators, or none.
         """
         names = policy_joint_names
         if names is None and term_joint_names is not None:

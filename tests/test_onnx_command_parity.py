@@ -65,10 +65,9 @@ def _bind_lift_override(term: Any) -> None:
 
 @pytest.fixture(scope="module", autouse=True)
 def _registrations():
-    """Register `LiftingCommandCfg` as a port does, as `examples/demo/main.py` does.
+    """Register `LiftingCommandCfg` as `examples/demo/main.py` does.
 
-    mjswan binds no command class that only one task uses. `UniformVelocityCommandCfg`
-    needs nothing: mjswan binds that one itself.
+    mjswan binds `UniformVelocityCommandCfg` itself, but no class only one task uses.
     """
     from mjswan import CommandBinding, register_command
     from mjswan.managers.command_manager import _custom_registry

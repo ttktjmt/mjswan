@@ -9,8 +9,7 @@ repos:
       - id: end-of-file-fixer
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Keep in step with the `ruff==` pin in pyproject's check extra. Two different
-    # ruff versions here and in CI means the hook can pass while CI fails.
+    # Match the `ruff==` pin in pyproject's check extra, or the hook and CI can disagree.
     rev: v0.16.0
     hooks:
       # Run the linter.

@@ -41,10 +41,8 @@ jobs:
           pytest -m "not slow" --tb=short -q
 
   core:
-    # `pip install mjswan` with no extra: it must import, build a model-only scene, and
-    # answer each source's call with the extra to install. Only this job has nothing
-    # missing to test, so the tests skip everywhere else, and MJSWAN_CORE_ONLY makes
-    # them fail here rather than skip if an extra slips into the install.
+    # A bare `pip install mjswan`. The tests skip wherever an extra is installed;
+    # MJSWAN_CORE_ONLY turns that skip into a failure here.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

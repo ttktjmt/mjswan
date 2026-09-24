@@ -319,11 +319,9 @@ def motion_rsi_offset(
     """Reference-state-initialization jitter from ``MotionCommand._resample_command``.
 
     mjlab perturbs the reference frame it is about to write; this perturbs the frame
-    *already written*, in place. Numerically the same, but it needs no motion clip, so
-    it traces like any other reset event, its draws becoming the graph's ``rand`` input
-    fed from the seeded PRNG.
-
-    Draws are ordered pose -> velocity -> joint, as mjlab's are.
+    *already written*, in place. The numbers are the same, but no motion clip is needed,
+    so it traces like any other reset event. Draws are ordered pose, velocity, joint, as
+    mjlab's are.
     """
     import torch
     from mjlab.utils.lab_api.math import quat_from_euler_xyz, quat_mul
@@ -342,7 +340,7 @@ def motion_rsi_offset(
     )
     root_quat = quat_mul(orientations_delta, asset.data.root_link_quat_w)
 
-    # Root velocity: linear and angular offsets, no rotation involved.
+    # Root velocity: linear and angular offsets.
     velocity_ranges = _range_tensor(velocity_range, device)
     velocity_samples = sample_uniform(
         velocity_ranges[:, 0], velocity_ranges[:, 1], (1, 6), device=device
