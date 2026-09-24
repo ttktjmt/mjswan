@@ -307,12 +307,10 @@ def main() -> None:
     project = builder.add_project(name="{name}")
 
     spec = mujoco.MjSpec.from_file("model.xml")
-    # Seconds per control step, the rate your policy was trained to act at
-    # (mjlab's timestep * decimation). A scene with a policy needs it.
+    # Your policy's control period in seconds (mjlab: timestep * decimation).
     scene = project.add_scene(spec=spec, name="Scene", control_dt=0.02)
 
-    # Replace with your ONNX policy file. Pass observations= and actions= to say
-    # what the network reads and what its output drives: see the policy config guide.
+    # Replace with your ONNX policy; add_policy needs its observations= and actions=.
     policy_model = onnx.load("policy.onnx")
     scene.add_policy(policy=policy_model, name="Policy")
 
@@ -488,8 +486,7 @@ def _describe_licenses(node, root: Path, directory: Path) -> None:
 def _describe_projects(tree, root: Path, manifest: dict) -> int:
     """Add one node per project/scene/MDP/policy under ``tree``; return the asset bytes.
 
-    Every name and path goes through ``escape``: rich reads ``[...]`` as markup and
-    drops it, which is how a bracketed project id used to vanish.
+    Names, ids and paths are escaped: rich would parse a ``[...]`` in them as markup.
     """
     total_bytes = 0
     for project in manifest.get("projects", []):

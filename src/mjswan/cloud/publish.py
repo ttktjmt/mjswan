@@ -272,8 +272,7 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
             file="manifest.json",
         )
 
-    # Not in DATA_EXTENSIONS, so it would be left behind and the published scene
-    # would open to nothing.
+    # An .mjb is not uploaded (DATA_EXTENSIONS), so the scene would publish without it.
     for project in config.get("projects", []):
         for scene in project.get("scenes", []):
             if scene.get("scene", "").endswith(".mjb"):

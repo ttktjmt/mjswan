@@ -23,9 +23,8 @@ test('createEngine renders a scene from bytes, React-free', async ({ page }) => 
   expect(pageErrors).toEqual([]);
 });
 
-// `container.mjb` is `container.mjz` compiled and saved by the Python mujoco the build
-// pins, its builtin textures shrunk to keep it small. An `.mjb` loads only in the MuJoCo
-// version that saved it, so it has to be written again when that pin moves.
+// `container.mjb`: `container.mjz` saved by the pinned Python mujoco, textures shrunk.
+// An `.mjb` loads only in the MuJoCo that saved it: rewrite it when the pin moves.
 test('createEngine renders the .mjb that add_scene(model=...) writes', async ({ page }) => {
   const { result, pageErrors } = await runHarness(page, '?scene=/fixtures/container.mjb&format=mjb');
   expect(result?.ok, result?.error).toBe(true);

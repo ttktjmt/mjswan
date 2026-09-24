@@ -22,8 +22,7 @@ def test_the_policy_template_builds_once_its_network_is_in_place(
     project = tmp_path / "demo"
     onnx.save(minimal_onnx, project / "policy.onnx")
 
-    # The script's own build() would run the Node build and launch() would serve, so
-    # build() writes the manifest alone and hands back an app whose launch() is inert.
+    # Stand-ins for the Node build and the server: build() writes only the manifest.
     monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
     monkeypatch.setattr(
         "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)

@@ -1,6 +1,6 @@
-"""`mjswan info` and the build progress show names and ids exactly as written.
+"""`mjswan info` and the build progress show ids and names with their brackets.
 
-rich reads ``[...]`` as markup, so a bracketed id or name used to vanish from the output.
+rich parses ``[...]`` as markup, which would drop them.
 """
 
 from pathlib import Path

@@ -128,8 +128,7 @@ class ProjectHandle:
         Using ``model`` saves the scene as a binary ``.mjb`` file, which loads
         faster in the browser but produces larger files. It opens only in the
         MuJoCo version that saved it, goes without the XR hands (they are added
-        to the MJCF), and cannot be published to mjswan Cloud, which takes
-        ``.mjz`` scenes only.
+        to the MJCF), and cannot be published to mjswan Cloud.
 
         Using ``spec`` saves the scene as a compressed ``.mjz`` file, which
         uses significantly less storage but may take slightly longer to load.
