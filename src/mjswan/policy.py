@@ -480,11 +480,7 @@ class PolicyHandle:
             default=default,
             loop=loop,
         )
-        if default:
-            for existing in self._config.motions:
-                existing.default = False
-        self._config.motions.append(motion)
-        return MotionHandle(motion, self)
+        return self._append_motion(motion)
 
     def add_motion_hf(
         self,

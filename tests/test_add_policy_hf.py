@@ -231,6 +231,18 @@ class TestSceneDefault:
 
         assert [older._config.default, newer._config.default] == [False, True]
 
+    def test_a_rename_is_not_read_as_a_step(self, scene, fake_hub):
+        """Two files named alike with no step: the first opens, not the one renamed."""
+        fake_hub("a/walk.onnx", metadata=MJLAB_METADATA)
+        fake_hub("b/walk.onnx", metadata=MJLAB_METADATA)
+
+        with pytest.warns(RuntimeWarning, match="renamed 'walk_1'"):
+            first, second = scene.add_policy_hf(
+                "my-org/two-joint", filename=["a/walk.onnx", "b/walk.onnx"]
+            )
+
+        assert (first._config.default, second._config.name) == (True, "walk_1")
+
 
 class TestJointMappingGuard:
     """The metadata is paired with the scene's model, never taken on faith."""

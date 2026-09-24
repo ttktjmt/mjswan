@@ -493,6 +493,24 @@ class TestPolicyHandle:
         assert called["run_path"] == "demo-org/tracking/abc123"
         assert policy._config.motions[0].data == b"npz-bytes"
 
+    def test_add_motion_wandb_renames_a_clip_named_like_another(
+        self, monkeypatch, minimal_model, minimal_onnx
+    ):
+        _, policy = self._make_policy(minimal_model, minimal_onnx)
+        monkeypatch.setattr(
+            "mjswan.source.wandb.fetch_motion_npz", lambda run_path: ("clip", b"npz")
+        )
+        clip = dict(anchor_body_name="torso_link", body_names=("torso_link",))
+
+        policy.add_motion_wandb(run_path="org/tracking/a", **clip)
+        with pytest.warns(RuntimeWarning, match="renamed 'clip_1'"):
+            policy.add_motion_wandb(run_path="org/tracking/b", default=True, **clip)
+
+        assert [(m.name, m.default) for m in policy._config.motions] == [
+            ("clip", False),
+            ("clip_1", True),
+        ]
+
     def test_add_policy_wandb_auto_imports_tracking_motion(
         self, monkeypatch, minimal_model, minimal_onnx
     ):

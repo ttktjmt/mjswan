@@ -251,9 +251,13 @@ def _model_rest_pose(
     return pose
 
 
-def _default_to_latest(handles: list[PolicyHandle], scene: SceneConfig) -> None:
+def _default_to_latest(
+    handles: list[PolicyHandle], scene: SceneConfig, names: list[str] | None = None
+) -> None:
     """Open the scene on the highest-step checkpoint these handles brought.
 
+    The step is read from ``names``, what each handle was asked to be called, where
+    given: a collision renames ``walk`` to ``walk_1``, and that ``_1`` is no step.
     Skipped when the scene already has a default: several calls may add policies to one
     scene, and each marking its own best would leave several defaults, which the build
     refuses (ADR 0006 §4).
@@ -261,11 +265,12 @@ def _default_to_latest(handles: list[PolicyHandle], scene: SceneConfig) -> None:
     if not handles or any(policy.default for policy in scene.policies):
         return
 
-    def _step(handle: PolicyHandle) -> int:
-        match = re.search(r"_(\d+)", handle._config.name)
+    def _step(name: str) -> int:
+        match = re.search(r"_(\d+)", name)
         return int(match.group(1)) if match else -1
 
-    latest = max(handles, key=_step)._config
+    steps = [_step(name) for name in names or [h._config.name for h in handles]]
+    latest = handles[steps.index(max(steps))]._config
     latest.default = latest.auto_default = True
 
 
@@ -1276,7 +1281,8 @@ class SceneHandle:
                 )
             )
 
-        _default_to_latest(handles, self._config)
+        requested = [name or policy_name for policy_name, _ in fetched]
+        _default_to_latest(handles, self._config, requested)
         return handles
 
     @staticmethod
