@@ -169,7 +169,7 @@ Add a MuJoCo scene. Provide exactly one of `model` or `spec`.
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `name` | `str` | — | Display name shown in the UI. A name whose id another scene of the project has is renamed `<name>_1` with a warning. |
-| `model` | `mujoco.MjModel \| None` | `None` | Compiled MuJoCo model. Saved as `.mjb` (binary). Loads faster; larger files. |
+| `model` | `mujoco.MjModel \| None` | `None` | Compiled MuJoCo model. Saved as `.mjb` (binary). Loads faster; larger files. Opens only in the MuJoCo version that saved it, goes without the XR hands, and cannot be published to mjswan Cloud. |
 | `spec` | `mujoco.MjSpec \| None` | `None` | MuJoCo spec. Saved as `.mjz` (DEFLATE-compressed ZIP). Smaller files; slightly slower to load. |
 | `metadata` | `dict \| None` | `None` | Arbitrary key-value metadata kept on the scene. |
 | `control_dt` | `float \| None` | `None` | Seconds per control step — mjlab's `timestep * decimation`. Required once the scene carries a policy: the model holds only the physics timestep, and a wrong control rate raises nothing at playback. `add_scene_mjlab` fills it in from the task. |

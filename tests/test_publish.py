@@ -116,7 +116,9 @@ class FakeTransport(HttpTransport):
         return HttpResponse(self._put_status, b"")
 
 
-def _make_dist(tmp_path: Path, *, uses_custom_js: bool = False) -> Path:
+def _make_dist(
+    tmp_path: Path, *, uses_custom_js: bool = False, scene: str = "scene.mjz"
+) -> Path:
     """A realistic built dist/: data files plus app-shell files to be excluded."""
     dist = tmp_path / "dist"
     (dist / "assets").mkdir(parents=True)
@@ -137,7 +139,7 @@ def _make_dist(tmp_path: Path, *, uses_custom_js: bool = False) -> Path:
                     {
                         "id": "humanoid",
                         "name": "Humanoid",
-                        "scene": "scene.mjz",
+                        "scene": scene,
                         "mdps": [{"id": "mdp_0"}],
                         "policies": [
                             {
@@ -155,7 +157,7 @@ def _make_dist(tmp_path: Path, *, uses_custom_js: bool = False) -> Path:
     (dist / "manifest.json").write_text(json.dumps(config))
 
     # Data files (should be uploaded).
-    (scene_dir / "scene.mjz").write_bytes(b"MJZ" * 10)
+    (scene_dir / scene).write_bytes(b"MJZ" * 10)
     (scene_dir / "policy" / "walk.onnx").write_bytes(b"ONNX" * 10)
     (scene_dir / "mdp" / "mdp_0" / "obs" / "actor.onnx").write_bytes(b"GRAPH" * 2)
     (scene_dir / "assets" / "walk_run.npz").write_bytes(b"NPZ" * 10)
@@ -250,6 +252,14 @@ class TestPlanPublish:
             plan_publish(_make_dist(tmp_path, uses_custom_js=True))
         assert exc.value.file == "manifest.json"
         assert "custom-js" in str(exc.value).lower()
+
+    def test_refuses_an_mjb_scene_rather_than_publishing_it_without_one(
+        self, tmp_path: Path
+    ):
+        with pytest.raises(PublishError) as exc:
+            plan_publish(_make_dist(tmp_path, scene="scene.mjb"))
+        assert exc.value.file == "demo/humanoid/scene.mjb"
+        assert "add_scene(spec=...)" in str(exc.value)
 
     def test_missing_config(self, tmp_path: Path):
         empty = tmp_path / "empty"

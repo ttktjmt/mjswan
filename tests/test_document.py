@@ -27,8 +27,7 @@ from mjswan.document import (
 from mjswan.envs.mdp.actions import JointPositionActionCfg
 
 
-@pytest.fixture
-def built(tmp_path, minimal_model, minimal_onnx, monkeypatch) -> Path:
+def _build(tmp_path, onnx_model, monkeypatch, **scene_source) -> Path:
     """A real `_save_web` tree with the engine files a build would also carry."""
     monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
     monkeypatch.setattr(
@@ -36,11 +35,11 @@ def built(tmp_path, minimal_model, minimal_onnx, monkeypatch) -> Path:
     )
     builder = Builder()
     scene = builder.add_project(name="Demo").add_scene(
-        control_dt=0.02, name="Humanoid", model=minimal_model
+        control_dt=0.02, name="Humanoid", **scene_source
     )
     scene.add_policy(
         name="walk",
-        policy=minimal_onnx,
+        policy=onnx_model,
         actions={"joint_pos": JointPositionActionCfg(actuator_names=(".*",))},
     )
     out = tmp_path / "dist"
@@ -50,6 +49,11 @@ def built(tmp_path, minimal_model, minimal_onnx, monkeypatch) -> Path:
     (out / "assets" / "index-abc.js").write_text("console.log(1)")
     (out / "assets" / "mujoco.wasm").write_bytes(b"\\0asm")
     return out
+
+
+@pytest.fixture
+def built(tmp_path, minimal_model, minimal_onnx, monkeypatch) -> Path:
+    return _build(tmp_path, minimal_onnx, monkeypatch, model=minimal_model)
 
 
 class TestDocumentFiles:
@@ -148,7 +152,11 @@ class _Transport:
 
 
 class TestPublishingADocument:
-    def test_uploads_the_same_file_set_as_the_directory(self, built, monkeypatch):
+    def test_uploads_the_same_file_set_as_the_directory(
+        self, tmp_path, minimal_spec, minimal_onnx, monkeypatch
+    ):
+        # From a spec: Cloud takes no .mjb scene.
+        built = _build(tmp_path, minimal_onnx, monkeypatch, spec=minimal_spec)
         monkeypatch.setenv("MJSWAN_TOKEN", "t")
         as_directory = {f.upload_path for f in plan_publish(built).files}
         path = write_document(built)

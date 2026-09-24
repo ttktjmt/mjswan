@@ -249,8 +249,8 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
     """Validate ``dist_dir`` and build the upload plan without any network I/O.
 
     Raises :class:`PublishError` on any client-side constraint violation:
-    missing/invalid config, custom-JS build, too many/too-large files, a
-    path that escapes the upload root, or a license file whose terms forbid
+    missing/invalid config, custom-JS build, a ``.mjb`` scene, too many/too-large
+    files, a path that escapes the upload root, or a license file whose terms forbid
     redistribution (ADR 0007 §3).
     """
     dist_dir = Path(dist_dir).expanduser().resolve()
@@ -271,6 +271,18 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
             "missing capability as an engine built-in. See mjswan ADR 0003.",
             file="manifest.json",
         )
+
+    # Not in DATA_EXTENSIONS, so it would be left behind and the published scene
+    # would open to nothing.
+    for project in config.get("projects", []):
+        for scene in project.get("scenes", []):
+            if scene.get("scene", "").endswith(".mjb"):
+                raise PublishError(
+                    f"Scene {scene.get('name')!r} was built with add_scene(model=...), "
+                    "which saves it as .mjb, and mjswan Cloud takes .mjz scenes only. "
+                    "Build it with add_scene(spec=...) to publish it.",
+                    file=f"{project['id']}/{scene['id']}/{scene['scene']}",
+                )
 
     plan = PublishPlan(dist_dir=dist_dir, config=config)
 

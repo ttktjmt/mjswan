@@ -524,10 +524,13 @@ class TestBuildOutput:
         assert "license" not in json.dumps(licensed_manifest).lower()
 
     def test_the_document_carries_the_files_and_publish_takes_them(
-        self, tmp_path, minimal_model, build_manifest
+        self, tmp_path, minimal_spec, build_manifest
     ):
         builder = Builder(license="Apache-2.0", copyright="x")
-        _, scene = _project_with_scene(builder, minimal_model)
+        # From a spec: Cloud takes no .mjb scene.
+        scene = builder.add_project(name="Demo").add_scene(
+            name="Humanoid", spec=minimal_spec
+        )
         scene.add_attribution("go2", license="BSD-3-Clause", copyright="Unitree")
         out = tmp_path / "dist"
         build_manifest(builder, out)

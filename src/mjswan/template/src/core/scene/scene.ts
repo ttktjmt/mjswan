@@ -4,6 +4,8 @@ import { createLights, lightSpecularRatio } from './lights';
 import { createTexture, createSkyboxTexture } from './textures';
 import { createTendonMeshes } from './tendons';
 
+/** How a scene's model bytes are encoded: `add_scene(spec=...)` writes `mjz`, `model=` `mjb`. */
+export type ModelFormat = 'mjz' | 'mjb';
 
 export function reflectanceParams(
   mjModel: MjModel,

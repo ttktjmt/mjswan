@@ -135,6 +135,9 @@ hand bodies, roughly 1.6x the physics cost, and the headset must grant the
 WebXR hand tracking with nothing to install. Ordinary desktop and mobile viewing is
 unaffected: untracked hands sit parked far above the scene.
 
+The hand bodies are added to the scene's MJCF, so a scene added as `add_scene(model=...)`
+(a compiled `.mjb`, with no MJCF) goes without them.
+
 ### Passthrough AR
 
 A headset that supports `immersive-ar` gets a second button, **Start AR**, next to

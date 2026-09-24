@@ -125,7 +125,8 @@ The engine never fetches. Every asset arrives as `Bytes` — an `ArrayBuffer`, o
 
     ```ts
     interface SceneInput {
-      model: Bytes;                        // .mjz (the engine unpacks it)
+      model: Bytes;
+      modelFormat?: 'mjz' | 'mjb';         // 'mjz' (default) from add_scene(spec=...), 'mjb' from model=
       policy?: PolicyInput | null;
       splat?: SplatInput | null;
       viewer?: ViewerConfig;

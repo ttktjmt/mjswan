@@ -1,9 +1,10 @@
 /**
  * Browser glue for the Playwright engine E2E (issue #76 step 1i, runtime tier).
  *
- * React-free: imports ONLY `createEngine`, loads a fixture `.mjz` by bytes, lets
- * the physics + render loops run, then reads back `captureThumbnail()` and checks
- * the frame is non-blank. Result is published on `window.__harness` for the test.
+ * React-free: imports ONLY `createEngine`, loads a fixture scene by bytes (`?scene=`, with
+ * `?format=mjb` for a compiled model), lets the physics + render loops run, then reads back
+ * `captureThumbnail()` and checks the frame is non-blank. Result is published on
+ * `window.__harness` for the test.
  */
 import { createEngine } from '../engine';
 import type { MjswanEngineState } from '../engine';
@@ -33,7 +34,9 @@ async function main(): Promise<void> {
   const element = document.getElementById('app');
   if (!element) throw new Error('missing #app');
 
-  const sceneUrl = new URLSearchParams(location.search).get('scene') ?? '/fixtures/container.mjz';
+  const params = new URLSearchParams(location.search);
+  const sceneUrl = params.get('scene') ?? '/fixtures/container.mjz';
+  const modelFormat = params.get('format') === 'mjb' ? 'mjb' : 'mjz';
   const states: MjswanEngineState[] = [];
 
   // Caller-chosen, so the test checks the value survives option → runtime → snapshot.
@@ -41,7 +44,7 @@ async function main(): Promise<void> {
   engine.subscribe((state) => states.push(state));
 
   const model = await (await fetch(sceneUrl)).arrayBuffer();
-  await engine.loadScene({ model });
+  await engine.loadScene({ model, modelFormat });
 
   // Let the setTimeout physics loop and the rAF render loop advance a few frames.
   await new Promise((resolve) => setTimeout(resolve, 1500));

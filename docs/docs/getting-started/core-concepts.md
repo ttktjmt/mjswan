@@ -82,6 +82,8 @@ scene = project.add_scene(
 !!! tip "Which format should I use?"
     Use `spec=` unless you have a specific reason to prefer `model=`. The `.mjz` format uses DEFLATE compression and is significantly smaller — important when approaching GitHub Pages' 1 GB deployment limit.
 
+    A `.mjb` opens only in the MuJoCo version that saved it (the browser's is pinned to the Python package's), has no MJCF to add the [XR hands](../guides/embedding.md#hand-tracking-in-vr) to, and cannot be [published to mjswan Cloud](../guides/publishing.md).
+
 A scene can also come from an mjlab task ([`add_scene_mjlab`](../guides/mjlab.md)) or from a
 Hugging Face Hub repository ([`add_scene_hf`](../api/core.md#projecthandleadd_scene_hf)),
 which downloads the XML's directory and adds it as `spec=`.
