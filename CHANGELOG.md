@@ -404,6 +404,9 @@ shortcuts.
     mjlab, with no other job covering them: `parity.yml` names five files and reaches
     the rest. The two workflows that now resolve torch ask for the CPU wheel, since
     mjswan only ever calls `torch.onnx.export` and `torch.load(map_location="cpu")`.
+  - A `core` job in `pytest.yml` installs mjswan with no extra at all and checks that it
+    imports, builds a model-only scene, and answers each source's call with the extra
+    to install: the promise above, held by an install that has none of them.
 
 - **`import mjswan` no longer imports `onnx`**, only `mujoco` and `numpy`: about 190 ms
   down to 125 ms, 153 fewer modules. Where mjlab is installed it also imports mjlab and
