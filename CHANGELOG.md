@@ -310,6 +310,13 @@ shortcuts.
   after its directory (`walk/policy.onnx` is `walk`, passing over folders such as
   `exported/`), which is where two files from one repository collided.
 
+- **`add_policy_wandb` checks its extras when called.** With `only_latest=False` it
+  converts at build time, so a missing `wandb`, `mjlab` or `torch` surfaced only after the
+  build had cleared `dist/` and built the frontend; it now raises at the call, naming
+  `mjswan[wandb,mjlab]`. A checkpoint named like one an earlier run already added is still
+  skipped, since a resumed run first saves the step its predecessor stopped at, but now
+  with a warning rather than silently.
+
 - **The demo stores no assets, and `examples/demo/assets/` is gone**: 116 MB of
   vendored meshes, policies and a `.mjz` scene, none of which had to be in a git
   repository ([#128](https://github.com/ttktjmt/mjswan/issues/128)). `examples/` is now

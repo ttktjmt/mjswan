@@ -622,6 +622,43 @@ class TestPolicyHandle:
         cfg = builder.get_projects()[0].scenes[0].policies[0]
         assert cfg.metadata["version"] == "1.0"
 
+    def test_a_resumed_run_repeating_a_checkpoint_is_skipped_with_a_warning(
+        self, minimal_model, minimal_onnx, monkeypatch
+    ):
+        """mjlab's resumed run saves the step the earlier run stopped at, first."""
+        scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
+        monkeypatch.setattr(
+            "mjswan.source.wandb.fetch_onnx", lambda _path: ("model_1000", minimal_onnx)
+        )
+
+        with pytest.warns(RuntimeWarning, match="earlier run already added"):
+            handles = scene.add_policy_wandb(["e/p/run1", "e/p/run2"], only_latest=True)
+
+        assert [handle.name for handle in handles] == ["model_1000"]
+
+    def test_missing_conversion_extras_fail_at_the_call(
+        self, minimal_model, monkeypatch
+    ):
+        """Not at build time, after the build has cleared `dist/` and built the site."""
+        import importlib.util
+
+        real_find_spec = importlib.util.find_spec
+        monkeypatch.setattr(
+            importlib.util,
+            "find_spec",
+            lambda name, *args: (
+                None if name == "mjlab" else real_find_spec(name, *args)
+            ),
+        )
+        scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
+
+        with pytest.raises(
+            ImportError, match=r"mjlab is not installed.*mjswan\[wandb,mjlab\]"
+        ):
+            scene.add_policy_wandb("e/p/run", task_id="Mjlab-Velocity-Flat-Unitree-G1")
+
+        assert scene._config.pending_conversions == []
+
     def test_add_policy_wandb_only_latest_preserves_extras(
         self, minimal_model, minimal_onnx, monkeypatch
     ):

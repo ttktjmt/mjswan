@@ -7,6 +7,7 @@ managing MuJoCo scenes and their associated policies.
 from __future__ import annotations
 
 import copy
+import importlib.util
 import os
 import re
 import tempfile
@@ -266,6 +267,17 @@ def _default_to_latest(handles: list[PolicyHandle], scene: SceneConfig) -> None:
 
     latest = max(handles, key=_step)._config
     latest.default = latest.auto_default = True
+
+
+def _warn_resumed_checkpoint(name: str, run_path: str, *, stacklevel: int) -> None:
+    """Say why a checkpoint named like one an earlier run added is not added again."""
+    warnings.warn(
+        f"Checkpoint {name!r} from {run_path!r} has the name of one an earlier run "
+        "already added, so it is skipped. A resumed run starts by saving the step the "
+        "earlier one stopped at, so the two are the same policy.",
+        category=RuntimeWarning,
+        stacklevel=stacklevel,
+    )
 
 
 @dataclass
@@ -768,7 +780,9 @@ class SceneHandle:
 
         Args:
             run_path: W&B run path in the format ``"entity/project/run_id"``, or
-                a list of such paths to fetch policies from multiple runs.
+                a list of such paths to fetch policies from multiple runs. A checkpoint
+                named like one an earlier run already added is skipped with a warning:
+                a run resumed from another repeats the step it stopped at.
             only_latest: If ``False`` (default), fetches all ``model_*.pt``
                 checkpoints and converts each to ONNX via mjlab — requires
                 ``mjlab`` and ``torch`` to be installed and ``task_id`` to be
@@ -813,8 +827,8 @@ class SceneHandle:
         Raises:
             ValueError: If ``only_latest=False`` and ``task_id`` is not provided,
                 or if no matching files are found in a W&B run.
-            ImportError: If ``only_latest=False`` and ``mjlab``/``torch`` are not
-                installed.
+            ImportError: If ``only_latest=False`` and ``wandb``, ``mjlab`` or
+                ``torch`` is not installed. Raised here, not at build time.
 
         Example — all logged checkpoints from a single run (default):
             ```python
@@ -884,32 +898,48 @@ class SceneHandle:
         if only_latest:
             for path in run_paths:
                 name, model = source.wandb.fetch_onnx(path)
-                if name not in seen_names:
-                    seen_names.add(name)
-                    handle = self.add_policy(
-                        name=name,
-                        policy=model,
-                        config_path=config_path,
-                        metadata=metadata,
-                        env_cfg=env_cfg,
-                        task_id=task_id,
-                        mdp=shared_mdp,
-                        in_keys=in_keys,
-                        out_keys=out_keys,
-                        clip_actions=clip_actions,
-                        extras=extras,
-                    )
-                    attach_tracking_motion(
-                        handle,
-                        path,
-                        tracking_term,
-                        tracking_motion_cache,
-                    )
-                    handles.append(handle)
+                if name in seen_names:
+                    _warn_resumed_checkpoint(name, path, stacklevel=3)
+                    continue
+                seen_names.add(name)
+                handle = self.add_policy(
+                    name=name,
+                    policy=model,
+                    config_path=config_path,
+                    metadata=metadata,
+                    env_cfg=env_cfg,
+                    task_id=task_id,
+                    mdp=shared_mdp,
+                    in_keys=in_keys,
+                    out_keys=out_keys,
+                    clip_actions=clip_actions,
+                    extras=extras,
+                )
+                attach_tracking_motion(
+                    handle,
+                    path,
+                    tracking_term,
+                    tracking_motion_cache,
+                )
+                handles.append(handle)
         else:
             # Deferred to build time so each scene converts and traces before the next
             # starts; converting up front held one mjlab env per scene alive.
             assert task_id is not None
+            # Checked now: by the time the build reaches this scene, it has already
+            # cleared `dist/` and built the frontend.
+            missing = [
+                module
+                for module in ("wandb", "mjlab", "torch")
+                if importlib.util.find_spec(module) is None
+            ]
+            if missing:
+                raise ImportError(
+                    "add_policy_wandb(only_latest=False) downloads each checkpoint and "
+                    f"converts it with mjlab and torch, but {', '.join(missing)} "
+                    f"{'is' if len(missing) == 1 else 'are'} not installed. Install "
+                    "them with: pip install 'mjswan[wandb,mjlab]'"
+                )
 
             def _convert(on_run: Callable[[str], None] = lambda _: None) -> None:
                 from .mjlab.runner import (
@@ -997,6 +1027,9 @@ class SceneHandle:
                             with source.wandb.fetch_checkpoints(path) as checkpoints:
                                 for name, pt_path in checkpoints:
                                     if name in seen_names:
+                                        _warn_resumed_checkpoint(
+                                            name, path, stacklevel=2
+                                        )
                                         continue
                                     seen_names.add(name)
                                     model = export_checkpoint(export_context, pt_path)
