@@ -88,7 +88,8 @@ class Builder:
             run_path: Optional W&B run path (``"entity/project/run_id"``) or a
                 list of such paths. When provided, all ``model_*.pt``
                 checkpoints from each run are fetched and converted to ONNX
-                via mjlab+torch (both required). ``task_id`` above is reused
+                via mjlab and torch (the ``wandb`` and ``mjlab`` extras, checked
+                when this is called). ``task_id`` above is reused
                 for the conversion. Defaults to ``None`` (no policy attached).
                 For finer control (e.g. ``only_latest=True``, custom
                 observations/actions), build manually with
@@ -160,8 +161,9 @@ class Builder:
             task_id: mjlab task identifier (e.g. ``"go2_flat"``).
             run_path: Optional W&B run path (``"entity/project/run_id"``) or a
                 list of such paths. When provided, all checkpoints are fetched
-                and converted to ONNX via mjlab+torch (both required) using
-                ``task_id``. Defaults to ``None`` (no policy attached).
+                and converted to ONNX via mjlab and torch (the ``wandb`` and
+                ``mjlab`` extras) using ``task_id``. Defaults to ``None`` (no
+                policy attached).
             hf_repo_id: Optional Hugging Face Hub repository to take the policy's
                 exported ONNX from. See :meth:`from_mjlab`.
             project_name: Name for the created project. Defaults to ``"mjlab"``.

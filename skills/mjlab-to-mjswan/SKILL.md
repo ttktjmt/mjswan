@@ -67,8 +67,8 @@ An action term with a non-`None` `unsupported_reason`, or one `adapt_actions` wa
 
 ## 4. Get the policy into ONNX
 
-- **W&B run path** → nothing to do here. `add_policy_wandb(run_path)` converts every `model_*.pt` itself and passes the metadata below on its own. Needs the `wandb` extra.
-- **Hugging Face repo** → `add_policy_hf(repo_id)`. Needs the `hf` extra and neither mjlab nor torch: a Hub repo holds the published artifact, so this path downloads the `.onnx` and reads what mjlab baked into it.
+- **W&B run path** → nothing to do here. `add_policy_wandb(run_path)` converts every `model_*.pt` itself and passes the metadata below on its own. Needs the `wandb` and `mjlab` extras.
+- **Hugging Face repo** → `add_policy_hf(repo_id)`. The fetch needs the `hf` extra and neither mjlab nor torch: a Hub repo holds the published artifact, so this path downloads the `.onnx` and reads what mjlab baked into it. The scene and its traced terms still need mjlab.
 - **Local `model_*.pt`** → copy `export_policy.py` (next to this file) into `<repo>/mjswan_app/` and run it. It writes one `<stem>.onnx` per checkpoint plus `policy_meta.json`.
 - **Pre-exported `.onnx` on disk** → usable directly, but plain `add_policy` reads nothing out of the file; see below.
 
@@ -172,7 +172,7 @@ When it finally builds, read the document it wrote before spending minutes on pa
 mjswan info mjswan_app/dist
 ```
 
-One line per project, scene, MDP and policy. Three things to check, none of which a successful build says out loud: **one MDP per shared `MdpConfig`** (one per W&B run, one for the whole local-checkpoint loop — more than that means a policy was handed its own config and the same terms were traced once per checkpoint); a **non-zero graph count** on each MDP (zero means every term ended up native or skipped); and **every checkpoint present** as a policy. The same command reads a `dist.swn`, so it is also how you inspect a document someone hands you.
+One line per project, scene, MDP and policy. Three things to check, none of which a successful build says out loud: **one MDP per shared `MdpConfig`** (one per `add_policy_wandb` or `add_policy_hf` call, one for the whole local-checkpoint loop — more than that means a policy was handed its own config and the same terms were traced once per checkpoint); a **non-zero graph count** on each MDP (zero means every term ended up native or skipped); and **every checkpoint present** as a policy. The same command reads a `dist.swn`, so it is also how you inspect a document someone hands you.
 
 ## 7. Parity gate
 

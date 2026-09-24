@@ -59,9 +59,9 @@ Convenience factory that creates a `Builder` pre-configured with a single mjlab 
 
 `play` and `env_cfg` behave exactly as on `ProjectHandle.add_scene_mjlab`, including being mutually exclusive; both are forwarded unresolved.
 
-When `run_path` is supplied, every `model_*.pt` checkpoint from each W&B run is fetched and converted to ONNX via mjlab + torch (both required). Each attached policy configures itself from the task — observations, commands, actions and terminations from its `env_cfg`, `clip_actions` from its runner config. For finer control, build manually with `add_project` → `ProjectHandle.add_scene_mjlab` → `SceneHandle.add_policy_wandb`.
+When `run_path` is supplied, every `model_*.pt` checkpoint from each W&B run is fetched and converted to ONNX via mjlab + torch, which needs the `wandb` and `mjlab` extras; a missing one raises when this is called. Each attached policy configures itself from the task — observations, commands, actions and terminations from its `env_cfg`, `clip_actions` from its runner config. For finer control, build manually with `add_project` → `ProjectHandle.add_scene_mjlab` → `SceneHandle.add_policy_wandb`.
 
-`hf_repo_id` (`"<owner>/<name>"`) adds a Hugging Face Hub repository's exported ONNX the same way, with no conversion, as [`SceneHandle.add_policy_hf`](#scenehandleadd_policy_hf) does; it may be combined with `run_path`.
+`hf_repo_id` (`"<owner>/<name>"`) adds a Hugging Face Hub repository's exported ONNX the same way, with no conversion, as [`SceneHandle.add_policy_hf`](#scenehandleadd_policy_hf) does (the `hf` and `mjlab` extras); it may be combined with `run_path`.
 
 **Returns** — `Builder`
 
@@ -79,7 +79,7 @@ def add_project_mjlab(
 ) -> ProjectHandle
 ```
 
-Add a project pre-configured with a single mjlab task (project + mjlab scene + optional W&B policies). The instance-method counterpart to `Builder.from_mjlab`; use it to add an mjlab task to a builder that already has other projects.
+Add a project pre-configured with a single mjlab task (project + mjlab scene + optional W&B or Hub policies). The instance-method counterpart to `Builder.from_mjlab`; use it to add an mjlab task to a builder that already has other projects.
 
 **Returns** — `ProjectHandle`
 
@@ -99,20 +99,22 @@ Add a project to the application. Its id — the directory it is written to and 
 `?project=` value — is `name2id(name)`: lowercased, every run of characters other than
 `a-z0-9` collapsed to one `_`, edges trimmed (`"Newton's Cradle"` → `newton_s_cradle`). Two
 projects whose names sanitize alike are kept, the second renamed `<name>_1` with the id
-`<id>_1` and a warning, so the viewer never lists two alike.
+`<id>_1` (the next `_2`, and so on) and a warning, so the viewer never lists two alike.
+The same rule holds among a project's scenes, a scene's policies and splats, and a
+policy's motions.
 
 **Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `name` | `str` | — | Display name shown in the UI; the id derives from it. |
-| `default` | `bool` | `False` | Open on this project when the URL names none. At most one project may set it — two fail the build — and when none does, the first added is the default. |
+| `default` | `bool` | `False` | Open on this project when the URL names none. At most one project may set it: a second `default=True` raises. When none does, the first added is the default. |
 | `license` | `str \| PathLike \| None` | `None` | This project's license, overriding the builder's; same forms as `Builder(license=)`. |
 | `copyright` | `str \| None` | `None` | The holder line of a generated text. |
 
 **Returns** — `ProjectHandle`
 
-**Raises** — `TypeError` for the removed `id=` argument.
+**Raises** — `TypeError` for the removed `id=` argument; `ValueError` for `default=True` when another project already is the default.
 
 ### Builder.build
 
@@ -166,7 +168,7 @@ Add a MuJoCo scene. Provide exactly one of `model` or `spec`.
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `name` | `str` | — | Display name shown in the UI. |
+| `name` | `str` | — | Display name shown in the UI. A name whose id another scene of the project has is renamed `<name>_1` with a warning. |
 | `model` | `mujoco.MjModel \| None` | `None` | Compiled MuJoCo model. Saved as `.mjb` (binary). Loads faster; larger files. |
 | `spec` | `mujoco.MjSpec \| None` | `None` | MuJoCo spec. Saved as `.mjz` (DEFLATE-compressed ZIP). Smaller files; slightly slower to load. |
 | `metadata` | `dict \| None` | `None` | Arbitrary key-value metadata kept on the scene. |
@@ -189,20 +191,20 @@ def add_scene_mjlab(
 ) -> SceneHandle
 ```
 
-Load an mjlab task's MuJoCo spec from the task registry and add it as a scene. Requires `mjlab` to be installed. Automatically applies the task's `viewer`, `events`, and any terrain data — including swapping mjlab's `reset_root_state_uniform` for a spawn on a random flat terrain patch, since the browser runs a single env where mjlab trains many spread across the terrain.
+Load an mjlab task's MuJoCo spec from the task registry and add it as a scene. Needs the `mjlab` extra. Automatically applies the task's `viewer`, `events`, and any terrain data — including swapping mjlab's `reset_root_state_uniform` for a spawn on a random flat terrain patch, since the browser runs a single env where mjlab trains many spread across the terrain.
 
 **Parameters**
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `task_id` | `str` | — | mjlab task identifier (e.g. `"go2_flat"`). |
+| `task_id` | `str` | — | mjlab task identifier (e.g. `"Mjlab-Velocity-Flat-Unitree-G1"`). |
 | `play` | `bool \| None` | `None` | Which of the task's two registered configs to load. mjlab keeps them as `env_cfg` (training) and `play_env_cfg`; this selects between them exactly as its `load_env_cfg(task_id, play=...)` does. **Unset means play — the opposite of mjlab's own default, deliberately**: that one serves training scripts, and this is a playback tool. mjlab's training config sets `episode_length_s` to 10–20 s, which mjswan serializes into the browser's `time_out` termination, so a viewer built from it resets the robot every few seconds; it also keeps `push_robot` and the terrain-bounds termination, and lacks `randomize_terrain`. Pass `False` to reproduce training-time conditions. **Mutually exclusive with `env_cfg`** — passing both raises. |
 | `env_cfg` | `Any \| None` | `None` | Pre-loaded (and possibly edited) env config to use instead of loading `task_id` fresh. Load it with the `play` you want — `load_env_cfg(task_id, play=True)` — since `play` here then has nothing left to select. The scene keeps whichever config it used, and policies added to it default their term sets to it. A tracking task does not need this: mjlab registers it with `commands["motion"].motion_file = ""`, and the builder points that at the clip it bundles. |
 | `events` | `Mapping[str, Any] \| None` | `None` | Scene events, overriding the task's own `env_cfg.events`. Omit to take the task's; pass `{}` for a scene with none. |
 
 **Returns** — `SceneHandle`
 
-**Raises** — `ImportError` if `mjlab` is not installed.
+**Raises** — `ImportError`, naming `mjswan[mjlab]`, if mjlab is not installed.
 
 ### ProjectHandle.add_scene_hf
 
@@ -222,7 +224,7 @@ def add_scene_hf(
 ) -> SceneHandle
 ```
 
-Add a scene whose MJCF and assets come from a Hugging Face Hub repository. MuJoCo resolves meshes and textures relative to the XML, so its whole directory is downloaded (for an XML at the root, the whole repository) and the spec is compiled where it lands. It is then added as by [`add_scene`](#projecthandleadd_scene) with `spec=`, license detection included: a `LICENSE` beside the model or its meshes is copied into the scene directory. Needs the `hf` extra.
+Add a scene whose MJCF and assets come from a Hugging Face Hub repository. MuJoCo resolves meshes and textures relative to the XML, so its whole directory is downloaded (for an XML at the root, the whole repository) and the spec is compiled where it lands. It is then added as by [`add_scene`](#projecthandleadd_scene) with `spec=`, license detection included: a `LICENSE` beside the model or its meshes is copied into the scene directory as `LICENSE.<component>`, named after its directory, or after the repository at the root. Needs the `hf` extra.
 
 **Parameters**
 
@@ -230,7 +232,7 @@ Add a scene whose MJCF and assets come from a Hugging Face Hub repository. MuJoC
 |---|---|---|---|
 | `repo_id` | `str` | — | Hub repository, `"<owner>/<name>"`. |
 | `path` | `str` | — | The MJCF within the repository, e.g. `"scenes/unitree_g1/scene.xml"`. |
-| `name` | `str \| None` | `None` | Scene name. Defaults to the XML's stem, or to its directory (the repository at the root) when the stem only names a role (`scene.xml`, `model.xml`). |
+| `name` | `str \| None` | `None` | Scene name. Defaults to the XML's stem, or to its directory (the repository at the root) when the stem only names a role (`scene`, `model`, `robot`, `main`). |
 | `revision` | `str \| None` | `None` | Branch, tag or commit. Unset takes the default branch, so the build follows the repository; pass a commit to pin it. |
 | `repo_type` | `str` | `"model"` | `"model"`, `"dataset"` or `"space"`. |
 | `token` | `str \| None` | `None` | Hub token for a gated or private repository. |
@@ -320,7 +322,7 @@ field of the scene's mjlab env config when it has one — events to the scene's 
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `name` | `str` | — | Display name shown in the UI. |
+| `name` | `str` | — | Display name shown in the UI. Its id, `name2id(name)`, is the `policy/<id>.onnx` stem and the `?policy=` value; a name whose id another policy on the scene has is renamed `<name>_1` with a warning. |
 | `policy` | `onnx.ModelProto` | — | Loaded ONNX model (e.g. from `onnx.load("policy.onnx")`). |
 | `metadata` | `dict \| None` | `None` | Arbitrary key-value metadata. |
 | `source_path` | `str \| None` | `None` | Path to the source `.onnx` file, kept for reference. |
@@ -335,7 +337,7 @@ field of the scene's mjlab env config when it has one — events to the scene's 
 | `events` | `Mapping[str, EventTermCfg] \| None` | `None` | Event terms keyed by name, in any of the four modes. Defaults to the scene's events; `{}` means none. |
 | `in_keys` | `Sequence[str] \| None` | `None` | The network's **input slot table**: `in_keys[i]` names what fills its *i*-th input — an observation group, or a tensor the runtime synthesizes (`is_init`, `adapt_hx`, `time_step`). Positional; the network's own input names never matter. Required when the network has more than one input, checked here against its input count; a single-input network takes its one observation group and needs none. |
 | `out_keys` | `Sequence[str \| Sequence[str]] \| None` | `None` | The output slot table, `out_keys[i]` naming the *i*-th output. `action` is the one the runtime drives the actuators from; a recurrent policy also carries `["next", "adapt_hx"]`. Defaults to `["action"]`. |
-| `policy_joint_names` | `list[str] \| None` | `None` | Ordered list of joint names the policy controls. Required by the browser runtime to map outputs to actuators. |
+| `policy_joint_names` | `list[str] \| None` | `None` | Joint names in the order the network's actions come out: for an mjlab policy, each action term's joints in the model's joint order, which is not always actuator order. Required by the browser runtime to map outputs to actuators. |
 | `policy_num_actions` | `int \| None` | `None` | Output width for policies whose action count cannot be inferred from `policy_joint_names` — e.g. muscle-driven ones, which drive actuators rather than joints. |
 | `default_joint_pos` | `list[float] \| None` | `None` | Default (resting) joint positions corresponding to `policy_joint_names`. |
 | `encoder_bias` | `list[float] \| None` | `None` | Per-joint encoder bias (mirrors mjlab's joint-position action path). |
@@ -343,7 +345,7 @@ field of the scene's mjlab env config when it has one — events to the scene's 
 | `initial_qpos` | `list[float] \| None` | `None` | Optional initial qpos written to the policy's manifest entry for reset logic. |
 | `initial_qvel` | `list[float] \| None` | `None` | Optional initial qvel written to the policy's manifest entry for reset logic. |
 | `extras` | `dict \| None` | `None` | Extra JSON payload merged verbatim into the policy's manifest entry. |
-| `default` | `bool` | `False` | Open on this policy when the URL names none. At most one per scene may set it — two fail the build — and when none does, the first added is the default. |
+| `default` | `bool` | `False` | Open on this policy when the URL names none. At most one per scene may set it: two fail the build. It takes over from the checkpoint an `add_policy_hf` or `add_policy_wandb` call opened the scene on. When no policy sets it, the first added is the default. |
 
 **Returns** — `PolicyHandle`
 
@@ -366,20 +368,22 @@ def add_policy_wandb(
     commands: Mapping[str, Any] | None = None,
     actions: Mapping[str, ActionTermCfg] | None = None,
     terminations: dict[str, TerminationTermCfg] | None = None,
+    in_keys: Sequence[str] | None = None,
+    out_keys: Sequence[str | Sequence[str]] | None = None,
     clip_actions: float | None = None,
     extras: dict[str, Any] | None = None,
 ) -> list[PolicyHandle]
 ```
 
-Fetch ONNX policies from one or more W&B runs and attach them all to the scene. Same `observations` / `commands` / `actions` / `terminations` are applied to every policy.
+Fetch ONNX policies from one or more W&B runs and attach them to the scene. Same `observations` / `commands` / `actions` / `terminations` are applied to every policy. With several runs, a checkpoint named like one an earlier run already added is skipped with a warning: a resumed mjlab run first saves the step its predecessor stopped at, so the two are the same policy. Needs the `wandb` extra, and with `only_latest=False` the `mjlab` extra too.
 
 When `only_latest=False` (the default), all `model_*.pt` checkpoints in each run are downloaded and converted to ONNX via mjlab + torch — `task_id` is required, and comes from the scene unless the scene is a plain one. When `only_latest=True`, only the exported `.onnx` artifact is fetched.
 
 Every term set defaults to the scene's mjlab env config (or to `env_cfg=`, when given), and `task_id` to the scene's task — so for a scene from `add_scene_mjlab` the run path alone is enough. `clip_actions` is read from the task's runner config automatically.
 
-**Returns** — `list[PolicyHandle]` (flat across all runs). The latest checkpoint (highest `_<step>` suffix) is marked as the default.
+**Returns** — `list[PolicyHandle]`, flat across all runs; empty when `only_latest=False`, whose checkpoints are converted and added when `build()` reaches the scene. The highest `_<step>` opens the scene, unless the scene has a default by then.
 
-**Raises** — `ValueError` if `only_latest=False` and `task_id` is missing; `ImportError` if `mjlab`/`torch` are missing.
+**Raises** — `ValueError` if `only_latest=False` and `task_id` is missing; `ImportError` when called, not at build: naming `mjswan[wandb]` if `wandb` is missing, or with `only_latest=False` naming `mjswan[wandb,mjlab]` if `wandb`, `mjlab` or `torch` is.
 
 ### SceneHandle.add_policy_hf
 
@@ -413,13 +417,13 @@ def add_policy_hf(
 
 Fetch exported ONNX policies from a Hugging Face Hub repository and attach them to the scene. The light counterpart of `add_policy_wandb`: nothing is converted, so neither mjlab nor torch is needed and `task_id` is optional. Needs the `hf` extra.
 
-With no `filename`, it takes `policy.onnx`, then `final.onnx`, then the repository's single `.onnx`, and raises when several are left to choose from. A list adds one policy per file, sharing one MDP. Each policy is named after its file; for a stem that only names a role (`policy`), after its directory (`walk/policy.onnx` is `walk`, passing over folders such as `exported/` or `checkpoints/`), else after the repository.
+With no `filename`, it takes `policy.onnx`, then `final.onnx`, then the repository's single `.onnx`, and raises when several are left to choose from. A list adds one policy per file, sharing one MDP. Each policy is named after its file; for a stem that only names a role (`policy`, `final`, `model`, `actor`), after its directory (`walk/policy.onnx` is `walk`, passing over `checkpoints/`, `exported/`, `models/`, `onnx/`, `policies/` and `policy/`), else after the repository.
 
-Term sets default as on `add_policy_wandb`. What the caller does not pass is filled as mjlab has it: `policy_joint_names` are the joints the task's action terms name, in mjlab's action order, when the scene or `env_cfg` has those terms; otherwise, with `use_metadata` on, they come from the metadata mjlab bakes into an export, and so does the joint-position action term. The metadata lists every joint of the robot, so it is used only where it lists every joint the scene's own model actuates, one per action, and a task with several action terms needs its env config. `default_joint_pos` is looked up by joint name, in the metadata and then in the scene model's first keyframe, which is mjlab's `init_state`. Whatever cannot be filled warns. Observation terms are never reconstructed from the metadata. See [What an mjlab export already carries](../guides/policy-config.md#what-an-mjlab-export-already-carries).
+Term sets default as on `add_policy_wandb`. What the caller does not pass is filled as mjlab has it: `policy_joint_names` are the joints the action terms name (those passed, else the scene's or `env_cfg`'s), in mjlab's action order; otherwise, with `use_metadata` on, they come from the metadata mjlab bakes into an export, and so does the joint-position action term. The metadata lists every joint of the robot, so it is used only where it lists every joint the scene's own model actuates, one per action, and a task with several action terms needs its env config. `default_joint_pos` is looked up by joint name, in the metadata and then in the scene model's first keyframe, which is mjlab's `init_state`. Whatever cannot be filled warns. Observation terms are never reconstructed from the metadata. See [What an mjlab export already carries](../guides/policy-config.md#what-an-mjlab-export-already-carries).
 
-**Returns** — `list[PolicyHandle]`, one per file in the order given. The highest `_<step>` opens the scene, unless the scene already has a default.
+**Returns** — `list[PolicyHandle]`, one per file in the order given. The highest `_<step>` opens the scene, unless the scene already has a default; a later `add_policy(..., default=True)` takes over from it.
 
-**Raises** — `ImportError` if `huggingface_hub` is not installed; `ValueError` if `name` is given for several files, or the repository has no unambiguous `.onnx` and none was named.
+**Raises** — `ImportError`, naming `mjswan[hf]`, if `huggingface_hub` is not installed; `ValueError` if `name` is given for several files, or the repository has no unambiguous `.onnx` and none was named.
 
 ### SceneHandle.add_splat
 
@@ -447,7 +451,7 @@ Add a Gaussian Splat background to the scene. Exactly one of `source` or `url` m
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `name` | `str` | — | Display name shown in the viewer selector. |
+| `name` | `str` | — | Display name shown in the viewer selector. A name whose id another splat on the scene has is renamed `<name>_1` with a warning. |
 | `source` | `str \| None` | `None` | Local path to a `.spz` file. The file is copied into `dist/` during `Builder.build()`. Mutually exclusive with `url`. |
 | `url` | `str \| None` | `None` | URL to an external `.spz` file. Fetched by the browser at runtime; not bundled. Mutually exclusive with `source`. |
 | `scale` | `float` | `1.0` | Metric scale factor (converts splat units to metres). |
@@ -487,7 +491,7 @@ def add_splat_hf(
 ) -> SplatHandle
 ```
 
-The Hub counterpart of `add_splat`: the `.spz` at `filename` is downloaded and bundled like a local `source=`, so the deployed app needs no network. The placement arguments mean what they do on `add_splat` and stay the caller's, since no file on the Hub says how a capture lines up with a model. `name` defaults to the file's stem, or to the repository's name when the stem only names a role (`background`). A collider is not bundled, so one on the Hub is named by its `resolve` URL. `revision`, `repo_type` and `token` are as on `add_policy_hf`. Needs the `hf` extra.
+The Hub counterpart of `add_splat`: the `.spz` at `filename` is downloaded and bundled like a local `source=`, so the deployed app needs no network. The placement arguments mean what they do on `add_splat` and stay the caller's, since no file on the Hub says how a capture lines up with a model. `name` defaults to the file's stem, or to the repository's name when the stem only names a role (`splat`, `background`, `scene`). A collider is not bundled, so one on the Hub is named by its `resolve` URL. `revision`, `repo_type` and `token` are as on `add_policy_hf`. Needs the `hf` extra.
 
 **Returns** — `SplatHandle`
 
@@ -624,7 +628,7 @@ pass it to [`SceneHandle.set_trace_env`](#scenehandleset_trace_env).
 Joint defaults come from the model's first keyframe, matching what the browser resets to,
 so a `*_rel` observation subtracts the same pose on both sides.
 
-**Requires** `mjlab` and `torch` (build-time only).
+**Requires** the `mjlab` extra (`mjlab` and `torch`), at build time only.
 
 ### SceneHandle.set_metadata
 
@@ -638,8 +642,7 @@ Set a metadata entry for the scene. Returns `self` for chaining.
 
 | Property | Type | Description |
 |---|---|---|
-| `name` | `str` | Display name of the scene. |
-| `id` | `str` | `name2id(name)`, unique in the project: the scene's directory and its `?scene=` value. |
+| `name` | `str` | Display name of the scene. Its id, `name2id(name)`, is the scene's directory and its `?scene=` value. |
 
 ---
 
@@ -671,7 +674,7 @@ Attach a bundled `.npz` reference motion to the policy (used by motion-tracking 
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `name` | `str` | — | Display name, and the bundled filename stem. Two clips with the same name but different content get a `_1` / `_2` suffix. |
+| `name` | `str` | — | Display name. A name whose id another motion on this policy has is renamed `<name>_1` with a warning. The clip is bundled as `<name2id(name)>.npz`; another clip in the scene with that file name but different content gets a `_1` / `_2` suffix. |
 | `source` | `str` | — | Path to a local `.npz`, copied into `dist/` at build time. |
 | `fps` | `float` | `50.0` | Frame rate of the clip. |
 | `anchor_body_name` | `str` | — | Body the reference trajectory is anchored to. Required. |
@@ -707,7 +710,7 @@ def add_motion_wandb(
 Download a motion `.npz` artifact from a W&B run and attach it to the policy. Supply either
 `run_path="entity/project/run_id"` or `run_id` / `entity` / `project` separately. `name`
 defaults to the artifact's own name; every other parameter behaves as on
-[`add_motion`](#policyhandleadd_motion).
+[`add_motion`](#policyhandleadd_motion). Needs the `wandb` extra.
 
 **Returns** — `MotionHandle`
 
@@ -973,6 +976,8 @@ mjswan.register_command(mjlab_name: str, spec: CommandBinding) -> None
 
 Register an adapter from a custom mjlab `*CommandCfg` class to a browser-side command term. `mjlab_name` should typically be the mjlab config class name (e.g. `"LiftingCommandCfg"`).
 
+mjswan binds two of mjlab's command classes itself: `UniformVelocityCommandCfg`, traced through a rewrite of its body and drawn with mjlab's arrows, and `MotionCommandCfg`, native, with its reset jitter traced. A class only one task uses is that task's to register: `examples/demo/main.py` registers `LiftingCommandCfg` with a `trace_override` and a `viz`.
+
 ---
 
 ## MDP extension registries
@@ -1026,9 +1031,14 @@ the old names no longer import. What each became:
 | `EventFunc` | `EventBinding` |
 | `MjlabMdpBinding` | `MdpBinding` |
 | `CommandTermSpec` | `CommandBinding` |
+| `PolicyHandle.add_motion_from_wandb(wandb_run_path=)` | [`add_motion_wandb(run_path=)`](#policyhandleadd_motion_wandb) |
 
 The two renamed modules' old paths are gone with them: `mjswan.viewer_config` is
-`mjswan.viewer`, and `mjswan.wandb_utils` is now `mjswan.source.wandb`.
+`mjswan.viewer`, and `mjswan.wandb_utils` (0.8's `mjswan.wandb_io`) is split into
+`mjswan.source.wandb`, which downloads, and `mjswan.mjlab.runner`, which exports a `.pt`
+to ONNX. Every other module moved when the package was laid out by layer, with no alias
+left behind; [ADR 0008](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0008-package-layout.md)
+maps each old path to its new one.
 
 ---
 
@@ -1266,7 +1276,7 @@ Every key in `manifest.json` is `snake_case`, and every path under a scene entry
 against that scene's directory, so a policy entry reads `"onnx": "policy/walk.onnx"` and
 its MDP's fused group `"mdp/walk/obs/actor.onnx"`. A key carrying its default is omitted
 — `in_keys` when it is `["actor"]`, `out_keys` when it is `["action"]`. The manifest also
-stamps `format` (the layout's version, currently 1; an engine refuses a document newer than
+stamps `format` (the layout's version, currently 2; an engine refuses a document newer than
 it knows) and `version` (the mjswan release that wrote it), independently.
 
 `MjswanApp.save_document()` packs the document — the manifest and the project directories,

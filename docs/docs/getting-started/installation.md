@@ -54,12 +54,13 @@ frontend build. It bundles any MuJoCo model and any ONNX policy you already have
 of them:
 
 ```bash
-pip install 'mjswan[wandb]'  # add_policy_wandb / add_motion_wandb
+pip install 'mjswan[wandb]'  # add_policy_wandb(only_latest=True) / add_motion_wandb
 pip install 'mjswan[hf]'     # add_scene_hf / add_policy_hf / add_motion_hf / add_splat_hf
 pip install 'mjswan[mjlab]'  # add_scene_mjlab, and tracing MDP terms (mjlab + torch)
 ```
 
-They combine: `pip install 'mjswan[wandb,mjlab]'` is the W&B checkpoint workflow.
+They combine: `pip install 'mjswan[wandb,mjlab]'` is the W&B checkpoint workflow, which
+`add_policy_wandb` runs by default and checks for when it is called.
 
 !!! warning "Policies with MDP terms need the `mjlab` extra"
     mjswan compiles observation, termination, event and command terms to ONNX at build
@@ -72,7 +73,8 @@ They combine: `pip install 'mjswan[wandb,mjlab]'` is the W&B checkpoint workflow
     pip install 'mjswan[mjlab]'
     ```
 
-Two more extras exist for working *on* mjswan rather than with it:
+Three more extras: two for working *on* mjswan rather than with it, and one for running its
+examples:
 
 ```bash
 pip install 'mjswan[check]'     # ruff, ty, pyright, what `make check` runs
@@ -113,8 +115,8 @@ uv sync --all-extras
 To run the bundled demo after cloning:
 
 ```bash
-mjswan demo          # lists the bundled demos
-mjswan demo simple   # runs one of them
+uv run mjswan demo          # lists the bundled demos
+uv run mjswan demo simple   # runs one of them
 ```
 
 Common Makefile targets while developing:
@@ -122,7 +124,7 @@ Common Makefile targets while developing:
 | Target | What it does |
 |---|---|
 | `make sync` | Install/refresh all dependencies with `uv` |
-| `make check` | Lint, format check, and type check |
+| `make check` | Format and lint in place (`make format`), then type check |
 | `make test` | Full pytest suite (`test-all` runs `check` first) |
 | `make docs-serve` | Live-reloading documentation server |
 

@@ -100,7 +100,7 @@ current state back into the URL — so you can arrange a view by hand and copy t
 bar into your `src`.
 
 ```html
-<iframe src="https://ttktjmt.github.io/mjswan/?scene=G1&policy=Locomotion&panel=0" …></iframe>
+<iframe src="https://ttktjmt.github.io/mjswan/?project=showcase&scene=g1_on_street&policy=locomotion&panel=0" …></iframe>
 ```
 
 ### Moving around in VR

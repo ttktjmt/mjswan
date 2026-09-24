@@ -262,6 +262,12 @@ The build fails and names the term. Two ways out, both via
    injects it into the browser bundle. A binding *without* `ts_src` also fails the build:
    mjswan ships no built-in TypeScript term classes, so there is nothing to fall back on.
 
+A command is a class, so its way out is
+[`register_command`](../api/core.md#register_command): a `CommandBinding` whose
+`trace_override` rebinds the built term's methods before it is traced.
+`examples/demo/main.py` does this for mjlab's `LiftingCommandCfg`, whose
+`_update_command` calls `env.sim.forward()`, which the tracer refuses.
+
 In practice tracing failures are rare, because mjlab must run thousands of parallel
 environments on a GPU. That forces term bodies to avoid per-environment Python
 `if`/`for` over tensor values in favour of masking — which is exactly the shape

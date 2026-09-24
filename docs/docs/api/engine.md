@@ -31,7 +31,7 @@ import { createEngine } from 'mjswan';
 
 const engine = await createEngine(container, { multithreaded: false });
 
-const model = await (await fetch('/main/assets/g1/scene.mjz')).arrayBuffer();
+const model = await (await fetch('/my_robots/g1/scene.mjz')).arrayBuffer();
 await engine.loadScene({ model });
 ```
 
@@ -82,6 +82,8 @@ Verbs are named for their cost: `loadScene` rebuilds the model, everything else 
 | `play` / `pause` / `reset` | `() => void` | Playback. |
 | `camera` | `CameraControls` | `set(partial)`, `get()`, `frame()`. |
 | `commands` | `CommandControls` | `set(id, value)`, `trigger(id)`. |
+| `debugVis` | `DebugVisControls` | `set(term, enabled)`: show or hide a command term's drawing, such as the velocity arrows. |
+| `events` | `EventControls` | `fire(name)` for a `manual` term, `setArmed(name, armed)` for an `interval` one. |
 | `getState` | `() => MjswanEngineState` | Current snapshot. |
 | `subscribe` | `(listener) => () => void` | Returns an unsubscribe function. |
 | `captureThumbnail` | `(opts?: { maxDim?, quality? }) => Promise<Blob>` | JPEG of the current frame. |
@@ -99,6 +101,10 @@ interface MjswanEngineState {
   error: Error | null;
   commands: ReadonlyArray<CommandDescriptor>;
   commandValues: Readonly<Record<string, number>>;
+  /** Terms with a debug drawing to toggle; empty when the policy has none. */
+  debugVis: ReadonlyArray<DebugVisDescriptor>;
+  /** Event terms the operator can drive; empty when the scene has none. */
+  events: ReadonlyArray<EventDescriptor>;
   /** The seed in use, so an app recording a session can persist it. */
   termSeed: number;
 }
@@ -196,8 +202,8 @@ await engine.loadScene(await scene.buildScene({ policy: 'locomotion' }));  // by
 
 | Type | Shape |
 |---|---|
-| `Catalog` | `{ projects: ProjectCatalog[], default: string, pluginsPath?: string }` |
-| `ProjectCatalog` | `{ name, id, default?, scenes }` |
+| `Catalog` | `{ projects: ProjectCatalog[], pluginsPath?: string }` |
+| `ProjectCatalog` | `{ id, name, default, scenes }` |
 | `SceneEntry` | `{ id, name, camera?, splatSection, policies, splats, buildScene(opts?) }` |
 | `PolicyEntry` | `{ id, name, default, motions, build() }` |
 | `SplatEntry` | `{ id, name, control, transform, build() }` |
@@ -251,6 +257,7 @@ Python builder injects it into the bundle.
 | Requirement | Version |
 |---|---|
 | Node.js | 24+ (for building; the runtime is browser-only) |
+| MuJoCo | 3.11.0 (`@mujoco/mujoco`, bundled), the same version as the Python package's `mujoco` pin |
 | Browser | WebAssembly + WebGL2. `SharedArrayBuffer` only for `multithreaded: true`. |
 
 The library build (`dist/mjswan.js`) is a single self-contained ESM: every dependency is

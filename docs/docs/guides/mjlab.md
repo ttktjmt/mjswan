@@ -14,8 +14,10 @@ environment that [ONNX tracing](how-it-works.md) needs, so everything on this pa
 without a single `set_trace_env` or `control_dt` of your own.
 
 !!! info "Install"
-    mjlab is a soft dependency: `pip install 'mjswan[mjlab]'`. It is needed at **build
-    time** only, and nothing about it ships to the browser.
+    mjlab is a soft dependency: `pip install 'mjswan[mjlab]'` installs mjlab 1.6.0 and
+    torch. The W&B helpers also need the `wandb` extra (`'mjswan[mjlab,wandb]'`), and the
+    Hub helpers the `hf` extra. It is needed at **build time** only, and nothing about it
+    ships to the browser.
 
 This page walks through three integration levels, from the one-line shortcut to the full manual form.
 
@@ -27,7 +29,7 @@ The fastest path. `Builder.from_mjlab(task_id, run_path=...)` creates a project,
 import mjswan
 
 # Just visualize the scene
-app = mjswan.Builder.from_mjlab("go2_flat").build()
+app = mjswan.Builder.from_mjlab("Mjlab-Velocity-Flat-Unitree-G1").build()
 app.launch()
 
 # Visualize the scene + every checkpoint from a W&B run
@@ -38,9 +40,9 @@ app = mjswan.Builder.from_mjlab(
 app.launch()
 ```
 
-The W&B form requires both `mjlab` and `torch` (the `model_*.pt` → ONNX conversion runs locally).
+The W&B form needs `mjswan[wandb,mjlab]` (the `model_*.pt` → ONNX conversion runs locally), and checks for it when called. Or pass `hf_repo_id="<owner>/<name>"` to add a Hugging Face Hub repository's exported ONNX, as `add_policy_hf` does: nothing is converted, so this needs `mjswan[hf,mjlab]` and no W&B account. `examples/demo/simple.py` adds a checkpoint from the public `ttktjmt/mjswan` repository to an mjlab scene the same way.
 
-Each attached policy configures itself from the task: its observations, commands, actions and terminations all come from the task's `env_cfg`, and its raw-action bound from the task's runner config. For finer control, drop down to the next two patterns.
+Each attached policy configures itself from the task: its observations, commands, actions and terminations all come from the task's `env_cfg`, and its raw-action bound from the task's runner config. mjswan binds mjlab's `UniformVelocityCommandCfg` and `MotionCommandCfg` itself; a task with another command class, such as Lift-Cube-Yam's `LiftingCommandCfg`, needs a binding registered with [`mjswan.register_command`](../api/core.md#register_command), as `examples/demo/main.py` does, or the command is skipped with a warning. Under mjlab 1.6, a `trace_override` that replaces `_update_command` takes `env_ids`. For finer control, drop down to the next two patterns.
 
 ## 2. Scene helper: `ProjectHandle.add_scene_mjlab`
 
@@ -90,7 +92,7 @@ scene.add_policy_wandb("<entity>/<project>/<run_id>")
 
 A `motion_file` you set yourself is left alone, as long as it points at a file that exists.
 
-Each distinct clip is written once per scene and shared by every policy that uses it, so the checkpoints of one run do not each get a copy. The filename is the motion's `name`; two clips with the same name but different content get a `_1` / `_2` suffix.
+Each distinct clip is written once per scene and shared by every policy that uses it, so the checkpoints of one run do not each get a copy. The file is named after the motion's id, `name2id(name)`; two clips with the same name but different content get a `_1` / `_2` suffix.
 
 ### Editing the config first
 
@@ -103,7 +105,7 @@ task_id = "Mjlab-Tracking-Flat-Unitree-G1"
 # `play=True` here, not on `add_scene_mjlab`: `env_cfg` *is* one of the two configs, so
 # there is nothing left for `play` to select — passing both raises.
 env_cfg = load_env_cfg(task_id, play=True)
-env_cfg.terminations.pop("bad_anchor_ori")
+env_cfg.terminations.pop("anchor_ori")
 
 scene = project.add_scene_mjlab(task_id, env_cfg=env_cfg)
 scene.add_policy_wandb("<entity>/<project>/<run_id>")
@@ -124,7 +126,7 @@ scene.add_policy_wandb(
 
 mjswan adapts mjlab config classes automatically. `observations` also accepts the task's whole `env_cfg.observations` dict or a single group — see [MDP Terms](policy-config.md), which explains why the key matters.
 
-`add_policy_wandb` accepts a `list[str]` for the run path if you want to bundle checkpoints from multiple runs together. The latest checkpoint (highest training step) is marked as the default.
+`add_policy_wandb` accepts a `list[str]` for the run path if you want to bundle checkpoints from multiple runs together, such as a run and its resumptions: a `model_<step>` an earlier run in the list already added is skipped with a warning, since a resumed run first saves the step it stopped at. The latest checkpoint (highest training step) is marked as the default unless the scene already has one, and a later `add_policy(..., default=True)` takes over from it.
 
 If you only want the exported `.onnx` artifact (skipping the `.pt → .onnx` conversion), pass `only_latest=True` — `task_id` is then optional.
 

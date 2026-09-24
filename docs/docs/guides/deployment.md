@@ -20,7 +20,12 @@ When your site lives at a subdirectory — the typical case for GitHub Pages pro
 builder = mjswan.Builder(base_path="/myrepo/")
 ```
 
-You can also set this at runtime with an environment variable to avoid hardcoding it:
+To avoid hardcoding it, read it from an environment variable in your script, as
+`examples/demo/main.py` does; mjswan does not read the variable itself:
+
+```python
+builder = mjswan.Builder(base_path=os.environ.get("MJSWAN_BASE_PATH", "/"))
+```
 
 ```bash
 MJSWAN_BASE_PATH=/myrepo/ python build.py
@@ -103,12 +108,11 @@ No `base_path` change is needed on a `*.pages.dev` root domain.
 
 !!! warning "25 MiB per file"
     Cloudflare Pages refuses any single file above 25 MiB, and nothing the engine itself
-    ships comes near it: the largest is ONNX Runtime's WebAssembly at 13.3 MiB. One big
-    mesh, `.spz` splat or `.onnx` checkpoint will trip it; `mjswan info dist` finds which,
-    and `url=` (splats) or a fetched checkpoint keeps it out of the build. Deleting
-    oversized files in the build command is not the way out: the engine's own WebAssembly
-    is the largest thing in `dist/`, and a page whose wasm 404s is served HTML in its place
-    and fails with `expected magic word 00 61 73 6d`.
+    ships comes near it: the largest is ONNX Runtime's WebAssembly at 13.3 MiB. What trips
+    it is your own content: a `scene.mjz` carrying a big mesh, an `.onnx` checkpoint or a
+    `.spz` splat, and `find dist -size +25M` lists them. A splat can stay out of the build
+    with `url=`; a scene or a policy cannot, so make it smaller. Deleting the file in the
+    build command trades a failed upload for a page that cannot load it.
 
 ## Cross-Origin Isolation headers for multi-threading
 

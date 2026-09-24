@@ -45,7 +45,7 @@ full list):
 
 | Kwarg | Purpose |
 |---|---|
-| `policy_joint_names` | Ordered list of joint names the policy controls. Required for browser-side actuator mapping. |
+| `policy_joint_names` | Joint names in the order the network's actions come out: for an mjlab policy, each action term's joints in the model's joint order, which is not always actuator order (the Unitree G1 differs). Required for browser-side actuator mapping. |
 | `default_joint_pos` | Default pose, one entry per `policy_joint_names`. Used when `use_default_offset=True` on the action term and when an observation subtracts the default pose. |
 | `observations` | A single `ObservationGroupCfg`, mjlab's whole `env_cfg.observations` dict, or a dict keyed by the slot names `in_keys` uses. Prefer one of the first two — see [below](#why-not-a-dict-of-groups). |
 | `actions` | `dict[str, ActionTermCfg]` keyed by term name (e.g. `"joint_pos"`). |
@@ -102,9 +102,10 @@ Identity is by object: two `MdpConfig`s with equal contents are two MDPs. The bu
 each one once, under `mdp/<mdp-id>/` in the scene directory, and every policy entry points
 at its MDP by id. Passing the five term sets straight to `add_policy` builds an anonymous
 `MdpConfig` for that policy alone, and the MDP takes **that policy's id** — `mdp/walk/`
-beside `policy/walk.onnx`. `add_policy_wandb` builds one per call, so a run's checkpoints
-share it; a config shared like that belongs to no single policy and is numbered `mdp_0`,
-`mdp_1`, … in first-use order unless it carries a `name` (`name2id(name)` wins over both).
+beside `policy/walk.onnx`. `add_policy_wandb` and `add_policy_hf` each build one per call,
+so the checkpoints a call adds share it; a config shared like that belongs to no single
+policy and is numbered `mdp_0`, `mdp_1`, … in first-use order unless it carries a `name`
+(`name2id(name)` wins over both).
 
 The first policy to use an `MdpConfig` fills its unset fields from the scene's env config
 and adapts mjlab types in place; policies sharing one must agree on `policy_joint_names`
@@ -260,6 +261,14 @@ actions = {
 | `MuscleActivationActionCfg` | Supported — drives MuJoCo muscle actuators. See [below](#muscle-actuators). |
 | `JointVelocityActionCfg`, `TendonLengthActionCfg`, `TendonVelocityActionCfg`, `TendonEffortActionCfg`, `SiteEffortActionCfg` | Exported so mjlab configs import cleanly, but raise `NotImplementedError` at build time. |
 
+`actuator_names` are regular expressions, each matched whole (`^(?:...)$`) against
+`policy_joint_names`: despite the name they select joints, as in mjlab's
+`JointPositionAction`, and a lone `".*"` drives every joint in the list. A muscle term
+matches actuator names instead. An mjlab action term, a task's or one you pass, has each
+pattern prefixed with its entity to match the namespaced joint names an mjlab scene
+carries, and an alternation is grouped first so the prefix covers every branch: `a|b`
+becomes `robot/(?:a|b)`. mjswan's own classes are used as written.
+
 `stiffness` and `damping` are mjswan-specific — in mjlab they live on the actuator, but
 the browser runtime computes PD externally for motor actuators with `biastype=none`, so
 they have to be in the policy config. Both accept a scalar, a per-joint list (aligned with
@@ -289,9 +298,9 @@ misbehaves in the browser.
 
 `clip_actions` lands ahead of everything, so a `last_action` observation reads the clamped
 vector — matching mjlab, where the wrapper clamps before `env.step` and the action manager
-records what it was handed. `add_policy_wandb` reads it from the task automatically; pass
-it explicitly only for a hand-built policy or with `only_latest=True`, which skips mjlab
-entirely.
+records what it was handed. Every `add_policy*` reads it from the task's runner config
+when mjlab is installed and the task is known; pass it explicitly for a hand-built policy,
+or where mjlab is not installed.
 
 `ActionTermCfg.clip` keys are **patterns**, matched with mjlab's anchored `re.fullmatch`.
 An unmatched target is left unbounded, and a pattern that matches nothing warns.
@@ -326,11 +335,14 @@ commands = {
 rescales the value slider's drag range, mirroring mjlab's own play GUI; it carries no
 command id, so nothing about it reaches the policy.
 
-An mjlab command class with real logic — a velocity command holding a heading target, a
-lifting command sampling a goal pose — is traced like any other term, with its hidden
-state promoted to explicit graph I/O. Register the adapter with
-`mjswan.register_command(mjlab_name, spec)`; see the
-[API reference](../api/core.md#register_command).
+An mjlab command class with real logic is traced like any other term, with its hidden
+state promoted to explicit graph I/O. mjswan binds the two its task families share:
+`UniformVelocityCommandCfg` (a velocity command holding a heading target) is traced, and
+`MotionCommandCfg` runs as the native tracking command with its reset jitter traced.
+Another class, such as `LiftingCommandCfg` (a lifting command sampling a goal pose), is
+skipped with a warning until you register an adapter with
+`mjswan.register_command(mjlab_name, spec)`, as `examples/demo/main.py` does for it; see
+the [API reference](../api/core.md#register_command).
 
 ## Terminations
 
@@ -420,10 +432,13 @@ mjlab writes the checkpoint's own defaults into the `.onnx` itself (`joint_names
 `default_joint_pos`, `action_scale`, and a description of each observation term), so an
 mjlab policy travels self-describing.
 [`add_policy_hf`](../getting-started/examples.md#a-policy-published-on-the-hugging-face-hub)
-reads that block and fills `policy_joint_names`, `default_joint_pos` and the
-joint-position action term from it where the scene does not already say (a scene from
-`add_scene_mjlab` names the joints through its action terms), leaving anything you pass
-explicitly alone. To read one yourself:
+reads that block and fills what you do not pass. `policy_joint_names` come from the
+action terms when they name joints (yours, `env_cfg=`'s, or the task's on an
+`add_scene_mjlab` scene), in the order the actions come out, and from the metadata
+otherwise; the metadata's joint-position action term is taken only when there are no
+action terms at all. `default_joint_pos` is looked up by joint name, in the metadata and
+then in the scene model's first keyframe, which is mjlab's `init_state`. To read one
+yourself:
 
 ```python
 import onnx
@@ -453,8 +468,9 @@ Two limits are worth knowing. The encoding is **lossy**: mjlab formats list valu
 list keeps full precision). And `joint_names` lists **every joint of the robot**, while
 the network emits one action per *actuated* joint: each action term's joints in joint
 order, one term after another. `add_policy_hf` therefore uses the metadata only where it
-lists every joint your scene's own model actuates, dropping the rest, and warns rather
-than guessing when they disagree. It does not record where a second action term's
+lists every joint your scene's own model actuates (dropping the rest), the network has
+one action per such joint, and a per-action `action_scale` has as many entries; otherwise
+it warns rather than guessing. It does not record where a second action term's
 actions go, so a task with several needs its env config (`add_scene_mjlab`, or
 `env_cfg=`).
 

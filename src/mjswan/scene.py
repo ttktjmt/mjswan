@@ -817,10 +817,8 @@ class SceneHandle:
                 ``time_step``).
             out_keys: ONNX output slot table applied to every fetched policy; see
                 :meth:`add_policy`.
-            clip_actions: Overrides the raw-action bound that would otherwise be
-                read from the task's mjlab runner config. Only the
-                ``only_latest=True`` path needs it explicitly — that path skips
-                mjlab entirely, so there is no runner config to read.
+            clip_actions: Raw-action bound. Unset, it is read from ``task_id``'s runner
+                config when mjlab and that task are installed.
             extras: Optional extra JSON payload applied to every fetched policy.
 
         Returns:

@@ -52,7 +52,8 @@ builder.build().launch()
 The shortest path to a policy in a browser, if you trained with
 [mjlab](../guides/mjlab.md). Every `model_*.pt` checkpoint in the W&B run is fetched,
 converted to ONNX, and attached; observations, actions, commands, terminations and the
-control rate all come from the task.
+control rate all come from the task, and the app opens on the highest-step checkpoint.
+Needs `pip install 'mjswan[wandb,mjlab]'`.
 
 ```python
 import mjswan
@@ -67,8 +68,9 @@ app.launch()
 ## A policy published on the Hugging Face Hub
 
 Where a W&B run holds training state (which is why the call above needs mjlab and torch
-to convert it), a Hub repository holds the exported ONNX. So this path downloads and
-stops: `pip install mjswan[hf]` is all it needs.
+to convert it), a Hub repository holds the exported ONNX. So this path skips the
+conversion, but the scene and its MDP still come from the mjlab task:
+`pip install 'mjswan[hf,mjlab]'`.
 
 ```python
 import mjswan
@@ -184,7 +186,8 @@ for name, path in [("Policy A", "policy_a.onnx"), ("Policy B", "policy_b.onnx")]
 ```
 
 The browser UI shows a selector for choosing between policies at runtime. Pass
-`default=True` to pick which one loads first.
+`default=True` to pick which one loads first; it also takes over from the highest-step
+checkpoint an `add_policy_wandb` or `add_policy_hf` call would open.
 
 ## Custom command inputs
 
@@ -332,12 +335,16 @@ scene.add_splat(
 ## Headless build (CI-friendly)
 
 `build()` writes `dist/` and returns; `launch()` is the blocking part. Gate it on an
-environment variable so the same script works locally and in CI — the convention the
-bundled examples follow:
+environment variable so the same script works locally and in CI, the convention
+`examples/demo/main.py` and `simple.py` follow. mjswan reads neither variable itself:
 
 ```python
 import os
 
+import mjswan
+
+builder = mjswan.Builder(base_path=os.environ.get("MJSWAN_BASE_PATH", "/"))
+...
 app = builder.build()
 if not os.environ.get("MJSWAN_NO_LAUNCH"):
     app.launch()
