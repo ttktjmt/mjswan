@@ -58,11 +58,15 @@ jobs:
         run: |
           sed -i "s/^__version__ = \".*\"/__version__ = \"${{ inputs.version }}\"/" src/mjswan/_version.py
 
-      - name: Update version in package.json
+      # The lockfile repeats the version at its root and under `packages[""]`;
+      # left behind, the next `npm install` rewrites it in an unrelated commit.
+      - name: Update version in package.json and package-lock.json
         run: |
           cd src/mjswan/template
           jq --arg v "${{ inputs.version }}" '.version = $v' package.json > package.json.tmp
           mv package.json.tmp package.json
+          jq --arg v "${{ inputs.version }}" '.version = $v | .packages[""].version = $v' package-lock.json > package-lock.json.tmp
+          mv package-lock.json.tmp package-lock.json
 
       # Stable releases bump the version on main. Prereleases do NOT commit — the
       # publish jobs set the version from the `version` input, so the branch/PR
@@ -75,7 +79,7 @@ jobs:
       - name: Commit version bump (stable only)
         if: steps.type.outputs.is_prerelease != 'true'
         run: |
-          git add src/mjswan/_version.py src/mjswan/template/package.json
+          git add src/mjswan/_version.py src/mjswan/template/package.json src/mjswan/template/package-lock.json
           if git diff --cached --quiet; then
             echo "Version already at ${{ inputs.version }}, skipping commit"
           else

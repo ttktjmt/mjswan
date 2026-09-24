@@ -783,3 +783,8 @@ shortcuts.
   the cleared `null` as "unchanged" and leave the old name behind, and the parameters
   are normalized on load rather than at the first interaction, so the address bar is
   copyable as soon as the scene is up.
+- **A release bumps `package-lock.json` along with `package.json`.** `release.yml` set
+  the version in `_version.py` and `package.json` only, so the lockfile kept the old one
+  until the next `npm install` rewrote it in whatever commit came next, and 0.10.1 and
+  0.10.2 each needed a sync commit afterwards. The bump commit now carries the lockfile's
+  two version fields as well.
