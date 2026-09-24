@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 import mujoco
 import numpy as np
 
-from .document.ids import assign_id, name2id, unique_id
+from .document.ids import assign_id, assign_name, name2id, unique_id
 from .license import Attribution, resolve_license, resolve_notice
 from .mdp import MdpConfig
 from .mjlab import (
@@ -264,7 +264,8 @@ def _default_to_latest(handles: list[PolicyHandle], scene: SceneConfig) -> None:
         match = re.search(r"_(\d+)", handle._config.name)
         return int(match.group(1)) if match else -1
 
-    max(handles, key=_step)._config.default = True
+    latest = max(handles, key=_step)._config
+    latest.default = latest.auto_default = True
 
 
 @dataclass
@@ -695,7 +696,7 @@ class SceneHandle:
             task_id=task_id,
             policy_joint_names=policy_joint_names,
         )
-        policy_id = assign_id(
+        name, policy_id = assign_name(
             name, {p.id for p in self._config.policies}, kind="policy", stacklevel=3
         )
         self._config.mdp_id(mdp, policy_id=policy_id if sugar_built else None)
@@ -711,6 +712,11 @@ class SceneHandle:
             # count from the network's own output width.
             policy_num_actions = onnx_output_width(policy, slot_out)
 
+        if default:
+            # The caller's choice wins over the latest checkpoint an earlier call chose.
+            for other in self._config.policies:
+                if other.auto_default:
+                    other.default = other.auto_default = False
         policy_config = PolicyConfig(
             name=name,
             id=policy_id,
@@ -1076,8 +1082,8 @@ class SceneHandle:
             token: Hub token for a gated or private repository. ``None`` uses the
                 locally stored login, then anonymous access.
             name: Display name, for a single file only. Omitted, the name is the file's
-                stem, or the repository's own name when the stem is a generic one such
-                as ``policy``.
+                stem, or for a generic stem such as ``policy`` its directory
+                (``walk/policy.onnx`` is ``walk``), else the repository's own name.
             use_metadata: Read mjlab's ``metadata_props``, as described above. ``False``
                 ignores them entirely.
             task_id: mjlab task whose runner config supplies defaults such as
@@ -1408,11 +1414,12 @@ class SceneHandle:
         if source is not None and url is not None:
             raise ValueError("Provide either 'source' or 'url', not both.")
 
+        name, splat_id = assign_name(
+            name, {s.id for s in self._config.splats}, kind="splat", stacklevel=3
+        )
         splat_config = SplatConfig(
             name=name,
-            id=assign_id(
-                name, {s.id for s in self._config.splats}, kind="splat", stacklevel=3
-            ),
+            id=splat_id,
             source=source,
             url=url,
             scale=scale,

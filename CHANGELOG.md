@@ -299,7 +299,16 @@ shortcuts.
   marked its own highest-step checkpoint as the one the scene opens on, which the build
   then refused for having several (ADR 0006 §4). A scene carrying two differently
   trained policies takes two calls (they are two MDPs), so the first call to name a
-  default now keeps it.
+  default now keeps it, and an `add_policy(default=True)` made later takes over from it.
+
+- **A name that collides is renamed along with its id.** Two policies (or projects,
+  scenes, splats, or motions of one policy) whose names sanitize to one id kept one
+  display name between them, and the viewer's select refuses a repeated option, so the
+  page rendered nothing. The second is now named `<name>_1` as its id becomes `<id>_1`,
+  with the same warning, so every name the viewer lists is distinct and still spells its
+  `?scene=` / `?policy=` value (ADR 0006 §4). `add_policy_hf` also names a `policy.onnx`
+  after its directory (`walk/policy.onnx` is `walk`, passing over folders such as
+  `exported/`), which is where two files from one repository collided.
 
 - **The demo stores no assets, and `examples/demo/assets/` is gone**: 116 MB of
   vendored meshes, policies and a `.mjz` scene, none of which had to be in a git
@@ -556,6 +565,11 @@ shortcuts.
   the registries held `ts_src` terms described the design they replaced.
 
 ### Fixed
+
+- **An `actuator_names` alternation keeps its entity prefix on every branch.** mjlab's
+  patterns are prefixed with the entity (`robot/…`) to match `policy_joint_names`, and
+  the runtime reads each as `^(?:…)$`, so `robot/a|b` matched `robot/a` or a bare `b`. An
+  alternation is now grouped: `robot/(?:a|b)`.
 
 - **Both cartpole scenes ran with no control at all.** mjlab attaches export metadata
   from its velocity, manipulation and tracking runners only, and `get_base_metadata`

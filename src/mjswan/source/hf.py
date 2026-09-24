@@ -99,9 +99,26 @@ def _named_by_file_or_repo(filename: str, generic: frozenset[str], repo_id: str)
     return stem
 
 
+#: Folders that hold policies rather than name one, skipped when naming by directory.
+_POLICY_CONTAINER_DIRS = frozenset(
+    {"checkpoints", "exported", "models", "onnx", "policies", "policy"}
+)
+
+
 def policy_name_for(repo_id: str, filename: str) -> str:
-    """A fetched policy's display name: its stem, or the repository's own name."""
-    return _named_by_file_or_repo(filename, _GENERIC_STEMS, repo_id)
+    """A fetched policy's display name: its stem, or for a generic stem its directory.
+
+    ``policies/walk/policy.onnx`` is ``walk`` and ``run1/exported/policy.onnx`` is
+    ``run1``: a folder that only holds policies is passed over. With none left, the
+    repository's own name.
+    """
+    stem = Path(filename).stem
+    if stem.lower() not in _GENERIC_STEMS:
+        return stem
+    for parent in Path(filename).parents:
+        if parent.name and parent.name.lower() not in _POLICY_CONTAINER_DIRS:
+            return parent.name
+    return repo_id.rsplit("/", 1)[-1] or stem
 
 
 def splat_name_for(repo_id: str, filename: str) -> str:

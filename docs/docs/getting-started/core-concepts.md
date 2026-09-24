@@ -53,8 +53,9 @@ demo = builder.add_project(name="Demo")  # ?project=demo
 Every project, scene, policy and splat has an **id** derived from its name — lowercased,
 runs of anything but `a-z0-9` collapsed to `_`, edges trimmed, so `"Newton's Cradle"`
 becomes `newton_s_cradle`. The id is the directory the object is written to and the value
-the URL parameters take. Two siblings whose names sanitize alike get `<id>` and `<id>_1`,
-with a warning naming both.
+the URL parameters take. Two siblings whose names sanitize alike are both kept: the
+second is renamed with a `_1` suffix on its name and its id, with a warning, so what the
+viewer lists always matches the URL.
 
 ## Scene
 

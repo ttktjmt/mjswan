@@ -53,6 +53,15 @@ class TestPolicyNameFor:
     def test_repo_id_without_owner(self):
         assert policy_name_for("microduck", "policy.onnx") == "microduck"
 
+    def test_a_generic_stem_in_its_own_folder_takes_the_folder(self):
+        """Two ``policy.onnx`` in one repository must not both be the repository."""
+        assert policy_name_for("org/duck", "policies/walk/policy.onnx") == "walk"
+        assert policy_name_for("org/duck", "policies/run/policy.onnx") == "run"
+
+    def test_a_folder_that_only_holds_policies_is_passed_over(self):
+        assert policy_name_for("org/duck", "run1/exported/policy.onnx") == "run1"
+        assert policy_name_for("org/duck", "policies/policy.onnx") == "duck"
+
 
 class TestSceneNameFor:
     """A scene is several files, so its directory is what identifies it."""

@@ -304,6 +304,10 @@ class PolicyConfig:
     At most one policy in a scene may set it; when none does, the first added wins.
     """
 
+    auto_default: bool = False
+    """``default`` was set by an ``add_policy_*`` call opening the scene on its latest
+    checkpoint, not by the caller, so a ``default=True`` added later takes it over."""
+
     def __post_init__(self) -> None:
         if not self.id:
             from .document.ids import name2id
@@ -383,6 +387,17 @@ class PolicyHandle:
         return self
 
     def _append_motion(self, motion: MotionConfig) -> MotionHandle:
+        from .document.ids import assign_name, name2id
+
+        # A motion has no id of its own, but the viewer lists it by name, so two alike
+        # are renamed as siblings elsewhere are. A name with no id stays as it was.
+        if name2id(motion.name):
+            motion.name, _ = assign_name(
+                motion.name,
+                {name2id(m.name) for m in self._config.motions},
+                kind="motion",
+                stacklevel=4,
+            )
         if motion.default:
             for existing in self._config.motions:
                 existing.default = False

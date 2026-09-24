@@ -98,7 +98,8 @@ def add_project(
 Add a project to the application. Its id — the directory it is written to and its
 `?project=` value — is `name2id(name)`: lowercased, every run of characters other than
 `a-z0-9` collapsed to one `_`, edges trimmed (`"Newton's Cradle"` → `newton_s_cradle`). Two
-projects whose names sanitize alike get `<id>` and `<id>_1`, with a warning.
+projects whose names sanitize alike are kept, the second renamed `<name>_1` with the id
+`<id>_1` and a warning, so the viewer never lists two alike.
 
 **Parameters**
 
@@ -412,7 +413,7 @@ def add_policy_hf(
 
 Fetch exported ONNX policies from a Hugging Face Hub repository and attach them to the scene. The light counterpart of `add_policy_wandb`: nothing is converted, so neither mjlab nor torch is needed and `task_id` is optional. Needs the `hf` extra.
 
-With no `filename`, it takes `policy.onnx`, then `final.onnx`, then the repository's single `.onnx`, and raises when several are left to choose from. A list adds one policy per file, sharing one MDP. Each policy is named after its file, or after the repository when the stem only names a role (`policy`).
+With no `filename`, it takes `policy.onnx`, then `final.onnx`, then the repository's single `.onnx`, and raises when several are left to choose from. A list adds one policy per file, sharing one MDP. Each policy is named after its file; for a stem that only names a role (`policy`), after its directory (`walk/policy.onnx` is `walk`, passing over folders such as `exported/` or `checkpoints/`), else after the repository.
 
 Term sets default as on `add_policy_wandb`. What the caller does not pass is filled as mjlab has it: `policy_joint_names` are the joints the task's action terms name, in mjlab's action order, when the scene or `env_cfg` has those terms; otherwise, with `use_metadata` on, they come from the metadata mjlab bakes into an export, and so does the joint-position action term. The metadata lists every joint of the robot, so it is used only where it lists every joint the scene's own model actuates, one per action, and a task with several action terms needs its env config. `default_joint_pos` is looked up by joint name, in the metadata and then in the scene model's first keyframe, which is mjlab's `init_state`. Whatever cannot be filled warns. Observation terms are never reconstructed from the metadata. See [What an mjlab export already carries](../guides/policy-config.md#what-an-mjlab-export-already-carries).
 

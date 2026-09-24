@@ -42,20 +42,26 @@ def unique_id(base: str, taken: Collection[str]) -> str:
     return f"{base}_{n}"
 
 
-def assign_id(
-    name: str, taken: Collection[str], *, kind: str, stacklevel: int = 3
-) -> str:
-    """``name2id(name)``, made unique among ``taken``; warns when it had to be renamed.
-
-    ``kind`` names the level in the warning ("scene", "policy", …). An empty result, from
-    a name with no ASCII letter or digit, is refused: it would have no directory and no URL.
-    """
+def _base_id(name: str, kind: str) -> str:
+    """``name2id(name)``, refused when empty: it would have no directory and no URL."""
     base = name2id(name)
     if not base:
         raise ValueError(
             f"{kind.capitalize()} name {name!r} has no ASCII letter or digit, so it "
             "sanitizes to an empty id. Give it a name with at least one."
         )
+    return base
+
+
+def assign_id(
+    name: str, taken: Collection[str], *, kind: str, stacklevel: int = 3
+) -> str:
+    """``name2id(name)``, made unique among ``taken``; warns when it had to be renamed.
+
+    ``kind`` names the level in the warning ("scene", "policy", …). For an object the
+    viewer lists, use :func:`assign_name`, which renames the name along with the id.
+    """
+    base = _base_id(name, kind)
     ident = unique_id(base, taken)
     if ident != base:
         warnings.warn(
@@ -67,4 +73,27 @@ def assign_id(
     return ident
 
 
-__all__ = ["assign_id", "name2id", "unique_id"]
+def assign_name(
+    name: str, taken: Collection[str], *, kind: str, stacklevel: int = 3
+) -> tuple[str, str]:
+    """``(name, id)`` for a new sibling: the id is ``name2id(name)``, and both are unique.
+
+    A name whose id a sibling in ``taken`` already holds takes the same ``_1``, ``_2``, …
+    suffix as its id, with a warning. So the viewer never lists two entries alike, and
+    each entry's name still sanitizes to its ``?scene=`` / ``?policy=`` value.
+    """
+    base = _base_id(name, kind)
+    ident = unique_id(base, taken)
+    if ident == base:
+        return name, ident
+    renamed = name + ident[len(base) :]
+    warnings.warn(
+        f"{kind.capitalize()} {name!r} sanitizes to {base!r}, which another {kind} "
+        f"already uses, so it is renamed {renamed!r} (id {ident!r}).",
+        category=RuntimeWarning,
+        stacklevel=stacklevel,
+    )
+    return renamed, ident
+
+
+__all__ = ["assign_id", "assign_name", "name2id", "unique_id"]

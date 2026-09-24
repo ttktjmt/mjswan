@@ -69,11 +69,15 @@ def _adapt_action_cfg(term: Any) -> MjswanActionTermCfg | None:
         if val is not dataclasses.MISSING:
             kwargs[f.name] = val
 
-    # Prefixed with the entity name, as mjlab does, to match policy_joint_names.
+    # Prefixed with the entity name, as mjlab does, to match policy_joint_names. An
+    # alternation is grouped, or the prefix would bind to its first branch only.
     if entity_name and "actuator_names" in kwargs:
         raw = kwargs["actuator_names"]
         if isinstance(raw, (list, tuple)):
-            kwargs["actuator_names"] = tuple(f"{entity_name}/{n}" for n in raw)
+            kwargs["actuator_names"] = tuple(
+                f"{entity_name}/(?:{n})" if "|" in n else f"{entity_name}/{n}"
+                for n in raw
+            )
 
     return mjswan_cls(**kwargs)
 

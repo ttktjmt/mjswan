@@ -455,6 +455,28 @@ class TestRestPose:
         assert policy._config.default_joint_pos == [0.1, 0.2]
 
 
+class TestExplicitDefault:
+    def test_a_later_explicit_default_takes_over(
+        self, scene, fake_hub, build_manifest, tmp_path
+    ):
+        """The latest checkpoint opens the scene only until the caller names one."""
+        fake_hub("policy.onnx", metadata=MJLAB_METADATA)
+        (hub,) = scene.add_policy_hf("my-org/two-joint")
+        chosen = scene.add_policy(
+            name="Mine",
+            policy=hub.model,
+            policy_joint_names=["hip", "knee"],
+            default=True,
+        )
+
+        manifest = build_manifest(scene._project._builder, tmp_path / "dist")
+
+        entries = manifest["projects"][0]["scenes"][0]["policies"]
+        assert [entry["name"] for entry in entries if entry.get("default")] == [
+            chosen.name
+        ]
+
+
 class TestSeveralFiles:
     def test_each_file_becomes_a_policy_sharing_one_mdp(self, scene, fake_hub):
         fake_hub("policies/walk.onnx", metadata=MJLAB_METADATA)

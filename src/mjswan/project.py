@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 import mujoco
 
 from .build.mjz import collect_spec_assets
-from .document.ids import assign_id, name2id
+from .document.ids import assign_name, name2id
 from .license import (
     detect_attributions,
     known_attribution,
@@ -183,11 +183,12 @@ class ProjectHandle:
         if metadata is None:
             metadata = {}
 
+        name, ident = assign_name(
+            name, {s.id for s in self._config.scenes}, kind="scene", stacklevel=4
+        )
         scene_config = SceneConfig(
             name=name,
-            id=assign_id(
-                name, {s.id for s in self._config.scenes}, kind="scene", stacklevel=4
-            ),
+            id=ident,
             model=model,
             spec=spec,
             metadata=metadata,

@@ -208,6 +208,12 @@ occurrence to `<id>_1`, the third to `<id>_2`, and emits a warning naming both
 the original name and the assigned id. Two scenes called "Flat Terrain" is a
 reasonable thing to write and should not fail a build.
 
+> **Amended (#133).** The rename reaches the name as well: the second "Flat
+> Terrain" becomes "Flat Terrain_1". Renaming only the id left two entries alike in
+> the viewer's lists, which its select refuses (the page rendered nothing), and broke
+> "every id is `name2id(name)`". Motions, listed by name within their policy, follow
+> the same rule.
+
 Immutable generated ids (UUIDs) were considered and rejected: a URL is a sharing
 surface and `?project=g1_locomotion&scene=flat_terrain` has to be readable by a
 person. mjswan Cloud simulations are immutable once published — changing one

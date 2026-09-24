@@ -12,6 +12,7 @@ Run all tests (CI):               pytest
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -105,6 +106,12 @@ class TestProjectIdAssignment:
             "flat_terrain_1",
             "flat_terrain_2",
         )
+        # The name takes the suffix too, so the viewer never lists two alike.
+        assert (first.name, second.name, third.name) == (
+            "Flat Terrain",
+            "flat-terrain_1",
+            "FLAT TERRAIN_2",
+        )
 
     def test_a_name_with_no_letter_or_digit_is_refused(self):
         with pytest.raises(ValueError, match="empty id"):
@@ -135,9 +142,10 @@ class TestSceneAndPolicyIds:
     def test_two_scenes_with_one_name_are_both_kept(self, minimal_model):
         project = Builder().add_project(name="P")
         a = project.add_scene(name="Flat Terrain", model=minimal_model)
-        with pytest.warns(RuntimeWarning, match="scene"):
+        with pytest.warns(RuntimeWarning, match="renamed 'Flat Terrain_1'"):
             b = project.add_scene(name="Flat Terrain", model=minimal_model)
         assert (a._config.id, b._config.id) == ("flat_terrain", "flat_terrain_1")
+        assert (a._config.name, b._config.name) == ("Flat Terrain", "Flat Terrain_1")
 
     def test_the_same_scene_name_in_another_project_is_not_a_collision(
         self, minimal_model
@@ -159,6 +167,81 @@ class TestSceneAndPolicyIds:
         with pytest.warns(RuntimeWarning, match="policy"):
             b = scene.add_policy(name="model_2000", policy=minimal_onnx)
         assert (a._config.id, b._config.id) == ("model_2000", "model_2000_1")
+        assert (a.name, b.name) == ("model_2000", "model_2000_1")
+
+    def test_two_splats_with_one_name_are_both_kept(self, minimal_model):
+        scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
+        a = scene.add_splat("Street", url="https://example.com/a.spz")
+        with pytest.warns(RuntimeWarning, match="splat"):
+            b = scene.add_splat("Street", url="https://example.com/b.spz")
+        assert (a._config.id, b._config.id) == ("street", "street_1")
+        assert (a._config.name, b._config.name) == ("Street", "Street_1")
+
+    def test_two_motions_with_one_name_on_a_policy_are_both_kept(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        clip = tmp_path / "clip.npz"
+        clip.write_bytes(b"clip")
+        policy = (
+            Builder()
+            .add_project(name="P")
+            .add_scene(name="S", model=minimal_model, control_dt=0.02)
+            .add_policy(name="walker", policy=minimal_onnx)
+        )
+        motion = dict(source=str(clip), anchor_body_name="b", body_names=("b",))
+        a = policy.add_motion(name="Spin Kick", **motion)
+        with pytest.warns(RuntimeWarning, match="motion"):
+            b = policy.add_motion(name="Spin Kick", **motion)
+        assert (a._config.name, b._config.name) == ("Spin Kick", "Spin Kick_1")
+
+    def test_every_listed_name_is_unique_and_spells_its_id(
+        self, tmp_path, minimal_model, minimal_onnx, build_manifest
+    ):
+        """What the viewer lists is what the URL says: `name2id(name) == id`.
+
+        Two entries alike in one list would also stop the viewer: its select refuses
+        a repeated option value, and the page renders nothing.
+        """
+        clip = tmp_path / "clip.npz"
+        clip.write_bytes(b"clip")
+        builder = Builder()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            for project_name in ("Demo", "demo"):
+                project = builder.add_project(name=project_name)
+                for scene_name in ("Flat", "Flat"):
+                    scene = project.add_scene(
+                        name=scene_name, model=minimal_model, control_dt=0.02
+                    )
+                    for splat_name in ("Street", "street"):
+                        scene.add_splat(splat_name, url="https://example.com/s.spz")
+                    for policy_name in ("walker", "walker"):
+                        policy = scene.add_policy(name=policy_name, policy=minimal_onnx)
+                        for motion_name in ("Clip", "Clip"):
+                            policy.add_motion(
+                                name=motion_name,
+                                source=str(clip),
+                                anchor_body_name="b",
+                                body_names=("b",),
+                            )
+
+        manifest = build_manifest(builder, tmp_path / "dist")
+
+        def unique(entries):
+            names = [entry["name"] for entry in entries]
+            assert len(set(names)) == len(names), names
+            for entry in entries:
+                if "id" in entry:
+                    assert name2id(entry["name"]) == entry["id"], entry
+
+        unique(manifest["projects"])
+        for project in manifest["projects"]:
+            unique(project["scenes"])
+            for scene in project["scenes"]:
+                unique(scene["policies"])
+                unique(scene.get("splats", []))
+                for policy in scene["policies"]:
+                    unique(policy["motions"])
 
     def test_two_default_policies_fail_the_build(
         self, tmp_path, minimal_model, minimal_onnx, build_manifest

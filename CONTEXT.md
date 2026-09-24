@@ -98,7 +98,7 @@ MjswanApp.save_document(path=None) → Path    # the data as one .swn (ZIP of th
 MjswanApp.publish(title=..., tags=...)       # → mjswan Cloud; a .swn publishes too
 ```
 
-Every project / scene / MDP / policy / splat has an `id = name2id(name)`, unique within its parent (collision → `<id>_1` + RuntimeWarning); ids are the directories in the build and the `?project=` / `?scene=` / `?policy=` values (ADR 0006 §4).
+Every project / scene / MDP / policy / splat has an `id = name2id(name)`, unique within its parent; ids are the directories in the build and the `?project=` / `?scene=` / `?policy=` values (ADR 0006 §4). On a collision the second is renamed `<name>_1` with id `<id>_1` and a RuntimeWarning (`document.ids.assign_name`), so the viewer never lists two alike and the id stays `name2id(name)`; a policy's motions, which have no id, are renamed the same way.
 
 `Builder.from_mjlab(task_id, run_path=...)` is the one-liner shortcut for the common "visualize a single mjlab task" pattern; it delegates to the instance method `Builder.add_project_mjlab`, which creates a project, adds an mjlab scene, and optionally attaches all `model_*.pt` checkpoints from one or more W&B runs (converted to ONNX via mjlab+torch). For finer control, build manually: `add_project` → `ProjectHandle.add_scene_mjlab` → `SceneHandle.add_policy_wandb(...)`. `hf_repo_id=` is the same shortcut against a Hugging Face Hub repository, which holds an exported ONNX rather than training state and so needs no conversion.
 

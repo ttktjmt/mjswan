@@ -955,6 +955,24 @@ class TestMuscleActionAdaptation:
         d = result["muscles"].to_dict()
         assert d["actuator_names"] == ["robot/m1", "robot/m2"]
 
+    def test_an_alternation_keeps_the_prefix_on_every_branch(self):
+        """The runtime reads each pattern as `^(?:p)$`, so `robot/a|b` would match `b`."""
+        import re
+
+        mjlab_cfg = FakeMyoMuscleActivationActionCfg(
+            entity_name="robot",
+            actuator_names=("m1|m2",),
+        )
+
+        result = adapt_actions({"muscles": mjlab_cfg})
+        assert result is not None
+        (pattern,) = result["muscles"].to_dict()["actuator_names"]
+        assert [
+            name
+            for name in ("robot/m1", "robot/m2", "m2")
+            if re.fullmatch(pattern, name)
+        ] == ["robot/m1", "robot/m2"]
+
     def test_normalize_defaults_to_true_when_source_lacks_field(self):
         # MyoMuscleActivationActionCfg has no `normalize` field and always applies the sigmoid
         # mapping in upstream; the adapted cfg must keep the mjswan default (normalize=True),
