@@ -117,12 +117,15 @@ def write_app(
     scene_entries: dict[tuple[str, str], dict] = {}
     max_name_len = max(len(p.name) for p in projects)
     for project in projects:
+        # markup=False: these show the author's names, and rich would drop a "[...]".
         with Progress(
             SpinnerColumn(spinner_name="dots"),
-            TextColumn("[progress.description]{task.description}"),
+            TextColumn(
+                "{task.description}", style="progress.description", markup=False
+            ),
             BarColumn(),
             MofNCompleteColumn(),
-            TextColumn("[dim]{task.fields[scene]}"),
+            TextColumn("{task.fields[scene]}", style="dim", markup=False),
         ) as progress:
             task = progress.add_task(
                 project.name.ljust(max_name_len),

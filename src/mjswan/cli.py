@@ -9,6 +9,7 @@ from typing import Annotated, Optional
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 app = typer.Typer(
     name="mjswan",
@@ -457,7 +458,7 @@ def info_cmd(
             version = manifest.get("version", "unknown")
             fmt = manifest.get("format", "?")
             tree = Tree(
-                f"[bold]mjswan {kind}[/bold]: {dist_dir}  "
+                f"[bold]mjswan {kind}[/bold]: {escape(str(dist_dir))}  "
                 f"[dim]v{version}, format {fmt}[/dim]"
             )
             total_bytes = _describe_projects(tree, root, manifest)
@@ -480,16 +481,21 @@ def _describe_licenses(node, root: Path, directory: Path) -> None:
         if declaration is None:
             continue
         label = "License" if declaration.location.kind == "LICENSE" else "Notice"
-        what = f": [blue]{declaration.spdx}[/blue]" if declaration.spdx else ""
-        node.add(f"{label}{what}  [dim]{declaration.path}[/dim]")
+        what = f": [blue]{escape(declaration.spdx)}[/blue]" if declaration.spdx else ""
+        node.add(f"{label}{what}  [dim]{escape(declaration.path)}[/dim]")
 
 
 def _describe_projects(tree, root: Path, manifest: dict) -> int:
-    """Add one node per project/scene/MDP/policy under ``tree``; return the asset bytes."""
+    """Add one node per project/scene/MDP/policy under ``tree``; return the asset bytes.
+
+    Every name and path goes through ``escape``: rich reads ``[...]`` as markup and
+    drops it, which is how a bracketed project id used to vanish.
+    """
     total_bytes = 0
     for project in manifest.get("projects", []):
+        project_id = escape(f"[{project['id']}]")
         p_node = tree.add(
-            f"[cyan]{project['name']}[/cyan]  [dim][{project['id']}][/dim]"
+            f"[cyan]{escape(project['name'])}[/cyan]  [dim]{project_id}[/dim]"
         )
         _describe_licenses(p_node, root, root / project["id"])
         for scene in project.get("scenes", []):
@@ -498,15 +504,16 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
             scene_size = scene_path.stat().st_size if scene_path.exists() else 0
             total_bytes += scene_size
             s_node = p_node.add(
-                f"[green]{scene['name']}[/green]  "
-                f"[dim]{scene['id']}/{scene.get('scene', '')}  "
+                f"[green]{escape(scene['name'])}[/green]  "
+                f"[dim]{escape(scene['id'] + '/' + scene.get('scene', ''))}  "
                 f"({_fmt_size(scene_size)})[/dim]"
             )
             _describe_licenses(s_node, root, scene_dir)
             for mdp in scene.get("mdps", []):
                 graphs = list((scene_dir / "mdp" / mdp["id"]).rglob("*.onnx"))
                 s_node.add(
-                    f"MDP: [magenta]{mdp['id']}[/magenta]  [dim]{len(graphs)} graph(s)[/dim]"
+                    f"MDP: [magenta]{escape(mdp['id'])}[/magenta]  "
+                    f"[dim]{len(graphs)} graph(s)[/dim]"
                 )
             for policy in scene.get("policies", []):
                 onnx_path = scene_dir / policy.get("onnx", "")
@@ -514,7 +521,7 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
                 total_bytes += policy_size
                 size_str = f"  ({_fmt_size(policy_size)})" if policy_size else ""
                 s_node.add(
-                    f"Policy: [yellow]{policy['name']}[/yellow]  "
-                    f"[dim]mdp={policy.get('mdp')}{size_str}[/dim]"
+                    f"Policy: [yellow]{escape(policy['name'])}[/yellow]  "
+                    f"[dim]mdp={escape(str(policy.get('mdp')))}{size_str}[/dim]"
                 )
     return total_bytes
