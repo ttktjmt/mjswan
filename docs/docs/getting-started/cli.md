@@ -72,7 +72,7 @@ Scaffold a new mjswan project in a directory named `<name>`.
 | Template | What you get |
 |---|---|
 | `hello-world` (default) | A `main.py` that builds a single scene from `model.xml` and a minimal `model.xml`. |
-| `policy` | The hello-world template plus an `add_policy(name="Policy", policy=...)` call expecting a `policy.onnx` file alongside `main.py`. |
+| `policy` | The hello-world template plus an `add_policy(name="Policy", policy=...)` call expecting a `policy.onnx` file alongside `main.py`, and the scene's `control_dt` set to `0.02` s: change it to the rate your policy was trained at, and give `add_policy` the observations and actions your network uses ([policy config](../guides/policy-config.md)). |
 | `mjlab` | A one-line `mjswan.Builder.from_mjlab("go2_flat").build()` script, the task id a placeholder to replace. Needs the [`mjlab`](../guides/mjlab.md) extra (`pip install 'mjswan[mjlab]'`). |
 
 After scaffolding:

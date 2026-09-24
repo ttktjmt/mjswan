@@ -306,9 +306,12 @@ def main() -> None:
     project = builder.add_project(name="{name}")
 
     spec = mujoco.MjSpec.from_file("model.xml")
-    scene = project.add_scene(spec=spec, name="Scene")
+    # Seconds per control step, the rate your policy was trained to act at
+    # (mjlab's timestep * decimation). A scene with a policy needs it.
+    scene = project.add_scene(spec=spec, name="Scene", control_dt=0.02)
 
-    # Replace with your ONNX policy file
+    # Replace with your ONNX policy file. Pass observations= and actions= to say
+    # what the network reads and what its output drives: see the policy config guide.
     policy_model = onnx.load("policy.onnx")
     scene.add_policy(policy=policy_model, name="Policy")
 
