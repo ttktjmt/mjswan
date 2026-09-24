@@ -247,9 +247,10 @@ shortcuts.
   `@mujoco/mujoco@3.11.0`, pinned exactly and installed under the `mujoco` name the
   engine imports. That name used to resolve to `@ttktjmt/mujoco@3.7.0`, aliased by an
   unused `mjswan` devDependency, while the declared `@mujoco/mujoco` was imported
-  nowhere, so a `.mjb` the Python side saved could not load; a vitest case now checks
-  what is installed. mjlab 1.6 calls `CommandTerm._update_command(env_ids)` and checks the
-  signature, so a `trace_override` that replaces the method takes `env_ids` too.
+  nowhere, so the browser ran MuJoCo 3.7.0 on what the Python side compiled with 3.11.0;
+  a vitest case now checks what is installed. mjlab 1.6 calls
+  `CommandTerm._update_command(env_ids)` and checks the signature, so a `trace_override`
+  that replaces the method takes `env_ids` too.
 
 - **Inference ships ONNX Runtime's CPU build, so the engine's largest file is 13.3 MiB
   instead of 26.5 MiB.** Importing `onnxruntime-web` resolves to the JSEP build, whose
