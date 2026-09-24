@@ -243,9 +243,12 @@ shortcuts.
 - **MuJoCo 3.11.0 and mjlab 1.6.0, and one MuJoCo on both sides.** The core pin moves
   from `mujoco==3.8.1` to the `3.11.0` mjlab 1.6.0 needs, and the `[tool.uv]
   override-dependencies` that reconciled the two inside this repository go, so
-  `pip install "mjswan[mjlab]"` resolves outside it too. The browser takes
-  `@mujoco/mujoco@3.11.0`, pinned exactly and installed under the `mujoco` name the
-  engine imports. That name used to resolve to `@ttktjmt/mujoco@3.7.0`, aliased by an
+  `pip install "mjswan[mjlab]"` resolves outside it too. The browser takes MuJoCo 3.11.0
+  from `@ttktjmt/mujoco@3.11.0`, pinned exactly and installed under the `mujoco` name the
+  engine imports: MuJoCo's own `@mujoco/mujoco` throws on every `mjtBool` array from
+  3.9.0 on, and the fork is 3.11.0 with the bindings fix of
+  [google-deepmind/mujoco#3616](https://github.com/google-deepmind/mujoco/pull/3616).
+  That name used to resolve to `@ttktjmt/mujoco@3.7.0`, aliased by an
   unused `mjswan` devDependency, while the declared `@mujoco/mujoco` was imported
   nowhere, so the browser ran MuJoCo 3.7.0 on what the Python side compiled with 3.11.0;
   a vitest case now checks what is installed. mjlab 1.6 calls
@@ -576,6 +579,27 @@ shortcuts.
   the registries held `ts_src` terms described the design they replaced.
 
 ### Fixed
+
+- **A scene added with `add_scene(model=...)` opens in the browser.** The build saves such
+  a scene as a compiled `.mjb`, but the engine opened every scene as a zipped `.mjz`, so
+  JSZip rejected it before MuJoCo saw it. The build names the file for the argument
+  `add_scene` got, the catalog passes that on as `SceneInput.modelFormat`, and the engine
+  loads an `.mjb` with `mj_loadModel`. An `.mjb` still opens only in the MuJoCo version
+  that saved it, and goes without the XR hands, which are added to the MJCF.
+
+  mjswan Cloud takes `.mjz` scenes only, and `mjswan publish` used to leave the `.mjb`
+  behind and publish a simulation with no scene. It now refuses the build and says to add
+  the scene with `spec=`.
+
+- **`mjswan new --template policy` writes a project that builds.** A scene with a policy
+  must say how often the policy acts, and the build refuses one that does not, so the
+  template stopped at `builder.build()` once its `policy.onnx` was in place. It now passes
+  `control_dt=0.02`, marked as the value to set to the policy's own rate.
+
+- **`mjswan info` shows each project's id.** The id is printed in brackets, and rich read
+  `[my_robots]` as a style tag and dropped it. `info` now escapes every name, id and path,
+  and the build's progress bar renders names without markup, so a scene named `G1 [v2]`
+  no longer shows as `G1`.
 
 - **An `actuator_names` alternation keeps its entity prefix on every branch.** mjlab's
   patterns are prefixed with the entity (`robot/…`) to match `policy_joint_names`, and
