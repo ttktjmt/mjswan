@@ -1,7 +1,8 @@
-import { Box, SegmentedControl, Text } from '@mantine/core';
+import { Box, Checkbox, SegmentedControl, Tooltip } from '@mantine/core';
 
 import type { InteractionModeDescriptor, InteractionModeId } from '../engine';
 import { CommandSection } from './CommandSection';
+import { LabeledInput } from './LabeledInput';
 import { SliderRow } from './SliderRow';
 
 interface InteractionSectionProps {
@@ -16,10 +17,9 @@ interface InteractionSectionProps {
 /**
  * What the pointer does, and the numbers behind it.
  *
- * Only the active mode's parameters are drawn: three modes' worth at once would be most
- * of the panel, and a number you cannot currently exercise is noise. Which gesture drives
- * which mode is not configurable and so has no control here; the one rule, that a press
- * hitting something is the mode's and a press that misses is the camera's, is in the hint.
+ * Only the active mode's parameters are drawn, in a folder of their own: one level down,
+ * as a command group is, so the label, slider and number columns line up with the
+ * commands above. A mode the scene cannot run says why on hover.
  */
 export function InteractionSection({
   modes,
@@ -33,7 +33,7 @@ export function InteractionSection({
   }
   const active = modes.find((m) => m.id === mode);
   return (
-    <CommandSection label="Interaction">
+    <CommandSection label="Interaction" expandByDefault={false}>
       <Box px="xs" pb="0.5em">
         <SegmentedControl
           fullWidth
@@ -41,29 +41,55 @@ export function InteractionSection({
           radius="xs"
           value={mode}
           onChange={(next) => onModeChange(next as InteractionModeId)}
-          data={modes.map((m) => ({ value: m.id, label: m.label, disabled: !m.available }))}
+          data={modes.map((m) => ({
+            value: m.id,
+            disabled: !m.available,
+            label: m.available ? (
+              m.label
+            ) : (
+              <Tooltip label={m.reason ?? 'Not available in this scene.'} withArrow>
+                <span style={{ pointerEvents: 'auto' }}>{m.label}</span>
+              </Tooltip>
+            ),
+          }))}
         />
       </Box>
-      {active && (
-        <Box px="xs" pb="0.5em">
-          <Text c="dimmed" style={{ fontSize: '0.8em', lineHeight: 1.4 }}>
-            {active.available ? active.hint : (active.reason ?? 'Not available in this scene.')}
-          </Text>
-        </Box>
+      {active?.available && (
+        <CommandSection label={active.label}>
+          {active.params.map((param) => {
+            const id = `interaction:${mode}:${param.name}`;
+            const label = param.unit ? `${param.label} (${param.unit})` : param.label;
+            const value = params[mode]?.[param.name] ?? param.default;
+            const set = (next: number) => onParamChange(mode, param.name, next);
+            if (param.type === 'checkbox') {
+              return (
+                <LabeledInput key={param.name} id={id} label={label}>
+                  <Checkbox
+                    id={id}
+                    checked={value >= 0.5}
+                    onChange={(event) => set(event.currentTarget.checked ? 1 : 0)}
+                    size="xs"
+                  />
+                </LabeledInput>
+              );
+            }
+            return (
+              <SliderRow
+                key={param.name}
+                id={id}
+                label={label}
+                value={value}
+                min={param.softMin ?? param.min}
+                max={param.softMax ?? param.max}
+                inputMin={param.min}
+                inputMax={param.max}
+                step={param.step}
+                onChange={set}
+              />
+            );
+          })}
+        </CommandSection>
       )}
-      {active?.available &&
-        active.params.map((param) => (
-          <SliderRow
-            key={param.name}
-            id={`interaction:${mode}:${param.name}`}
-            label={param.unit ? `${param.label} (${param.unit})` : param.label}
-            value={params[mode]?.[param.name] ?? param.default}
-            min={param.min}
-            max={param.max}
-            step={param.step}
-            onChange={(value) => onParamChange(mode, param.name, value)}
-          />
-        ))}
     </CommandSection>
   );
 }

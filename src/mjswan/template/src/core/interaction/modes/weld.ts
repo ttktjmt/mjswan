@@ -12,8 +12,6 @@
  *   and mjlab recovers `qfrc_external` from the smooth-dynamics identity, which does not
  *   include it. The robot feels a held limb through its own state, not as an applied force.
  */
-import * as THREE from 'three';
-
 import type { InteractionMode, ModeContext } from './mode';
 import { toMjc } from './mode';
 import { POINTER_ANCHOR_BODY, POINTER_PARK_Z, POINTER_WELD } from '../grabInject';
@@ -49,6 +47,8 @@ export class WeldMode implements InteractionMode {
     });
     if (!grabbed) return 'none';
     this.held = gesture.hit.bodyId;
+    // No arrow: the body is at the pointer already, and a line to it says nothing more.
+    ctx.setCursor('grabbing');
     return 'exclusive';
   }
 
@@ -60,21 +60,19 @@ export class WeldMode implements InteractionMode {
     const { mjData } = ctx.sim();
     if (!mjData) {
       this.held = 0;
+      ctx.setCursor('');
       return;
     }
     ctx.weld.release(mjData, POINTER_WELD);
     this.moveAnchor(ctx, PARKED);
     this.held = 0;
-    ctx.arrow.hide();
+    ctx.setCursor('');
   }
 
   preStep(gesture: PointerGesture | null, ctx: ModeContext): void {
     const { mjData } = ctx.sim();
     if (!gesture || !this.held || !mjData) return;
     this.moveAnchor(ctx, toMjc(gesture.ray));
-    // Draw from the body's own origin rather than the grab point: the weld holds a pose,
-    // not a point, so the line reads as "this body is attached to the pointer".
-    ctx.arrow.show(bodyPosition(ctx, this.held), gesture.ray);
   }
 
   /**
@@ -91,14 +89,4 @@ export class WeldMode implements InteractionMode {
     for (let i = 0; i < 3; i++) mjData.mocap_pos[mocapId * 3 + i] = position[i];
     for (let i = 0; i < 4; i++) mjData.mocap_quat[mocapId * 4 + i] = IDENTITY_QUAT[i];
   }
-}
-
-function bodyPosition(ctx: ModeContext, bodyId: number): THREE.Vector3 {
-  const { mjData } = ctx.sim();
-  if (!mjData) return new THREE.Vector3();
-  return new THREE.Vector3(
-    mjData.xpos[bodyId * 3 + 0],
-    mjData.xpos[bodyId * 3 + 2],
-    -mjData.xpos[bodyId * 3 + 1],
-  );
 }

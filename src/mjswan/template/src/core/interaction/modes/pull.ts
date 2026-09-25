@@ -36,7 +36,7 @@ export class PullMode implements InteractionMode {
     const { mujoco, mjModel, mjData } = ctx.sim();
     if (!mjModel || !mjData) return;
     const params = ctx.params();
-    const saturated = ctx.wrench.pull(
+    const { force, saturated } = ctx.wrench.pull(
       mujoco,
       mjModel,
       mjData,
@@ -49,6 +49,9 @@ export class PullMode implements InteractionMode {
       },
       params.maxForce,
     );
-    ctx.arrow.show(fromBodyFrame(mjData, this.bodyId, this.grab), gesture.ray, saturated);
+    ctx.arrow.show(fromBodyFrame(mjData, this.bodyId, this.grab), gesture.ray, {
+      load: force / params.maxForce,
+      saturated,
+    });
   }
 }

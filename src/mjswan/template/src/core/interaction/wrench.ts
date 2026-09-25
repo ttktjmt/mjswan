@@ -12,7 +12,22 @@
  */
 import type { MainModule, MjData, MjModel, MjvPerturb } from 'mujoco';
 
-import { applyDragPull, applyPointForce, clampWrench, clearWrench, type DragPull } from './perturbForce';
+import {
+  applyDragPull,
+  applyPointForce,
+  clampWrench,
+  clearWrench,
+  wrenchForce,
+  type DragPull,
+} from './perturbForce';
+
+/** What a pull actually applied, for the arrow that draws it. */
+export interface PullResult {
+  /** Newtons, after the clamp. */
+  force: number;
+  /** Whether `maxForce` bit. */
+  saturated: boolean;
+}
 
 export class InteractionWrench {
   private written = new Set<number>();
@@ -23,10 +38,7 @@ export class InteractionWrench {
     this.written.clear();
   }
 
-  /**
-   * Pull a body toward a point. Returns whether `maxForce` bit, which is the only thing
-   * about a force people cannot see in the sim itself.
-   */
+  /** Pull a body toward a point, clamped to `maxForce` newtons. */
   pull(
     mujoco: MainModule,
     mjModel: MjModel,
@@ -34,10 +46,11 @@ export class InteractionWrench {
     perturb: MjvPerturb,
     pull: DragPull,
     maxForce: number,
-  ): boolean {
+  ): PullResult {
     applyDragPull(mujoco, mjModel, mjData, perturb, pull);
     this.written.add(pull.bodyId);
-    return clampWrench(mjData, pull.bodyId, maxForce);
+    const saturated = clampWrench(mjData, pull.bodyId, maxForce);
+    return { force: wrenchForce(mjData, pull.bodyId), saturated };
   }
 
   /** Shove a body at a point along a direction. */

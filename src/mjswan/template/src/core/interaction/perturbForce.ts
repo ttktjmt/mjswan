@@ -103,6 +103,13 @@ export function clampWrench(mjData: MjData, bodyId: number, maxForce: number): b
   return true;
 }
 
+/** The magnitude of the force in one body's row, newtons. */
+export function wrenchForce(mjData: MjData, bodyId: number): number {
+  const at = bodyId * WRENCH_STRIDE;
+  const row = mjData.xfrc_applied;
+  return Math.hypot(row[at], row[at + 1], row[at + 2]);
+}
+
 /** Zero one body's row, for a mode that has stopped writing it. */
 export function clearWrench(mjData: MjData, bodyId: number): void {
   const at = bodyId * WRENCH_STRIDE;

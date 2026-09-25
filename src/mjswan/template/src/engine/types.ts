@@ -145,10 +145,16 @@ export interface InteractionParamDescriptor {
   /** The id {@link InteractionControls.setParam} takes. */
   name: string;
   label: string;
-  /** Printed beside the value; '' for a dimensionless one. */
+  /** Printed beside the label; '' for a dimensionless one. */
   unit: string;
+  /** A `checkbox` holds 0 or 1. */
+  type: 'slider' | 'checkbox';
+  /** What `setParam` clamps to, and so what a typed value may reach. */
   min: number;
   max: number;
+  /** The span a slider drags over, inside `min`..`max`; absent means the same. */
+  softMin?: number;
+  softMax?: number;
   step: number;
   default: number;
 }
@@ -156,8 +162,6 @@ export interface InteractionParamDescriptor {
 export interface InteractionModeDescriptor {
   id: InteractionModeId;
   label: string;
-  /** One line describing the gesture. */
-  hint: string;
   /** False when the loaded scene cannot run this mode; `reason` says why. */
   available: boolean;
   reason?: string;

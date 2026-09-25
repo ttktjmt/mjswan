@@ -14,6 +14,8 @@ export function SliderRow({
   value,
   min,
   max,
+  inputMin = min,
+  inputMax = max,
   step,
   onChange,
   disabled,
@@ -23,6 +25,12 @@ export function SliderRow({
   value: number;
   min: number;
   max: number;
+  /**
+   * How far the number box reaches, when a typed value may go past the slider. The thumb
+   * then pins at the end of the track.
+   */
+  inputMin?: number;
+  inputMax?: number;
   /** A slider descriptor always carries one; Mantine's own default stands in if not. */
   step?: number;
   onChange: (value: number) => void;
@@ -51,8 +59,8 @@ export function SliderRow({
             const parsed = typeof next === 'number' ? next : Number(next);
             if (Number.isFinite(parsed)) onChange(parsed);
           }}
-          min={min}
-          max={max}
+          min={inputMin}
+          max={inputMax}
           step={step}
           size="xs"
           hideControls

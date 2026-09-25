@@ -130,14 +130,28 @@ modes itself.
 
 | Mode | `id` | Does | Parameters |
 |---|---|---|---|
-| Pull | `pull` | Drags a body toward the pointer for as long as the press is held. | `gain` (N/m, default 100), `maxForce` (N, default 500) |
+| Pull | `pull` | Drags a body toward the pointer for as long as the press is held. The arrow thickens as the force nears `maxForce` and turns yellow at it. | `gain` (N/m, default 100), `maxForce` (N, default 500) |
 | Push | `push` | Taps a body to shove it along the inward normal of the face that was hit. | `impulse` (N s, default 10) |
-| Grab | `weld` | Carries a body where you put it, and releasing leaves it with the speed the carry gave it. | `softness` (s, default 0.02), `torqueScale` (default 1) |
+| Grab | `weld` | Carries a body where you put it, and releasing leaves it with the speed the carry gave it. The cursor shows a closed hand while something is held. | `softness` (s, default 0.02), `torqueScale` (checkbox, default 1) |
 
-Each `InteractionModeDescriptor` carries an `id`, a `label`, a one-line `hint`, an
-`available` flag with a `reason` when it is false, and a `params` list whose entries give
-`name`, `label`, `unit`, `min`, `max`, `step` and `default`. `setParam` clamps to that
-range rather than refusing.
+Each `InteractionModeDescriptor` carries an `id`, a `label`, an `available` flag with a
+`reason` when it is false, and a `params` list. A parameter gives `name`, `label`, `unit`,
+`type` (`'slider'` or `'checkbox'`, the latter holding 0 or 1), `step`, `default`, and two
+ranges: `min` / `max` is what `setParam` clamps to, and `softMin` / `softMax`, when
+present, is the narrower span a slider should drag over. The viewer's number box takes
+anything inside `min` / `max`, and a value past the slider pins its thumb at the end.
+
+| Parameter | Slider | Accepted |
+|---|---|---|
+| `pull.gain` | 0 to 200 | 0 to 2000 |
+| `pull.maxForce` | 1 to 500 | 1 to 20000 |
+| `push.impulse` | 0.1 to 200 | 0.1 to 2000 |
+| `weld.softness` | 0.004 to 0.2 | the same |
+
+`weld.softness` is the weld's time constant (`eq_solref[0]`): how long the held body
+takes to catch up with the pointer, so a larger value carries it on a looser spring.
+`weld.torqueScale` is `eq_data[10]`; at 1 the body keeps the pose it was grabbed in, at 0
+it hangs from the grab point.
 
 **Input bindings are not configurable, by design.** A press that hits a geom belongs to the
 active mode and a press that misses belongs to the camera, on a mouse and on a touchscreen

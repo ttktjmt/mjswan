@@ -33,7 +33,6 @@ export type { InteractionSim } from './modes/mode';
 export interface InteractionModeReport {
   id: InteractionModeId;
   label: string;
-  hint: string;
   /** False when this scene cannot run it; `reason` says why. */
   available: boolean;
   reason?: string;
@@ -57,6 +56,7 @@ export class InteractionManager {
   private readonly wrench = new InteractionWrench();
   private readonly readSim: () => InteractionSim;
   private readonly weld: WeldHold;
+  private readonly canvas: HTMLElement;
   private readonly modes = new Map<InteractionModeId, InteractionMode>();
   private readonly values = defaultParams();
   private active: InteractionModeId = DEFAULT_INTERACTION_MODE;
@@ -65,6 +65,7 @@ export class InteractionManager {
   constructor(options: InteractionManagerOptions) {
     this.readSim = options.sim;
     this.weld = options.weld;
+    this.canvas = options.renderer.domElement;
     this.arrow = new DragArrow(options.scene);
     this.ring = new PushRing(options.scene);
     for (const mode of [new PullMode(), new PushMode(), new WeldMode()]) this.modes.set(mode.id, mode);
@@ -118,7 +119,6 @@ export class InteractionManager {
       return {
         id: spec.id,
         label: spec.label,
-        hint: spec.hint,
         available: known && reason === null,
         reason: known ? (reason ?? undefined) : 'Not implemented yet.',
       };
@@ -173,6 +173,7 @@ export class InteractionManager {
   }
 
   dispose(): void {
+    this.canvas.style.cursor = '';
     this.pointer.dispose();
     this.arrow.dispose();
     this.ring.dispose();
@@ -210,6 +211,9 @@ export class InteractionManager {
       arrow: this.arrow,
       ring: this.ring,
       weld: this.weld,
+      setCursor: (cursor) => {
+        this.canvas.style.cursor = cursor;
+      },
     };
   }
 

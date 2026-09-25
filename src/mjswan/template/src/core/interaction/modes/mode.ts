@@ -31,6 +31,8 @@ export interface ModeContext {
   ring: PushRing;
   /** Shared with the XR hand: the slots a scene compiled in for holding things. */
   weld: WeldHold;
+  /** The canvas's CSS cursor; '' hands it back. A touchscreen shows none of it. */
+  setCursor(cursor: string): void;
 }
 
 export interface InteractionMode {

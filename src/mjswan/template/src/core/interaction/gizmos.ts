@@ -17,9 +17,17 @@ function tag(object: THREE.Object3D): void {
   });
 }
 
+/** How hard a pull is: `load` is the force over its clamp, so 1 is the most it can be. */
+export interface ArrowLoad {
+  load: number;
+  /** Recolours the arrow while the force is riding its clamp. */
+  saturated: boolean;
+}
+
 /**
- * The pull arrow: from the grab point toward the pointer. Same shape and colour the
- * pre-mode drag had, since it is the one piece of this people already read at a glance.
+ * The pull arrow: from the grab point to the pointer, thicker the harder it pulls. The
+ * tip stays on the pointer, so the length still says where the body is being pulled to
+ * and the girth is left to say how hard.
  */
 export class DragArrow {
   private readonly scene: THREE.Scene;
@@ -27,7 +35,11 @@ export class DragArrow {
   private readonly shaft: THREE.Mesh;
   private readonly head: THREE.Mesh;
   private readonly material: THREE.MeshStandardMaterial;
+  private static readonly SHAFT_RADIUS = 0.008;
+  private static readonly HEAD_RADIUS = 0.03;
   private static readonly HEAD_HEIGHT = 0.1;
+  /** Girth at the clamp, over girth at rest; the head grows by half as much. */
+  private static readonly MAX_THICKENING = 4;
   private static readonly UP = new THREE.Vector3(0, 1, 0);
 
   constructor(scene: THREE.Scene) {
@@ -39,18 +51,21 @@ export class DragArrow {
       metalness: 0,
       roughness: 0.2,
     });
-    this.shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1), this.material);
-    this.shaft.position.y = 0.5;
-    this.head = new THREE.Mesh(new THREE.ConeGeometry(0.03, DragArrow.HEAD_HEIGHT), this.material);
-    this.head.position.y = 1;
+    this.shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(DragArrow.SHAFT_RADIUS, DragArrow.SHAFT_RADIUS, 1),
+      this.material,
+    );
+    this.head = new THREE.Mesh(
+      new THREE.ConeGeometry(DragArrow.HEAD_RADIUS, DragArrow.HEAD_HEIGHT),
+      this.material,
+    );
     this.group.add(this.shaft, this.head);
     this.group.visible = false;
     tag(this.group);
     scene.add(this.group);
   }
 
-  /** `saturated` recolours the arrow while the force is riding its clamp. */
-  show(from: THREE.Vector3, to: THREE.Vector3, saturated = false): void {
+  show(from: THREE.Vector3, to: THREE.Vector3, { load, saturated }: ArrowLoad): void {
     const offset = to.clone().sub(from);
     const length = offset.length();
     if (length <= 0.001) {
@@ -60,10 +75,19 @@ export class DragArrow {
     this.group.visible = true;
     this.group.position.copy(from);
     this.group.quaternion.setFromUnitVectors(DragArrow.UP, offset.normalize());
-    const shaftLength = Math.max(0.01, length - DragArrow.HEAD_HEIGHT);
-    this.shaft.scale.y = shaftLength;
+
+    // Square root, so the girth moves most across the light pulls that are most of them.
+    const t = Math.sqrt(Math.min(1, Math.max(0, Number.isFinite(load) ? load : 0)));
+    const girth = 1 + (DragArrow.MAX_THICKENING - 1) * t;
+    const headScale = 1 + ((DragArrow.MAX_THICKENING - 1) / 2) * t;
+    // A pull shorter than the head squashes the head rather than pushing it past the pointer.
+    const shaftLength = Math.max(0.001, length - DragArrow.HEAD_HEIGHT * headScale);
+    const headHeight = length - shaftLength;
+
+    this.shaft.scale.set(girth, shaftLength, girth);
     this.shaft.position.y = shaftLength / 2;
-    this.head.position.y = shaftLength + DragArrow.HEAD_HEIGHT / 2;
+    this.head.scale.set(headScale, headHeight / DragArrow.HEAD_HEIGHT, headScale);
+    this.head.position.y = shaftLength + headHeight / 2;
     this.material.color.setHex(saturated ? 0xffd166 : GIZMO_COLOR);
   }
 

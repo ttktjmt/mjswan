@@ -77,8 +77,11 @@ test('every pointer mode does its own job', async ({ page }) => {
   for (let step = 1; step <= 10; step++) await page.mouse.move(x, y - step * 6);
   await page.waitForTimeout(300);
   const held = await page.evaluate(() => window.__probe!.read());
+  const cursor = () => page.evaluate(() => document.querySelector('canvas')!.style.cursor);
+  expect(await cursor(), 'a held body shows the grabbing hand').toBe('grabbing');
   await page.mouse.up();
   expect(held.welded, 'grabbing activates a weld').toBe(true);
+  expect(await cursor(), 'letting go hands the cursor back').toBe('');
 
   expect(errors, errors.join('\n')).toEqual([]);
 });
