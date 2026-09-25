@@ -17,13 +17,6 @@ function tag(object: THREE.Object3D): void {
   });
 }
 
-/** How hard a pull is: `load` is the force over its clamp, so 1 is the most it can be. */
-export interface ArrowLoad {
-  load: number;
-  /** Recolours the arrow while the force is riding its clamp. */
-  saturated: boolean;
-}
-
 /**
  * The pull arrow: from the grab point to the pointer, thicker the harder it pulls. The
  * tip stays on the pointer, so the length still says where the body is being pulled to
@@ -38,8 +31,10 @@ export class DragArrow {
   private static readonly SHAFT_RADIUS = 0.008;
   private static readonly HEAD_RADIUS = 0.03;
   private static readonly HEAD_HEIGHT = 0.1;
-  /** Girth at the clamp, over girth at rest; the head grows by half as much. */
+  /** How much thicker the arrow can get than at rest; the head grows by half as much. */
   private static readonly MAX_THICKENING = 4;
+  /** The pull, newtons, at which the arrow is halfway to its thickest. */
+  private static readonly HALF_FORCE = 100;
   private static readonly UP = new THREE.Vector3(0, 1, 0);
 
   constructor(scene: THREE.Scene) {
@@ -65,7 +60,8 @@ export class DragArrow {
     scene.add(this.group);
   }
 
-  show(from: THREE.Vector3, to: THREE.Vector3, { load, saturated }: ArrowLoad): void {
+  /** `force` is the pull's magnitude, newtons. */
+  show(from: THREE.Vector3, to: THREE.Vector3, force: number): void {
     const offset = to.clone().sub(from);
     const length = offset.length();
     if (length <= 0.001) {
@@ -76,8 +72,10 @@ export class DragArrow {
     this.group.position.copy(from);
     this.group.quaternion.setFromUnitVectors(DragArrow.UP, offset.normalize());
 
-    // Square root, so the girth moves most across the light pulls that are most of them.
-    const t = Math.sqrt(Math.min(1, Math.max(0, Number.isFinite(load) ? load : 0)));
+    // Saturating rather than linear: there is no clamp to scale against, and a heavy robot
+    // takes forces a block never sees, so the girth has to stay readable across both.
+    const f = Number.isFinite(force) && force > 0 ? force : 0;
+    const t = f / (f + DragArrow.HALF_FORCE);
     const girth = 1 + (DragArrow.MAX_THICKENING - 1) * t;
     const headScale = 1 + ((DragArrow.MAX_THICKENING - 1) / 2) * t;
     // A pull shorter than the head squashes the head rather than pushing it past the pointer.
@@ -88,7 +86,6 @@ export class DragArrow {
     this.shaft.position.y = shaftLength / 2;
     this.head.scale.set(headScale, headHeight / DragArrow.HEAD_HEIGHT, headScale);
     this.head.position.y = shaftLength + headHeight / 2;
-    this.material.color.setHex(saturated ? 0xffd166 : GIZMO_COLOR);
   }
 
   hide(): void {

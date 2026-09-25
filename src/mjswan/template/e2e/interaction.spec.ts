@@ -60,7 +60,7 @@ test('every pointer mode does its own job', async ({ page }) => {
   await page.waitForTimeout(300);
   const pulled = await page.evaluate(() => window.__probe!.read());
   await page.mouse.up();
-  expect(pulled.maxForce, 'pull puts the block under a force').toBeGreaterThan(1);
+  expect(pulled.peakForce, 'pull puts the block under a force').toBeGreaterThan(1);
 
   // ── push: a tap, whose shove lasts one control step ────────────────────
   await arm('push');
@@ -68,7 +68,7 @@ test('every pointer mode does its own job', async ({ page }) => {
   await page.mouse.down();
   await page.mouse.up();
   await page.waitForTimeout(300);
-  expect((await page.evaluate(() => window.__probe!.read())).maxForce, 'a tap shoves').toBeGreaterThan(1);
+  expect((await page.evaluate(() => window.__probe!.read())).peakForce, 'a tap shoves').toBeGreaterThan(1);
 
   // ── weld: carrying a block means an active constraint ──────────────────
   await arm('weld');

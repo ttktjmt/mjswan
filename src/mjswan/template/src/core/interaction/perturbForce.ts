@@ -89,20 +89,6 @@ export function applyPointForce(
   }
 }
 
-/**
- * Hold a body's wrench to `maxForce` newtons, scaling the torque with it so the line of
- * action is unchanged. Returns whether the clamp bit.
- */
-export function clampWrench(mjData: MjData, bodyId: number, maxForce: number): boolean {
-  const at = bodyId * WRENCH_STRIDE;
-  const row = mjData.xfrc_applied;
-  const magnitude = Math.hypot(row[at], row[at + 1], row[at + 2]);
-  if (!(magnitude > maxForce)) return false;
-  const scale = maxForce / magnitude;
-  for (let i = 0; i < WRENCH_STRIDE; i++) row[at + i] *= scale;
-  return true;
-}
-
 /** The magnitude of the force in one body's row, newtons. */
 export function wrenchForce(mjData: MjData, bodyId: number): number {
   const at = bodyId * WRENCH_STRIDE;

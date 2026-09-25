@@ -44,17 +44,11 @@ export const INTERACTION_MODES: readonly InteractionModeSpec[] = [
     id: 'pull',
     label: 'Pull',
     params: [
-      // The pre-mode viewer pulled with a hard-coded 100 N/m, so this default is the
-      // drag people already know.
+      // A spring constant between the grab point and the pointer. The pre-mode viewer
+      // pulled with a hard-coded 100 N/m, so this default is the drag people already know.
       {
-        name: 'gain', label: 'Force', unit: 'N/m', type: 'slider',
+        name: 'spring', label: 'Spring', unit: 'N/m', type: 'slider',
         min: 0, max: 2000, softMin: 0, softMax: 200, step: 1, default: 100,
-      },
-      // There was no clamp before, and a camera that follows a body can jump the pointer
-      // offset far enough in one frame to launch whatever is held.
-      {
-        name: 'maxForce', label: 'Max force', unit: 'N', type: 'slider',
-        min: 1, max: 20000, softMin: 1, softMax: 500, step: 1, default: 500,
       },
     ],
   },
@@ -66,7 +60,7 @@ export const INTERACTION_MODES: readonly InteractionModeSpec[] = [
       // feels the same whatever a scene's decimation is.
       {
         name: 'impulse', label: 'Impulse', unit: 'N·s', type: 'slider',
-        min: 0.1, max: 2000, softMin: 0.1, softMax: 200, step: 0.1, default: 10,
+        min: 0.1, max: 500, softMin: 0.1, softMax: 50, step: 0.1, default: 10,
       },
     ],
   },

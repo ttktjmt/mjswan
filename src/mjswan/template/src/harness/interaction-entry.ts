@@ -16,7 +16,7 @@ const SAMPLE_MS = 4;
 
 export interface InteractionProbe {
   /** Largest force any body has been under since the last `reset`: pull and push. */
-  maxForce: number;
+  peakForce: number;
   /** Whether any equality has been active since the last `reset`: grab. */
   welded: boolean;
 }
@@ -51,14 +51,14 @@ async function main(): Promise<void> {
     }
   ).runtime;
 
-  let maxForce = 0;
+  let peakForce = 0;
   let welded = false;
   setInterval(() => {
     const { mjData, mjModel } = runtime;
     for (let body = 1; body < mjModel.nbody; body++) {
       const at = body * 6;
       const force = Math.hypot(mjData.xfrc_applied[at], mjData.xfrc_applied[at + 1], mjData.xfrc_applied[at + 2]);
-      if (force > maxForce) maxForce = force;
+      if (force > peakForce) peakForce = force;
     }
     for (let eq = 0; eq < mjModel.neq; eq++) {
       if (mjData.eq_active[eq]) welded = true;
@@ -67,10 +67,10 @@ async function main(): Promise<void> {
 
   window.__probe = {
     reset: () => {
-      maxForce = 0;
+      peakForce = 0;
       welded = false;
     },
-    read: () => ({ maxForce, welded }),
+    read: () => ({ peakForce, welded }),
   };
 
   // Let the physics and render loops advance before anything presses on the canvas.

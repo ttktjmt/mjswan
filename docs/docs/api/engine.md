@@ -130,7 +130,7 @@ modes itself.
 
 | Mode | `id` | Does | Parameters |
 |---|---|---|---|
-| Pull | `pull` | Drags a body toward the pointer for as long as the press is held. The arrow thickens as the force nears `maxForce` and turns yellow at it. | `gain` (N/m, default 100), `maxForce` (N, default 500) |
+| Pull | `pull` | Drags a body toward the pointer on a spring for as long as the press is held. The arrow thickens with the force. | `spring` (N/m, default 100) |
 | Push | `push` | Taps a body to shove it along the inward normal of the face that was hit. | `impulse` (N s, default 10) |
 | Grab | `weld` | Carries a body where you put it, and releasing leaves it with the speed the carry gave it. The cursor shows a closed hand while something is held. | `softness` (s, default 0.02), `torqueScale` (checkbox, default 1) |
 
@@ -143,9 +143,8 @@ anything inside `min` / `max`, and a value past the slider pins its thumb at the
 
 | Parameter | Slider | Accepted |
 |---|---|---|
-| `pull.gain` | 0 to 200 | 0 to 2000 |
-| `pull.maxForce` | 1 to 500 | 1 to 20000 |
-| `push.impulse` | 0.1 to 200 | 0.1 to 2000 |
+| `pull.spring` | 0 to 200 | 0 to 2000 |
+| `push.impulse` | 0.1 to 50 | 0.1 to 500 |
 | `weld.softness` | 0.004 to 0.2 | the same |
 
 `weld.softness` is the weld's time constant (`eq_solref[0]`): how long the held body

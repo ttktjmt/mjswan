@@ -87,35 +87,27 @@ describe('InteractionWrench against the real WASM', () => {
   });
 
   // The arrow is drawn from this number, so it has to be the force the body is under.
-  it('reports the force a pull applied, after the clamp', () => {
+  it('reports the force a pull applied', () => {
     const { mjModel, mjData, bodyId } = load();
     const wrench = new InteractionWrench();
     const perturb = new (mujoco as unknown as { MjvPerturb: new () => MjvPerturb }).MjvPerturb();
-    const pull = (target: [number, number, number], maxForce: number) => {
+    const pull = (target: [number, number, number]) => {
       wrench.begin(mjData);
-      return wrench.pull(
-        mujoco,
-        mjModel,
-        mjData,
-        perturb,
-        { bodyId, localPoint: [0, 0, 0], targetPoint: target, forceScale: 100 },
-        maxForce,
-      );
+      return wrench.pull(mujoco, mjModel, mjData, perturb, {
+        bodyId,
+        localPoint: [0, 0, 0],
+        targetPoint: target,
+        forceScale: 100,
+      });
     };
     const applied = () =>
       Math.hypot(...Array.from(mjData.xfrc_applied.slice(bodyId * 6, bodyId * 6 + 3) as ArrayLike<number>));
 
-    // 0.3 m at 100 N/m: under the clamp, so the spring's own 30 N.
-    const light = pull([0.3, 0, 1], 500);
-    expect(light.saturated).toBe(false);
-    expect(light.force).toBeCloseTo(30, 3);
-    expect(light.force).toBeCloseTo(applied(), 9);
-
-    // 5 m would be 500 N; the clamp holds it to 40.
-    const heavy = pull([5, 0, 1], 40);
-    expect(heavy.saturated).toBe(true);
-    expect(heavy.force).toBeCloseTo(40, 6);
-    expect(heavy.force).toBeCloseTo(applied(), 9);
+    // A spring: 100 N/m over 0.3 m, then over 5 m, with nothing capping the second.
+    expect(pull([0.3, 0, 1])).toBeCloseTo(30, 3);
+    expect(pull([0.3, 0, 1])).toBeCloseTo(applied(), 9);
+    expect(pull([5, 0, 1])).toBeCloseTo(500, 3);
+    expect(pull([5, 0, 1])).toBeCloseTo(applied(), 9);
     perturb.delete();
   });
 

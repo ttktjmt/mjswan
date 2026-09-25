@@ -12,22 +12,7 @@
  */
 import type { MainModule, MjData, MjModel, MjvPerturb } from 'mujoco';
 
-import {
-  applyDragPull,
-  applyPointForce,
-  clampWrench,
-  clearWrench,
-  wrenchForce,
-  type DragPull,
-} from './perturbForce';
-
-/** What a pull actually applied, for the arrow that draws it. */
-export interface PullResult {
-  /** Newtons, after the clamp. */
-  force: number;
-  /** Whether `maxForce` bit. */
-  saturated: boolean;
-}
+import { applyDragPull, applyPointForce, clearWrench, wrenchForce, type DragPull } from './perturbForce';
 
 export class InteractionWrench {
   private written = new Set<number>();
@@ -38,19 +23,11 @@ export class InteractionWrench {
     this.written.clear();
   }
 
-  /** Pull a body toward a point, clamped to `maxForce` newtons. */
-  pull(
-    mujoco: MainModule,
-    mjModel: MjModel,
-    mjData: MjData,
-    perturb: MjvPerturb,
-    pull: DragPull,
-    maxForce: number,
-  ): PullResult {
+  /** Pull a body toward a point. Returns the force it now carries, newtons. */
+  pull(mujoco: MainModule, mjModel: MjModel, mjData: MjData, perturb: MjvPerturb, pull: DragPull): number {
     applyDragPull(mujoco, mjModel, mjData, perturb, pull);
     this.written.add(pull.bodyId);
-    const saturated = clampWrench(mjData, pull.bodyId, maxForce);
-    return { force: wrenchForce(mjData, pull.bodyId), saturated };
+    return wrenchForce(mjData, pull.bodyId);
   }
 
   /** Shove a body at a point along a direction. */

@@ -18,31 +18,31 @@ describe('DragArrow', () => {
   const from = new THREE.Vector3(0, 0.5, 0);
   const to = new THREE.Vector3(0.4, 0.8, -0.2);
 
-  it('grows thicker with the load and keeps its tip on the pointer', () => {
+  it('grows thicker with the force and keeps its tip on the pointer', () => {
     const scene = new THREE.Scene();
     const arrow = new DragArrow(scene);
     const girths: number[] = [];
-    for (const load of [0, 0.1, 0.5, 1]) {
-      arrow.show(from, to, { load, saturated: false });
+    for (const force of [0, 10, 100, 1000, 100000]) {
+      arrow.show(from, to, force);
       const { girth, tip } = tipOf(scene);
       girths.push(girth);
-      expect(tip.distanceTo(to), `tip at load ${load}`).toBeLessThan(1e-6);
+      expect(tip.distanceTo(to), `tip at ${force} N`).toBeLessThan(1e-6);
     }
     for (let i = 1; i < girths.length; i++) expect(girths[i]).toBeGreaterThan(girths[i - 1]);
+    // No clamp to scale against, so it has to stay bounded on its own.
+    expect(girths[girths.length - 1]).toBeLessThan(4 + 1e-9);
     arrow.dispose();
   });
 
-  it('treats a load past the clamp, or no load at all, as the ends of the range', () => {
+  it('draws no force, or a nonsense one, at its rest girth', () => {
     const scene = new THREE.Scene();
     const arrow = new DragArrow(scene);
-    arrow.show(from, to, { load: 1, saturated: true });
-    const full = tipOf(scene).girth;
-    arrow.show(from, to, { load: 7, saturated: true });
-    expect(tipOf(scene).girth).toBe(full);
-    arrow.show(from, to, { load: 0, saturated: false });
+    arrow.show(from, to, 0);
     const rest = tipOf(scene).girth;
-    arrow.show(from, to, { load: Number.NaN, saturated: false });
-    expect(tipOf(scene).girth).toBe(rest);
+    for (const force of [Number.NaN, -50, Number.NEGATIVE_INFINITY]) {
+      arrow.show(from, to, force);
+      expect(tipOf(scene).girth, String(force)).toBe(rest);
+    }
     arrow.dispose();
   });
 
@@ -50,7 +50,7 @@ describe('DragArrow', () => {
     const scene = new THREE.Scene();
     const arrow = new DragArrow(scene);
     const near = from.clone().add(new THREE.Vector3(0, 0.03, 0));
-    arrow.show(from, near, { load: 1, saturated: false });
+    arrow.show(from, near, 1000);
     expect(tipOf(scene).tip.distanceTo(near)).toBeLessThan(1e-6);
     arrow.dispose();
   });

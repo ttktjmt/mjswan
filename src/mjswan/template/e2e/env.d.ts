@@ -14,6 +14,6 @@ interface Window {
   __ready?: boolean;
   __probe?: {
     reset(): void;
-    read(): { maxForce: number; welded: boolean };
+    read(): { peakForce: number; welded: boolean };
   };
 }
