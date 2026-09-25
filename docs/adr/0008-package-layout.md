@@ -51,11 +51,13 @@ cli.py  →  app.py · cloud/  →  the object model at the root  →  build/  �
 
 - **`cli.py`** parses arguments and calls the layers below.
 - **`app.py` and `cloud/`** serve, package and publish a *built* document. They read
-  `document/` and `license/` and never import `build/` or `compile/`.
+  `document/` and `license/` and never import `compile/`. `cloud/` never imports
+  `build/` either; `app.py` reaches `build/frontend.py` to assemble the engine a `.swn`
+  is served beside, building it when no matching one is cached.
 - **The root** is the fluent object model: `Builder`, the `*Handle` / `*Config` pairs,
   `MdpConfig`, `ViewerConfig`. `Builder.build()` delegates to `build.pipeline`;
   `add_policy_wandb` / `add_policy_hf` delegate to `source/` and `mjlab/`. Both
-  imports are lazy, so `import mjswan` costs neither torch nor a Node build.
+  imports are lazy, so `import mjswan` needs neither torch nor a Node build.
 - **`build/`** is what `Builder.build()` does, and the one place that knows the shape
   of a manifest entry. It writes every file of a document.
 - **`compile/`** traces a term body to ONNX bytes against an env it is handed. It
@@ -162,12 +164,14 @@ layout they point at. The table below is the migration guide.
 
 ## Consequences
 
-- `import mjswan` imports neither torch, mjlab, `onnx` nor `rich`: `builder.py` no
-  longer imports the build pipeline at module level, and the three modules the
-  object model does reach (`policy.py`, `scene.py`, `mjlab/runner.py`) take `onnx`
-  under `TYPE_CHECKING`: they annotate a `ModelProto` but read it duck-typed.
-  Someone opening a MuJoCo model in the viewer with no policy pays for `mujoco` and
-  `numpy` and nothing else.
+- `import mjswan` needs neither torch nor mjlab, and imports neither `onnx` nor `rich`:
+  `builder.py` no longer imports the build pipeline at module level, and the three
+  modules the object model does reach (`policy.py`, `scene.py`, `mjlab/runner.py`) take
+  `onnx` under `TYPE_CHECKING`: they annotate a `ModelProto` but read it duck-typed.
+  `envs/mdp/commands.py` and `events.py` still import torch, and mjlab, where they are
+  installed, since the tracer's RNG spy patches `sample_uniform` as a module global of
+  theirs. Someone opening a MuJoCo model in the viewer with a core install pays for
+  `mujoco` and `numpy` and nothing else.
 - A reader finds a manifest key in `build/manifest.py` or `build/mdp/<kind>.py` and
   nowhere else; a tracing question in `compile/<pass or kind>.py`; anything that reads
   an mjlab object in `mjlab/`.
@@ -237,8 +241,8 @@ diagnostic counts, and passed the fast suite; the parity sweep ran once at the e
 
 - No module at the root but `_version.py` starts with an underscore, and every root
   module is part of the object model or the CLI.
-- No import points upward through the layers of §1; `import mjswan` imports neither
-  torch nor mjlab.
+- No import points upward through the layers of §1; `import mjswan` succeeds with
+  neither torch nor mjlab installed.
 - The shape of a manifest entry appears in `build/` and nowhere else; `compile/`
   writes no file.
 - `mjswan/__init__.py`'s `__all__` is unchanged, and the mirror import paths under
