@@ -28,11 +28,10 @@ export class DragArrow {
   private readonly shaft: THREE.Mesh;
   private readonly head: THREE.Mesh;
   private readonly material: THREE.MeshStandardMaterial;
-  private static readonly SHAFT_RADIUS = 0.008;
-  private static readonly HEAD_RADIUS = 0.03;
-  private static readonly HEAD_HEIGHT = 0.1;
-  /** How much thicker the arrow can get than at rest; the head grows by half as much. */
-  private static readonly MAX_THICKENING = 4;
+  /** Metres, at no force and in the limit of a very hard pull. */
+  private static readonly SHAFT_RADIUS = { rest: 0.002, full: 0.032 };
+  private static readonly HEAD_RADIUS = { rest: 0.01, full: 0.075 };
+  private static readonly HEAD_HEIGHT = { rest: 0.035, full: 0.25 };
   /** The pull, newtons, at which the arrow is halfway to its thickest. */
   private static readonly HALF_FORCE = 100;
   private static readonly UP = new THREE.Vector3(0, 1, 0);
@@ -46,14 +45,9 @@ export class DragArrow {
       metalness: 0,
       roughness: 0.2,
     });
-    this.shaft = new THREE.Mesh(
-      new THREE.CylinderGeometry(DragArrow.SHAFT_RADIUS, DragArrow.SHAFT_RADIUS, 1),
-      this.material,
-    );
-    this.head = new THREE.Mesh(
-      new THREE.ConeGeometry(DragArrow.HEAD_RADIUS, DragArrow.HEAD_HEIGHT),
-      this.material,
-    );
+    // Unit shapes, sized by their scale every frame.
+    this.shaft = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1), this.material);
+    this.head = new THREE.Mesh(new THREE.ConeGeometry(1, 1), this.material);
     this.group.add(this.shaft, this.head);
     this.group.visible = false;
     tag(this.group);
@@ -76,15 +70,16 @@ export class DragArrow {
     // takes forces a block never sees, so the girth has to stay readable across both.
     const f = Number.isFinite(force) && force > 0 ? force : 0;
     const t = f / (f + DragArrow.HALF_FORCE);
-    const girth = 1 + (DragArrow.MAX_THICKENING - 1) * t;
-    const headScale = 1 + ((DragArrow.MAX_THICKENING - 1) / 2) * t;
+    const size = ({ rest, full }: { rest: number; full: number }) => rest + (full - rest) * t;
+    const shaftRadius = size(DragArrow.SHAFT_RADIUS);
+    const headRadius = size(DragArrow.HEAD_RADIUS);
     // A pull shorter than the head squashes the head rather than pushing it past the pointer.
-    const shaftLength = Math.max(0.001, length - DragArrow.HEAD_HEIGHT * headScale);
+    const shaftLength = Math.max(0.001, length - size(DragArrow.HEAD_HEIGHT));
     const headHeight = length - shaftLength;
 
-    this.shaft.scale.set(girth, shaftLength, girth);
+    this.shaft.scale.set(shaftRadius, shaftLength, shaftRadius);
     this.shaft.position.y = shaftLength / 2;
-    this.head.scale.set(headScale, headHeight / DragArrow.HEAD_HEIGHT, headScale);
+    this.head.scale.set(headRadius, headHeight, headRadius);
     this.head.position.y = shaftLength + headHeight / 2;
   }
 

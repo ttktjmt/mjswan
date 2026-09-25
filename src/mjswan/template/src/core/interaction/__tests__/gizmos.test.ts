@@ -29,8 +29,10 @@ describe('DragArrow', () => {
       expect(tip.distanceTo(to), `tip at ${force} N`).toBeLessThan(1e-6);
     }
     for (let i = 1; i < girths.length; i++) expect(girths[i]).toBeGreaterThan(girths[i - 1]);
-    // No clamp to scale against, so it has to stay bounded on its own.
-    expect(girths[girths.length - 1]).toBeLessThan(4 + 1e-9);
+    // No clamp to scale against, so it has to stay bounded on its own: past a hard pull,
+    // a thousand times the force adds almost nothing.
+    arrow.show(from, to, 1e9);
+    expect(tipOf(scene).girth - girths[girths.length - 1]).toBeLessThan(0.01 * girths[girths.length - 1]);
     arrow.dispose();
   });
 
