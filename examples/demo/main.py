@@ -39,7 +39,11 @@ HF_REPO = "ttktjmt/mjswan"
 # Its checkpoints mirror W&B runs. To add a task's:
 #   1. fetch each `model_<step>.pt` of its runs (`mjswan.source.wandb.fetch_checkpoints`);
 #   2. export each with `mjswan.mjlab.runner.export_checkpoint`, as `add_policy_wandb`
-#      does, so it keeps the metadata mjlab adds;
+#      does. That writes no metadata, so attach it as mjlab's task runners do on
+#      `save()`: `get_base_metadata(context.env.unwrapped, ...)` and
+#      `attach_metadata_to_onnx` from `mjlab.rl.exporter_utils`, plus the motion term's
+#      `anchor_body_name` and `body_names` for tracking. A task with no `joint_pos`
+#      action term (cartpole) has none;
 #   3. upload it as `checkpoints/<task id, lower-cased>/model_<step>.onnx`.
 
 # Project A: mjlab Tasks
@@ -195,7 +199,8 @@ def _add_mjlab_tasks(builder: mjswan.Builder) -> None:
         if viewer_cfg := TASK_VIEWER_CONFIG_MAP.get(task_id):
             scene.set_viewer(viewer_cfg)
         # Only the files are named here: the MDP and the action order come from
-        # `env_cfg`, the rest pose from the metadata mjlab bakes into each `.onnx`.
+        # `env_cfg`, the rest pose from each `.onnx`'s mjlab metadata, else from the
+        # model's keyframe (cartpole's exports carry none).
         scene.add_policy_hf(HF_REPO, filename=_checkpoints_for(task_id, repo_onnx))
 
     _add_tracking_scene(project, repo_onnx)
