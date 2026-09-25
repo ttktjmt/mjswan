@@ -37,19 +37,42 @@ shortcuts.
   `add_project_mjlab()`, beside their `_wandb` counterparts. The two sources are not
   symmetric and the code says so: a W&B run holds *training state*, so `add_policy_wandb`
   rebuilds a live mjlab env and converts every `model_*.pt` with torch; a Hub repository
-  holds the *published artifact*, so `add_policy_hf` downloads the `.onnx` and stops:
-  neither mjlab nor torch is needed, and `task_id` is optional. `huggingface_hub` is the
-  one dependency, in its own `hf` extra rather than `examples`, so `pip install
-  mjswan[hf]` is the whole light path. With no filename given, `policy.onnx` then
-  `final.onnx` then the repository's single `.onnx`; several unnamed candidates raise
-  rather than pick one.
+  holds the *published artifact*, so `add_policy_hf` downloads the `.onnx` and stops: no
+  checkpoint is converted, so torch is not needed for that, and `task_id` is optional.
+  `huggingface_hub` is the download's one dependency, in its own `hf` extra rather than
+  `examples`; a policy with MDP terms to trace still needs `mjswan[mjlab]`, as it does
+  from any source. With no filename given, `policy.onnx` then `final.onnx` then the
+  repository's single `.onnx`; several unnamed candidates raise rather than pick one. A
+  generic stem such as `policy` is named after its directory (`walk/policy.onnx` is
+  `walk`, passing over folders such as `exported/`), else after the repository.
+
+  What the caller does not pass is filled the way mjlab has it. mjlab's actions are its
+  action terms', one after another, each in the model's **joint** order:
+  `JointPositionAction` resolves `actuator_names` through
+  `Entity.find_joints_by_actuator_names`, which keeps joint order, and on the Unitree G1
+  that is not the actuator block's. So `policy_joint_names` come from the task's own
+  action terms whenever the scene or `env_cfg` has them, and from the export's metadata
+  otherwise (mjlab attaches it from its velocity, manipulation and tracking runners only,
+  so a cartpole checkpoint has none). The metadata lists `robot.joint_names`, so a joint
+  the model does not actuate drops out (mjlab's YAM has eight against seven actions, two
+  fingers ganged into one gripper), and the joint-position term's scale, which mjlab
+  writes once per action, lines up with what remains. It cannot say where a second
+  action term's actions go, so a task with several needs its env config, and metadata
+  describing a different robot warns and fills nothing. `default_joint_pos` is looked up
+  by joint name, in the metadata and then in the scene model's first keyframe, which is
+  mjlab's `init_state`. When nothing names a policy's joints it warns rather than return
+  a policy that drives nothing; one with no joint action term, or a `config_path`
+  sidecar that may carry the names, is left alone.
 - **An mjlab export describes itself, and mjswan now reads it**: `mjlab/onnx_meta.py`
   parses the `metadata_props` mjlab bakes into an exported policy, so `add_policy_hf`
   takes `policy_joint_names`, `default_joint_pos` and the joint-position action term from
-  the file instead of asking for them again, where the scene does not already say (see
-  Changed). Observation terms are never reconstructed; the metadata names them but does
-  not carry the functions mjswan traces. Reading needs no mjlab installed, the encoding
-  being plain strings.
+  the file where the scene and its `env_cfg` do not already say (see above). Observation
+  terms are never reconstructed; the metadata names them but does not carry the functions
+  mjswan traces. Reading needs no mjlab installed, the encoding being plain strings.
+- **`SceneHandle.actuated_joint_names()`** returns the joint each actuator drives, in
+  actuator order. Useful for seeing what a model actuates; not `policy_joint_names`
+  without thought, since that wants the order the network's actions come out in and an
+  mjlab policy's is joint order.
 - **License files travel with the build**
   ([ADR 0007](docs/adr/0007-license-files-in-the-build.md)): `<project-id>/LICENSE` /
   `NOTICE` for the work, via `Builder(license=, copyright=)`, `add_project(license=…)` or
@@ -70,8 +93,8 @@ shortcuts.
   command's reset graph; a traced command names its class. Every written `.onnx` also
   carries `producer_name = "mjswan"`, a `doc_string` and `metadata_props`
   `mjswan.kind` / `mjswan.term` / `mjswan.func`, so Netron's Model Properties name the
-  source. Additive — `format` stays 1 and the runtime ignores the keys; they exist for
-  readers of the document, mjswan Cloud's inspector first.
+  source. Additive: the runtime ignores the keys, which exist for readers of the
+  document, mjswan Cloud's inspector first.
 - **The build output is a simulation document**
   ([ADR 0006](docs/adr/0006-swn-simulation-document.md)): one `manifest.json` at the
   root — `{format, version, uses_custom_js, plugins?, projects}`, every key `snake_case`
@@ -148,7 +171,7 @@ shortcuts.
 - **WebXR hand tracking as bodies in the simulation** (`createEngine({ handTracking:
   true })`, or `?hands=1` on the bundled app). A headset can bat a scene's objects around,
   rest one on an open palm, and pinch to pick one up: a 2 kg box, lifted by friction
-  alone. Opt-in: the bodies are added to every scene the build loads, at about 1.6x per
+  alone. Opt-in: the bodies are added to every scene loaded from MJCF, at about 1.6x per
   physics step.
 - **Thumbstick locomotion in VR.** The camera and the tracked hands now hang off an XR
   rig, which is what a session moves: the left stick slides the viewer along its heading,
@@ -250,7 +273,7 @@ shortcuts.
   [google-deepmind/mujoco#3616](https://github.com/google-deepmind/mujoco/pull/3616).
   That name used to resolve to `@ttktjmt/mujoco@3.7.0`, aliased by an
   unused `mjswan` devDependency, while the declared `@mujoco/mujoco` was imported
-  nowhere, so the browser ran MuJoCo 3.7.0 on what the Python side compiled with 3.11.0;
+  nowhere, so the browser ran MuJoCo 3.7.0 on what the Python side compiled with 3.8.1;
   a vitest case now checks what is installed. mjlab 1.6 calls
   `CommandTerm._update_command(env_ids)` and checks the signature, so a `trace_override`
   that replaces the method takes `env_ids` too.
@@ -273,32 +296,6 @@ shortcuts.
   co-located wasm source under it: an upstream bump that crosses it would otherwise
   build green and 404 at runtime.
 
-- **`add_policy_hf` maps a checkpoint's actions the way mjlab orders them.** mjlab's
-  actions are its action terms', one after another, each in the model's **joint** order:
-  `JointPositionAction` resolves `actuator_names` through
-  `Entity.find_joints_by_actuator_names`, which narrows `joint_names` and keeps their
-  order. So `policy_joint_names` now comes from the task's own action terms whenever the
-  scene or `env_cfg` has them, and from the export's metadata otherwise. The old guard
-  wanted that metadata to equal the model's actuator block, name for name and in the same
-  order, and left 42 of the demo's policies with no `policy_joint_names` at all, which is
-  what the runtime resolves an actuator through. The actuator block is not the action
-  order either: on the Unitree G1 the two differ.
-
-  The metadata is used when it lists every joint the scene's model actuates. It lists
-  `robot.joint_names`, so a joint the model does not actuate simply drops out (mjlab's YAM
-  has eight against seven actions, two fingers ganged into one gripper), and the
-  joint-position term's scale, which mjlab writes once per action, lines up with what
-  remains. It cannot say where a second action term's actions go, so a task with several
-  needs its env config, and a metadata describing a different robot still warns and fills
-  nothing. `default_joint_pos` is looked up by joint name, in the metadata and then in the
-  scene model's first keyframe, which is mjlab's `init_state`, so it follows whichever
-  names won.
-
-- **`SceneHandle.actuated_joint_names()`** returns the joint each actuator drives, in
-  actuator order. Useful for seeing what a model actuates; not `policy_joint_names`
-  without thought, since that wants the order the network's actions come out in and an
-  mjlab policy's is joint order.
-
 - **Two `add_policy_*` calls on one scene no longer both claim the default.** Each call
   marked its own highest-step checkpoint as the one the scene opens on, which the build
   then refused for having several (ADR 0006 §4). A scene carrying two differently
@@ -310,9 +307,7 @@ shortcuts.
   display name between them, and the viewer's select refuses a repeated option, so the
   page rendered nothing. The second is now named `<name>_1` as its id becomes `<id>_1`,
   with the same warning, so every name the viewer lists is distinct and still spells its
-  `?scene=` / `?policy=` value (ADR 0006 §4). `add_policy_hf` also names a `policy.onnx`
-  after its directory (`walk/policy.onnx` is `walk`, passing over folders such as
-  `exported/`), which is where two files from one repository collided.
+  `?scene=` / `?policy=` value (ADR 0006 §4).
 
 - **`add_policy_wandb` checks its extras when called.** With `only_latest=False` it
   converts at build time, so a missing `wandb`, `mjlab` or `torch` surfaced only after the
@@ -413,8 +408,9 @@ shortcuts.
     to install: the promise above, held by an install that has none of them.
 
 - **`import mjswan` no longer imports `onnx`**, only `mujoco` and `numpy`: about 190 ms
-  down to 125 ms, 153 fewer modules. Where mjlab is installed it also imports mjlab and
-  torch, whose `sample_uniform` the traced command rewrites need as a module global.
+  down to 125 ms, 153 fewer modules. It still imports torch where torch is installed, and
+  mjlab where that is too, since the traced command and event rewrites need mjlab's
+  `sample_uniform` as a module global.
   `policy.py`, `scene.py` and `mjlab/runner.py` annotate an `onnx.ModelProto` but never
   touch the module (they read `model.graph` duck-typed), so the import moves under
   `TYPE_CHECKING` and into the one function that loads a file. Opening a MuJoCo model in
@@ -431,8 +427,8 @@ shortcuts.
   and `envs/mdp/`. The public API in `mjswan/__init__.py` is unchanged; module paths are
   not: `mjswan.command` → `mjswan.managers.command_manager` (the configs,
   `CommandBinding`, `register_command`) and `mjswan.envs.mdp.commands` (`ui_command`,
-  `velocity_command`); `mjswan.trace_env` → `mjswan.mjlab.env`; `mjswan.mjlab_onnx_meta`
-  → `mjswan.mjlab.onnx_meta`; `mjswan.wandb_io` / `hf_io` → `mjswan.source.wandb` / `hf`;
+  `velocity_command`); `mjswan.trace_env` → `mjswan.mjlab.env`; `mjswan.wandb_io` →
+  `mjswan.source.wandb`, and `mjswan.mjlab.runner` for the `.pt` export;
   `mjswan.publish` / `auth` → `mjswan.cloud.publish` / `auth`; `mjswan.licenses` →
   `mjswan.license`; `mjswan.document` is a package; `mjswan._cli` → `mjswan.cli`;
   `ActionTermCfg` is defined in `mjswan.managers.action_manager`, as mjlab's is. The
@@ -499,9 +495,6 @@ shortcuts.
   engine a policy config that is the manifest entry merged with its MDP — slot tables at
   the top level, events included. `SceneInput` lost `events` and `graphs`; `PolicyInput.graphs`
   carries the whole MDP's graphs, events included, keyed by scene-relative path.
-- Every script under `examples/` is restructured for the document layout: bare groups for
-  single-input policies, the Go2 slot tables spelled out in `examples/demo/main.py`, and
-  the demo sidecars stripped of their `onnx` blocks.
 - **Methods**
   - `ProjectHandle.add_mjlab_scene` → `ProjectHandle.add_scene_mjlab`
   - `SceneHandle.add_policy_from_wandb` → `SceneHandle.add_policy_wandb`
@@ -525,9 +518,9 @@ shortcuts.
   - `mjswan.viewer_config` → `mjswan.viewer`
   - `mjswan.wandb_utils` → `mjswan.wandb_io`
 - The built `dist/` no longer copies the unused `logo-color.svg` (only `logo.svg`).
-- mjlab is pinned exactly, now `mjlab==1.6.0` in the `mjlab` extra (was `>=1.3.0` in
-  `examples`), because the tracer reads mjlab's internals; a weekly CI parity sweep
-  catches upstream drift. The `examples` extra adds `onnxruntime`.
+- mjlab is pinned exactly, now `mjlab==1.6.0` in the `mjlab` extra (was `==1.5.3` in
+  `examples`, and `>=1.3.0` before that), because the tracer reads mjlab's internals; a
+  weekly CI parity sweep catches upstream drift. The `examples` extra adds `onnxruntime`.
 
 ### Removed
 
@@ -539,9 +532,9 @@ shortcuts.
   `ObsFunc`, `TermBinding`, `TermFunc`, `EventFunc`, `MjlabMdpBinding`,
   `CommandTermSpec`) and the module aliases `mjswan.viewer_config` / `mjswan.wandb_utils`.
   Use the spelled-out names.
-- The `main`, `simple`, `mjlab` and `serve` console scripts, which only launched a module
-  under `examples/`. `mjswan serve <dist-dir | document.swn>` replaces the last; run the
-  examples as modules.
+- The `main`, `simple` and `mjlab` console scripts, which only launched a module under
+  `examples/` (`mjswan demo main` and `mjswan demo simple` do the same), and `serve`,
+  which `mjswan serve <dist-dir | document.swn>` replaces.
 - **`mjswan demo mjlab`**, which ran `examples/mjlab/defaults/main.py`, the same tasks
   read from a W&B run instead of the Hub. That example moves to `mjswan_playground`, and
   with it the only demo needing a W&B login.
@@ -605,31 +598,6 @@ shortcuts.
   patterns are prefixed with the entity (`robot/…`) to match `policy_joint_names`, and
   the runtime reads each as `^(?:…)$`, so `robot/a|b` matched `robot/a` or a bare `b`. An
   alternation is now grouped: `robot/(?:a|b)`.
-
-- **Both cartpole scenes ran with no control at all.** mjlab attaches export metadata
-  from its velocity, manipulation and tracking runners only, and `get_base_metadata`
-  reads `scene["robot"]` and a `joint_pos` action term to build it. Cartpole's entity is
-  `cartpole` and its action term is `effort`, so its checkpoints carry none. The Hub path
-  had no other source for `policy_joint_names`, so it left them unset; the browser then
-  matched the term's joint patterns against an empty list, skipped the term, and wrote no
-  `ctrl`. The scene rendered and the cart never moved.
-
-  Only the two cartpole tasks are affected, and only since the demo moved from W&B to the
-  Hub in this release: `add_policy_wandb` read the names off the live action manager
-  rather than the file, which works for any task.
-
-  `add_policy_hf` now reads them off the task's own action terms, whose `actuator_names`
-  are joint patterns, resolved against the actuated joints in joint order (the order
-  `Entity.find_joints_by_actuator_names` produces, so the order the actions come out),
-  and the rest pose off the scene model's first keyframe, mjlab's `init_state`, rather
-  than leaving `use_default_offset` to add zeros. A list the network's actions cannot
-  drive is refused and reported rather than used.
-
-  And when even that comes up empty, `add_policy_hf` now says so rather than returning a
-  policy that drives nothing. That is the check that was missing: both halves of this
-  failed silently, the Python side by returning nothing and the browser by a
-  `console.warn` a release bundle strips. A policy with no joint action term is inert by
-  design and a `config_path` sidecar may still carry the names, so neither is reported.
 
 - **A license beside a model in the Hugging Face cache reaches the build.** License
   detection resolved each asset path, and the cache keeps every file in `blobs/` behind a
