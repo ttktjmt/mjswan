@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v5
@@ -25,6 +25,11 @@ jobs:
       - name: Install dependencies
         run: |
           pip install uv
+          # `[dev]` brings mjlab, which requires torch. mjswan only ever calls
+          # `torch.onnx.export` and `torch.load(map_location="cpu")`, so the CPU
+          # wheel is enough, and the default Linux wheel is the CUDA build.
+          uv pip install --system torch \
+            --index-url https://download.pytorch.org/whl/cpu
           uv pip install --system -e ".[dev]"
 
       # Runs L1/L2 tests only.
@@ -34,3 +39,26 @@ jobs:
       - name: Test with pytest
         run: |
           pytest -m "not slow" --tb=short -q
+
+  core:
+    # A bare `pip install mjswan`. The tests skip wherever an extra is installed;
+    # MJSWAN_CORE_ONLY turns that skip into a failure here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install mjswan without extras
+        run: |
+          pip install uv
+          uv pip install --system . pytest
+
+      - name: Test the core install
+        env:
+          MJSWAN_CORE_ONLY: "1"
+        run: |
+          pytest tests/test_core_install.py --tb=short -q

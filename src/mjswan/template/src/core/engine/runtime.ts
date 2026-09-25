@@ -7,6 +7,7 @@ import {
   getPosition,
   getQuaternion,
   loadSceneFromURL,
+  type ModelFormat,
 } from '../scene/scene';
 import { loadMjzFile } from '../utils/mjzLoader';
 import { type Bytes } from '../utils/bytes';
@@ -41,7 +42,7 @@ import {
 import { applyResetTerms } from './resetChain';
 import { yieldToBrowser } from './yieldToBrowser';
 import { TerminationManager } from '../termination/TerminationManager';
-import * as ort from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web/wasm';
 import { PolicyRunner } from '../policy/PolicyRunner';
 import { OnnxModule } from '../policy/OnnxModule';
 import { PolicyStateBuilder } from '../policy/PolicyStateBuilder';
@@ -136,6 +137,8 @@ export type ResolvedSplat = {
 /** A full scene ready to build: model bytes plus resolved policy/splat/config. */
 export type ResolvedScene = {
   model: ArrayBuffer;
+  /** `mjz` unless the build wrote the scene from `add_scene(model=...)`. */
+  modelFormat?: ModelFormat;
   policy?: ResolvedPolicy | null;
   splat?: ResolvedSplat | null;
   viewer?: ViewerConfig | null;
@@ -447,7 +450,7 @@ export class mjswanRuntime {
     await this.stop();
     this.scenePlugins = scene.plugins ?? {};
     this.terrainData = scene.terrainData ?? null;
-    // Needed before `buildSceneFromMjz`, which derives `decimation` from it.
+    // Needed before `buildSceneFromModel`, which derives `decimation` from it.
     this.controlDt = scene.controlDt && scene.controlDt > 0 ? scene.controlDt : null;
     // Reseed so two loads of the same scene draw the same randomness.
     this.termRng = new SeededRng(this.termSeed);
@@ -469,14 +472,13 @@ export class mjswanRuntime {
     this.initializeCommands();
 
     // Clear current references before loading the new scene.
-    this.mjModel = null;
-    this.mjData = null;
+    this.releaseModel();
     this.bodies = null;
     this.lights = [];
     this.mujocoRoot = null;
     this.dynamicBodyIds = null;
 
-    await this.buildSceneFromMjz(scene.model);
+    await this.buildSceneFromModel(scene.model, scene.modelFormat ?? 'mjz');
     // A fresh model: nothing snapshotted yet, nothing to restore.
     if (this.mjModel) this.modelFieldDefaults = new ModelFieldDefaults(this.mjModel);
 
@@ -555,7 +557,7 @@ export class mjswanRuntime {
     term.setReferenceVisible(visible);
   }
 
-  private async buildScene(xmlPath: string): Promise<void> {
+  private async buildScene(modelPath: string): Promise<void> {
     if (this.loadingScene) {
       await this.loadingScene;
     }
@@ -566,15 +568,11 @@ export class mjswanRuntime {
         this.scene.remove(existingRoot);
       }
 
-      const parent = {
-        mjModel: this.mjModel,
-        mjData: this.mjData,
-        scene: this.scene,
-      };
+      const parent = { scene: this.scene };
 
       [this.mjModel, this.mjData, this.bodies, this.lights] = await loadSceneFromURL(
         this.mujoco,
-        xmlPath,
+        modelPath,
         parent
       );
 
@@ -634,14 +632,30 @@ export class mjswanRuntime {
     await this.loadingScene;
   }
 
+  /** Frees the model on the WASM heap, which nothing else does. Call with the loop stopped. */
+  private releaseModel(): void {
+    this.mjData?.delete();
+    this.mjModel?.delete();
+    this.mjData = null;
+    this.mjModel = null;
+  }
+
   // No scene cache to reclaim on OOM, so surface it as WasmMemoryLimitError directly.
-  private async buildSceneFromMjz(model: ArrayBuffer): Promise<void> {
+  private async buildSceneFromModel(model: ArrayBuffer, format: ModelFormat): Promise<void> {
     try {
-      const xmlPath = await loadMjzFile(this.mujoco, model);
-      if (this.handMocap) {
-        injectHandMocapFile(this.mujoco, `/working/${xmlPath}`);
+      let modelPath: string;
+      if (format === 'mjb') {
+        // `loadSceneFromURL` reads a `.mjb` path with `mj_loadModel`. A compiled model has
+        // no XML to add the XR hands to, so they stay off (`HandMocap.bind` warns).
+        modelPath = 'scene.mjb';
+        this.mujoco.FS.writeFile(`/working/${modelPath}`, new Uint8Array(model));
+      } else {
+        modelPath = await loadMjzFile(this.mujoco, model);
+        if (this.handMocap) {
+          injectHandMocapFile(this.mujoco, `/working/${modelPath}`);
+        }
       }
-      await this.buildScene(xmlPath);
+      await this.buildScene(modelPath);
     } catch (error) {
       this.loadingScene = null;
       if (isWasmOom(error)) {
@@ -1873,8 +1887,7 @@ export class mjswanRuntime {
       this.dragStateManager = null;
     }
 
-    this.mjData = null;
-    this.mjModel = null;
+    this.releaseModel();
 
     // NOTE: Do NOT dispose Three.js resources here as they may be cached The cache manager
     // will handle their disposal when evicting Just clear references

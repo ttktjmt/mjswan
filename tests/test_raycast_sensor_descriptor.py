@@ -11,7 +11,7 @@ pytest.importorskip("torch")
 
 import torch  # noqa: E402
 
-from mjswan._onnx_build import raycast_sensor_descriptor  # noqa: E402
+from mjswan.build.mdp import raycast_sensor_descriptor  # noqa: E402
 
 
 class _Cfg:

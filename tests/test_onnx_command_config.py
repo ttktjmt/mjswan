@@ -15,11 +15,11 @@ import pytest
 # Pure-Python serialization, but `mjswan.compile` imports torch at load time.
 torch = pytest.importorskip("torch")
 
-from mjswan.compile import command_config, write_command_artifact  # noqa: E402
-from mjswan.compile.tracer import (  # noqa: E402
+from mjswan.build.mdp import command_config, write_command_artifact  # noqa: E402
+from mjswan.compile.command import CommandExport  # noqa: E402
+from mjswan.compile.slot import (  # noqa: E402
     _COMMAND_NS,
     _SENSOR_NS,
-    CommandExport,
     _is_dynamic_field,
     slot_to_json,
 )
@@ -269,9 +269,9 @@ def test_the_export_filters_match_the_exporters_wording(monkeypatch):
     from being swallowed with the three that are safe. `catch_warnings` stops the
     process-wide install from leaking into the rest of the session.
     """
-    from mjswan.compile import tracer
+    from mjswan.compile import export as onnx_export
 
-    monkeypatch.setattr(tracer, "_EXPORT_FILTERS_INSTALLED", False)
+    monkeypatch.setattr(onnx_export, "_EXPORT_FILTERS_INSTALLED", False)
     vetted = [
         "ONNX Preprocess - Removing mutation from node aten::index_put_ on block "
         "input: 'value.1'. This changes graph semantics.",
@@ -289,7 +289,7 @@ def test_the_export_filters_match_the_exporters_wording(monkeypatch):
     ]
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        tracer._prepare_single_env_export(1)
+        onnx_export._prepare_single_env_export(1)
         for message in vetted + others:
             warnings.warn(message, UserWarning, stacklevel=1)
     assert [str(w.message) for w in caught] == others
@@ -297,7 +297,7 @@ def test_the_export_filters_match_the_exporters_wording(monkeypatch):
 
 def test_a_batched_trace_is_refused():
     """Silencing `len(env_ids)` is only sound while the baked row count is 1."""
-    from mjswan.compile.tracer import _prepare_single_env_export
+    from mjswan.compile.export import _prepare_single_env_export
 
     with pytest.raises(ValueError, match="num_envs=4"):
         _prepare_single_env_export(4)
@@ -307,8 +307,8 @@ def test_native_command_emits_a_traced_reset_graph(tmp_path):
     pytest.importorskip("mjlab")
     from rsi_body_fixture import rsi_joint_offset
 
-    from mjswan._onnx_build import serialize_command
-    from mjswan.command import CommandTermConfig, PendingResetTrace
+    from mjswan.build.mdp import serialize_command
+    from mjswan.managers.command_manager import CommandTermConfig, PendingResetTrace
 
     cfg = CommandTermConfig(
         term_name="TrackingCommand",
@@ -359,8 +359,8 @@ def test_element_bounds_broadcasts_mjlab_per_axis_ranges():
 
 
 def test_command_without_a_reset_trace_is_unchanged(tmp_path):
-    from mjswan._onnx_build import serialize_command
-    from mjswan.command import CommandTermConfig
+    from mjswan.build.mdp import serialize_command
+    from mjswan.managers.command_manager import CommandTermConfig
 
     cfg = CommandTermConfig(
         term_name="TrackingCommand", params={"sampling_mode": "start"}
@@ -424,7 +424,7 @@ def _reads_nothing(env, *, width=3):
 
 
 def test_untraceable_observation_fails_the_build():
-    from mjswan.compile.tracer import UntraceableTerm, trace_term
+    from mjswan.compile.term import UntraceableTerm, trace_term
 
     with pytest.raises(UntraceableTerm) as excinfo:
         trace_term(_reads_opaque_state, {}, _opaque_state_env(), name="contact_obs")
@@ -435,7 +435,7 @@ def test_untraceable_observation_fails_the_build():
 
 
 def test_term_reading_nothing_is_a_constant_not_untraceable():
-    from mjswan.compile.tracer import ConstantTerm, UntraceableTerm, trace_term
+    from mjswan.compile.term import ConstantTerm, UntraceableTerm, trace_term
 
     with pytest.raises(ConstantTerm) as excinfo:
         trace_term(_reads_nothing, {}, _opaque_state_env(), name="padding")
@@ -445,8 +445,8 @@ def test_term_reading_nothing_is_a_constant_not_untraceable():
 
 
 def test_serializer_bakes_a_constant_but_refuses_an_untraceable_term(tmp_path):
-    from mjswan._onnx_build import serialize_observation_term
-    from mjswan.compile.tracer import UntraceableTerm
+    from mjswan.build.mdp import serialize_observation_term
+    from mjswan.compile.term import UntraceableTerm
     from mjswan.managers.observation_manager import ObservationTermCfg
 
     env = _opaque_state_env()
@@ -473,7 +473,7 @@ def test_observation_binding_without_ts_src_fails_rather_than_dropping():
     nothing in the browser and the term goes missing from a bundle that reports
     itself complete — shortening the vector the policy was trained on.
     """
-    from mjswan._onnx_build import serialize_observation_term
+    from mjswan.build.mdp import serialize_observation_term
     from mjswan.envs.mdp.observations import ObservationBinding
     from mjswan.managers.observation_manager import ObservationTermCfg
 
@@ -490,7 +490,7 @@ def test_termination_binding_without_ts_src_fails_rather_than_dropping():
     and could not warn the way it does for a term whose graph failed to load. The
     episode then silently never checks a reset condition it is configured to have.
     """
-    from mjswan._onnx_build import serialize_terminations
+    from mjswan.build.mdp import serialize_terminations
     from mjswan.envs.mdp.terminations import TerminationBinding
     from mjswan.managers.termination_manager import TerminationTermCfg
 
@@ -505,7 +505,7 @@ def test_termination_binding_without_ts_src_fails_rather_than_dropping():
 
 def test_a_binding_with_ts_src_serializes(tmp_path):
     """The supported shape: a class the builder will inject."""
-    from mjswan._onnx_build import serialize_observation_term
+    from mjswan.build.mdp import serialize_observation_term
     from mjswan.envs.mdp.observations import ObservationBinding
     from mjswan.managers.observation_manager import ObservationTermCfg
 
@@ -525,7 +525,8 @@ def test_structured_sensor_fields_become_one_slot_each():
     tasks. Each field is its own slot now, so the arithmetic traces and the runtime
     is told exactly which readings to supply.
     """
-    from mjswan.compile.tracer import slot_to_json, trace_term
+    from mjswan.compile.slot import slot_to_json
+    from mjswan.compile.term import trace_term
 
     class _RayData:
         def __init__(self):
@@ -620,7 +621,7 @@ def time_out(env):
 
 def test_terminations_fuse_into_one_graph_with_one_lane_per_term(tmp_path):
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import FUSED_TERMINATION_KEY, serialize_terminations
+    from mjswan.build.mdp import FUSED_TERMINATION_KEY, serialize_terminations
     from mjswan.managers.termination_manager import TerminationTermCfg
 
     entries = serialize_terminations(
@@ -656,7 +657,7 @@ def test_terminations_fuse_into_one_graph_with_one_lane_per_term(tmp_path):
 def test_a_lone_traced_termination_is_not_fused(tmp_path):
     """Fusing one term buys no `ort.run()` and costs a wire shape."""
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import FUSED_TERMINATION_KEY, serialize_terminations
+    from mjswan.build.mdp import FUSED_TERMINATION_KEY, serialize_terminations
     from mjswan.managers.termination_manager import TerminationTermCfg
 
     entries = serialize_terminations(
@@ -678,7 +679,7 @@ def test_a_lone_traced_termination_is_not_fused(tmp_path):
 
 def test_time_out_is_native_by_name_and_never_traced(tmp_path):
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import serialize_terminations
+    from mjswan.build.mdp import serialize_terminations
     from mjswan.managers.termination_manager import TerminationTermCfg
 
     def time_out(env):
@@ -703,7 +704,7 @@ def _constant_false(env):
 @pytest.mark.parametrize("flagged", [True, False])
 def test_a_termination_reading_nothing_fails_the_build(tmp_path, flagged):
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import serialize_terminations
+    from mjswan.build.mdp import serialize_terminations
     from mjswan.managers.termination_manager import TerminationTermCfg
 
     with pytest.raises(ValueError, match="'deviation' reads no simulation state"):
@@ -717,7 +718,7 @@ def test_a_termination_reading_nothing_fails_the_build(tmp_path, flagged):
 def test_a_constant_termination_fails_the_fused_path_too(tmp_path):
     """Two terms take the fused path; the constant one must still be named."""
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import serialize_terminations
+    from mjswan.build.mdp import serialize_terminations
     from mjswan.managers.termination_manager import TerminationTermCfg
 
     with pytest.raises(ValueError, match="'deviation' reads no simulation state"):
@@ -733,7 +734,8 @@ def test_a_constant_termination_fails_the_fused_path_too(tmp_path):
 
 def test_discovery_refuses_an_env_read_the_tracer_does_not_serve():
     """The attribute exists on the real env, so forwarding it would bake a constant."""
-    from mjswan.compile.tracer import UnsupportedEnvRead, trace_term
+    from mjswan.compile.slot import UnsupportedEnvRead
+    from mjswan.compile.term import trace_term
 
     def reads_the_horizon(env):
         return env.scene["robot"].data.root_link_pos_w[:, 2] * env.max_episode_length_s
@@ -749,11 +751,8 @@ def test_fused_lanes_match_the_terms_run_individually(tmp_path):
     """The graph's lane *i* must be term *i* — a swap would be silent."""
     pytest.importorskip("mjlab")
     onnxruntime = pytest.importorskip("onnxruntime")
-    from mjswan.compile.tracer import (
-        GroupTermSpec,
-        read_slot,
-        trace_termination_group,
-    )
+    from mjswan.compile.group import GroupTermSpec, trace_termination_group
+    from mjswan.compile.slot import read_slot
 
     env = _term_env()
     specs = [
@@ -800,7 +799,7 @@ class _StatefulTerm:
         # Only `command` is resampled; `bias`/`latched` carry over untouched.
         self.command = self.bias + rand.reshape(1, -1)[:, :3]
 
-    def _update_command(self):
+    def _update_command(self, env_ids):
         pass
 
 
@@ -916,7 +915,7 @@ def test_a_command_terms_replay_env_does_not_forward_back_into_the_term():
     forwarding at the term makes `num_envs` recurse until the stack dies. Only the
     slow command-parity suite caught this, which is too late to be useful.
     """
-    from mjswan.compile.tracer import _EventReplayEnv
+    from mjswan.compile.replay import _EventReplayEnv
 
     class _RealEnv:
         num_envs = 4

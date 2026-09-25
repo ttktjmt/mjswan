@@ -7,5 +7,6 @@ interface Window {
     running?: boolean;
     nonBlank?: boolean;
     luminanceRange?: [number, number];
+    termSeed?: number;
   };
 }

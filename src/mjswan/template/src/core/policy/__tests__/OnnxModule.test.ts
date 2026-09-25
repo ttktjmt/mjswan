@@ -1,8 +1,8 @@
 /**
- * The provider choice in `OnnxModule.init()`: WebGPU first, plus the session-creation
- * fallback ORT does not perform itself.
+ * The provider choice in `OnnxModule.init()`: wasm, the only backend the bundled ORT
+ * build carries. `../../onnx/__tests__/ortRuntimeFiles.test.ts` pins that build.
  */
-import * as ort from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web/wasm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { OnnxModule } from '../OnnxModule';
@@ -19,27 +19,14 @@ const providersOf = (call: unknown[]): unknown =>
 describe('OnnxModule.init', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('asks for WebGPU first and lets ORT settle on wasm where there is none', async () => {
+  it('asks for wasm, the one backend the shipped build registers', async () => {
     const create = vi.spyOn(ort.InferenceSession, 'create').mockResolvedValue(fakeSession);
     await new OnnxModule(new ArrayBuffer(8)).init();
     expect(create).toHaveBeenCalledTimes(1);
-    expect(providersOf(create.mock.calls[0])).toEqual(['webgpu', 'wasm']);
+    expect(providersOf(create.mock.calls[0])).toEqual(['wasm']);
   });
 
-  it('retries the session on wasm when WebGPU is present but fails at creation', async () => {
-    const create = vi
-      .spyOn(ort.InferenceSession, 'create')
-      .mockRejectedValueOnce(new Error('WebGPU device lost'))
-      .mockResolvedValueOnce(fakeSession);
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await new OnnxModule(new ArrayBuffer(8)).init();
-    expect(create).toHaveBeenCalledTimes(2);
-    expect(providersOf(create.mock.calls[1])).toEqual(['wasm']);
-    expect(warn).toHaveBeenCalledOnce();
-  });
-
-  it('surfaces the second error, not a WebGPU warning, when wasm fails as well', async () => {
-    // Both attempts failing means the model is at fault; the warning would mislead.
+  it('surfaces a creation failure instead of retrying, since there is nothing to fall back to', async () => {
     vi.spyOn(ort.InferenceSession, 'create').mockRejectedValue(new Error('bad model'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await expect(new OnnxModule(new ArrayBuffer(8)).init()).rejects.toThrow('bad model');

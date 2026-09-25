@@ -22,6 +22,7 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import types
 from typing import Any
 
 import pytest
@@ -48,15 +49,43 @@ COMMAND_TASKS = [
 ]
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _registrations() -> None:
-    """`LiftingCommandCfg`'s traced body lives author-side; load it before resolving.
+def _lift_update_command(self: Any, env_ids: Any = None) -> None:
+    """``LiftingCommand._update_command`` without its live-sim refresh.
 
-    Without it the adapter raises for an unregistered class — the footgun that cost
-    `g1_spinkick` its RSI jitter. `UniformVelocityCommandCfg` needs no import: mjswan
-    binds that one itself.
+    mjlab forwards the sim there after a timer-expiry teleport, which the tracer
+    refuses. The command is ``_resample_command``'s alone, so dropping the refresh
+    changes no number.
     """
-    pytest.importorskip("examples.mjlab.defaults.commands")
+    del env_ids
+
+
+def _bind_lift_override(term: Any) -> None:
+    term._update_command = types.MethodType(_lift_update_command, term)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _registrations():
+    """Register `LiftingCommandCfg` as `examples/demo/main.py` does.
+
+    mjswan binds `UniformVelocityCommandCfg` itself, but no class only one task uses.
+    """
+    from mjswan import CommandBinding, register_command
+    from mjswan.managers.command_manager import _custom_registry
+
+    previous = _custom_registry.get("LiftingCommandCfg")
+    register_command(
+        "LiftingCommandCfg",
+        CommandBinding(
+            state_fields=["target_pos"],
+            command_field="target_pos",
+            trace_override=_bind_lift_override,
+        ),
+    )
+    yield
+    if previous is None:
+        _custom_registry.pop("LiftingCommandCfg", None)
+    else:
+        _custom_registry["LiftingCommandCfg"] = previous
 
 
 def _traced_command(task_id: str, command_name: str) -> tuple[Any, Any]:
@@ -64,7 +93,7 @@ def _traced_command(task_id: str, command_name: str) -> tuple[Any, Any]:
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.tasks.registry import load_env_cfg
 
-    from mjswan.adapters.mjlab_adapter import _adapt_command_cfg
+    from mjswan.mjlab.command import _adapt_command_cfg
 
     cfg = load_env_cfg(task_id, play=True)
     cfg.scene.num_envs = 1

@@ -16,8 +16,8 @@ on:
   pull_request:
     paths:
       - "src/mjswan/compile/**"
-      - "src/mjswan/_onnx_build.py"
-      - "src/mjswan/trace_env.py"
+      - "src/mjswan/build/mdp/**"
+      - "src/mjswan/mjlab/env.py"
       - "tests/test_onnx_*.py"
       - "uv.lock"
       - ".github/workflows/parity.yml"
@@ -42,6 +42,9 @@ jobs:
       - name: Install dependencies
         run: |
           pip install uv
+          # See pytest.yml: the CPU torch wheel is all mjswan asks of torch.
+          uv pip install --system torch \
+            --index-url https://download.pytorch.org/whl/cpu
           uv pip install --system -e ".[dev,examples]"
 
       - name: Cache warp kernels

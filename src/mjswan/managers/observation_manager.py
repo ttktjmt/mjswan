@@ -104,14 +104,14 @@ class ObservationTermCfg:
         """Serialize an ``ObservationBinding`` term.
 
         A plain-callable term needs a live env this method has no access to; the Builder
-        calls ``mjswan._onnx_build.serialize_observation_group`` for those.
+        calls ``mjswan.build.mdp.serialize_observation_group`` for those.
         """
         if isinstance(self.func, ObservationBinding):
             return self._to_dict_legacy()
         raise TypeError(
             f"ObservationTermCfg.to_dict() cannot serialize a plain callable "
             f"func ({self.func!r}) — it must be traced to ONNX against a live "
-            f"env. Use mjswan._onnx_build.serialize_observation_group(group, "
+            f"env. Use mjswan.build.mdp.serialize_observation_group(group, "
             f"env, out_dir) instead (the Builder does this automatically)."
         )
 

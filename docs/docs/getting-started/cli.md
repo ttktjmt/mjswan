@@ -15,14 +15,12 @@ mjswan --help
 | [`mjswan view`](#mjswan-view) | Build and launch a viewer for a MuJoCo XML / MJCF file |
 | [`mjswan serve`](#mjswan-serve) | Serve a pre-built `dist/` directory, or a `.swn` document |
 | [`mjswan new`](#mjswan-new) | Scaffold a new project from a template |
-| [`mjswan demo`](#mjswan-demo) | Run a built-in demo |
+| [`mjswan demo`](#mjswan-demo) | List the built-in demos, or run one |
 | [`mjswan info`](#mjswan-info) | Show a tree of projects / scenes / MDPs / policies and asset sizes, for a `dist/` or a `.swn` |
 | [`mjswan publish`](#mjswan-publish) | Upload a built `dist/` or a `.swn` to mjswan Cloud |
 | [`mjswan login`](#mjswan-login-whoami-logout) | Sign in to mjswan Cloud via GitHub |
 | [`mjswan whoami`](#mjswan-login-whoami-logout) | Show the signed-in account |
 | [`mjswan logout`](#mjswan-login-whoami-logout) | Remove the stored session |
-
-The legacy entry points `main`, `simple`, `mjlab`, and `serve <dist-dir>` are kept for backward compatibility — prefer the subcommands above for new scripts.
 
 ## `mjswan view`
 
@@ -74,8 +72,8 @@ Scaffold a new mjswan project in a directory named `<name>`.
 | Template | What you get |
 |---|---|
 | `hello-world` (default) | A `main.py` that builds a single scene from `model.xml` and a minimal `model.xml`. |
-| `policy` | The hello-world template plus an `add_policy(name="Policy", policy=...)` call expecting a `policy.onnx` file alongside `main.py`. |
-| `mjlab` | A one-line `mjswan.Builder.from_mjlab("go2_flat").build()` script. Requires [`mjlab`](../guides/mjlab.md) installed. |
+| `policy` | The hello-world template plus an `add_policy(name="Policy", policy=...)` call expecting a `policy.onnx` file alongside `main.py`, and the scene's `control_dt` set to `0.02` s: change it to the rate your policy was trained at, and give `add_policy` the observations and actions your network uses ([policy config](../guides/policy-config.md)). |
+| `mjlab` | A one-line `mjswan.Builder.from_mjlab("go2_flat").build()` script, the task id a placeholder to replace. Needs the [`mjlab`](../guides/mjlab.md) extra (`pip install 'mjswan[mjlab]'`). |
 
 After scaffolding:
 
@@ -87,18 +85,23 @@ python main.py
 ## `mjswan demo`
 
 ```bash
-mjswan demo [name] [--list]
+mjswan demo [name]
 ```
 
-Run one of the bundled demos under `examples/`.
+With no name it lists the bundled demos; with one it runs that demo. They live under
+`examples/`, which the wheel does not ship, so this needs mjswan installed in editable
+mode from a clone (`uv sync`, or `pip install -e .`): the command runs the checkout mjswan
+was installed from, whatever the current directory. They fetch what they show (from
+mjlab, from the Hugging Face Hub, or from upstream): Hub downloads are cached for later
+runs, while `mujoco` fetches MuJoCo's gallery at the `3.11.0` tag again each time.
 
-| Demo | Source |
-|---|---|
-| `simple` (default) | `examples/demo/simple.py` |
-| `main` | `examples/demo/main.py` (the demo deployed to GitHub Pages) |
-| `mjlab` | `examples/mjlab/defaults/main.py` |
+| Demo | Source | Needs |
+|---|---|---|
+| `main` | `examples/demo/main.py`, the demo deployed to GitHub Pages | `mjswan[hf,mjlab]` |
+| `simple` | `examples/demo/simple.py`, one mjlab task, one checkpoint | `mjswan[hf,mjlab]` |
+| `mujoco` | `examples/demo/mujoco_models.py`, MuJoCo's `<replicate>` gallery, no policy | core only |
 
-Use `mjswan demo --list` to enumerate them.
+The bare command lists rather than running one, because each of these downloads.
 
 ## `mjswan info`
 
@@ -114,12 +117,12 @@ GitHub Pages 1 GB limit.
 Example output:
 
 ```
-mjswan app — dist  v0.9.3, format 1
-└── My Robots  [my_robots]
-    └── G1  g1/scene.mjz  (3.2 MB)
-        ├── MDP: mdp_0  3 graph(s)
-        └── Policy: Locomotion  mdp=mdp_0  (1.1 MB)
-Total scene+policy assets: 4.3 MB
+mjswan app: dist  v0.11.0, format 2
+├── My Robots  [my_robots]
+│   └── G1  g1/scene.mjz  (3.2 MB)
+│       ├── MDP: mdp_0  3 graph(s)
+│       └── Policy: Locomotion  mdp=mdp_0  (1.1 MB)
+└── Total scene+policy assets: 4.3 MB
 ```
 
 ## `mjswan publish`

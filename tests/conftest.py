@@ -21,8 +21,10 @@ def build_manifest(monkeypatch):
     """
 
     def build(builder, out: Path) -> dict:
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr(
+            "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+        )
         builder._save_web(out)
         return json.loads((out / "manifest.json").read_text())
 

@@ -13,19 +13,12 @@ from typing import Any, Callable, Collection
 import numpy as np
 import torch
 
+from .event import trace_event_term
+from .native import is_native_termination, native_observation_entry
+from .record import WriteCaptures, _EventCaptureEnv, _flatten_captures
 from .rng import DrawRecorder
-from .tracer import (
-    TermExport,
-    WriteCaptures,
-    _EventCaptureEnv,
-    _flatten_captures,
-    is_native_termination,
-    native_observation_entry,
-    read_slot,
-    slot_label,
-    trace_event_term,
-    trace_term,
-)
+from .slot import read_slot, slot_label
+from .term import TermExport, trace_term
 
 
 @dataclass
@@ -319,14 +312,14 @@ def run_command_parity(
     """
     import onnxruntime as ort
 
-    from .tracer import (
+    from .command import (
         _entity_attrs,
-        _flatten_captures,
         _RecordCommand,
         _restore_state,
         _snapshot_state,
         trace_command_term,
     )
+    from .record import _flatten_captures
 
     tr = TermReport(name=name, kind="command", representation="onnx")
     export = trace_command_term(
@@ -357,7 +350,7 @@ def run_command_parity(
         with _RecordCommand(term, entity_attr_names, entity_name) as rec_env:
             with DrawRecorder(term._resample_command) as rec:
                 term._resample_command(env_ids)
-                term._update_command()
+                term._update_command(None)
             ref_writes = _flatten_captures(dict(rec_env.captures))[1]
         ref_next = {f: getattr(term, f).detach().clone() for f in state_fields}
         _restore_state(term, snap)
@@ -380,7 +373,7 @@ def run_command_parity(
     prev = {f: getattr(term, f).detach().clone() for f in state_fields}
     dyn_feeds = _dyn_feeds()
     with _RecordCommand(term, entity_attr_names, entity_name):
-        term._update_command()
+        term._update_command(None)
     ref_false = {f: getattr(term, f).detach().clone() for f in state_fields}
     _restore_state(term, snap)
 

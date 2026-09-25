@@ -52,7 +52,8 @@ builder.build().launch()
 The shortest path to a policy in a browser, if you trained with
 [mjlab](../guides/mjlab.md). Every `model_*.pt` checkpoint in the W&B run is fetched,
 converted to ONNX, and attached; observations, actions, commands, terminations and the
-control rate all come from the task.
+control rate all come from the task, and the app opens on the highest-step checkpoint.
+Needs `pip install 'mjswan[wandb,mjlab]'`.
 
 ```python
 import mjswan
@@ -63,6 +64,39 @@ app = mjswan.Builder.from_mjlab(
 ).build()
 app.launch()
 ```
+
+## A policy published on the Hugging Face Hub
+
+Where a W&B run holds training state (which is why the call above needs mjlab and torch
+to convert it), a Hub repository holds the exported ONNX. So this path skips the
+conversion, but the scene and its MDP still come from the mjlab task:
+`pip install 'mjswan[hf,mjlab]'`.
+
+```python
+import mjswan
+
+app = mjswan.Builder.from_mjlab(
+    "Mjlab-Velocity-Flat-Unitree-G1",
+    hf_repo_id="<owner>/<name>",
+).build()
+app.launch()
+```
+
+On a scene of your own, `add_policy_hf` reads what mjlab baked into the file (the joint
+names, the rest pose and the action scale), so they need not be repeated here:
+
+```python
+scene.add_policy_hf("<owner>/<name>")
+```
+
+With no filename given it takes `policy.onnx`, then `final.onnx`, then the repository's
+single `.onnx`; pass `filename=` for anything else, or a list of them to add several
+policies at once. The metadata fills what the scene does not already say (on a scene
+from `add_scene_mjlab`, the task's action terms name the joints), and only where it
+lists every joint your scene's model actuates: a mismatch warns and fills nothing rather
+than misdriving the actuators. Observation terms are never reconstructed from it: the
+file names them but does not carry the functions mjswan traces, so `observations=` is
+still yours to supply (or the task's, on a scene from `add_scene_mjlab`).
 
 ## Policy with velocity command sliders
 
@@ -77,7 +111,7 @@ from mjswan.managers.observation_manager import (
     ObservationGroupCfg,
     ObservationTermCfg,
 )
-from mjswan.trace_env import build_single_entity_trace_env
+from mjswan.mjlab.env import build_single_entity_trace_env
 
 
 def build_spec() -> mujoco.MjSpec:
@@ -152,7 +186,8 @@ for name, path in [("Policy A", "policy_a.onnx"), ("Policy B", "policy_b.onnx")]
 ```
 
 The browser UI shows a selector for choosing between policies at runtime. Pass
-`default=True` to pick which one loads first.
+`default=True` to pick which one loads first; it also takes over from the highest-step
+checkpoint an `add_policy_wandb` or `add_policy_hf` call would open.
 
 ## Custom command inputs
 
@@ -185,7 +220,7 @@ scene.add_policy(
 )
 ```
 
-See [examples/tutorial/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/tutorial/minimum_policy.py){:target="_blank"} for a complete runnable version — a hand-built two-node ONNX policy, one self-authored observation, and a slider, in one file.
+See [examples/demo/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/minimum_policy.py){:target="_blank"} for a complete runnable version: a hand-built two-node ONNX policy, one self-authored observation, and a slider, in one file.
 
 ## Multiple projects
 
@@ -244,6 +279,27 @@ scene.add_splat(
 )
 ```
 
+## Gaussian Splat background (Hugging Face Hub)
+
+`add_splat_hf` downloads the `.spz` and bundles it, so the deployed app is as
+self-contained as a local one: the Hub is a build-time source, not a runtime
+dependency. Needs `pip install mjswan[hf]`.
+
+```python
+scene.add_splat_hf(
+    "<owner>/<name>",
+    "splats/street.spz",
+    scale=3.275,
+    z_offset=0.708,
+)
+```
+
+The splat is named after its file (`street`), or after the repository when the stem
+only names a role (`background.spz`); pass `name=` for anything else. The placement
+arguments describe how *this* capture lines up with *this* model, which no file on the
+Hub knows, so they stay yours to supply. `revision=` pins a branch, tag or commit;
+without it the build follows the repository's default branch.
+
 ## Multiple splats on one scene
 
 Add several splats to the same scene — the viewer shows a selector to switch between them at runtime.
@@ -279,12 +335,16 @@ scene.add_splat(
 ## Headless build (CI-friendly)
 
 `build()` writes `dist/` and returns; `launch()` is the blocking part. Gate it on an
-environment variable so the same script works locally and in CI — the convention the
-bundled examples follow:
+environment variable so the same script works locally and in CI, the convention
+`examples/demo/main.py` and `simple.py` follow. mjswan reads neither variable itself:
 
 ```python
 import os
 
+import mjswan
+
+builder = mjswan.Builder(base_path=os.environ.get("MJSWAN_BASE_PATH", "/"))
+...
 app = builder.build()
 if not os.environ.get("MJSWAN_NO_LAUNCH"):
     app.launch()

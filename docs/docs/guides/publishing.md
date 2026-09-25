@@ -20,7 +20,7 @@ simulation with its own pinned copy of the engine, loaded from a CDN.
 | Uploaded | Not uploaded |
 |---|---|
 | `manifest.json` | `index.html`, `logo.svg`, `robots.txt` |
-| `scene.mjz` / `scene.mjb` | the compiled JS/CSS bundle and its WASM (`assets/`) |
+| `scene.mjz` | the compiled JS/CSS bundle and its WASM (`assets/`) |
 | `policy/<policy-id>.onnx` | `_headers`, `coi-serviceworker.js` |
 | traced graphs (`mdp/<mdp-id>/{obs,term,command,event}/`) | |
 | `assets/<motion-id>.npz`, `assets/<splat-id>.spz`, `.ply` colliders | |
@@ -31,6 +31,9 @@ so a `.swn` written by `app.save_document()` publishes the same file set as the 
 it came from: `mjswan publish sim.swn`.
 
 Limits: 50 MB per file, 200 MB total, 64 files.
+
+Cloud takes `.mjz` scenes only, so `mjswan publish` refuses a build with a scene added
+as `add_scene(model=...)` (a `.mjb`). Add it with `spec=` to publish it.
 
 Before the first byte moves, `publish` prints every license file it will carry with the
 license it identifies, `demo/LICENSE (Apache-2.0)` or

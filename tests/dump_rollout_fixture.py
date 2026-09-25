@@ -95,11 +95,11 @@ def _termination_verdicts(env: Any, cfg: Any) -> dict[str, bool]:
     is under test here is whether the graph agrees with the term, so both sides
     must see the same state.
     """
-    from mjswan._onnx_build import _resolved_params
+    from mjswan.build.mdp.provenance import resolved_params
 
     verdicts: dict[str, bool] = {}
     for name, term_cfg in cfg.terminations.items():
-        params = _resolved_params(term_cfg.params, env)
+        params = resolved_params(term_cfg.params, env)
         value = term_cfg.func(env, **params)
         verdicts[name] = bool(value.reshape(-1)[0].item())
     return verdicts
@@ -165,8 +165,9 @@ def _dump_task(task_id: str, out_dir: Path) -> dict[str, Any]:
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.tasks.registry import load_env_cfg
 
-    from mjswan._onnx_build import serialize_observation_group, serialize_terminations
-    from mjswan.adapters.mjlab_adapter import _adapt_obs_group, _adapt_term_cfg
+    from mjswan.build.mdp import serialize_observation_group, serialize_terminations
+    from mjswan.mjlab.observation import _adapt_obs_group
+    from mjswan.mjlab.termination import _adapt_term_cfg
 
     cfg = load_env_cfg(task_id, play=True)
     cfg.scene.num_envs = 1

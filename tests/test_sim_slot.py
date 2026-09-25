@@ -25,15 +25,10 @@ import numpy as np  # noqa: E402
 import onnx  # noqa: E402
 import onnxruntime as ort  # noqa: E402
 
-from mjswan.compile.tracer import (  # noqa: E402
-    READER_FIELDS,
-    GroupTermSpec,
-    read_slot,
-    slots_json,
-    trace_observation_group,
-    trace_term,
-)
-from mjswan.trace_env import build_single_entity_trace_env  # noqa: E402
+from mjswan.compile.group import GroupTermSpec, trace_observation_group  # noqa: E402
+from mjswan.compile.slot import READER_FIELDS, read_slot, slots_json  # noqa: E402
+from mjswan.compile.term import trace_term  # noqa: E402
+from mjswan.mjlab.env import build_single_entity_trace_env  # noqa: E402
 
 MUSCLE_MODEL = """
 <mujoco>
@@ -204,7 +199,7 @@ class TestEnvSimData:
             np.testing.assert_allclose(_run(export, env), live, rtol=1e-6)
 
     def test_the_rest_of_sim_is_refused(self, env):
-        from mjswan.compile.tracer import UnsupportedEnvRead
+        from mjswan.compile.slot import UnsupportedEnvRead
 
         def reads_the_model(env):
             return env.scene["robot"].data.joint_pos * env.sim.mj_model.nq
@@ -213,7 +208,7 @@ class TestEnvSimData:
             trace_term(reads_the_model, {}, env, name="nq")
 
     def test_a_termination_reading_env_sim_data_is_traced(self, env, tmp_path):
-        from mjswan._onnx_build import serialize_terminations
+        from mjswan.build.mdp import serialize_terminations
         from mjswan.managers.termination_manager import TerminationTermCfg
 
         def deviation(env):

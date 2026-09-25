@@ -8,7 +8,7 @@ exclude = ["src/mjswan/template/.nodeenv", "src/mjswan/template/node_modules", "
 ignore-vcs = true
 
 [tool.hatch.version]
-path = "src/mjswan/__init__.py"
+path = "src/mjswan/_version.py"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -28,40 +28,52 @@ authors = [
 description = "Browser-based MuJoCo simulation with real-time policy control"
 readme = "README.md"
 license = { text="Apache-2.0" }
-# labmaze (transitive dep via myosuite -> dm-control) has no pre-built wheel for
-# Python 3.13+, forcing a Bazel source build that fails with Bazel 8.x (WORKSPACE
-# support removed). Pin to <3.13 until labmaze publishes a cp313 wheel.
-# https://github.com/google-deepmind/dm_control/issues/511
-requires-python = ">=3.10, <3.13"
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3 :: Only",
     "Typing :: Typed",
     "Topic :: Scientific/Engineering",
     "Natural Language :: English",
 ]
+# What turning a MuJoCo model into a browser app needs, whatever the assets came from.
+# Each asset source is an extra below: `wandb`, `hf`, `mjlab`.
 dependencies = [
-    "mujoco==3.8.1",
+    "mujoco==3.11.0",
     "nodeenv>=1.9.1",
     "onnx>=1.20.0",
     "rich>=13.0.0",
     "typer>=0.12.0",
-    "wandb>=0.23.1",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pyright>=1.1.407",
-    "pre-commit>=3.3.2",
-    # Pinned exactly, not floored. CI installs `.[dev]` fresh, so a floor resolves
+# --- Sources, one per backend (ADR 0008). Each is imported inside a function, so
+# `import mjswan` needs none of them.
+wandb = [
+    "wandb>=0.23.1",
+]
+hf = [
+    "huggingface-hub>=0.26.0",
+]
+# The PT->ONNX conversion path: `add_scene_mjlab`, `add_policy_wandb`'s checkpoint
+# branch, and term tracing.
+mjlab = [
+    "mjlab==1.6.0",
+    "torch>=2.9.1",
+]
+
+# --- Tooling: only what `make check` runs. The ruff workflow installs this alone, so
+# a source backend here would make the lint job download torch.
+check = [
+    # Pinned exactly, not floored. CI installs this fresh, so a floor resolves
     # to whatever ruff is newest that day — and a ruff release that stabilizes a
     # preview rule turns the lint job red with no change to this repo. That already
     # happened once: `PLR0917` (too many positional arguments) went stable in
@@ -72,34 +84,35 @@ dev = [
     # weekly, so a floor would let a release change what `make type` reports with no
     # change to this repo. Bump it deliberately.
     "ty==0.0.77",
-    "pytest>=9.0.2",
+    "pyright>=1.1.407",
 ]
+
+# What a contributor and the pytest workflow install: every source, or the tests that
+# `importorskip` one silently skip.
+dev = [
+    "mjswan[check,wandb,hf,mjlab]",
+    "pytest>=9.0.2",
+    "pre-commit>=3.3.2",
+]
+
+# What `examples/` needs. `wandb` is for `examples/colab/anymal_c_velocity.ipynb`,
+# which trains and reads back a run.
 examples = [
-    "mjlab==1.5.3",
-    "torch>=2.9.1",
+    "mjswan[wandb,hf,mjlab]",
     "onnxruntime>=1.21.0",
-    "robot-descriptions>=1.22.0",
-    "playground>=0.1.0",
-    "myosuite",
-    "gymnasium",
 ]
 
 [project.urls]
 "GitHub" = "https://github.com/ttktjmt/mjswan"
 
 [project.scripts]
-mjswan = "mjswan._cli:app"
-main = "mjswan._cli:main"
-simple = "mjswan._cli:simple"
-mjlab = "mjswan._cli:mjlab"
-serve = "mjswan._cli:serve"
+mjswan = "mjswan.cli:app"
 
 [tool.pyright]
 extraPaths = []
-# The package. `examples/` is deliberately out: those scripts are written
-# against third-party APIs (mjlab, myosuite, playground), and checking them meant walking
-# every one of those dependency graphs — minutes per run — for diagnostics about code that
-# is not shipped. `**/.dep` keeps a repo an example clones at run time out of any glob.
+# The package only: checking `examples/` means walking mjlab's and torch's dependency
+# graph (minutes per run) for code that is not shipped. `**/.dep` keeps a repo an
+# example clones at run time out of any glob.
 include = ["src/mjswan"]
 exclude = ["**/.dep", "**/node_modules", "**/dist", "./src/mjswan/template/.nodeenv", "./build"]
 # `from torch import arange` and its siblings: torch's stubs re-export without `as`,
@@ -158,14 +171,6 @@ exclude = [
 required-environments = [
     "sys_platform == 'darwin' and platform_machine == 'arm64'",
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
-]
-override-dependencies = [
-    "mujoco==3.10.0",
-    "mujoco-mjx==3.10.0",
-    "mujoco-warp>=3.10.0.3,<3.11",
-    # h5py 3.7.0 has no pre-built wheel for Python 3.12 / macOS arm64.
-    # Newer versions do, so override the version pinned by myosuite.
-    "h5py>=3.8.0",
 ]
 
 [tool.pytest.ini_options]

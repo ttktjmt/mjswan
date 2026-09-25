@@ -5,6 +5,7 @@ Tests the "contract" of the builder's hierarchical configuration API:
   Builder → ProjectHandle → SceneHandle → PolicyHandle
 """
 
+import contextlib
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -15,8 +16,9 @@ import pytest
 
 import mjswan
 from mjswan.builder import Builder
-from mjswan.command import CommandTermConfig, SliderConfig, ui_command
 from mjswan.envs.mdp.actions import JointPositionActionCfg
+from mjswan.envs.mdp.commands import ui_command
+from mjswan.managers.command_manager import CommandTermConfig, SliderConfig
 from mjswan.managers.termination_manager import TerminationTermCfg
 from mjswan.project import _collect_mjlab_scene_assets
 from mjswan.scene import SceneConfig
@@ -53,8 +55,8 @@ def _install_fake_mjlab(monkeypatch, minimal_spec) -> tuple[list[tuple], _FakeEn
             self.terrain = None
 
     class FakeManagerBasedRlEnv:
-        """Stands in for mjlab's real env — ADR 0005 needs a live env to trace term
-        bodies, built lazily at build time by `builder._scene_trace_env`."""
+        """Stands in for mjlab's real env: ADR 0005 traces term bodies against a live
+        env, which `mjswan.build.pipeline` builds lazily."""
 
         def __init__(self, env_cfg, device: str):
             calls.append(("env", env_cfg, device))
@@ -178,7 +180,7 @@ class TestSceneConfig:
 
     def test_scene_filename_survives_the_build_releasing_the_spec(self, minimal_spec):
         cfg = SceneConfig(name="Test", spec=minimal_spec)
-        cfg.spec = None  # what Builder._save_web does after writing scene.mjz
+        cfg.spec = None  # what the build does after writing scene.mjz
         assert cfg.scene_filename == "scene.mjz"
 
 
@@ -476,7 +478,7 @@ class TestPolicyHandle:
             return "artifact_motion", b"npz-bytes"
 
         monkeypatch.setattr(
-            "mjswan.wandb_io.fetch_motion_npz_from_wandb_run",
+            "mjswan.source.wandb.fetch_motion_npz",
             fake_fetch,
         )
 
@@ -491,6 +493,24 @@ class TestPolicyHandle:
         assert called["run_path"] == "demo-org/tracking/abc123"
         assert policy._config.motions[0].data == b"npz-bytes"
 
+    def test_add_motion_wandb_renames_a_clip_named_like_another(
+        self, monkeypatch, minimal_model, minimal_onnx
+    ):
+        _, policy = self._make_policy(minimal_model, minimal_onnx)
+        monkeypatch.setattr(
+            "mjswan.source.wandb.fetch_motion_npz", lambda run_path: ("clip", b"npz")
+        )
+        clip = dict(anchor_body_name="torso_link", body_names=("torso_link",))
+
+        policy.add_motion_wandb(run_path="org/tracking/a", **clip)
+        with pytest.warns(RuntimeWarning, match="renamed 'clip_1'"):
+            policy.add_motion_wandb(run_path="org/tracking/b", default=True, **clip)
+
+        assert [(m.name, m.default) for m in policy._config.motions] == [
+            ("clip", False),
+            ("clip_1", True),
+        ]
+
     def test_add_policy_wandb_auto_imports_tracking_motion(
         self, monkeypatch, minimal_model, minimal_onnx
     ):
@@ -504,11 +524,11 @@ class TestPolicyHandle:
                 self.body_names = ("pelvis", "torso_link")
 
         monkeypatch.setattr(
-            "mjswan.wandb_io.fetch_onnx_from_wandb_run",
+            "mjswan.source.wandb.fetch_onnx",
             lambda run_path: ("policy", minimal_onnx),
         )
         monkeypatch.setattr(
-            "mjswan.wandb_io.fetch_motion_npz_from_wandb_run",
+            "mjswan.source.wandb.fetch_motion_npz",
             lambda run_path: ("motion_asset", b"npz-data"),
         )
 
@@ -553,15 +573,15 @@ class TestPolicyHandle:
         scene._config.mjlab_env_cfg = env_cfg
 
         monkeypatch.setattr(
-            "mjswan.wandb_io.fetch_onnx_from_wandb_run",
+            "mjswan.source.wandb.fetch_onnx",
             lambda run_path: ("policy", minimal_onnx),
         )
         monkeypatch.setattr(
-            "mjswan.wandb_io.fetch_motion_npz_from_wandb_run",
+            "mjswan.source.wandb.fetch_motion_npz",
             lambda run_path: ("motion_asset", b"npz-data"),
         )
 
-        # No `commands=`: exactly what the g1_spinkick example does now.
+        # No `commands=`: a motion-tracking policy takes its target from the clip.
         handles = scene.add_policy_wandb("demo-org/tracking/run1", only_latest=True)
 
         assert len(handles) == 1
@@ -577,25 +597,24 @@ class TestPolicyHandle:
     ):
         """Pinned against mjlab's own `MotionCommandCfg`, not a stand-in for it.
 
-        `_extract_tracking_motion_term` recognises the term by class name, else by
+        `tracking_motion_term` recognises the term by class name, else by
         `anchor_body_name` + `body_names`. Both are upstream's spelling, so a rename there
-        would silently stop the clip being found — the same playback-only failure as
-        scanning the wrong `commands`.
+        would silently stop the clip being found, a failure that shows only at playback.
         """
         pytest.importorskip("mjlab")
         import mjlab.tasks  # noqa: F401 — populates the registry
         from mjlab.tasks.registry import load_env_cfg
 
-        from mjswan import wandb_io
+        from mjswan import source
 
         env_cfg = load_env_cfg(
             "Mjlab-Tracking-Flat-Unitree-G1-No-State-Estimation", play=True
         )
         monkeypatch.setattr(
-            wandb_io, "fetch_onnx_from_wandb_run", lambda p: ("model_100", minimal_onnx)
+            source.wandb, "fetch_onnx", lambda p: ("model_100", minimal_onnx)
         )
         monkeypatch.setattr(
-            wandb_io, "fetch_motion_npz_from_wandb_run", lambda p: ("spinkick", b"npz")
+            source.wandb, "fetch_motion_npz", lambda p: ("spinkick", b"npz")
         )
 
         scene = (
@@ -621,13 +640,50 @@ class TestPolicyHandle:
         cfg = builder.get_projects()[0].scenes[0].policies[0]
         assert cfg.metadata["version"] == "1.0"
 
+    def test_a_resumed_run_repeating_a_checkpoint_is_skipped_with_a_warning(
+        self, minimal_model, minimal_onnx, monkeypatch
+    ):
+        """A resumed mjlab run first saves the step its predecessor stopped at."""
+        scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
+        monkeypatch.setattr(
+            "mjswan.source.wandb.fetch_onnx", lambda _path: ("model_1000", minimal_onnx)
+        )
+
+        with pytest.warns(RuntimeWarning, match="earlier run already added"):
+            handles = scene.add_policy_wandb(["e/p/run1", "e/p/run2"], only_latest=True)
+
+        assert [handle.name for handle in handles] == ["model_1000"]
+
+    def test_missing_conversion_extras_fail_at_the_call(
+        self, minimal_model, monkeypatch
+    ):
+        """Not at build time, after the build has cleared `dist/` and built the site."""
+        import importlib.util
+
+        real_find_spec = importlib.util.find_spec
+        monkeypatch.setattr(
+            importlib.util,
+            "find_spec",
+            lambda name, *args: (
+                None if name == "mjlab" else real_find_spec(name, *args)
+            ),
+        )
+        scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
+
+        with pytest.raises(
+            ImportError, match=r"mjlab is not installed.*mjswan\[wandb,mjlab\]"
+        ):
+            scene.add_policy_wandb("e/p/run", task_id="Mjlab-Velocity-Flat-Unitree-G1")
+
+        assert scene._config.pending_conversions == []
+
     def test_add_policy_wandb_only_latest_preserves_extras(
         self, minimal_model, minimal_onnx, monkeypatch
     ):
         scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
 
         monkeypatch.setattr(
-            "mjswan.wandb_io.fetch_onnx_from_wandb_run",
+            "mjswan.source.wandb.fetch_onnx",
             lambda _path: ("latest", minimal_onnx),
         )
 
@@ -771,6 +827,17 @@ class TestPolicyTermsDerivedFromEnvCfg:
         assert scene.add_policy(name="Policy", policy=minimal_onnx, env_cfg=same)
 
 
+def _fake_checkpoints(*names: str):
+    """A stand-in for ``source.wandb.fetch_checkpoints``: the named ``.pt`` files, as if
+    downloaded, with nothing behind the paths (the export is faked too)."""
+
+    @contextlib.contextmanager
+    def fetch(run_path: str):
+        yield [(name, Path(f"{name}.pt")) for name in names]
+
+    return fetch
+
+
 class _FakeExportContext:
     """Stands in for `PtOnnxExportContext` (a wrapped env plus the metadata it reads)."""
 
@@ -796,16 +863,16 @@ class TestLatestCheckpointIsTheDefault:
     @pytest.fixture
     def checkpoints(self, monkeypatch, minimal_onnx):
         monkeypatch.setattr(
-            "mjswan.wandb_io.create_pt_onnx_export_context",
+            "mjswan.mjlab.runner.create_pt_onnx_export_context",
             lambda task_id, env_cfg=None: _FakeExportContext(),
         )
         monkeypatch.setattr(
-            "mjswan.wandb_io.fetch_pt_onnx_from_wandb_run",
-            lambda run_path, task_id, export_context: [
-                ("model_0", minimal_onnx),
-                ("model_1000", minimal_onnx),
-                ("model_500", minimal_onnx),
-            ],
+            "mjswan.source.wandb.fetch_checkpoints",
+            _fake_checkpoints("model_0", "model_1000", "model_500"),
+        )
+        monkeypatch.setattr(
+            "mjswan.mjlab.runner.export_checkpoint",
+            lambda context, pt_path: minimal_onnx,
         )
 
     def test_the_deferred_conversion_still_marks_it(self, checkpoints, minimal_model):
@@ -842,12 +909,15 @@ class TestExportEnvBecomesTheTraceEnv:
     def context(self, monkeypatch, minimal_onnx):
         context = _FakeExportContext()
         monkeypatch.setattr(
-            "mjswan.wandb_io.create_pt_onnx_export_context",
+            "mjswan.mjlab.runner.create_pt_onnx_export_context",
             lambda task_id, env_cfg=None: context,
         )
         monkeypatch.setattr(
-            "mjswan.wandb_io.fetch_pt_onnx_from_wandb_run",
-            lambda run_path, task_id, export_context: [("model_0", minimal_onnx)],
+            "mjswan.source.wandb.fetch_checkpoints", _fake_checkpoints("model_0")
+        )
+        monkeypatch.setattr(
+            "mjswan.mjlab.runner.export_checkpoint",
+            lambda context, pt_path: minimal_onnx,
         )
         return context
 

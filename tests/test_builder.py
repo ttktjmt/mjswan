@@ -12,6 +12,7 @@ Run all tests (CI):               pytest
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -21,15 +22,16 @@ import pytest
 from onnx import TensorProto, helper
 
 import mjswan
-from mjswan._build_client import ClientBuilder
+from mjswan.build.frontend import ClientBuilder
+from mjswan.build.pipeline import write_mt_headers
 from mjswan.builder import Builder
+from mjswan.document.ids import name2id
 from mjswan.envs.mdp import events as evt_fns
 from mjswan.envs.mdp import observations as obs_fns
 from mjswan.envs.mdp import terminations as term_fns
 from mjswan.envs.mdp.actions import JointEffortActionCfg, JointPositionActionCfg
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjswan.managers.termination_manager import TerminationTermCfg
-from mjswan.utils import name2id
 from mjswan.viewer import ViewerConfig
 
 
@@ -104,6 +106,12 @@ class TestProjectIdAssignment:
             "flat_terrain_1",
             "flat_terrain_2",
         )
+        # The name takes the suffix too, so the viewer never lists two alike.
+        assert (first.name, second.name, third.name) == (
+            "Flat Terrain",
+            "flat-terrain_1",
+            "FLAT TERRAIN_2",
+        )
 
     def test_a_name_with_no_letter_or_digit_is_refused(self):
         with pytest.raises(ValueError, match="empty id"):
@@ -134,9 +142,10 @@ class TestSceneAndPolicyIds:
     def test_two_scenes_with_one_name_are_both_kept(self, minimal_model):
         project = Builder().add_project(name="P")
         a = project.add_scene(name="Flat Terrain", model=minimal_model)
-        with pytest.warns(RuntimeWarning, match="scene"):
+        with pytest.warns(RuntimeWarning, match="renamed 'Flat Terrain_1'"):
             b = project.add_scene(name="Flat Terrain", model=minimal_model)
         assert (a._config.id, b._config.id) == ("flat_terrain", "flat_terrain_1")
+        assert (a._config.name, b._config.name) == ("Flat Terrain", "Flat Terrain_1")
 
     def test_the_same_scene_name_in_another_project_is_not_a_collision(
         self, minimal_model
@@ -158,6 +167,81 @@ class TestSceneAndPolicyIds:
         with pytest.warns(RuntimeWarning, match="policy"):
             b = scene.add_policy(name="model_2000", policy=minimal_onnx)
         assert (a._config.id, b._config.id) == ("model_2000", "model_2000_1")
+        assert (a.name, b.name) == ("model_2000", "model_2000_1")
+
+    def test_two_splats_with_one_name_are_both_kept(self, minimal_model):
+        scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
+        a = scene.add_splat("Street", url="https://example.com/a.spz")
+        with pytest.warns(RuntimeWarning, match="splat"):
+            b = scene.add_splat("Street", url="https://example.com/b.spz")
+        assert (a._config.id, b._config.id) == ("street", "street_1")
+        assert (a._config.name, b._config.name) == ("Street", "Street_1")
+
+    def test_two_motions_with_one_name_on_a_policy_are_both_kept(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        clip = tmp_path / "clip.npz"
+        clip.write_bytes(b"clip")
+        policy = (
+            Builder()
+            .add_project(name="P")
+            .add_scene(name="S", model=minimal_model, control_dt=0.02)
+            .add_policy(name="walker", policy=minimal_onnx)
+        )
+        motion = dict(source=str(clip), anchor_body_name="b", body_names=("b",))
+        a = policy.add_motion(name="Spin Kick", **motion)
+        with pytest.warns(RuntimeWarning, match="motion"):
+            b = policy.add_motion(name="Spin Kick", **motion)
+        assert (a._config.name, b._config.name) == ("Spin Kick", "Spin Kick_1")
+
+    def test_every_listed_name_is_unique_and_spells_its_id(
+        self, tmp_path, minimal_model, minimal_onnx, build_manifest
+    ):
+        """What the viewer lists is what the URL says: `name2id(name) == id`.
+
+        Two entries alike in one list would also stop the viewer: its select refuses
+        a repeated option value, and the page renders nothing.
+        """
+        clip = tmp_path / "clip.npz"
+        clip.write_bytes(b"clip")
+        builder = Builder()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            for project_name in ("Demo", "demo"):
+                project = builder.add_project(name=project_name)
+                for scene_name in ("Flat", "Flat"):
+                    scene = project.add_scene(
+                        name=scene_name, model=minimal_model, control_dt=0.02
+                    )
+                    for splat_name in ("Street", "street"):
+                        scene.add_splat(splat_name, url="https://example.com/s.spz")
+                    for policy_name in ("walker", "walker"):
+                        policy = scene.add_policy(name=policy_name, policy=minimal_onnx)
+                        for motion_name in ("Clip", "Clip"):
+                            policy.add_motion(
+                                name=motion_name,
+                                source=str(clip),
+                                anchor_body_name="b",
+                                body_names=("b",),
+                            )
+
+        manifest = build_manifest(builder, tmp_path / "dist")
+
+        def unique(entries):
+            names = [entry["name"] for entry in entries]
+            assert len(set(names)) == len(names), names
+            for entry in entries:
+                if "id" in entry:
+                    assert name2id(entry["name"]) == entry["id"], entry
+
+        unique(manifest["projects"])
+        for project in manifest["projects"]:
+            unique(project["scenes"])
+            for scene in project["scenes"]:
+                unique(scene["policies"])
+                unique(scene.get("splats", []))
+                for policy in scene["policies"]:
+                    unique(policy["motions"])
 
     def test_two_default_policies_fail_the_build(
         self, tmp_path, minimal_model, minimal_onnx, build_manifest
@@ -384,21 +468,6 @@ class TestBuilderValidation:
         scene.add_policy(name="Policy", policy=minimal_onnx)
         manifest = build_manifest(builder, tmp_path / "out")
         assert manifest["projects"][0]["scenes"][0]["control_dt"] == 0.05
-
-    def test_policy_filename_rejects_empty_string(self):
-        with pytest.raises(ValueError):
-            Builder()._policy_filename("")
-
-    def test_policy_filename_rejects_forward_slash(self):
-        with pytest.raises(ValueError):
-            Builder()._policy_filename("path/policy")
-
-    def test_policy_filename_rejects_backslash(self):
-        with pytest.raises(ValueError):
-            Builder()._policy_filename("path\\policy")
-
-    def test_policy_filename_accepts_plain_name(self):
-        assert Builder()._policy_filename("my_policy") == "my_policy"
 
 
 # ===========================================================================
@@ -684,10 +753,10 @@ class TestUsesCustomJsFlag:
     def _isolate_registries(self, monkeypatch):
         """Swap each MDP custom-registry for an empty dict so the test does
         not see registrations leaked in from other tests / modules."""
-        from mjswan import command as command_mod
         from mjswan.envs.mdp import events as events_mod
         from mjswan.envs.mdp import observations as obs_mod
         from mjswan.envs.mdp import terminations as term_mod
+        from mjswan.managers import command_manager as command_mod
 
         monkeypatch.setattr(obs_mod, "_custom_registry", {})
         monkeypatch.setattr(term_mod, "_custom_registry", {})
@@ -869,8 +938,10 @@ class TestSaveWebPolicyJson:
     @pytest.fixture(autouse=True)
     def _no_frontend(self, monkeypatch):
         """Skip the Node.js frontend build and the large template copytree."""
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr(
+            "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+        )
 
     def _run(self, builder: Builder, tmp_path: Path) -> Path:
         """Call _save_web and return the output directory."""
@@ -1972,7 +2043,7 @@ class TestFullBuild:
 
 
 # ===========================================================================
-# L1 — mt parameter: _save_mt_headers / no-headers when mt=False
+# L1: mt parameter: write_mt_headers / no-headers when mt=False
 # ===========================================================================
 class TestMtHeaders:
     def test_mt_defaults_to_false(self):
@@ -1982,21 +2053,21 @@ class TestMtHeaders:
         assert Builder(mt=True)._mt is True
 
     def test_save_mt_headers_creates_headers_file(self, tmp_path):
-        Builder()._save_mt_headers(tmp_path)
+        write_mt_headers(tmp_path)
         assert (tmp_path / "_headers").exists()
 
     def test_save_mt_headers_contains_coop(self, tmp_path):
-        Builder()._save_mt_headers(tmp_path)
+        write_mt_headers(tmp_path)
         content = (tmp_path / "_headers").read_text()
         assert "Cross-Origin-Opener-Policy: same-origin" in content
 
     def test_save_mt_headers_contains_coep(self, tmp_path):
-        Builder()._save_mt_headers(tmp_path)
+        write_mt_headers(tmp_path)
         content = (tmp_path / "_headers").read_text()
         assert "Cross-Origin-Embedder-Policy: require-corp" in content
 
     def test_save_mt_headers_applies_wildcard_route(self, tmp_path):
-        Builder()._save_mt_headers(tmp_path)
+        write_mt_headers(tmp_path)
         content = (tmp_path / "_headers").read_text()
         assert content.startswith("/*")
 
@@ -2004,8 +2075,10 @@ class TestMtHeaders:
         self, tmp_path, minimal_model, monkeypatch
     ):
         """_save_web with mt=False must not create _headers."""
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr(
+            "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+        )
         builder = Builder(mt=False)
         builder.add_project(name="P").add_scene(
             control_dt=0.02, name="S", model=minimal_model
@@ -2016,8 +2089,10 @@ class TestMtHeaders:
 
     def test_mt_true_writes_headers(self, tmp_path, minimal_model, monkeypatch):
         """_save_web with mt=True must create _headers with COOP/COEP content."""
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr(
+            "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+        )
         builder = Builder(mt=True)
         builder.add_project(name="P").add_scene(
             control_dt=0.02, name="S", model=minimal_model
@@ -2038,8 +2113,10 @@ class TestMtHeaders:
         The output is assembled allowlist-style from the built dist/ (+ LICENSE),
         so template-root scaffolding like _mt is excluded by construction.
         """
-        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-        monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr(
+            "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+        )
 
         builder = Builder(mt=False)
         builder.add_project(name="P").add_scene(

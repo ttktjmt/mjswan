@@ -1,4 +1,4 @@
-"""Tests for mjswan.adapters.mjlab_adapter — mjlab type conversion.
+"""Tests for mjswan.mjlab: mjlab type conversion.
 
 Layer: L1 (pure Python, no MuJoCo/ONNX/mjlab required).
 
@@ -18,7 +18,12 @@ from typing import Any
 
 import pytest
 
-from mjswan.adapters.mjlab_adapter import (
+from mjswan.document.manifest import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS
+from mjswan.envs.mdp.observations import ObservationBinding
+from mjswan.envs.mdp.terminations import TerminationBinding
+from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
+from mjswan.managers.termination_manager import TerminationTermCfg
+from mjswan.mjlab import (
     DEFAULT_OBS_GROUP_KEY,
     adapt_actions,
     adapt_commands,
@@ -28,11 +33,6 @@ from mjswan.adapters.mjlab_adapter import (
     resolve_pd_gains,
     resolve_runner_defaults,
 )
-from mjswan.envs.mdp.observations import ObservationBinding
-from mjswan.envs.mdp.terminations import TerminationBinding
-from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
-from mjswan.managers.termination_manager import TerminationTermCfg
-from mjswan.policy import DEFAULT_IN_KEYS, DEFAULT_OUT_KEYS
 
 # ---------------------------------------------------------------------------
 # Fake mjlab types — classes whose __module__ starts with "mjlab"
@@ -599,12 +599,13 @@ class TestAdaptCommands:
         assert command.params["anchor_body_name"] == "torso_link"
         assert command.params["body_names"] == ["pelvis", "torso_link"]
 
-    def test_a_traced_command_gets_mjlabs_debug_drawing_without_being_asked(self):
-        """The binding declares no `viz`; the cfg class is mjlab's, so one is derived.
-
-        Otherwise a `debug_vis=True` task the author forgot is silently blank.
-        """
-        from mjswan.command import CommandBinding, _custom_registry, register_command
+    def test_a_traced_command_draws_what_its_binding_declares(self):
+        """`viz` is called with the task's own cfg; without one, nothing is drawn."""
+        from mjswan.managers.command_manager import (
+            CommandBinding,
+            _custom_registry,
+            register_command,
+        )
 
         cfg_cls = _make_mjlab_class(
             "LiftingCommandCfg",
@@ -612,29 +613,34 @@ class TestAdaptCommands:
             debug_vis=True,
             viz=SimpleNamespace(target_color=(1.0, 0.5, 0.0, 0.3)),
         )
-        register_command(
-            "LiftingCommandCfg",
-            CommandBinding(state_fields=["target_pos"], command_field="target_pos"),
-        )
-        try:
-            result = adapt_commands({"lift_height": cfg_cls()})
-        finally:
-            _custom_registry.pop("LiftingCommandCfg", None)
 
-        assert result is not None
-        viz = result["lift_height"].pending_trace.viz
-        assert viz == [
-            {
-                "shape": "sphere",
-                "radius": 0.03,
-                "color": [1.0, 0.5, 0.0, 0.3],
-                "origin": {"state": "target_pos"},
-            }
-        ]
+        def sphere(cfg):
+            return [{"shape": "sphere", "color": list(cfg.viz.target_color)}]
+
+        def drawn(viz):
+            register_command(
+                "LiftingCommandCfg",
+                CommandBinding(
+                    state_fields=["target_pos"], command_field="target_pos", viz=viz
+                ),
+            )
+            try:
+                result = adapt_commands({"lift_height": cfg_cls()})
+            finally:
+                _custom_registry.pop("LiftingCommandCfg", None)
+            assert result is not None
+            return result["lift_height"].pending_trace.viz
+
+        assert drawn(sphere) == [{"shape": "sphere", "color": [1.0, 0.5, 0.0, 0.3]}]
+        assert drawn(None) is None
 
     def test_a_registered_cfg_adapts_from_outside_the_mjlab_package(self):
         """The registry decides, not the defining module."""
-        from mjswan.command import CommandBinding, _custom_registry, register_command
+        from mjswan.managers.command_manager import (
+            CommandBinding,
+            _custom_registry,
+            register_command,
+        )
 
         class SkateCommandCfg:
             resampling_time_range = (20.0, 20.0)
@@ -865,7 +871,7 @@ class TestAdaptedSerialization:
     def test_adapted_obs_to_dict_requires_tracing(self):
         # A plain-callable func (mjlab's own, resolved by the adapter with no mirror lookup)
         # cannot be serialized via to_dict()/to_list() directly — it must be traced to ONNX
-        # against a live env at build time (mjswan._onnx_build.serialize_observation_group).
+        # against a live env at build time (mjswan.build.mdp.serialize_observation_group).
         mjlab_func = _make_mjlab_obs_func("last_action")
         mjlab_term = FakeMjlabObsTermCfg(func=mjlab_func)
         mjlab_group = FakeMjlabObsGroupCfg(terms={"la": mjlab_term})
@@ -944,6 +950,24 @@ class TestMuscleActionAdaptation:
         assert result is not None
         d = result["muscles"].to_dict()
         assert d["actuator_names"] == ["robot/m1", "robot/m2"]
+
+    def test_an_alternation_keeps_the_prefix_on_every_branch(self):
+        """The runtime reads each pattern as `^(?:p)$`, so `robot/a|b` would match `b`."""
+        import re
+
+        mjlab_cfg = FakeMyoMuscleActivationActionCfg(
+            entity_name="robot",
+            actuator_names=("m1|m2",),
+        )
+
+        result = adapt_actions({"muscles": mjlab_cfg})
+        assert result is not None
+        (pattern,) = result["muscles"].to_dict()["actuator_names"]
+        assert [
+            name
+            for name in ("robot/m1", "robot/m2", "m2")
+            if re.fullmatch(pattern, name)
+        ] == ["robot/m1", "robot/m2"]
 
     def test_normalize_defaults_to_true_when_source_lacks_field(self):
         # MyoMuscleActivationActionCfg has no `normalize` field and always applies the sigmoid

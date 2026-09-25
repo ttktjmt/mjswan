@@ -17,8 +17,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .command import CommandTermConfig
     from .envs.mdp.actions.actions import ActionTermCfg
+    from .managers.command_manager import CommandTermConfig
     from .managers.event_manager import EventTermCfg
     from .managers.observation_manager import ObservationGroupCfg
     from .managers.termination_manager import TerminationTermCfg
