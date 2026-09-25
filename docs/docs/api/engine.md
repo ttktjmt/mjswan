@@ -84,6 +84,7 @@ Verbs are named for their cost: `loadScene` rebuilds the model, everything else 
 | `commands` | `CommandControls` | `set(id, value)`, `trigger(id)`. |
 | `debugVis` | `DebugVisControls` | `set(term, enabled)`: show or hide a command term's drawing, such as the velocity arrows. |
 | `events` | `EventControls` | `fire(name)` for a `manual` term, `setArmed(name, armed)` for an `interval` one. |
+| `interaction` | `InteractionControls` | `setMode(id)`, `getMode()`, `setParam(mode, name, value)`, `getParams(mode)`, `cancel()`. See [Pointer interaction](#pointer-interaction). |
 | `getState` | `() => MjswanEngineState` | Current snapshot. |
 | `subscribe` | `(listener) => () => void` | Returns an unsubscribe function. |
 | `captureThumbnail` | `(opts?: { maxDim?, quality? }) => Promise<Blob>` | JPEG of the current frame. |
@@ -105,6 +106,11 @@ interface MjswanEngineState {
   debugVis: ReadonlyArray<DebugVisDescriptor>;
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
+  /** Every pointer mode, with whether this scene can run it. */
+  interactions: ReadonlyArray<InteractionModeDescriptor>;
+  interactionMode: InteractionModeId;
+  /** Current parameter values, per mode. */
+  interactionParams: Readonly<Record<InteractionModeId, Readonly<Record<string, number>>>>;
   /** The seed in use, so an app recording a session can persist it. */
   termSeed: number;
 }
@@ -115,6 +121,35 @@ an `id` (`"group:name"`), a `type` of `'slider' | 'checkbox' | 'button'`, a `lab
 for a slider — `min` / `max` / `step`, an optional `enabledWhen` naming a gating checkbox,
 and an optional `adjustableRange` companion. Render them however you like and drive them
 through `engine.commands`.
+
+### Pointer interaction
+
+What a press on the canvas does. The set of modes is closed, and `state.interactions`
+describes it, so a host draws the switch and the sliders generically rather than naming
+modes itself.
+
+| Mode | `id` | Does | Parameters |
+|---|---|---|---|
+| Pull | `pull` | Drags a body toward the pointer for as long as the press is held. | `gain` (N/m, default 100), `maxForce` (N, default 500) |
+| Push | `push` | Taps a body to shove it along the inward normal of the face that was hit. | `impulse` (N s, default 10) |
+| Grab | `weld` | Carries a body where you put it, and releasing leaves it with the speed the carry gave it. | `softness` (s, default 0.02), `torqueScale` (default 1) |
+
+Each `InteractionModeDescriptor` carries an `id`, a `label`, a one-line `hint`, an
+`available` flag with a `reason` when it is false, and a `params` list whose entries give
+`name`, `label`, `unit`, `min`, `max`, `step` and `default`. `setParam` clamps to that
+range rather than refusing.
+
+**Input bindings are not configurable, by design.** A press that hits a geom belongs to the
+active mode and a press that misses belongs to the camera, on a mouse and on a touchscreen
+alike, with no hover, no modifier key and no right click. Switching mode is the only input
+decision a host makes, through `setMode`. Call `cancel()` before taking the pointer away
+(entering an overlay, say) so a held body is let go rather than left under a force.
+
+`available` is false when the loaded scene cannot run a mode, and `reason` says why. Grab
+needs the weld the viewer injects into the scene MJCF, which a scene loaded as a compiled
+`.mjb` does not have, and which is also withheld from a policy scene whose model does not
+namespace its elements: one more body there would change the width of a traced graph's
+input.
 
 ### Inputs
 
