@@ -3,7 +3,7 @@
  *
  * One table, because three places have to agree on it: the manager clamps against it, the
  * engine publishes it as descriptors, and the panel draws a slider per entry. A mode with
- * no entry here has no UI and no API surface, which is the point — modes are a closed set
+ * no entry here has no UI and no API surface, which is the point: modes are a closed set
  * (ADR-less by design: there is no plugin path in, and adding one is a code change here).
  */
 

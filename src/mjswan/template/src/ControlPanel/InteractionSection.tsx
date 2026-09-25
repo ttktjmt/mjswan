@@ -16,10 +16,10 @@ interface InteractionSectionProps {
 /**
  * What the pointer does, and the numbers behind it.
  *
- * Only the active mode's parameters are drawn: four modes' worth at once would be most of
- * the panel, and a number you cannot currently exercise is noise. Which gesture drives
- * which mode is not configurable and so has no control here — the one rule (a press that
- * hits something is the mode's, a press that misses is the camera's) is in the hint.
+ * Only the active mode's parameters are drawn: three modes' worth at once would be most
+ * of the panel, and a number you cannot currently exercise is noise. Which gesture drives
+ * which mode is not configurable and so has no control here; the one rule, that a press
+ * hitting something is the mode's and a press that misses is the camera's, is in the hint.
  */
 export function InteractionSection({
   modes,

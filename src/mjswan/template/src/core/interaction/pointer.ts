@@ -26,7 +26,7 @@ export interface PointerHit {
 /** The live state of a claimed gesture. */
 export interface PointerGesture {
   hit: PointerHit;
-  /** The point on the current ray at the press's depth — where the pointer "is" in 3D. */
+  /** The point on the current ray at the press's depth: where the pointer "is" in 3D. */
   ray: THREE.Vector3;
   /** Unit direction of the current ray: what a mode falls back to with no surface normal. */
   direction: THREE.Vector3;
@@ -131,7 +131,7 @@ export class PointerTracker {
     return { hit: this.hit, ray: this.ray, direction: this.direction, travel: this.travel };
   }
 
-  /** Drop the gesture without telling the mode — for teardown paths that already know. */
+  /** Drop the gesture without telling the mode, for teardown paths that already know. */
   release(): void {
     this.pointerId = null;
     this.hit = null;

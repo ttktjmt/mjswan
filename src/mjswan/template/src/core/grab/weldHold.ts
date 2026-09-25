@@ -2,8 +2,8 @@
  * Holding a body where you put it, by retargeting a weld that was declared with the model.
  *
  * MuJoCo compiles a model once and offers no way to add a constraint to a live one, so the
- * weld has to exist before the scene loads — declared `active="false"`, pointing at
- * nothing in particular — and is aimed at a pair of bodies when something actually grabs.
+ * weld has to exist before the scene loads (declared `active="false"`, pointing at
+ * nothing in particular) and is aimed at a pair of bodies when something actually grabs.
  * The XR hand has worked this way since it learned to carry a load rather than shove one;
  * this is that machinery with the hand taken out of it, so the pointer can use it too.
  *
@@ -89,7 +89,7 @@ export class WeldHold {
    * holds it rather than snapping it. Refuses a body another slot already has.
    *
    * `eq_data` for a weld is `[anchor(3), relpose pos(3), relpose quat(4), torquescale(1)]`,
-   * and its relpose is body2 expressed in body1's frame — the opposite of the obvious
+   * and its relpose is body2 expressed in body1's frame, the opposite of the obvious
    * reading.
    */
   hold(
@@ -142,7 +142,7 @@ export class WeldHold {
    *
    * `mj_resetData` restores `eq_active` on its own, but `eq_obj*id` / `eq_data` /
    * `eq_solref` live on the **model**, so a reset leaves a retargeted weld aimed at
-   * whatever it last grabbed — where the next policy's startup randomization, or a
+   * whatever it last grabbed, where the next policy's startup randomization, or a
    * `modelFieldDefaults` snapshot, would find it.
    */
   restore(mjModel: MjModel, mjData: MjData | null): void {

@@ -4,8 +4,8 @@
  *
  * This sits beside `xr/`, not inside the MDP layer: nothing here is part of a task's
  * definition, and nothing here reaches Python, the manifest or the `.swn` document. The
- * XR hand keeps its own driver — contact-driven pinching is a different gesture from a
- * raycast — and shares only the machinery under it.
+ * XR hand keeps its own driver (contact-driven pinching is a different gesture from a
+ * raycast) and shares only the machinery under it.
  */
 import * as THREE from 'three';
 import type { MjvPerturb } from 'mujoco';
@@ -150,7 +150,7 @@ export class InteractionManager {
    * A new model: body ids from the old one mean nothing now.
    *
    * The mode is cancelled rather than just released, because a gesture can outlive the
-   * scene it started in — a queued shove fired on the new scene's first step would land
+   * scene it started in: a queued shove fired on the new scene's first step would land
    * `impulse / controlDt` newtons on whatever body inherited that id.
    */
   onSceneLoaded(): void {
@@ -162,7 +162,7 @@ export class InteractionManager {
   }
 
   /**
-   * One control step's worth of interaction, run before the physics substeps — the slot
+   * One control step's worth of interaction, run before the physics substeps: the slot
    * the mouse drag has always occupied.
    */
   preStep(): void {
@@ -185,8 +185,8 @@ export class InteractionManager {
     const mode = this.current();
     if (!mode) return 'none';
     const context = this.context();
-    // A mode the scene cannot run stays selected — the panel shows it greyed with its
-    // reason — but it must not keep taking presses, or the camera stops orbiting in a
+    // A mode the scene cannot run stays selected (the panel shows it greyed with its
+    // reason), but it must not keep taking presses, or the camera stops orbiting in a
     // scene where the mode does nothing at all.
     if (mode.unavailable?.(context)) return 'none';
     return mode.onDown(gesture, context);

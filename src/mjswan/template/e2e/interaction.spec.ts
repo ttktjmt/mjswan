@@ -4,8 +4,8 @@ import { test, expect } from '@playwright/test';
  * Runtime tier for the pointer modes: a real mouse against a real canvas.
  *
  * The unit tests drive the mechanisms with the real WASM but no browser, so everything
- * between a `pointerdown` and a body moving — the raycast, the coordinate swizzle, the
- * claim handed to `OrbitControls`, the step-loop hook — is only exercised here. Each mode
+ * between a `pointerdown` and a body moving (the raycast, the coordinate swizzle, the
+ * claim handed to `OrbitControls`, the step-loop hook) is only exercised here. Each mode
  * is asserted on the effect it is *for*, so none of the three can quietly become a no-op.
  */
 

@@ -1,8 +1,8 @@
 /**
  * Tap a body to shove it.
  *
- * Two decisions worth stating. The shove goes **into the surface** — along the inward
- * normal of the face that was hit, not along the view ray — because that is the direction
+ * Two decisions worth stating. The shove goes **into the surface**, along the inward
+ * normal of the face that was hit rather than along the view ray, because that is the direction
  * a poke reads as: hitting the side of a torso from a three-quarter view should push it
  * sideways, not diagonally away from the camera. And the press is `shared`, not
  * `exclusive`: a tap shoves, but a drag from the same spot still orbits, because

@@ -137,8 +137,8 @@ export function applyViewerConfig(
     }
   } else if ((originType === 'AUTO' || originType === 'ASSET_ROOT') && mjModel) {
     // The first non-world body the *scene* owns (typically its floating base). Injected
-    // bodies are appended, so this is body 1 for every scene that has one of its own — and
-    // for a scene that has none, tracking the viewer's own parked crate 120 m up would
+    // bodies are appended, so this is body 1 for every scene that has one of its own, and
+    // for a scene that has none, tracking the viewer's own parked anchor 100 m up would
     // carry the camera off with it.
     for (let bodyId = 1; bodyId < mjModel.nbody; bodyId++) {
       if (injected.has(bodyId)) continue;

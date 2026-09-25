@@ -3,7 +3,7 @@
  *
  * All of it hangs off the three.js scene rather than the MuJoCo root, so it is outside
  * `frameCamera`'s bounds by construction, and every object carries `interactionGizmo` so
- * the pointer's own raycast skips it — otherwise the arrow you are dragging becomes the
+ * the pointer's own raycast skips it: otherwise the arrow you are dragging becomes the
  * thing you grab next.
  */
 import * as THREE from 'three';

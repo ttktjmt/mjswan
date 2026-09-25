@@ -2,7 +2,7 @@
  * Appending to a compiled-from-text MJCF scene.
  *
  * MJCF merges repeated top-level sections, so a second `<worldbody>` and `<equality>` at
- * the end of the file add to the first — which is what lets the viewer put its own bodies
+ * the end of the file add to the first, which is what lets the viewer put its own bodies
  * into a model it knows nothing about, including one whose bodies live in `<include>`d
  * files.
  *
@@ -16,7 +16,7 @@
  */
 import type { MainModule } from 'mujoco';
 
-/** Add `block` — raw MJCF, top-level sections — just before `</mujoco>`. */
+/** Add `block` (raw MJCF, top-level sections) just before `</mujoco>`. */
 export function appendToMjcf(xml: string, block: string): string {
   const close = xml.lastIndexOf('</mujoco>');
   if (close < 0) {
@@ -40,7 +40,7 @@ export function readMjcfFile(mujoco: MainModule, path: string): string {
  * Whether the model namespaces its elements, as mjlab's `attach` does (`robot/torso`).
  *
  * This is the same verdict `buildEntityIndex` reaches from the compiled model, read off
- * the text instead because the decision it gates — whether to inject extra bodies — has
+ * the text instead because the decision it gates (whether to inject extra bodies) has
  * to be made before compiling. Deliberately a scan of the raw text: a name attribute is
  * a name attribute wherever it appears, and over-reporting here only means declining to
  * inject into a model that would have tolerated it.

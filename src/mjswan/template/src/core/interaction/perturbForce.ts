@@ -1,11 +1,11 @@
 /**
- * Pulling a body toward a point, handed to MuJoCo's own mouse perturbation — the one
+ * Pulling a body toward a point, handed to MuJoCo's own mouse perturbation: the one
  * `simulate` uses for its drag.
  *
  * Reusing it is not only less code. `xfrc_applied` acts at the body's **centre of mass**,
  * so a wrench assembled by hand has to take its moment about `xipos`; taking it about
- * `xpos` is the same thing only for a body whose frame sits on its COM — true of a lone
- * primitive, false of nearly every robot link. `mjv_applyPerturbForce` takes a body-frame
+ * `xpos` is the same thing only for a body whose frame sits on its COM, true of a lone
+ * primitive and false of nearly every robot link. `mjv_applyPerturbForce` takes a body-frame
  * grab point and a world target and writes the whole row, so the only thing left to get
  * right is the coordinate flip on the way in.
  */
@@ -43,7 +43,7 @@ export function applyDragPull(
   perturb.select = pull.bodyId;
   perturb.active = mujoco.mjtPertBit.mjPERT_TRANSLATE.value;
   // MuJoCo scales the pull by `localmass`, so the viewer's own N/m rides in as one. Not
-  // the body's real mass, which would make a heavy link drag like a light one — that is
+  // the body's real mass, which would make a heavy link drag like a light one, and that is
   // `simulate`'s feel, not this viewer's.
   perturb.localmass = pull.forceScale / MJV_PERTURB_STIFFNESS;
   perturb.localpos.set(pull.localPoint);
@@ -62,7 +62,7 @@ const IDENTITY_ROTATION = [1, 0, 0, 0, 1, 0, 0, 0, 1];
  * The moment goes through `mju_transformSpatial` rather than a hand-rolled cross product,
  * so the point a wrench is referred to stays MuJoCo's business. Two conventions have to
  * be bridged: `mju_transformSpatial` reads and writes **(rotational, linear)**, while
- * `xfrc_applied` stores **(force, torque)** — hence the swap on the way out.
+ * `xfrc_applied` stores **(force, torque)**, hence the swap on the way out.
  */
 export function applyPointForce(
   mujoco: MainModule,

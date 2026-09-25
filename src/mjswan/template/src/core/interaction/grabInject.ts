@@ -1,8 +1,8 @@
 /**
  * The bodies and constraints the pointer needs, declared with the model.
  *
- * One mocap body to hold onto and one inactive weld to hold with — no degrees of freedom
- * between them, so a scene that never grabs anything pays nothing for carrying it. Both
+ * One mocap body to hold onto and one inactive weld to hold with, with no degrees of
+ * freedom between them, so a scene that never grabs anything pays nothing for carrying it. Both
  * names are flat: a `/` in an injected name changes how `slotReader/indexing.ts` reads
  * the *whole* model (see `scene/mjcfInject`).
  */

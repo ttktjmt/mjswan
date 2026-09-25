@@ -175,7 +175,7 @@ export interface InteractionControls {
   /** Out-of-range values are clamped to the descriptor, not refused. */
   setParam(mode: InteractionModeId, name: string, value: number): void;
   getParams(mode: InteractionModeId): Readonly<Record<string, number>>;
-  /** Drop whatever is held — for a host that is about to take the pointer away. */
+  /** Drop whatever is held, for a host that is about to take the pointer away. */
   cancel(): void;
 }
 

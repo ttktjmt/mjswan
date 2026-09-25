@@ -17,7 +17,7 @@ export interface InteractionSim {
   mjData: MjData | null;
   /** Bodies a mode may act on: everything with a degree of freedom. */
   dynamicBodyIds: Set<number> | null;
-  /** Seconds per control step — what an impulse is divided by. */
+  /** Seconds per control step: what an impulse is divided by. */
   controlDt: number;
 }
 

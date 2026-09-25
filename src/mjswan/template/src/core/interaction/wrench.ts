@@ -1,8 +1,8 @@
 /**
  * The one writer of `mjData.xfrc_applied`.
  *
- * Nothing else in the engine writes that field — MDP event terms reach `qpos` / `qvel`
- * and stop there — but plenty *reads* it: `body_external_force` / `_torque` / `_wrench`
+ * Nothing else in the engine writes that field (MDP event terms reach `qpos` / `qvel`
+ * and stop there), but plenty *reads* it: `body_external_force` / `_torque` / `_wrench`
  * are real slot readers, so whatever a mode puts here is visible to a policy one step
  * later. That makes "exactly one thing writes it" worth stating rather than inheriting.
  *

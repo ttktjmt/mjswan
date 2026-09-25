@@ -88,7 +88,7 @@ describe('InteractionWrench against the real WASM', () => {
   it('leaves rows it never wrote alone', () => {
     const { mjModel, mjData, bodyId } = load();
     const wrench = new InteractionWrench();
-    // Something outside the interaction layer — a custom plugin, say — parks a wrench on
+    // Something outside the interaction layer (a custom plugin, say) parks a wrench on
     // the world body. The drag this replaced zeroed the entire array every step.
     mjData.xfrc_applied[2] = 1.5;
     wrench.begin(mjData);

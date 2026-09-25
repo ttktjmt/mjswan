@@ -15,9 +15,9 @@ import { createEngine } from '../engine';
 const SAMPLE_MS = 4;
 
 export interface InteractionProbe {
-  /** Largest force any body has been under since the last `reset` — pull and push. */
+  /** Largest force any body has been under since the last `reset`: pull and push. */
   maxForce: number;
-  /** Whether any equality has been active since the last `reset` — grab. */
+  /** Whether any equality has been active since the last `reset`: grab. */
   welded: boolean;
 }
 

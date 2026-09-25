@@ -13,7 +13,7 @@ type MjData = import('mujoco').MjData;
 type MjvPerturb = import('mujoco').MjvPerturb;
 
 /**
- * One free body whose geom — and so its COM — sits 0.4 m off the body frame's origin.
+ * One free body whose geom, and so its COM, sits 0.4 m off the body frame's origin.
  * That gap is the whole point: a moment taken about `xpos` instead of `xipos` is wrong by
  * `(xipos - xpos) x F`, which is zero for a centred primitive and large for a robot link.
  */

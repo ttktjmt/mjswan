@@ -2,7 +2,7 @@
  * Grab a body and carry it.
  *
  * The hold is a weld to a mocap anchor the pointer drives, which is the same constraint
- * the XR hand uses (`core/grab/weldHold`) — only the trigger differs, raycast here and
+ * the XR hand uses (`core/grab/weldHold`); only the trigger differs, raycast here and
  * pinch there. Two consequences worth knowing:
  *
  * - **Letting go throws.** Release only deactivates the constraint, so the body leaves
@@ -40,7 +40,7 @@ export class WeldMode implements InteractionMode {
 
     this.moveAnchor(ctx, toMjc(gesture.hit.point));
     // The anchor's `xpos` comes from `mocap_pos` only at a forward, and it was parked 100 m
-    // up until a moment ago — welding against the stale pose would fling the body there.
+    // up until a moment ago: welding against the stale pose would fling the body there.
     mujoco.mj_forward(mjModel, mjData);
     const params = ctx.params();
     const grabbed = ctx.weld.hold(mjModel, mjData, POINTER_WELD, anchorId, gesture.hit.bodyId, {

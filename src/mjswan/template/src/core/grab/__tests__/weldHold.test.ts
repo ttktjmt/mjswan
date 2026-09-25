@@ -1,6 +1,6 @@
 /**
  * The shared hold, against the real WASM: it has to carry a body, and it has to hand the
- * model back exactly as it compiled — `mj_resetData` restores `eq_active` but not the
+ * model back exactly as it compiled: `mj_resetData` restores `eq_active` but not the
  * retargeting, so anything this leaves behind outlives the reset.
  */
 import { beforeAll, describe, expect, it } from 'vitest';

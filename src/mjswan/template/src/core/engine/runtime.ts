@@ -254,7 +254,7 @@ export class mjswanRuntime {
   private grabInjected = false;
   /**
    * Injected because the scene arrived without a policy, into a model whose elements are
-   * not entity-prefixed — the one combination where a later `setPolicy` would disagree
+   * not entity-prefixed: the one combination where a later `setPolicy` would disagree
    * with the traced graphs about how wide the entity is.
    */
   private injectedWithoutPolicy = false;
@@ -691,7 +691,7 @@ export class mjswanRuntime {
       let modelPath: string;
       if (format === 'mjb') {
         // `loadSceneFromURL` reads a `.mjb` path with `mj_loadModel`. A compiled model has
-        // no XML to add the XR hands to, so they stay off (`HandMocap.bind` warns) — and
+        // no XML to add the XR hands to, so they stay off (`HandMocap.bind` warns), and
         // the pointer's grab anchor with them, so `grab` reports itself unavailable.
         modelPath = 'scene.mjb';
         this.mujoco.FS.writeFile(`/working/${modelPath}`, new Uint8Array(model));
