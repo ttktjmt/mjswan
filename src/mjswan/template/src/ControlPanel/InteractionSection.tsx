@@ -33,12 +33,15 @@ export function InteractionSection({
   }
   const active = modes.find((m) => m.id === mode);
   return (
-    <CommandSection label="Interaction" expandByDefault={false}>
+    <CommandSection label="Interact" expandByDefault={false}>
       <Box px="xs" pb="0.5em">
         <SegmentedControl
           fullWidth
           size="xs"
           radius="xs"
+          // The panel's buttons print at `sm`; `xs` would set the mode names smaller than
+          // the Reset below them.
+          styles={{ label: { fontSize: 'var(--mantine-font-size-sm)' } }}
           value={mode}
           onChange={(next) => onModeChange(next as InteractionModeId)}
           data={modes.map((m) => ({
