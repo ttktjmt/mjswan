@@ -157,8 +157,6 @@ export async function loadSceneFromURL(
   mujoco: MainModule,
   filename: string,
   parent: {
-    mjModel: MjModel | null;
-    mjData: MjData | null;
     scene: THREE.Scene;
     bodies?: Record<number, THREE.Group>;
     lights?: THREE.Light[];
@@ -166,23 +164,6 @@ export async function loadSceneFromURL(
     mujocoRoot?: THREE.Group;
   }
 ): Promise<[MjModel, MjData, Record<number, THREE.Group>, THREE.Light[]]> {
-  if (parent.mjData != null) {
-    try {
-      parent.mjData.delete();
-    } catch {
-      // ignore
-    }
-    parent.mjData = null;
-  }
-  if (parent.mjModel != null) {
-    try {
-      parent.mjModel.delete();
-    } catch {
-      // ignore
-    }
-    parent.mjModel = null;
-  }
-
   let modelPath: string;
 
   if (isInlineXML(filename)) {
@@ -253,11 +234,8 @@ export async function loadSceneFromURL(
     throw new Error(`MjData constructor returned null for model loaded from ${modelPath}`);
   }
 
-  parent.mjModel = newModel;
-  parent.mjData = newData;
-
-  const mjModel = parent.mjModel;
-  const mjData = parent.mjData;
+  const mjModel = newModel;
+  const mjData = newData;
 
   const textDecoder = new TextDecoder('utf-8');
   const namesArray = new Uint8Array(mjModel.names);

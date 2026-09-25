@@ -32,3 +32,12 @@ test('createEngine renders the .mjb that add_scene(model=...) writes', async ({ 
   expect(result?.nonBlank, `luminance range ${JSON.stringify(result?.luminanceRange)}`).toBe(true);
   expect(pageErrors).toEqual([]);
 });
+
+// The switch path: the first scene's model is freed before the second loads.
+test('createEngine renders after switching scenes', async ({ page }) => {
+  const { result, pageErrors } = await runHarness(page, '?loads=2');
+  expect(result?.ok, result?.error).toBe(true);
+  expect(result?.running).toBe(true);
+  expect(result?.nonBlank, `luminance range ${JSON.stringify(result?.luminanceRange)}`).toBe(true);
+  expect(pageErrors).toEqual([]);
+});

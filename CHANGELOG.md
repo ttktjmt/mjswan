@@ -573,6 +573,12 @@ shortcuts.
 
 ### Fixed
 
+- **Switching scenes frees the scene it leaves.** The engine dropped its references to
+  the old `MjModel` and `MjData` before handing them to the loader that was to delete
+  them, so each switch kept the previous model on the WASM heap for the life of the
+  page, where a session of switches between large scenes ends in `WasmMemoryLimitError`.
+  The engine now frees them itself, on a switch and in `dispose()`.
+
 - **A scene added with `add_scene(model=...)` opens in the browser.** The build saves such
   a scene as a compiled `.mjb`, but the engine opened every scene as a zipped `.mjz`, so
   JSZip rejected it before MuJoCo saw it. The build names the file for the argument

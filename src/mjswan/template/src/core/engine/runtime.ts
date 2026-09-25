@@ -472,8 +472,7 @@ export class mjswanRuntime {
     this.initializeCommands();
 
     // Clear current references before loading the new scene.
-    this.mjModel = null;
-    this.mjData = null;
+    this.releaseModel();
     this.bodies = null;
     this.lights = [];
     this.mujocoRoot = null;
@@ -569,11 +568,7 @@ export class mjswanRuntime {
         this.scene.remove(existingRoot);
       }
 
-      const parent = {
-        mjModel: this.mjModel,
-        mjData: this.mjData,
-        scene: this.scene,
-      };
+      const parent = { scene: this.scene };
 
       [this.mjModel, this.mjData, this.bodies, this.lights] = await loadSceneFromURL(
         this.mujoco,
@@ -635,6 +630,14 @@ export class mjswanRuntime {
     })();
 
     await this.loadingScene;
+  }
+
+  /** Frees the model on the WASM heap, which nothing else does. Call with the loop stopped. */
+  private releaseModel(): void {
+    this.mjData?.delete();
+    this.mjModel?.delete();
+    this.mjData = null;
+    this.mjModel = null;
   }
 
   // No scene cache to reclaim on OOM, so surface it as WasmMemoryLimitError directly.
@@ -1884,8 +1887,7 @@ export class mjswanRuntime {
       this.dragStateManager = null;
     }
 
-    this.mjData = null;
-    this.mjModel = null;
+    this.releaseModel();
 
     // NOTE: Do NOT dispose Three.js resources here as they may be cached The cache manager
     // will handle their disposal when evicting Just clear references
