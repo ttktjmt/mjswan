@@ -44,9 +44,8 @@ export class OnnxModule {
   }
 
   async init(): Promise<void> {
-    // Wasm, like every other graph in the page: the engine carries ORT's CPU-only build,
-    // whose wasm is half the size of the one that also holds the WebGPU backend. See
-    // vite.wasm.ts for why that size is load-bearing.
+    // wasm is the only backend the bundled ORT build registers; `vite.wasm.ts` says why
+    // the GPU one is not shipped. See docs/docs/api/engine.md.
     this.session = await ort.InferenceSession.create(this.bytes, {
       executionProviders: ['wasm'],
       graphOptimizationLevel: 'all',

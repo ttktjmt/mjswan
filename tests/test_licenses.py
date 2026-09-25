@@ -7,6 +7,7 @@ copy are mocked by ``build_manifest``.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -14,8 +15,9 @@ import mujoco
 import pytest
 
 from mjswan.builder import Builder
+from mjswan.cloud.publish import plan_publish
 from mjswan.document import document_files, unpack_document, write_document
-from mjswan.licenses import (
+from mjswan.license import (
     BLOCKED,
     CUSTOM,
     GENERATABLE_LICENSES,
@@ -41,7 +43,6 @@ from mjswan.licenses import (
     spec_asset_directories,
     tier_of,
 )
-from mjswan.publish import plan_publish
 
 # ── The naming rule ───────────────────────────────────────────────────────────
 
@@ -339,6 +340,29 @@ class TestDetection:
 
         assert [(a.component, a.license) for a in found] == [("unitree_go1", _BSD)]
 
+    def test_a_hub_cache_layout_is_searched_where_it_links_from(self, tmp_path):
+        """The Hub cache keeps each file in ``blobs/`` and links it into the snapshot,
+        so the license sits beside the link, not beside what it points to."""
+        cache = tmp_path / "models--org--robots"
+        snapshot = cache / "snapshots" / "0a1b2c3"
+        (cache / "blobs").mkdir(parents=True)
+
+        def link(path: Path, data: bytes) -> None:
+            blob = cache / "blobs" / hashlib.sha256(data).hexdigest()
+            blob.write_bytes(data)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.symlink_to(blob)
+
+        source = _write_model(tmp_path / "source", meshdir="robot/assets")
+        link(snapshot / "scene.xml", source.read_bytes())
+        link(snapshot / "robot" / "assets" / "trunk.stl", b"solid trunk")
+        link(snapshot / "robot" / "LICENSE", _BSD)
+        spec = mujoco.MjSpec.from_file(str(snapshot / "scene.xml"))
+
+        found = detect_attributions(spec_asset_directories(spec))
+
+        assert [(a.component, a.license) for a in found] == [("robot", _BSD)]
+
     def test_two_parents_not_more(self, tmp_path):
         (tmp_path / "LICENSE").write_bytes(_APACHE)
         xml = _write_model(tmp_path / "a" / "b" / "c")
@@ -500,10 +524,13 @@ class TestBuildOutput:
         assert "license" not in json.dumps(licensed_manifest).lower()
 
     def test_the_document_carries_the_files_and_publish_takes_them(
-        self, tmp_path, minimal_model, build_manifest
+        self, tmp_path, minimal_spec, build_manifest
     ):
         builder = Builder(license="Apache-2.0", copyright="x")
-        _, scene = _project_with_scene(builder, minimal_model)
+        # From a spec: Cloud takes no .mjb scene.
+        scene = builder.add_project(name="Demo").add_scene(
+            name="Humanoid", spec=minimal_spec
+        )
         scene.add_attribution("go2", license="BSD-3-Clause", copyright="Unitree")
         out = tmp_path / "dist"
         build_manifest(builder, out)
@@ -541,7 +568,7 @@ class TestInfoCli:
     ):
         from typer.testing import CliRunner
 
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         builder = Builder(license="Apache-2.0", copyright="x")
         _, scene = _project_with_scene(builder, minimal_model)

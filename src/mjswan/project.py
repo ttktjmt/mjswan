@@ -7,24 +7,31 @@ managing projects containing multiple scenes.
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 import mujoco
 
-from .adapters import apply_mjlab_sim_options, ensure_mjlab_extensions
-from .envs.mdp.events import apply_terrain_spawn
-from .licenses import (
+from .build.mjz import collect_spec_assets
+from .document.ids import assign_name, name2id
+from .license import (
     detect_attributions,
     known_attribution,
     resolve_license,
     resolve_notice,
     spec_asset_directories,
 )
-from .scene import SceneConfig, SceneHandle, _env_cfg_control_dt
-from .utils import assign_id, collect_spec_assets, name2id
-from .viewer import ViewerConfig
+from .mjlab import apply_mjlab_sim_options, ensure_mjlab_extensions
+from .mjlab.event import apply_terrain_spawn
+from .mjlab.task import (
+    adapt_viewer_config,
+    entity_specs,
+    env_cfg_control_dt,
+    extract_terrain_data,
+)
+from .scene import SceneConfig, SceneHandle
 
 if TYPE_CHECKING:
     from .builder import Builder
@@ -88,7 +95,7 @@ class ProjectHandle:
 
         Args:
             license: A generatable SPDX id (one of
-                :data:`mjswan.licenses.GENERATABLE_LICENSES`) for the standard text, or
+                :data:`mjswan.license.GENERATABLE_LICENSES`) for the standard text, or
                 the path to a license text, copied verbatim.
             copyright: The holder line of a generated text, e.g. ``"2026 Example"``.
 
@@ -119,8 +126,9 @@ class ProjectHandle:
         Provide either ``model`` or ``spec`` (not both).
 
         Using ``model`` saves the scene as a binary ``.mjb`` file, which loads
-        faster in the browser but produces larger files. This is recommended
-        when loading speed is a priority and storage size is not a concern.
+        faster in the browser but produces larger files. It opens only in the
+        MuJoCo version that saved it, goes without the XR hands (they are added
+        to the MJCF), and cannot be published to mjswan Cloud.
 
         Using ``spec`` saves the scene as a compressed ``.mjz`` file, which
         uses significantly less storage but may take slightly longer to load.
@@ -176,11 +184,12 @@ class ProjectHandle:
         if metadata is None:
             metadata = {}
 
+        name, ident = assign_name(
+            name, {s.id for s in self._config.scenes}, kind="scene", stacklevel=4
+        )
         scene_config = SceneConfig(
             name=name,
-            id=assign_id(
-                name, {s.id for s in self._config.scenes}, kind="scene", stacklevel=4
-            ),
+            id=ident,
             model=model,
             spec=spec,
             metadata=metadata,
@@ -199,6 +208,82 @@ class ProjectHandle:
         if events:
             handle.set_events(events)
         return handle
+
+    def add_scene_hf(
+        self,
+        repo_id: str,
+        path: str,
+        *,
+        name: str | None = None,
+        revision: str | None = None,
+        repo_type: str = "model",
+        token: str | None = None,
+        allow_patterns: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        control_dt: float | None = None,
+        events: Mapping[str, Any] | None = None,
+    ) -> SceneHandle:
+        """Add a scene whose MJCF and assets come from a Hugging Face Hub repository.
+
+        The XML's whole directory is downloaded, since MuJoCo resolves meshes and
+        textures relative to it (for an XML at the root, the whole repository), and the
+        spec is compiled in place. It is then added as by :meth:`add_scene` with
+        ``spec=``, license detection included: a ``LICENSE`` beside the model is copied
+        into the scene directory (ADR 0007 §2).
+
+        Args:
+            repo_id: Hub repository, ``"<owner>/<name>"``.
+            path: The MJCF within the repository, e.g. ``"scenes/unitree_g1/scene.xml"``.
+            name: Scene name. Defaults to the XML's directory when its own stem only
+                names a role (``scene.xml``, ``model.xml``), else to the stem.
+            revision: Branch, tag or commit. ``None`` takes the default branch, so the
+                build follows the repository; pass a commit to pin it.
+            repo_type: ``"model"`` (default), ``"dataset"`` or ``"space"``.
+            token: Hub token for a gated or private repository.
+            allow_patterns: What to download, overriding "everything beside the XML".
+                Needed when the model reaches outside its own directory (a ``meshdir``
+                pointing at a shared folder), since the XML is not parsed to find out.
+            metadata: Optional metadata dictionary for the scene.
+            control_dt: Seconds per control step. See :meth:`add_scene`.
+            events: Default events for every policy's MDP on this scene.
+
+        Returns:
+            SceneHandle for adding policies and further configuration.
+
+        Raises:
+            ImportError: If ``huggingface_hub`` is not installed.
+            ValueError: If ``path`` does not name an XML file.
+
+        Example:
+            ```python
+            scene = project.add_scene_hf("my-org/assets", "scenes/unitree_g1/scene.xml")
+            scene.add_policy_hf("my-org/assets", filename="policies/walk.onnx")
+            ```
+        """
+        from .source.hf import fetch_dir, scene_name_for
+
+        if not path.lower().endswith(".xml"):
+            raise ValueError(
+                f"add_scene_hf({repo_id!r}) takes the path of the MJCF, not its "
+                f"directory, got {path!r}. The XML names the meshes beside it, so "
+                "which one to compile cannot be guessed."
+            )
+        local_dir = fetch_dir(
+            repo_id,
+            str(PurePosixPath(path).parent),
+            revision=revision,
+            repo_type=repo_type,
+            token=token,
+            allow_patterns=allow_patterns,
+        )
+        spec = mujoco.MjSpec.from_file(str(local_dir / PurePosixPath(path).name))
+        return self.add_scene(
+            name=name or scene_name_for(repo_id, path),
+            spec=spec,
+            metadata=metadata,
+            control_dt=control_dt,
+            events=events,
+        )
 
     def add_scene_mjlab(
         self,
@@ -250,7 +335,7 @@ class ProjectHandle:
         except ImportError as e:
             raise ImportError(
                 "mjlab is required for add_scene_mjlab(). "
-                "Install it with: pip install mjlab"
+                "Install it with: pip install 'mjswan[mjlab]'"
             ) from e
 
         if env_cfg is not None and play is not None:
@@ -279,7 +364,7 @@ class ProjectHandle:
         if not handle._config.attributions:
             handle._config.attributions = detect_attributions(
                 d
-                for entity_spec in _mjlab_entity_specs(env_cfg.scene)
+                for entity_spec in entity_specs(env_cfg.scene)
                 for d in spec_asset_directories(entity_spec)
             )
         if not handle._config.attributions:
@@ -287,10 +372,10 @@ class ProjectHandle:
             if known is not None:
                 handle._config.attributions.append(known)
 
-        # The trace env comes later, from `builder._scene_trace_env`: a tracking task
+        # The trace env comes later, from `mjswan.build.pipeline`: a tracking task
         # cannot build one until its clip has been written into the bundle.
         # Rates differ per task — Cartpole 0.05, locomotion 0.02 — so read it here.
-        control_dt = _env_cfg_control_dt(env_cfg)
+        control_dt = env_cfg_control_dt(env_cfg)
         if control_dt is None:
             raise ValueError(
                 f"Could not read a control rate off task {task_id!r}'s env config "
@@ -298,10 +383,10 @@ class ProjectHandle:
                 "and build the scene manually."
             )
         handle._config.control_dt = control_dt
-        viewer_cfg = _adapt_mjlab_viewer_config(getattr(env_cfg, "viewer", None))
+        viewer_cfg = adapt_viewer_config(getattr(env_cfg, "viewer", None))
         if viewer_cfg is not None:
             handle.set_viewer(viewer_cfg)
-        terrain_data = _extract_terrain_data(scene)
+        terrain_data = extract_terrain_data(scene)
         if terrain_data:
             handle._config.terrain_data = terrain_data
         if events is not None:
@@ -313,104 +398,12 @@ class ProjectHandle:
         return handle
 
 
-def _extract_terrain_data(scene: Any) -> dict[str, Any] | None:
-    """Extract spawn positions from a mjlab Scene for browser-side event execution.
-
-    Tries named flat_patches first (higher-quality sampled positions); falls back
-    to terrain_origins (one per sub-terrain tile) when flat_patch_sampling is not
-    configured on any sub-terrain.
-    """
-    terrain = getattr(scene, "terrain", None)
-    if terrain is None:
-        return None
-
-    # Try explicit flat_patches (only present when flat_patch_sampling is configured).
-    flat_patches = getattr(terrain, "flat_patches", None)
-    if flat_patches:
-        serialized: dict[str, list[list[float]]] = {}
-        for name, patches in flat_patches.items():
-            # patches: (num_rows, num_cols, num_patches, 3) tensor
-            try:
-                arr = patches.cpu().numpy()
-                rows, cols, n, _ = arr.shape
-                positions = arr.reshape(rows * cols * n, 3).tolist()
-                serialized[name] = positions
-            except Exception:
-                pass
-        if serialized:
-            return {"flat_patches": serialized}
-
-    # Fall back to terrain_origins (one spawn point per sub-terrain tile).
-    terrain_origins = getattr(terrain, "terrain_origins", None)
-    if terrain_origins is not None:
-        try:
-            arr = terrain_origins.cpu().numpy()
-            # shape: (num_rows, num_cols, 3)
-            num_rows, num_cols, _ = arr.shape
-            positions = arr.reshape(num_rows * num_cols, 3).tolist()
-            return {"flat_patches": {"spawn": positions}}
-        except Exception:
-            pass
-
-    return None
-
-
-def _mjlab_entity_specs(scene_cfg: Any) -> Iterator[mujoco.MjSpec]:
-    """The terrain's and each entity's own spec, before the scene flattens them."""
-    spec_cfgs = [getattr(scene_cfg, "terrain", None)]
-    entities = getattr(scene_cfg, "entities", {})
-    if isinstance(entities, dict):
-        spec_cfgs.extend(entities.values())
-
-    for cfg in spec_cfgs:
-        spec_fn = getattr(cfg, "spec_fn", None)
-        if not callable(spec_fn):
-            continue
-        spec = spec_fn()
-        if isinstance(spec, mujoco.MjSpec):
-            yield spec
-
-
 def _collect_mjlab_scene_assets(scene_cfg: Any) -> dict[str, bytes]:
     """Collect assets from mjlab scene component specs before they are flattened."""
     assets: dict[str, bytes] = {}
-    for spec in _mjlab_entity_specs(scene_cfg):
+    for spec in entity_specs(scene_cfg):
         assets.update(collect_spec_assets(spec))
     return assets
-
-
-def _adapt_mjlab_viewer_config(config: Any | None) -> ViewerConfig | None:
-    """Convert mjlab's ``ViewerConfig`` dataclass to mjswan's equivalent."""
-    if config is None:
-        return None
-
-    defaults = ViewerConfig()
-    entity_name = getattr(config, "entity_name", None)
-    body_name = getattr(config, "body_name", None)
-    if entity_name is None and body_name is not None:
-        entity_name = "robot"
-    origin_type_name = getattr(getattr(config, "origin_type", None), "name", None)
-    if isinstance(origin_type_name, str):
-        origin_type = getattr(ViewerConfig.OriginType, origin_type_name, None)
-    else:
-        origin_type = None
-
-    return ViewerConfig(
-        lookat=tuple(getattr(config, "lookat", (0.0, 0.0, 0.0))),
-        distance=float(getattr(config, "distance", 4.0)),
-        fovy=getattr(config, "fovy", None),
-        elevation=float(getattr(config, "elevation", -30.0)),
-        azimuth=float(getattr(config, "azimuth", 45.0)),
-        origin_type=origin_type or defaults.origin_type,
-        entity_name=entity_name,
-        body_name=body_name,
-        env_idx=int(getattr(config, "env_idx", 0)),
-        max_extra_envs=int(getattr(config, "max_extra_envs", 2)),
-        enable_reflections=bool(getattr(config, "enable_reflections", True)),
-        enable_shadows=bool(getattr(config, "enable_shadows", True)),
-        height=int(getattr(config, "height", 240)),
-        width=int(getattr(config, "width", 320)),
-    )
 
 
 __all__ = ["ProjectConfig", "ProjectHandle"]

@@ -16,6 +16,7 @@ import pytest
 
 from mjswan.app import MjswanApp
 from mjswan.builder import Builder
+from mjswan.cloud.publish import HttpResponse, plan_publish, publish_dist
 from mjswan.document import (
     document_files,
     is_document,
@@ -24,21 +25,21 @@ from mjswan.document import (
     write_document,
 )
 from mjswan.envs.mdp.actions import JointPositionActionCfg
-from mjswan.publish import HttpResponse, plan_publish, publish_dist
 
 
-@pytest.fixture
-def built(tmp_path, minimal_model, minimal_onnx, monkeypatch) -> Path:
+def _build(tmp_path, onnx_model, monkeypatch, **scene_source) -> Path:
     """A real `_save_web` tree with the engine files a build would also carry."""
-    monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-    monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+    monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+    monkeypatch.setattr(
+        "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+    )
     builder = Builder()
     scene = builder.add_project(name="Demo").add_scene(
-        control_dt=0.02, name="Humanoid", model=minimal_model
+        control_dt=0.02, name="Humanoid", **scene_source
     )
     scene.add_policy(
         name="walk",
-        policy=minimal_onnx,
+        policy=onnx_model,
         actions={"joint_pos": JointPositionActionCfg(actuator_names=(".*",))},
     )
     out = tmp_path / "dist"
@@ -48,6 +49,11 @@ def built(tmp_path, minimal_model, minimal_onnx, monkeypatch) -> Path:
     (out / "assets" / "index-abc.js").write_text("console.log(1)")
     (out / "assets" / "mujoco.wasm").write_bytes(b"\\0asm")
     return out
+
+
+@pytest.fixture
+def built(tmp_path, minimal_model, minimal_onnx, monkeypatch) -> Path:
+    return _build(tmp_path, minimal_onnx, monkeypatch, model=minimal_model)
 
 
 class TestDocumentFiles:
@@ -146,7 +152,11 @@ class _Transport:
 
 
 class TestPublishingADocument:
-    def test_uploads_the_same_file_set_as_the_directory(self, built, monkeypatch):
+    def test_uploads_the_same_file_set_as_the_directory(
+        self, tmp_path, minimal_spec, minimal_onnx, monkeypatch
+    ):
+        # From a spec: Cloud takes no .mjb scene.
+        built = _build(tmp_path, minimal_onnx, monkeypatch, spec=minimal_spec)
         monkeypatch.setenv("MJSWAN_TOKEN", "t")
         as_directory = {f.upload_path for f in plan_publish(built).files}
         path = write_document(built)
@@ -157,7 +167,7 @@ class TestPublishingADocument:
         assert "manifest.json" in as_directory
 
     def test_a_bad_document_is_a_publish_error(self, tmp_path, monkeypatch):
-        from mjswan.publish import PublishError
+        from mjswan.cloud.publish import PublishError
 
         monkeypatch.setenv("MJSWAN_TOKEN", "t")
         not_a_zip = tmp_path / "broken.swn"
@@ -177,7 +187,7 @@ class TestServingADocument:
         (engine / "dist" / "assets" / "index-abc.js").write_text("console.log(1)")
         (engine / "dist" / "fixtures").mkdir()
         (engine / "dist" / ".mjswan-build-meta.json").write_text("{}")
-        monkeypatch.setattr("mjswan._build_client.TEMPLATE_DIR", engine)
+        monkeypatch.setattr("mjswan.build.frontend.TEMPLATE_DIR", engine)
         return engine
 
     def test_a_directory_is_served_where_it_sits(self, built, monkeypatch, tmp_path):
@@ -219,7 +229,7 @@ class TestServingADocument:
     def test_serve_cli_refuses_a_document_without_a_manifest(self, tmp_path):
         from typer.testing import CliRunner
 
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         other = tmp_path / "other.swn"
         with zipfile.ZipFile(other, "w") as zf:
@@ -236,7 +246,7 @@ class TestInfoCli:
         return CliRunner()
 
     def test_info_reads_a_document_like_a_directory(self, built):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         path = write_document(built)
         as_dir = self._runner().invoke(app, ["info", str(built)])
@@ -249,7 +259,7 @@ class TestInfoCli:
         assert "mjswan document" in as_doc.output
 
     def test_info_refuses_a_document_without_a_manifest(self, tmp_path):
-        from mjswan._cli import app
+        from mjswan.cli import app
 
         other = tmp_path / "other.swn"
         with zipfile.ZipFile(other, "w") as zf:

@@ -1,6 +1,6 @@
 /**
- * The provider choice in `OnnxModule.init()`: the engine carries ORT's CPU-only build, so
- * there is one provider and no fallback to arrange.
+ * The provider choice in `OnnxModule.init()`: wasm, the only backend the bundled ORT
+ * build carries. `../../onnx/__tests__/ortRuntimeFiles.test.ts` pins that build.
  */
 import * as ort from 'onnxruntime-web/wasm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -19,16 +19,14 @@ const providersOf = (call: unknown[]): unknown =>
 describe('OnnxModule.init', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  // Asking for a provider this bundle does not carry would cost a failed session and a
-  // retry on every policy load, so the ask has to match what shipped (see vite.wasm.ts).
-  it('asks only for the provider the shipped bundle has', async () => {
+  it('asks for wasm, the one backend the shipped build registers', async () => {
     const create = vi.spyOn(ort.InferenceSession, 'create').mockResolvedValue(fakeSession);
     await new OnnxModule(new ArrayBuffer(8)).init();
     expect(create).toHaveBeenCalledTimes(1);
     expect(providersOf(create.mock.calls[0])).toEqual(['wasm']);
   });
 
-  it('surfaces a session failure rather than swallowing it', async () => {
+  it('surfaces a creation failure instead of retrying, since there is nothing to fall back to', async () => {
     vi.spyOn(ort.InferenceSession, 'create').mockRejectedValue(new Error('bad model'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await expect(new OnnxModule(new ArrayBuffer(8)).init()).rejects.toThrow('bad model');

@@ -88,8 +88,10 @@ def built_output(tmp_path, minimal_model, minimal_onnx, monkeypatch) -> Path:
     )
     from mjswan.managers.termination_manager import TerminationTermCfg
 
-    monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
-    monkeypatch.setattr("mjswan.builder.install_spa", MagicMock(return_value=True))
+    monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+    monkeypatch.setattr(
+        "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+    )
 
     def joint_pos(env):
         return env.scene["robot"].data.joint_pos

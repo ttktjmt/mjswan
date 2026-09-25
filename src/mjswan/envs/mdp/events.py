@@ -108,49 +108,8 @@ def reset_root_state_on_flat_patch(
     )
 
 
-def apply_terrain_spawn(scene: Any) -> None:
-    """Swap a scene's ``reset_root_state_uniform`` for patch-based spawning, in place.
-
-    mjlab spreads many envs over the terrain, so its uniform reset only jitters each
-    around its own origin; the browser has one env, so drawing a patch is what covers
-    the terrain at all. A no-op unless the scene has both a flat-patch table and that
-    mjlab term.
-    """
-    flat_patches = (scene.terrain_data or {}).get("flat_patches", {})
-    events = scene.events
-    if not flat_patches or not events:
-        return
-    patch_name = "spawn" if "spawn" in flat_patches else next(iter(flat_patches))
-    patches = flat_patches[patch_name]
-    if not patches:
-        return
-
-    # After the early returns: a terrain-free scene must not need mjlab importable.
-    from mjlab.managers.scene_entity_config import SceneEntityCfg
-
-    from mjswan.managers.event_manager import EventTermCfg
-
-    for key, event in events.items():
-        if getattr(event.func, "__name__", None) != "reset_root_state_uniform":
-            continue
-        # The mjlab term's own yaw range, so the swap does not also widen it.
-        pose_range = dict(event.params.get("pose_range") or {})
-        entity = getattr(event.params.get("asset_cfg"), "name", None) or "robot"
-        events[key] = EventTermCfg(
-            func=reset_root_state_on_flat_patch,
-            mode=event.mode,
-            params={
-                "asset_cfg": SceneEntityCfg(entity),
-                "patches": patches,
-                "yaw_range": tuple(pose_range.get("yaw", (-math.pi, math.pi))),
-            },
-        )
-        return
-
-
 __all__ = [
     "EventBinding",
-    "apply_terrain_spawn",
     "register_event",
     "reset_root_state_on_flat_patch",
     "_custom_registry",

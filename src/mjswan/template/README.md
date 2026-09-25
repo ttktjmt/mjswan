@@ -85,8 +85,9 @@ export class MyObservation extends ObservationBase {
 }
 ```
 
-The build step bundles your source into the engine. See the
-[examples](https://github.com/ttktjmt/mjswan/tree/main/examples) for complete custom terms.
+The build step bundles your source into the engine. See
+[How the Build Works](https://mjswan.readthedocs.io/en/latest/guides/how-it-works/#a-term-cannot-be-traced)
+for when a term needs one, and how a binding's `ts_src` names the file.
 
 > Subpath exports point at TypeScript source (not compiled `.d.ts`), so consumers need a
 > bundler that handles TypeScript. Vite does; plain `tsc` does not. This keeps full IDE

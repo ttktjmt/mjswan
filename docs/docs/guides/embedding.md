@@ -100,7 +100,7 @@ current state back into the URL — so you can arrange a view by hand and copy t
 bar into your `src`.
 
 ```html
-<iframe src="https://ttktjmt.github.io/mjswan/?scene=G1&policy=Locomotion&panel=0" …></iframe>
+<iframe src="https://ttktjmt.github.io/mjswan/?project=showcase&scene=g1_on_street&policy=locomotion&panel=0" …></iframe>
 ```
 
 ### Moving around in VR
@@ -134,6 +134,9 @@ hand bodies, roughly 1.6x the physics cost, and the headset must grant the
 `hand-tracking` feature — **Meta Quest** is the recommended one, since its browser ships
 WebXR hand tracking with nothing to install. Ordinary desktop and mobile viewing is
 unaffected: untracked hands sit parked far above the scene.
+
+The hand bodies are added to the scene's MJCF, so a scene added as `add_scene(model=...)`
+(a compiled `.mjb`, with no MJCF) goes without them.
 
 ### Passthrough AR
 

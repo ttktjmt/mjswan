@@ -1,5 +1,5 @@
 // esbuild aliases `three` to this shim when bundling author custom-MDP plugins
-// (see _build_client.build_plugins_module), so a plugin's `import * as THREE
+// (see build/frontend.py's build_plugins_module), so a plugin's `import * as THREE
 // from 'three'` resolves to the engine bundle's single three instance (exposed
 // on globalThis by src/engine/index.ts). One shared instance across the engine
 // and the separately-loaded plugin ESM makes instanceof / shared scene objects

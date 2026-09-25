@@ -98,6 +98,18 @@ describe('parseManifest', () => {
     expect(input.viewer).toEqual({ distance: 5, originType: 'ASSET_BODY', bodyName: 'torso' });
   });
 
+  it('tells the engine the model format the build named the scene file for', async () => {
+    const withScene = (scene: string): Manifest => ({
+      ...MANIFEST,
+      projects: [{ ...MANIFEST.projects[0], scenes: [{ ...MANIFEST.projects[0].scenes[0], scene }] }],
+    });
+    const formatOf = async (scene: string) =>
+      (await parseManifest(withScene(scene), fakeSource().source).projects[0].scenes[0].buildScene())
+        .modelFormat;
+    expect(await formatOf('scene.mjz')).toBe('mjz');
+    expect(await formatOf('scene.mjb')).toBe('mjb');
+  });
+
   it('defaults the policy and omits the splat, and accepts a JSON string', async () => {
     const catalog = parseManifest(JSON.stringify(MANIFEST), fakeSource().source);
     const input = await catalog.projects[0].scenes[0].buildScene();

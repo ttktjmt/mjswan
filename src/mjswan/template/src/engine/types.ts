@@ -6,10 +6,11 @@ import type { CameraView, ViewerConfig } from '../core/engine/viewer_config';
 import type { TerrainData } from '../core/event/EventBase';
 import type { Bytes } from '../core/utils/bytes';
 import type { SplatTransform } from '../core/scene/splat';
+import type { ModelFormat } from '../core/scene/scene';
 import type { EnginePlugins } from '../core/plugins';
 
 // Bytes: asset bytes or a lazy loader. EnginePlugins: custom MDP terms, trusted-only.
-export type { Bytes, SplatTransform, EnginePlugins };
+export type { Bytes, SplatTransform, ModelFormat, EnginePlugins };
 
 export interface SplatInput {
   data: Bytes;            // .spz
@@ -43,7 +44,13 @@ export interface PolicyInput {
 }
 
 export interface SceneInput {
-  model: Bytes;           // .mjz (engine unpacks)
+  model: Bytes;
+  /**
+   * `mjz` (the default) for the zipped MJCF of `add_scene(spec=...)`, `mjb` for the
+   * compiled model of `add_scene(model=...)`. An `mjb` loads only in the MuJoCo version
+   * that saved it, and has no XML to add the XR hands to.
+   */
+  modelFormat?: ModelFormat;
   policy?: PolicyInput | null;
   splat?: SplatInput | null;
   viewer?: ViewerConfig;

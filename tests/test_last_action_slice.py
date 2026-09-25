@@ -22,7 +22,7 @@ import pytest
 # Pure-Python walk, but `mjswan.compile` imports torch at load time.
 torch = pytest.importorskip("torch")
 
-from mjswan.compile.tracer import action_term_offset  # noqa: E402
+from mjswan.compile.native import action_term_offset  # noqa: E402
 
 
 class _StubActionManager:

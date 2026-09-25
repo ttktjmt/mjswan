@@ -279,7 +279,7 @@ export class RaycastSensor {
           origin as unknown as number[],
           direction as unknown as number[],
           this.geomGroup as unknown as number[],
-          1,
+          true,
           exclude,
           this.geomId,
           null,

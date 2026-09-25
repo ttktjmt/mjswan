@@ -30,8 +30,10 @@ jobs:
       with:
         python-version: '3.12'
 
+    # Only what `examples/demo/main.py` imports. `examples` additionally carries
+    # onnxruntime, which the numeric-parity checks need and this build does not.
     - name: Install Python dependencies
-      run: uv sync --extra examples
+      run: uv sync --extra hf --extra mjlab
 
     - name: Build demo application
       run: |

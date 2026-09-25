@@ -31,7 +31,7 @@ import { createEngine } from 'mjswan';
 
 const engine = await createEngine(container, { multithreaded: false });
 
-const model = await (await fetch('/main/assets/g1/scene.mjz')).arrayBuffer();
+const model = await (await fetch('/my_robots/g1/scene.mjz')).arrayBuffer();
 await engine.loadScene({ model });
 ```
 
@@ -59,19 +59,13 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
     no CDN, and `script-src 'self'` covers it.
 
 !!! note "Where inference runs"
-    Everything runs on **wasm** — the policy network and every traced MDP term graph alike.
-    The engine carries ONNX Runtime's CPU-only build: the one that also holds the WebGPU
-    backend passed 25 MiB in onnxruntime-web 1.29, which is Cloudflare Pages' per-file
-    limit, so it was silently dropped from deployments and every request for it answered
-    with the host's `index.html`. The CPU build is half the size, and it is what every
-    visitor downloads whether or not their machine has an adapter. Nothing to configure.
-
-    Term graphs would have stayed on wasm regardless: they are small, a step runs many of
-    them, and every inference in the page is serialized, so a GPU round trip each would
-    cost more than it saves.
-
-    ORT names the provider it dropped in a `console.warn`, which a release bundle strips.
-    Build with `MJSWAN_DEBUG=1` (or `Builder(debug=True)`) to see whether a machine fell back.
+    Every inference runs on **wasm** (the policy network and the traced MDP term graphs
+    alike), and there is nothing to configure. The engine ships ONNX Runtime's CPU build and
+    asks for no other provider. Its WebAssembly is 13.3 MiB against 26.5 MiB for the build
+    that adds WebGPU: over the 25 MiB per-file limit hosts such as Cloudflare Pages enforce,
+    and spent on a GPU round trip per step that networks this size do not win back. Term
+    graphs make the case twice over: a step runs many of them, and every inference in the
+    page goes through one serialized queue.
 
 ### `MjswanEngine`
 
@@ -88,6 +82,8 @@ Verbs are named for their cost: `loadScene` rebuilds the model, everything else 
 | `play` / `pause` / `reset` | `() => void` | Playback. |
 | `camera` | `CameraControls` | `set(partial)`, `get()`, `frame()`. |
 | `commands` | `CommandControls` | `set(id, value)`, `trigger(id)`. |
+| `debugVis` | `DebugVisControls` | `set(term, enabled)`: show or hide a command term's drawing, such as the velocity arrows. |
+| `events` | `EventControls` | `fire(name)` for a `manual` term, `setArmed(name, armed)` for an `interval` one. |
 | `getState` | `() => MjswanEngineState` | Current snapshot. |
 | `subscribe` | `(listener) => () => void` | Returns an unsubscribe function. |
 | `captureThumbnail` | `(opts?: { maxDim?, quality? }) => Promise<Blob>` | JPEG of the current frame. |
@@ -105,6 +101,10 @@ interface MjswanEngineState {
   error: Error | null;
   commands: ReadonlyArray<CommandDescriptor>;
   commandValues: Readonly<Record<string, number>>;
+  /** Terms with a debug drawing to toggle; empty when the policy has none. */
+  debugVis: ReadonlyArray<DebugVisDescriptor>;
+  /** Event terms the operator can drive; empty when the scene has none. */
+  events: ReadonlyArray<EventDescriptor>;
   /** The seed in use, so an app recording a session can persist it. */
   termSeed: number;
 }
@@ -125,7 +125,8 @@ The engine never fetches. Every asset arrives as `Bytes` — an `ArrayBuffer`, o
 
     ```ts
     interface SceneInput {
-      model: Bytes;                        // .mjz (the engine unpacks it)
+      model: Bytes;
+      modelFormat?: 'mjz' | 'mjb';         // 'mjz' (default) from add_scene(spec=...), 'mjb' from model=
       policy?: PolicyInput | null;
       splat?: SplatInput | null;
       viewer?: ViewerConfig;
@@ -202,8 +203,8 @@ await engine.loadScene(await scene.buildScene({ policy: 'locomotion' }));  // by
 
 | Type | Shape |
 |---|---|
-| `Catalog` | `{ projects: ProjectCatalog[], default: string, pluginsPath?: string }` |
-| `ProjectCatalog` | `{ name, id, default?, scenes }` |
+| `Catalog` | `{ projects: ProjectCatalog[], pluginsPath?: string }` |
+| `ProjectCatalog` | `{ id, name, default, scenes }` |
 | `SceneEntry` | `{ id, name, camera?, splatSection, policies, splats, buildScene(opts?) }` |
 | `PolicyEntry` | `{ id, name, default, motions, build() }` |
 | `SplatEntry` | `{ id, name, control, transform, build() }` |
@@ -257,6 +258,7 @@ Python builder injects it into the bundle.
 | Requirement | Version |
 |---|---|
 | Node.js | 24+ (for building; the runtime is browser-only) |
+| MuJoCo | 3.11.0 (`@ttktjmt/mujoco`, bundled: MuJoCo's own package with the `mjtBool` array fix of [google-deepmind/mujoco#3616](https://github.com/google-deepmind/mujoco/pull/3616)), the same version as the Python package's `mujoco` pin |
 | Browser | WebAssembly + WebGL2. `SharedArrayBuffer` only for `multithreaded: true`. |
 
 The library build (`dist/mjswan.js`) is a single self-contained ESM: every dependency is

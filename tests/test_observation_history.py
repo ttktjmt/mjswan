@@ -21,7 +21,7 @@ import pytest
 # `mjswan.compile` imports torch, so the package import below waits for the skip.
 torch = pytest.importorskip("torch")
 
-from mjswan._onnx_build import (  # noqa: E402
+from mjswan.build.mdp.observation import (  # noqa: E402
     _apply_observation_pipeline,
     _group_is_fusable,
 )

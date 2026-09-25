@@ -62,10 +62,11 @@ or with `npm`:
 npm install mjswan
 ```
 
-You can run the bundled demo with the `mjswan` CLI (after installing `mjswan[examples]`):
+The demos live in `examples/`, which the wheel does not ship, so run them with the
+`mjswan` CLI from a clone of this repository (after `pip install -e '.[examples]'`):
 ``` sh
-mjswan demo          # runs the default demo
-mjswan demo --list   # see all available demos
+mjswan demo          # lists the bundled demos
+mjswan demo simple   # runs the simple demo
 ```
 
 The minimum python script for a sanity check:
@@ -82,13 +83,6 @@ app.launch()
 ```
 
 For detailed instructions, visit the [documentation](https://mjswan.readthedocs.io).
-
-
-## Third-Party Assets
-
-mjswan incorporates mujoco models from the external sources in its demo. See the respective submodule for full details, including individual model licenses and copyrights. All models are used under their respective licenses. Please review and comply with those terms for any use or redistribution.
-
-[Robot Descriptions License](https://github.com/robot-descriptions/robot_descriptions.py/blob/main/LICENSE) ･ [MuJoCo Playground License](https://github.com/google-deepmind/mujoco_playground/blob/main/LICENSE) ･ [MyoSuite License](https://github.com/MyoHub/myosuite/blob/main/LICENSE)
 
 
 ## Acknowledgments

@@ -181,6 +181,7 @@ class Engine implements MjswanEngine {
     try {
       const scene: ResolvedScene = {
         model: await resolveBytes(input.model),
+        modelFormat: input.modelFormat,
         policy: input.policy ? await resolvePolicy(input.policy) : null,
         splat: input.splat ? await resolveSplat(input.splat) : null,
         viewer: input.viewer ?? null,

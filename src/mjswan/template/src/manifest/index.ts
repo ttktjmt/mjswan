@@ -88,7 +88,10 @@ export interface ManifestPolicy {
 export interface ManifestScene {
   id: string;
   name: string;
-  /** Scene-relative model path: `scene.mjz` or `scene.mjb`. */
+  /**
+   * Scene-relative model path, named for the argument the scene was built from:
+   * `scene.mjz` for `add_scene(spec=...)`, `scene.mjb` for `add_scene(model=...)`.
+   */
   scene: string;
   /** Seconds per control step, from the task (mjlab's `timestep * decimation`). */
   control_dt?: number;
@@ -351,6 +354,7 @@ function toSceneEntry(project: ManifestProject, scene: ManifestScene, source: By
       // only `terrainData`, which every MDP on it may draw from.
       return {
         model: source(inScene(dir, scene.scene)),
+        modelFormat: scene.scene.endsWith('.mjb') ? 'mjb' : 'mjz',
         policy: policy ? buildPolicy(dir, scene, policy, source) : null,
         splat: splat ? buildSplat(dir, splat, source) : null,
         viewer: toViewerConfig(scene.camera),

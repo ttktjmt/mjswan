@@ -36,13 +36,10 @@ mjswan can be installed as a Python package (the primary workflow) or as an npm 
 
 | Requirement | Version |
 |---|---|
-| Python | 3.10 – 3.12 (3.13+ not yet supported) |
+| Python | 3.10 to 3.13 |
 | Platform | macOS (Apple Silicon) or Linux (x86-64) |
 | Browser | Any modern browser with WebAssembly and WebGL |
 | Node.js | 24+ (npm installation only) |
-
-!!! note "Python 3.13"
-    A transitive dependency (`labmaze`, pulled in via MyoSuite) does not yet publish a Python 3.13 wheel. Until it does, mjswan requires Python ≤ 3.12.
 
 ## Python Installation
 
@@ -50,15 +47,22 @@ mjswan can be installed as a Python package (the primary workflow) or as an npm 
 pip install mjswan
 ```
 
-That is everything needed to bundle MuJoCo models — `mujoco`, `onnx`, `typer`, `rich`,
-`wandb`, and `nodeenv` for the frontend build. Extra dependency sets:
+That is the whole pipeline: `mujoco`, `onnx`, `typer`, `rich`, and `nodeenv` for the
+frontend build. It bundles any MuJoCo model and any ONNX policy you already have on disk.
+
+**Where assets come from is an extra**, one per backend, and `import mjswan` needs none
+of them:
 
 ```bash
-pip install 'mjswan[dev]'       # type checking, linting, test tools
-pip install 'mjswan[examples]'  # mjlab, torch, MyoSuite, Playground, …
+pip install 'mjswan[wandb]'  # add_policy_wandb(only_latest=True) / add_motion_wandb
+pip install 'mjswan[hf]'     # add_scene_hf / add_policy_hf / add_motion_hf / add_splat_hf
+pip install 'mjswan[mjlab]'  # add_scene_mjlab, and tracing MDP terms (mjlab + torch)
 ```
 
-!!! warning "Policies with MDP terms need the `examples` extra"
+They combine: `pip install 'mjswan[wandb,mjlab]'` is the W&B checkpoint workflow, which
+`add_policy_wandb` runs by default and checks for when it is called.
+
+!!! warning "Policies with MDP terms need the `mjlab` extra"
     mjswan compiles observation, termination, event and command terms to ONNX at build
     time, which runs `torch.onnx.export` against a live mjlab environment — so a policy
     carrying any of those needs `mjlab` and `torch` installed. Both are **build-time
@@ -66,12 +70,20 @@ pip install 'mjswan[examples]'  # mjlab, torch, MyoSuite, Playground, …
     [How the Build Works](../guides/how-it-works.md).
 
     ```bash
-    pip install 'mjswan[examples]'
+    pip install 'mjswan[mjlab]'
     ```
 
-The `examples` extra also pulls in MyoSuite, MuJoCo Playground, `robot_descriptions`,
-`onnxruntime` (for the numeric parity checks), and `gymnasium`. It can take several
-minutes to install and requires Python ≤ 3.12.
+Three more extras: two for working *on* mjswan rather than with it, and one for running its
+examples:
+
+```bash
+pip install 'mjswan[check]'     # ruff, ty, pyright, what `make check` runs
+pip install 'mjswan[dev]'       # the above, plus pytest, pre-commit, and every source
+pip install 'mjswan[examples]'  # what examples/ needs: every source, plus onnxruntime
+```
+
+`examples` is `wandb`, `hf` and `mjlab` together, plus `onnxruntime` for the numeric
+parity checks. torch makes it a large download.
 
 ## JavaScript Installation
 
@@ -103,8 +115,8 @@ uv sync --all-extras
 To run the bundled demo after cloning:
 
 ```bash
-mjswan demo          # runs the default demo
-mjswan demo --list   # see all available demos
+uv run mjswan demo          # lists the bundled demos
+uv run mjswan demo simple   # runs one of them
 ```
 
 Common Makefile targets while developing:
@@ -112,7 +124,7 @@ Common Makefile targets while developing:
 | Target | What it does |
 |---|---|
 | `make sync` | Install/refresh all dependencies with `uv` |
-| `make check` | Lint, format check, and type check |
+| `make check` | Format and lint in place (`make format`), then type check |
 | `make test` | Full pytest suite (`test-all` runs `check` first) |
 | `make docs-serve` | Live-reloading documentation server |
 

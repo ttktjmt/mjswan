@@ -81,7 +81,7 @@ function sampleGround(mujoco: MainModule, mjModel: MjModel, mjData: MjData): num
     origin,
     DOWN,
     TERRAIN_GROUP as unknown as number[],
-    1,
+    true,
     -1,
     geomId,
     null

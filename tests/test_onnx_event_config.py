@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from mjswan._onnx_build import model_field_dr_descriptor
+from mjswan.build.mdp import model_field_dr_descriptor
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "src" / "mjswan" / "template"
 
@@ -486,7 +486,7 @@ def test_the_descriptor_carries_exactly_what_the_browser_declares():
 def test_a_model_field_event_is_described_without_running_its_body(tmp_path):
     """mjlab's body writes `env.sim.model`: running it would hit the live model."""
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import serialize_event
+    from mjswan.build.mdp import serialize_event
 
     def geom_friction(env, env_ids, ranges, asset_cfg=None, operation="abs", **_):
         raise AssertionError("the body must not run at build time")
@@ -506,7 +506,7 @@ def test_a_model_field_event_is_described_without_running_its_body(tmp_path):
 def test_an_event_reading_an_unserved_env_attribute_fails_and_names_it(tmp_path):
     """The fake env *has* `sim`: refused by contract, not for being missing."""
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import serialize_event
+    from mjswan.build.mdp import serialize_event
 
     def scale_model(env, env_ids):
         env.sim.mj_model.nq  # noqa: B018 — the read is the point
@@ -521,7 +521,7 @@ def test_an_event_reading_an_unserved_env_attribute_fails_and_names_it(tmp_path)
 def test_serialize_event_emits_the_descriptor_with_its_name_and_mode(tmp_path):
     """End to end through the path the Builder actually takes."""
     pytest.importorskip("mjlab")
-    from mjswan._onnx_build import serialize_event
+    from mjswan.build.mdp import serialize_event
 
     entry = serialize_event(
         "fingertip_friction_slide",
@@ -603,7 +603,7 @@ class TestManualEvents:
     def test_it_serializes_with_its_label_and_no_schedule(self, tmp_path):
         torch = pytest.importorskip("torch")
         pytest.importorskip("mjlab")
-        from mjswan._onnx_build import serialize_event
+        from mjswan.build.mdp import serialize_event
         from mjswan.managers.event_manager import EventTermCfg
 
         def throw(env, env_ids, ball_name="ball"):
@@ -632,7 +632,7 @@ class TestManualEvents:
     def test_disabled_when_travels_to_the_browser(self, tmp_path):
         torch = pytest.importorskip("torch")
         pytest.importorskip("mjlab")
-        from mjswan._onnx_build import serialize_event
+        from mjswan.build.mdp import serialize_event
         from mjswan.managers.event_manager import EventTermCfg
 
         def throw(env, env_ids, ball_name="ball"):
@@ -655,7 +655,7 @@ class TestManualEvents:
 
     def test_a_gate_that_names_no_interval_term_is_refused(self):
         """A dead gate greys the button out forever, or never — and says nothing."""
-        from mjswan._onnx_build import _check_disabled_when
+        from mjswan.build.mdp.event import _check_disabled_when
         from mjswan.managers.event_manager import EventTermCfg
 
         def throw(env, env_ids):
@@ -688,7 +688,7 @@ class TestManualEvents:
             )
 
     def test_a_manual_term_carrying_an_interval_is_refused(self, tmp_path):
-        from mjswan._onnx_build import serialize_event
+        from mjswan.build.mdp import serialize_event
         from mjswan.managers.event_manager import EventTermCfg
 
         def throw(env, env_ids):
@@ -716,7 +716,7 @@ class TestAnUntraceableEventFailsTheBuild:
     @staticmethod
     def _serialize(term_cfg, tmp_path, env=None):
         pytest.importorskip("mjlab")
-        from mjswan._onnx_build import serialize_event
+        from mjswan.build.mdp import serialize_event
 
         return serialize_event("ev", term_cfg, env or _Env(), tmp_path)
 
@@ -1052,7 +1052,7 @@ class TestWriteTargetEntity:
 
 def test_reset_scene_to_default_needs_no_graph():
     """The runtime's reset already restores every default, so nothing is left to write."""
-    from mjswan._onnx_build import _EVENTS_WITH_NOTHING_TO_WRITE
+    from mjswan.build.mdp.event import _EVENTS_WITH_NOTHING_TO_WRITE
 
     assert "reset_scene_to_default" in _EVENTS_WITH_NOTHING_TO_WRITE
 
@@ -1088,10 +1088,8 @@ class TestApplyTerrainSpawn:
         )
 
     def test_it_replaces_the_uniform_reset_and_keeps_entity_and_yaw(self):
-        from mjswan.envs.mdp.events import (
-            apply_terrain_spawn,
-            reset_root_state_on_flat_patch,
-        )
+        from mjswan.envs.mdp.events import reset_root_state_on_flat_patch
+        from mjswan.mjlab.event import apply_terrain_spawn
 
         patches = [[0.0, 0.0, 0.0], [1.0, 1.0, 0.5]]
         scene = self._scene(
@@ -1107,7 +1105,7 @@ class TestApplyTerrainSpawn:
         assert term.params["yaw_range"] == (-1.0, 1.0)
 
     def test_it_leaves_a_scene_without_terrain_alone(self):
-        from mjswan.envs.mdp.events import apply_terrain_spawn
+        from mjswan.mjlab.event import apply_terrain_spawn
 
         event = self._uniform_event()
         scene = self._scene(None, {"reset_base": event})
@@ -1117,15 +1115,15 @@ class TestApplyTerrainSpawn:
 
 def test_serialize_events_reports_each_term_it_traces(monkeypatch):
     """The build's progress line names the event it is on; keep the hook wired."""
-    from mjswan import _onnx_build
+    from mjswan.build.mdp import event
 
     monkeypatch.setattr(
-        _onnx_build,
+        event,
         "serialize_event",
         lambda name, cfg, env, out, **kw: {"name": name},
     )
     seen: list[str] = []
-    _onnx_build.serialize_events(
+    event.serialize_events(
         {"reset_slider": object(), "reset_hinge": object()},
         env=None,
         out_dir=None,

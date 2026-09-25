@@ -3,7 +3,7 @@
  * file per section of `mjlab/entity/data.py`, so a mjlab bump maps to a file. The one
  * property with no reader is `joint_torques`, which raises in mjlab too.
  *
- * `compile/tracer.py`'s `READER_FIELDS` names the same set; a field here that Python
+ * `compile/slot.py`'s `READER_FIELDS` names the same set; a field here that Python
  * does not list is traced through instead of read, one listed there but missing here
  * freezes the observation. `slotReaderParity.test.ts` checks both directions.
  */

@@ -52,9 +52,12 @@ demo = builder.add_project(name="Demo")  # ?project=demo
 
 Every project, scene, policy and splat has an **id** derived from its name — lowercased,
 runs of anything but `a-z0-9` collapsed to `_`, edges trimmed, so `"Newton's Cradle"`
-becomes `newton_s_cradle`. The id is the directory the object is written to and the value
-the URL parameters take. Two siblings whose names sanitize alike get `<id>` and `<id>_1`,
-with a warning naming both.
+becomes `newton_s_cradle`. The id names what the object is written as (a project's or
+scene's directory, `policy/<id>.onnx`, a bundled splat's `assets/<id>.spz`), and it is
+the value `?project=`, `?scene=` and `?policy=` take. Two siblings whose names sanitize
+alike are both kept: the second is renamed with a `_1` suffix on its name and its id (the
+next `_2`, and so on), with a warning, so what the viewer lists always matches the URL.
+A policy's motions are renamed the same way.
 
 ## Scene
 
@@ -78,6 +81,12 @@ scene = project.add_scene(
 
 !!! tip "Which format should I use?"
     Use `spec=` unless you have a specific reason to prefer `model=`. The `.mjz` format uses DEFLATE compression and is significantly smaller — important when approaching GitHub Pages' 1 GB deployment limit.
+
+    A `.mjb` opens only in the MuJoCo version that saved it (the browser's is pinned to the Python package's), has no MJCF to add the [XR hands](../guides/embedding.md#hand-tracking-in-vr) to, and cannot be [published to mjswan Cloud](../guides/publishing.md).
+
+A scene can also come from an mjlab task ([`add_scene_mjlab`](../guides/mjlab.md)) or from a
+Hugging Face Hub repository ([`add_scene_hf`](../api/core.md#projecthandleadd_scene_hf)),
+which downloads the XML's directory and adds it as `spec=`.
 
 ### `control_dt` — required once a scene carries a policy
 
@@ -146,6 +155,9 @@ When multiple splats are attached to the same scene, the viewer shows a selector
 | `source` | Copies the `.spz` into `dist/` at build time — fully self-contained, works offline |
 | `url` | Browser fetches the file at runtime — smaller build, requires network access |
 
+[`add_splat_hf`](../api/core.md#scenehandleadd_splat_hf) downloads a `.spz` from the Hugging
+Face Hub and bundles it as `source` does.
+
 ### Alignment controls
 
 | Parameter | Description |
@@ -185,6 +197,12 @@ policy = scene.add_policy(
 Policies are purely client-side: inference runs in the browser via ONNX Runtime Web, so no
 server is needed at runtime.
 
+The viewer opens a scene on the policy added with `default=True` (or the first added), and
+`?policy=<id>` selects another. [`add_policy_wandb`](../api/core.md#scenehandleadd_policy_wandb)
+and [`add_policy_hf`](../api/core.md#scenehandleadd_policy_hf), which add a run's or a
+repository's checkpoints, open the scene on the highest step unless it already has a
+default, and a later `default=True` takes over from that.
+
 More usefully, you describe the whole MDP layer from Python by passing `observations=`,
 `actions=`, `commands=` and `terminations=` to `add_policy()`. Those take
 [mjlab's own config classes and functions](../guides/policy-config.md) — mjswan traces the
@@ -194,7 +212,7 @@ term bodies to ONNX at build time, so there is no reimplementation to import and
 ```python
 from mjlab.envs.mdp import observations as obs_fns
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
-from mjswan.trace_env import build_single_entity_trace_env
+from mjswan.mjlab.env import build_single_entity_trace_env
 
 scene = project.add_scene(spec=build_spec(), name="My Robot", control_dt=0.02)
 scene.set_trace_env(
@@ -214,7 +232,7 @@ scene.add_policy(
 Tracing needs a live environment to read shapes from and resolve entity patterns against.
 An [mjlab scene](../guides/mjlab.md) builds one from its task; a plain `add_scene` scene
 needs `set_trace_env(...)`. See [How the Build Works](../guides/how-it-works.md) and
-[examples/tutorial/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/tutorial/minimum_policy.py){:target="_blank"}.
+[examples/demo/minimum_policy.py](https://github.com/ttktjmt/mjswan/blob/main/examples/demo/minimum_policy.py){:target="_blank"}.
 
 ### Commands
 
@@ -269,6 +287,14 @@ policy.add_motion(
 # Or fetch from a W&B run
 policy.add_motion_wandb(
     run_path="<entity>/<project>/<run_id>",
+    anchor_body_name="pelvis",
+    body_names=("pelvis",),
+)
+
+# Or from a Hugging Face Hub dataset
+policy.add_motion_hf(
+    "<owner>/<dataset>",
+    "clips/walk.npz",
     anchor_body_name="pelvis",
     body_names=("pelvis",),
 )
@@ -359,7 +385,7 @@ manifest and the project directories with no engine in it, which `mjswan info` a
 
 | Variable | Effect |
 |---|---|
-| `MJSWAN_BASE_PATH` | Read by the Vite build (`vite.config.ts`) and used as the asset base. Useful in CI pipelines. |
-| `MJSWAN_NO_LAUNCH` | Convention used by the bundled example scripts (e.g. `examples/demo/main.py`) to skip `app.launch()` after building. Honor it in your own build scripts to make them CI-friendly. |
+| `MJSWAN_BASE_PATH` | The asset base `examples/demo/main.py` and `simple.py` pass to `Builder(base_path=)`, which is what the Vite build uses; mjswan does not read the variable itself. Useful in CI pipelines. |
+| `MJSWAN_NO_LAUNCH` | Read by `examples/demo/main.py` and `simple.py` to skip `app.launch()` after building. Honor it in your own build scripts to make them CI-friendly. |
 | `MJSWAN_TOKEN` | Access token for [`mjswan publish`](../guides/publishing.md); skips the interactive login. |
 | `MJSWAN_API_BASE` / `MJSWAN_WEB_BASE` | Override the mjswan Cloud API and web endpoints. |

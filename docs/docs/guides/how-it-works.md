@@ -205,9 +205,8 @@ called with `resample_mask = 1`.
     so later draws shift — and a termination verdict arriving a frame late moves the
     reset frame, which is control flow rather than randomness. Startup randomization is
     drawn synchronously and *is* fully reproducible; a command's resample schedule is
-    drawn before the in-flight check and is timing-independent too. The policy network
-    adds one more source: it runs on WebGPU where the browser has one, and GPU float32
-    differs across adapters, so a session recorded on one machine drifts on another.
+    drawn before the in-flight check and is timing-independent too. Inference adds
+    nothing: every graph runs on the same wasm build on every machine.
 
 ## Artifact layout
 
@@ -263,6 +262,12 @@ The build fails and names the term. Two ways out, both via
    injects it into the browser bundle. A binding *without* `ts_src` also fails the build:
    mjswan ships no built-in TypeScript term classes, so there is nothing to fall back on.
 
+A command is a class, so its way out is
+[`register_command`](../api/core.md#register_command): a `CommandBinding` whose
+`trace_override` rebinds the built term's methods before it is traced.
+`examples/demo/main.py` does this for mjlab's `LiftingCommandCfg`, whose
+`_update_command` calls `env.sim.forward()`, which the tracer refuses.
+
 In practice tracing failures are rare, because mjlab must run thousands of parallel
 environments on a GPU. That forces term bodies to avoid per-environment Python
 `if`/`for` over tensor values in favour of masking — which is exactly the shape
@@ -276,7 +281,7 @@ plain `add_scene()` scene has none, so a policy with traced terms on it raises �
 one explicitly:
 
 ```python
-from mjswan.trace_env import build_single_entity_trace_env
+from mjswan.mjlab.env import build_single_entity_trace_env
 
 scene = project.add_scene(name="Hovering Box", spec=build_spec(), control_dt=0.02)
 scene.set_trace_env(build_single_entity_trace_env(build_spec))
@@ -289,7 +294,7 @@ is only the tracer's read/write target.
 !!! warning "`mjlab` and `torch` are build-time dependencies for traced terms"
     Tracing runs `torch.onnx.export` against a live mjlab environment, so a policy with
     observation or termination terms needs both installed at build time (`pip install
-    'mjswan[examples]'`). Neither ships to the browser, and a *model-only* scene needs
+    'mjswan[mjlab]'`). Neither ships to the browser, and a *model-only* scene needs
     neither. See [Installation](../getting-started/installation.md).
 
 ### A scene with a policy has no `control_dt`

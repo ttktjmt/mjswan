@@ -7,6 +7,7 @@ interface Window {
     running?: boolean;
     nonBlank?: boolean;
     luminanceRange?: [number, number];
+    termSeed?: number;
   };
   /** Published by src/harness/interaction-entry.ts for the pointer-mode spec. */
   __engine?: unknown;

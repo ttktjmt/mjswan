@@ -10,7 +10,7 @@
  * indexes, so the graph need not gather them. An `EntityData` property with no reader in
  * `fields/` is traced through to the `sim` fields it reads, with mjlab's math in the
  * graph; a reader replaces that math with one input. The build emits a value slot only
- * for the fields `READER_FIELDS` (compile/tracer.py) lists, kept in step by hand.
+ * for the fields `READER_FIELDS` (compile/slot.py) lists, kept in step by hand.
  *
  * Entities resolve as `indexing.ts` describes; an unknown field returns null and the
  * caller holds its previous value.

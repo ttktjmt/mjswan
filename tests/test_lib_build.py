@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 import mjswan
-from mjswan._build_client import ClientBuilder
+from mjswan.build.frontend import ClientBuilder
 
 TEMPLATE_DIR = Path(mjswan.__file__).parent / "template"
 
@@ -41,8 +41,11 @@ _DYNAMIC_IMPORT = re.compile(
 
 #: ORT's runtime wasm upstream, and the name both builds emit it under: its own basename
 #: plus a Vite content hash.
-_ORT_WASM_FILE = "ort-wasm-simd-threaded.jsep.wasm"
-_ORT_WASM_GLOB = "ort-wasm-simd-threaded.jsep-*.wasm"
+_ORT_WASM_FILE = "ort-wasm-simd-threaded.wasm"
+_ORT_WASM_GLOB = "ort-wasm-simd-threaded-*.wasm"
+
+#: Cloudflare Pages' per-file limit. Mirrors MAX_ASSET_BYTES in vite.wasm.ts.
+_MAX_ASSET_BYTES = 25 * 1024 * 1024
 
 
 def _sha256(path: Path) -> str:
@@ -191,9 +194,9 @@ class TestLibBuild:
     def test_ort_wasm_paths_names_the_file_never_a_prefix(self, lib_dist: Path):
         """`wasmPaths` names the wasm; a URL prefix would be a third-party script fetch.
 
-        Given a prefix, ORT dynamic-imports `ort-wasm-simd-threaded.jsep.mjs` from it —
-        executable code, from whatever origin the prefix names, on every policy-driven
-        scene — while naming only the wasm keeps ORT on the loader inlined in the bundle.
+        Given a prefix, ORT dynamic-imports `ort-wasm-simd-threaded.mjs` from it:
+        executable code from whatever origin the prefix names. Naming only the wasm
+        keeps ORT on the loader inlined in the bundle.
         """
         code = (lib_dist / "mjswan.js").read_text()
         emitted = list(lib_dist.glob(f"assets/{_ORT_WASM_GLOB}"))
@@ -216,6 +219,20 @@ class TestLibBuild:
             "ort.env.wasm.numThreads is not 1 in the bundle; off its own origin ORT would "
             "then fetch the .mjs loader this package does not ship"
         )
+
+    def test_nothing_emitted_exceeds_a_static_host_file_limit(self, lib_dist: Path):
+        """Every emitted file fits Cloudflare Pages' 25 MiB per-file limit.
+
+        Over it the deploy fails, or, if the build prunes the file, the host answers the
+        wasm fetch with `index.html` and the browser reports `expected magic word
+        00 61 73 6d, found 3c 21 64 6f`.
+        """
+        oversized = {
+            path.relative_to(lib_dist).as_posix(): path.stat().st_size
+            for path in lib_dist.rglob("*")
+            if path.is_file() and path.stat().st_size > _MAX_ASSET_BYTES
+        }
+        assert not oversized, f"over {_MAX_ASSET_BYTES} bytes: {oversized}"
 
     def test_ort_wasm_name_agrees_with_vite_wasm_ts(self):
         """The literal above mirrors vite.wasm.ts, which owns the name; catch them drifting."""
