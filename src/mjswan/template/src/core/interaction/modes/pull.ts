@@ -5,7 +5,7 @@
  * every step, so it stays on the spot that was grabbed while the body tumbles. The force
  * itself is MuJoCo's (`interaction/perturbForce`).
  */
-import type { InteractionMode, InteractionSim, ModeContext } from './mode';
+import type { InteractionMode, ModeContext } from './mode';
 import { fromBodyFrame, toBodyFrame, toMjc } from './mode';
 import type { PointerClaim, PointerGesture } from '../pointer';
 
@@ -13,10 +13,6 @@ export class PullMode implements InteractionMode {
   readonly id = 'pull' as const;
   private bodyId = 0;
   private grab: [number, number, number] = [0, 0, 0];
-
-  pickable(sim: InteractionSim): Set<number> | null {
-    return sim.dynamicBodyIds;
-  }
 
   onDown(gesture: PointerGesture, ctx: ModeContext): PointerClaim {
     const { mjData } = ctx.sim();

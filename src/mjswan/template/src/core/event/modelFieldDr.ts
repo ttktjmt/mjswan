@@ -9,7 +9,6 @@
  */
 
 import type { SeededRng } from '../rng';
-import { writeGeomBounds } from '../scene/geomBounds';
 
 type MjModel = import('mujoco').MjModel;
 type MjData = import('mujoco').MjData;
@@ -39,6 +38,12 @@ export interface ModelFieldDrConfig {
   recompute_bounds?: boolean;
 }
 
+/** `mjtGeom` values whose bounds follow from `geom_size` — mjlab's supported set. */
+const GEOM_SPHERE = 2;
+const GEOM_CAPSULE = 3;
+const GEOM_ELLIPSOID = 4;
+const GEOM_CYLINDER = 5;
+const GEOM_BOX = 6;
 
 /**
  * The compiled field values, snapshotted on first touch, so a second `add`/`scale` event
@@ -206,8 +211,10 @@ export function applyModelFieldDr(
 }
 
 /**
- * The bounds for every geom whose size was just written. The arithmetic is shared with the
- * throw mode's pool, which resizes a box the same way (`scene/geomBounds`).
+ * `geom_rbound` and `geom_aabb` from the sizes just written, as
+ * `dr.geom_size._recompute_geom_bounds` computes them — without it a grown geom keeps its
+ * compiled bound and stops colliding at its own surface. `geom_aabb` is `(ngeom, 2, 3)`,
+ * centre then half-size, and a primitive's centre stays at its origin.
  */
 function recomputeGeomBounds(
   mjModel: MjModel,
@@ -215,22 +222,56 @@ function recomputeGeomBounds(
   indices: number[],
   defaults: ModelFieldDefaults,
 ): void {
+  const size = mjModel.geom_size as ArrayLike<number> | undefined;
   const types = mjModel.geom_type as ArrayLike<number> | undefined;
   // Snapshotted before they are written, so `restore()` covers the bounds as well as the
   // sizes they follow from; otherwise a size would be restored against a stale bound.
   defaults.base('geom_rbound');
   defaults.base('geom_aabb');
-  if (!types || !mjModel.geom_rbound || !mjModel.geom_aabb) {
+  const rbound = mjModel.geom_rbound as unknown as { [index: number]: number } | undefined;
+  const aabb = mjModel.geom_aabb as unknown as { [index: number]: number } | undefined;
+  if (!size || !types || !rbound || !aabb) {
     console.warn(`[modelFieldDr] "${name}": no geom bounds to recompute in this model.`);
     return;
   }
   for (const index of indices) {
-    // The build refuses the other types; this is the backstop.
-    if (!writeGeomBounds(mjModel, index, types[index])) {
-      console.warn(
-        `[modelFieldDr] "${name}": geom ${index} is type ${types[index]}, whose ` +
-          'bounds do not follow from its size; leaving them as compiled.',
-      );
+    const s0 = size[index * 3];
+    const s1 = size[index * 3 + 1];
+    const s2 = size[index * 3 + 2];
+    let bound: number;
+    let half: [number, number, number];
+    switch (types[index]) {
+      case GEOM_SPHERE:
+        bound = s0;
+        half = [s0, s0, s0];
+        break;
+      case GEOM_CAPSULE:
+        bound = s0 + s1;
+        half = [s0, s0, s0 + s1];
+        break;
+      case GEOM_ELLIPSOID:
+        bound = Math.max(s0, s1, s2);
+        half = [s0, s1, s2];
+        break;
+      case GEOM_CYLINDER:
+        bound = Math.sqrt(s0 * s0 + s1 * s1);
+        half = [s0, s0, s1];
+        break;
+      case GEOM_BOX:
+        bound = Math.sqrt(s0 * s0 + s1 * s1 + s2 * s2);
+        half = [s0, s1, s2];
+        break;
+      default:
+        // The build refuses these; this is the backstop.
+        console.warn(
+          `[modelFieldDr] "${name}": geom ${index} is type ${types[index]}, whose ` +
+            'bounds do not follow from its size; leaving them as compiled.',
+        );
+        continue;
     }
+    rbound[index] = bound;
+    aabb[index * 6 + 3] = half[0];
+    aabb[index * 6 + 4] = half[1];
+    aabb[index * 6 + 5] = half[2];
   }
 }

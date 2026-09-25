@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
  * The unit tests drive the mechanisms with the real WASM but no browser, so everything
  * between a `pointerdown` and a body moving — the raycast, the coordinate swizzle, the
  * claim handed to `OrbitControls`, the step-loop hook — is only exercised here. Each mode
- * is asserted on the effect it is *for*, so three of the four cannot quietly become no-ops.
+ * is asserted on the effect it is *for*, so none of the three can quietly become a no-op.
  */
 
 interface ModeReport {
@@ -33,7 +33,7 @@ test('every pointer mode does its own job', async ({ page }) => {
   await page.waitForFunction(() => window.__ready === true, undefined, { timeout: 90_000 });
 
   const modes = await page.evaluate(() => (window.__engine as HarnessEngine).getState().interactions);
-  expect(modes.map((m) => m.id)).toEqual(['pull', 'push', 'weld', 'spawn']);
+  expect(modes.map((m) => m.id)).toEqual(['pull', 'push', 'weld']);
   expect(modes.filter((m) => !m.available).map((m) => `${m.id}: ${m.reason}`)).toEqual([]);
 
   const canvas = (await page.locator('canvas').boundingBox())!;
@@ -79,17 +79,6 @@ test('every pointer mode does its own job', async ({ page }) => {
   const held = await page.evaluate(() => window.__probe!.read());
   await page.mouse.up();
   expect(held.welded, 'grabbing activates a weld').toBe(true);
-  expect(held.thrown, 'nothing thrown yet').toBe(0);
 
-  // ── spawn: press a surface, drag back to load, release to fire ─────────
-  await arm('spawn');
-  await page.mouse.move(x + 40, y + 80);
-  await page.mouse.down();
-  for (let step = 1; step <= 12; step++) await page.mouse.move(x + 40, y + 80 + step * 14);
-  await page.mouse.up();
-  await page.waitForTimeout(600);
-
-  const pool = await page.evaluate(() => window.__probe!.read());
-  expect(pool.thrown, `pool heights ${JSON.stringify(pool.poolZ)}`).toBe(1);
   expect(errors, errors.join('\n')).toEqual([]);
 });

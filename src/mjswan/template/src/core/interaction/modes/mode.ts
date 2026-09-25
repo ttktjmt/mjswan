@@ -5,8 +5,7 @@ import type { MainModule, MjData, MjModel, MjvPerturb } from 'mujoco';
 import { quatApply, quatApplyInv } from '../../observation/math';
 import { mjcToThreeCoordinate, threeToMjcCoordinate } from '../../scene/coordinate';
 import type { WeldHold } from '../../grab/weldHold';
-import type { DragArrow, PushRing, SpawnGhost } from '../gizmos';
-import type { SpawnPool } from '../spawnPool';
+import type { DragArrow, PushRing } from '../gizmos';
 import type { InteractionModeId } from '../params';
 import type { PointerClaim, PointerGesture } from '../pointer';
 import type { InteractionWrench } from '../wrench';
@@ -30,17 +29,12 @@ export interface ModeContext {
   perturb(): MjvPerturb;
   arrow: DragArrow;
   ring: PushRing;
-  ghost: SpawnGhost;
   /** Shared with the XR hand: the slots a scene compiled in for holding things. */
   weld: WeldHold;
-  /** The boxes this scene compiled in, empty when it carries none. */
-  pool: SpawnPool;
 }
 
 export interface InteractionMode {
   readonly id: InteractionModeId;
-  /** Which bodies the pointer may pick for this mode; null means anything drawn. */
-  pickable(sim: InteractionSim): Set<number> | null;
   onDown(gesture: PointerGesture, ctx: ModeContext): PointerClaim;
   onMove?(gesture: PointerGesture, ctx: ModeContext): void;
   onUp?(gesture: PointerGesture, ctx: ModeContext): void;

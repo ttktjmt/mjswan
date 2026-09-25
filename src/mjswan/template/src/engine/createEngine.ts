@@ -279,12 +279,6 @@ export async function createEngine(
   const mujocoModule = options.multithreaded ? await import('mujoco/mt') : await import('mujoco');
   const mujoco = await mujocoModule.default();
   return new Engine(
-    new mjswanRuntime(
-      mujoco,
-      element,
-      options.termSeed,
-      options.handTracking,
-      options.spawnPool,
-    ),
+    new mjswanRuntime(mujoco, element, options.termSeed, options.handTracking),
   );
 }

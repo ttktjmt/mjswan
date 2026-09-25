@@ -69,13 +69,6 @@ class ViewerConfig:
     width: int = 320
     """Viewer canvas width in pixels."""
 
-    spawn_pool: int | None = None
-    """How many throwable boxes the viewer's ``throw`` mode gets, 0 to turn it off.
-
-    They are declared with the model and parked out of sight, so the count is fixed for
-    the life of a scene. ``None`` leaves it to the viewer's own default.
-    """
-
     def to_dict(self) -> dict[str, Any]:
         """Serialize to the manifest's ``camera`` entry (snake_case, ADR 0006)."""
         d: dict[str, Any] = {
@@ -91,8 +84,6 @@ class ViewerConfig:
             # None means "45" to Python; the document says what it means.
             "fovy": self.fovy if self.fovy is not None else 45.0,
         }
-        if self.spawn_pool is not None:
-            d["spawn_pool"] = self.spawn_pool
         if self.entity_name is not None:
             d["entity_name"] = self.entity_name
         if self.body_name is not None:

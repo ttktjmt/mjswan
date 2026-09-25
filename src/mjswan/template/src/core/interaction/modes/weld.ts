@@ -14,7 +14,7 @@
  */
 import * as THREE from 'three';
 
-import type { InteractionMode, InteractionSim, ModeContext } from './mode';
+import type { InteractionMode, ModeContext } from './mode';
 import { toMjc } from './mode';
 import { POINTER_ANCHOR_BODY, POINTER_PARK_Z, POINTER_WELD } from '../grabInject';
 import type { PointerClaim, PointerGesture } from '../pointer';
@@ -25,10 +25,6 @@ const PARKED: [number, number, number] = [0, 0, POINTER_PARK_Z];
 export class WeldMode implements InteractionMode {
   readonly id = 'weld' as const;
   private held = 0;
-
-  pickable(sim: InteractionSim): Set<number> | null {
-    return sim.dynamicBodyIds;
-  }
 
   unavailable(ctx: ModeContext): string | null {
     return ctx.weld.has(POINTER_WELD) ? null : 'This scene was built without a grab anchor.';

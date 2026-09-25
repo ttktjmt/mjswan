@@ -11,17 +11,10 @@
  */
 import { createEngine } from '../engine';
 
-/** Parked slots sag by one step of gravity between writes; well under the parking height. */
-const PARKED_Z = 50;
-/** How many boxes the engine compiles in by default; the probe reads that many off the tail. */
-const POOL_SLOTS = 8;
 /** Fast enough to catch a one-control-step shove (20 ms at the default rate). */
 const SAMPLE_MS = 4;
 
 export interface InteractionProbe {
-  /** Height of every throwable box. Above {@link PARKED_Z} means it is still in the rack. */
-  poolZ: number[];
-  thrown: number;
   /** Largest force any body has been under since the last `reset` — pull and push. */
   maxForce: number;
   /** Whether any equality has been active since the last `reset` — grab. */
@@ -52,8 +45,8 @@ async function main(): Promise<void> {
   const runtime = (
     engine as unknown as {
       runtime: {
-        mjModel: { nq: number; nbody: number; neq: number };
-        mjData: { qpos: ArrayLike<number>; xfrc_applied: ArrayLike<number>; eq_active: ArrayLike<number> };
+        mjModel: { nbody: number; neq: number };
+        mjData: { xfrc_applied: ArrayLike<number>; eq_active: ArrayLike<number> };
       };
     }
   ).runtime;
@@ -77,15 +70,7 @@ async function main(): Promise<void> {
       maxForce = 0;
       welded = false;
     },
-    read: () => {
-      const { nq } = runtime.mjModel;
-      const poolZ: number[] = [];
-      // The pool's free joints are the last ones appended, seven qpos each.
-      for (let i = 0; i < POOL_SLOTS; i++) {
-        poolZ.push(runtime.mjData.qpos[nq - 7 * (POOL_SLOTS - i) + 2]);
-      }
-      return { poolZ, thrown: poolZ.filter((z) => z < PARKED_Z).length, maxForce, welded };
-    },
+    read: () => ({ maxForce, welded }),
   };
 
   // Let the physics and render loops advance before anything presses on the canvas.

@@ -228,18 +228,15 @@ export class PointerTracker {
 }
 
 /**
- * The scene builder tags every drawn body; gizmos and overlays carry no id.
- *
- * Body 0 comes back as 0 rather than null: a press on the floor is a miss for the modes
- * that act on a body and a perfectly good spawn point for the one that does not. Which it
- * is, is the caller's filter to apply.
+ * The scene builder tags every drawn body; gizmos and overlays carry no id. The worldbody
+ * is not a body a mode can act on, so a press on the floor reads as a miss.
  */
 export function bodyIdOf(object: THREE.Object3D): number | null {
   if (!('bodyID' in object) || typeof object.bodyID !== 'number') return null;
-  return object.bodyID;
+  return object.bodyID > 0 ? object.bodyID : null;
 }
 
-/** Opt-outs: the drag arrow, the throw ghost, and anything a scene marks itself. */
+/** Opt-outs: the mode gizmos, and anything a scene marks itself. */
 function isIgnored(object: THREE.Object3D): boolean {
   let current: THREE.Object3D | null = object;
   while (current) {

@@ -138,7 +138,7 @@ export interface EventControls {
 }
 
 /** Which pointer gesture the viewer is in. The set is closed: there is no plugin path in. */
-export type InteractionModeId = 'pull' | 'push' | 'weld' | 'spawn';
+export type InteractionModeId = 'pull' | 'push' | 'weld';
 
 /** One number a mode exposes, with everything a generic control needs to draw it. */
 export interface InteractionParamDescriptor {
@@ -210,12 +210,6 @@ export interface CreateEngineOptions {
   termSeed?: number;
   /** Put WebXR-tracked hands in the simulation as mocap-driven fingertips. */
   handTracking?: boolean;
-  /**
-   * How many throwable boxes a scene compiles in for the `spawn` mode. They are declared
-   * with the model and parked out of sight, so this is fixed for the life of a scene; 0
-   * turns the mode off. A scene's own `viewer.spawnPool` overrides this.
-   */
-  spawnPool?: number;
 }
 
 /** A headless, instance-scoped simulation engine. Create with {@link createEngine}. */

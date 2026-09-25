@@ -8,7 +8,7 @@
  * `exclusive`: a tap shoves, but a drag from the same spot still orbits, because
  * `OrbitControls` cannot pick up a drag whose start it never saw.
  */
-import type { InteractionMode, InteractionSim, ModeContext } from './mode';
+import type { InteractionMode, ModeContext } from './mode';
 import { toMjc } from './mode';
 import { TAP_SLOP_PX, type PointerClaim, type PointerGesture } from '../pointer';
 
@@ -23,10 +23,6 @@ interface PendingShove {
 export class PushMode implements InteractionMode {
   readonly id = 'push' as const;
   private pending: PendingShove | null = null;
-
-  pickable(sim: InteractionSim): Set<number> | null {
-    return sim.dynamicBodyIds;
-  }
 
   onDown(gesture: PointerGesture): PointerClaim {
     return gesture.hit.bodyId > 0 ? 'shared' : 'none';

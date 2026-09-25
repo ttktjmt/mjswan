@@ -827,7 +827,6 @@ class mjswan.ViewerConfig(
     enable_shadows: bool = True,
     height: int = 240,
     width: int = 320,
-    spawn_pool: int | None = None,
 )
 ```
 
@@ -845,7 +844,6 @@ Camera and rendering configuration applied to a scene via `SceneHandle.set_viewe
 | `origin_type` | One of `ViewerConfig.OriginType.{AUTO, WORLD, ASSET_ROOT, ASSET_BODY}`. Controls how the camera tracks the scene. |
 | `body_name` | Body to track when `origin_type` is `ASSET_BODY`. |
 | `enable_reflections` / `enable_shadows` | Toggle three.js reflections and shadows. |
-| `spawn_pool` | How many throwable boxes the viewer's **Throw** interaction mode gets, `0` to turn it off. They are declared with the model and parked out of sight, so the count is fixed for the life of a scene. Leave it `None` for the viewer's own default. |
 
 ### ViewerConfig.from_position
 

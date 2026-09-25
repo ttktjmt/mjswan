@@ -28,12 +28,6 @@ export type ViewerConfig = {
   height?: number;
   /** Viewer canvas width in pixels. */
   width?: number;
-  /**
-   * How many throwable boxes the `throw` interaction mode gets, 0 to turn it off. They are
-   * declared with the model, so this is fixed for the life of a scene; absent leaves it to
-   * the engine's own default.
-   */
-  spawnPool?: number;
 };
 
 /**

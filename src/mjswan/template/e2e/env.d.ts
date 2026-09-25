@@ -14,6 +14,6 @@ interface Window {
   __ready?: boolean;
   __probe?: {
     reset(): void;
-    read(): { poolZ: number[]; thrown: number; maxForce: number; welded: boolean };
+    read(): { maxForce: number; welded: boolean };
   };
 }

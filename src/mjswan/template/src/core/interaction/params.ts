@@ -7,9 +7,9 @@
  * (ADR-less by design: there is no plugin path in, and adding one is a code change here).
  */
 
-export type InteractionModeId = 'pull' | 'push' | 'weld' | 'spawn';
+export type InteractionModeId = 'pull' | 'push' | 'weld';
 
-export const INTERACTION_MODE_IDS: readonly InteractionModeId[] = ['pull', 'push', 'weld', 'spawn'];
+export const INTERACTION_MODE_IDS: readonly InteractionModeId[] = ['pull', 'push', 'weld'];
 
 export interface InteractionParamSpec {
   name: string;
@@ -63,17 +63,6 @@ export const INTERACTION_MODES: readonly InteractionModeSpec[] = [
       { name: 'softness', label: 'Give', unit: 's', min: 0.004, max: 0.2, step: 0.002, default: 0.02 },
       // `eq_data[10]`. At 0 the body hangs from the grab point instead of holding its pose.
       { name: 'torqueScale', label: 'Hold rotation', unit: '', min: 0, max: 1, step: 0.05, default: 1 },
-    ],
-  },
-  {
-    id: 'spawn',
-    label: 'Throw',
-    hint: 'Press a surface, drag back, release. A short drag drops it.',
-    params: [
-      { name: 'size', label: 'Size', unit: 'm', min: 0.01, max: 0.5, step: 0.01, default: 0.06 },
-      // Softwood is ~500; the default is a light crate rather than a cannonball.
-      { name: 'density', label: 'Density', unit: 'kg/m³', min: 20, max: 8000, step: 10, default: 400 },
-      { name: 'speed', label: 'Max speed', unit: 'm/s', min: 0, max: 30, step: 0.5, default: 6 },
     ],
   },
 ];
