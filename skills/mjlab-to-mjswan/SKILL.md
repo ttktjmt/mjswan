@@ -172,7 +172,7 @@ When it finally builds, read the document it wrote before spending minutes on pa
 mjswan info mjswan_app/dist
 ```
 
-One line per project, scene, MDP and policy. Three things to check, none of which a successful build says out loud: **one MDP per shared `MdpConfig`** (one per `add_policy_wandb` or `add_policy_hf` call, one for the whole local-checkpoint loop — more than that means a policy was handed its own config and the same terms were traced once per checkpoint); a **non-zero graph count** on each MDP (zero means every term ended up native or skipped); and **every checkpoint present** as a policy. The same command reads a `dist.swn`, so it is also how you inspect a document someone hands you.
+One line per project, scene, MDP and policy. Three things to check, none of which a successful build says out loud: **one MDP per shared `MdpConfig`** (one per `add_policy_wandb` or `add_policy_hf` call, one for the whole local-checkpoint loop; more than that means a policy was handed its own config and the same terms were traced once per checkpoint); a **non-zero graph count** on each MDP (zero means every term ended up native or skipped); and **every checkpoint present** as a policy. The same command reads a `dist.swn`, so it is also how you inspect a document someone hands you.
 
 ## 7. Parity gate
 

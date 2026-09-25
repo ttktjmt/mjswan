@@ -36,7 +36,7 @@ mjswan can be installed as a Python package (the primary workflow) or as an npm 
 
 | Requirement | Version |
 |---|---|
-| Python | 3.10 – 3.13 |
+| Python | 3.10 to 3.13 |
 | Platform | macOS (Apple Silicon) or Linux (x86-64) |
 | Browser | Any modern browser with WebAssembly and WebGL |
 | Node.js | 24+ (npm installation only) |

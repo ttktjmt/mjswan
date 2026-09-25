@@ -289,7 +289,7 @@ Extras, one per asset source plus tooling: `wandb`, `hf` (`huggingface-hub`), `m
 
 The core `mujoco` pin is exact and follows mjlab's, which is what lets `mjswan[mjlab]` resolve at all: mjlab 1.6.0 requires `mujoco~=3.11.0` and brings `mujoco-warp` with it. Holding the core at 3.8.1 while mjlab moved to 3.10 and then 3.11 is what the `[tool.uv] override-dependencies` block existed for; aligning the pin retired it, and with it the resolution that only ever worked inside this repo. The browser's own engine is the template's `mujoco` dependency, an alias pinned to `@ttktjmt/mujoco` at the same version: a `.mjz` carries MJCF the browser compiles itself, but a scene saved as `.mjb` loads only in the MuJoCo that wrote it. `tests/test_dependency_versions.py` holds the two pins together and `src/engine/__tests__/mujocoPackage.test.ts` checks the alias is what installs. The alias is a fork because MuJoCo's own `@mujoco/mujoco` throws on every `mjtBool` array from 3.9.0 on; `@ttktjmt/mujoco` is 3.11.0 with the generator fix of google-deepmind/mujoco#3616, and the alias goes back to `@mujoco/mujoco` once a release carries it and mjlab's pin reaches that release. The template's `.npmrc` refuses any package younger than three days (`min-release-age`), which a fresh fork release is: its lockfile entry was written with that check off once, and `npm install` and `npm ci` then install from the lockfile without it.
 
-Python 3.10–3.13. The old `<3.13` cap was taken for `labmaze` (transitive via myosuite →
+Python 3.10 to 3.13. The old `<3.13` cap was taken for `labmaze` (transitive via myosuite →
 dm-control, no cp313 wheel); myosuite left with the #128 examples cleanup, so the cap and
 the `h5py` override beside it are gone and the pytest matrix runs 3.13.
 
