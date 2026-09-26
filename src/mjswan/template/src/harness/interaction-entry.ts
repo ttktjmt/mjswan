@@ -38,8 +38,8 @@ async function main(): Promise<void> {
   const runtime = (
     engine as unknown as {
       runtime: {
-        mjModel: { nbody: number; neq: number };
-        mjData: { xfrc_applied: ArrayLike<number>; eq_active: ArrayLike<number> };
+        mjModel: { nbody: number; neq: number } | null;
+        mjData: { xfrc_applied: ArrayLike<number>; eq_active: ArrayLike<number> } | null;
       };
     }
   ).runtime;
@@ -48,6 +48,8 @@ async function main(): Promise<void> {
   let welded = false;
   setInterval(() => {
     const { mjData, mjModel } = runtime;
+    // Absent while a scene or the XR hands rebuild the model.
+    if (!mjData || !mjModel) return;
     for (let body = 1; body < mjModel.nbody; body++) {
       const at = body * 6;
       const force = Math.hypot(mjData.xfrc_applied[at], mjData.xfrc_applied[at + 1], mjData.xfrc_applied[at + 2]);

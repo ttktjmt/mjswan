@@ -182,6 +182,40 @@ export interface InteractionControls {
   cancel(): void;
 }
 
+/** A WebXR session: `vr` is `immersive-vr`, `ar` is `immersive-ar` (passthrough). */
+export type XrSessionId = 'vr' | 'ar';
+
+/** One session this device can start. The engine draws no button; the host does. */
+export interface XrSessionDescriptor {
+  id: XrSessionId;
+  /** What a press does now: `Enter VR` / `Start AR`, or `Exit VR` / `Stop AR` while it runs. */
+  label: string;
+  active: boolean;
+}
+
+/**
+ * The tracked hands as bodies inside the simulation. The switch never rebuilds the model
+ * by itself: the next build takes it, whether a scene load or entering a session with the
+ * model built the other way.
+ */
+export interface HandTrackingDescriptor {
+  /** False when the loaded scene cannot take the hand bodies; `reason` says why. */
+  available: boolean;
+  reason?: string;
+  enabled: boolean;
+}
+
+export interface XrControls {
+  /**
+   * Start a session. Call it from the click that asks for one: the browser grants a session
+   * only inside a user gesture. Resolves once the headset shows the scene, after rebuilding
+   * the model first when it does not match the hand-tracking switch.
+   */
+  enter(id: XrSessionId): Promise<void>;
+  exit(): Promise<void>;
+  setHandTracking(enabled: boolean): void;
+}
+
 /** Immutable snapshot pushed to {@link MjswanEngine.subscribe} listeners. */
 export interface MjswanEngineState {
   phase: 'running' | 'paused';
@@ -199,6 +233,10 @@ export interface MjswanEngineState {
   interactionMode: InteractionModeId;
   /** Current parameter values, per mode. */
   interactionParams: Readonly<Record<InteractionModeId, Readonly<Record<string, number>>>>;
+  /** The WebXR sessions this device can start; empty where it can start none. */
+  xrSessions: ReadonlyArray<XrSessionDescriptor>;
+  /** Null where no session this device starts could track hands (no `immersive-vr`). */
+  handTracking: HandTrackingDescriptor | null;
   /** Reported so an app recording a session can persist it rather than guess. */
   termSeed: number;
 }
@@ -211,7 +249,7 @@ export interface CreateEngineOptions {
    * from {@link MjswanEngineState.termSeed} to re-run a recorded session.
    */
   termSeed?: number;
-  /** Put WebXR-tracked hands in the simulation as mocap-driven fingertips. */
+  /** The hand-tracking switch's starting state ({@link XrControls.setHandTracking}). Default false. */
   handTracking?: boolean;
 }
 
@@ -237,6 +275,7 @@ export interface MjswanEngine {
   readonly debugVis: DebugVisControls;
   readonly events: EventControls;
   readonly interaction: InteractionControls;
+  readonly xr: XrControls;
 
   // state
   getState(): MjswanEngineState;

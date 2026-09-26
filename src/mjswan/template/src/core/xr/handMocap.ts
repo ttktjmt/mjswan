@@ -265,6 +265,12 @@ export class HandMocap {
     return this.bound.flatMap((hand) => hand.segments.map((s) => s.bodyId));
   }
 
+  /** Forget the bound model, for one built without the hand bones. */
+  clear(): void {
+    this.bound = [];
+    this.handOfGeom = new Map();
+  }
+
   bind(mujoco: MainModule, mjModel: MjModel): void {
     const body = mujoco.mjtObj.mjOBJ_BODY.value;
     this.bound = [];

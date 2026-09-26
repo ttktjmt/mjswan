@@ -26,6 +26,8 @@ import type {
   SceneInput,
   SplatInput,
   SplatTransform,
+  XrControls,
+  XrSessionId,
 } from './types';
 
 function toDescriptor(def: CommandDefinition): CommandDescriptor {
@@ -90,12 +92,15 @@ class Engine implements MjswanEngine {
   readonly debugVis: DebugVisControls;
   readonly events: EventControls;
   readonly interaction: InteractionControls;
+  readonly xr: XrControls;
 
   constructor(runtime: mjswanRuntime) {
     this.runtime = runtime;
     this.state = this.buildState();
     // The CommandManager outlives individual loads, so one listener covers every change.
     this.runtime.commands.addEventListener(this.onCommandEvent);
+    // Device support resolves late, and sessions start and end outside any verb.
+    this.runtime.onXrChange = () => this.refresh();
 
     this.camera = {
       set: (view) => this.runtime.setCameraView(view),
@@ -133,6 +138,11 @@ class Engine implements MjswanEngine {
       getParams: (mode) => this.runtime.getInteractionParams(mode),
       cancel: () => this.runtime.cancelInteraction(),
     };
+    this.xr = {
+      enter: (id) => this.enterXr(id),
+      exit: () => this.runtime.exitXr(),
+      setHandTracking: (enabled) => this.runtime.setHandTracking(enabled),
+    };
   }
 
   private onCommandEvent: CommandEventListener = () => this.refresh();
@@ -157,6 +167,8 @@ class Engine implements MjswanEngine {
         (all, id) => ({ ...all, [id]: this.runtime.getInteractionParams(id) }),
         {} as Record<InteractionModeId, Readonly<Record<string, number>>>,
       ),
+      xrSessions: this.runtime.xrSessions(),
+      handTracking: this.runtime.handTrackingReport(),
       termSeed: this.runtime.seed,
     };
   }
@@ -197,6 +209,26 @@ class Engine implements MjswanEngine {
       this.loading = false;
       this.loadingMessage = null;
       this.refresh();
+    }
+  }
+
+  /** A scene load in flight owns the model; entering waits for the next press. */
+  private async enterXr(id: XrSessionId): Promise<void> {
+    if (this.loading) return;
+    let rebuilt = false;
+    try {
+      await this.runtime.enterXr(id, (addingHands) => {
+        rebuilt = true;
+        this.loading = true;
+        this.loadingMessage = addingHands ? 'Adding tracked hands…' : 'Removing tracked hands…';
+        this.refresh();
+      });
+    } finally {
+      if (rebuilt) {
+        this.loading = false;
+        this.loadingMessage = null;
+        this.refresh();
+      }
     }
   }
 
