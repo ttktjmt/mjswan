@@ -175,11 +175,11 @@ shortcuts.
   in the browser, completing `height_scan`) and `ContactSensor`.
 - Seeded PRNG behind every term's randomness (`createEngine({ termSeed })`, reported
   back as `MjswanEngineState.termSeed`), so a recorded session replays.
-- **WebXR hand tracking as bodies in the simulation** (`createEngine({ handTracking:
-  true })`, or `?hands=1` on the bundled app). A headset can bat a scene's objects around,
-  rest one on an open palm, and pinch to pick one up: a 2 kg box, lifted by friction
-  alone. Opt-in: the bodies are added to every scene loaded from MJCF, at about 1.6x per
-  physics step.
+- **WebXR hand tracking as bodies in the simulation** (the **Hand tracking** switch, or
+  `engine.xr.setHandTracking`). A headset can bat a scene's objects around, rest one on an
+  open palm, and pinch to pick one up: a 2 kg box, lifted by friction alone. Opt-in: the
+  bodies go into a scene built from MJCF while the switch is on, at about 1.6x per physics
+  step.
 - **Thumbstick locomotion in VR.** The camera and the tracked hands now hang off an XR
   rig, which is what a session moves: the left stick slides the viewer along its heading,
   and the right stick turns it about the head for as long as it is held, at a rate the
@@ -263,7 +263,13 @@ shortcuts.
   switch's starting state.
 - **The hands follow the grab anchor's rule.** A policy scene whose model does not
   namespace its elements now reports `handTracking.available: false` with a reason, as a
-  compiled `.mjb` does, since the hand bones would widen its traced graphs' input.
+  compiled `.mjb` does, since the hand bones would widen its traced graphs' input. A scene
+  loaded with a policy keeps the rule after the policy is cleared, so neither the hands nor
+  the anchor go into a model its policy may come back to.
+- **The model verbs run one at a time.** `loadScene`, `setPolicy` and `setMotion` used to
+  interleave when called together; they now run in call order, `xr.enter` waits for them
+  before any rebuild, and `dispose` waits for the one running rather than freeing a model
+  it is still building.
 
 - **`mjswan demo` lists the demos instead of running one.** Every demo downloads models
   and checkpoints before it shows anything, which is not what to do to someone who typed

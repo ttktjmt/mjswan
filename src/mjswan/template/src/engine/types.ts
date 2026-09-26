@@ -1,6 +1,7 @@
 /**
  * Public API surface for the headless engine. One simulation at a time, bytes in directly
- * rather than fetched, and verbs named for their cost: `loadScene` rebuilds, the rest are live.
+ * rather than fetched, and verbs named for their cost: `loadScene` rebuilds, as does `xr.enter`
+ * when the hand-tracking switch disagrees with the model; the rest are live.
  */
 import type { CameraView, ViewerConfig } from '../core/engine/viewer_config';
 import type { TerrainData } from '../core/event/EventBase';
@@ -208,8 +209,9 @@ export interface HandTrackingDescriptor {
 export interface XrControls {
   /**
    * Start a session. Call it from the click that asks for one: the browser grants a session
-   * only inside a user gesture. Resolves once the headset shows the scene, after rebuilding
-   * the model first when it does not match the hand-tracking switch.
+   * only inside a user gesture. Resolves once the headset shows the scene: after any scene or
+   * policy load already running, and after rebuilding the model when it does not match the
+   * hand-tracking switch.
    */
   enter(id: XrSessionId): Promise<void>;
   exit(): Promise<void>;

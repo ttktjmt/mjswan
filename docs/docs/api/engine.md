@@ -69,7 +69,10 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
 
 ### `MjswanEngine`
 
-Verbs are named for their cost: `loadScene` rebuilds the model, everything else is live.
+Verbs are named for their cost: `loadScene` rebuilds the model, and so does `xr.enter` when
+the hand-tracking switch disagrees with it; everything else is live. The verbs that touch
+the model (`loadScene`, `setPolicy`, `setMotion` and that rebuild) run one at a time, in
+call order, and `dispose` waits for the one running.
 
 | Member | Signature | Notes |
 |---|---|---|
@@ -182,7 +185,8 @@ and in a frame not granted `xr-spatial-tracking`.
 | `ar` | `immersive-ar` (passthrough) | `Start AR`, then `Stop AR` | `local-floor` |
 
 Call `xr.enter(id)` from the click that asks for the session: the browser grants one only
-inside a user gesture. `xr.exit()` ends it, as does the headset's own menu.
+inside a user gesture. A scene or policy load already running finishes before the session
+starts. `xr.exit()` ends it, as does the headset's own menu.
 
 `state.handTracking` is the tracked-hands switch, or `null` on a device that cannot start a
 VR session (AR on a phone has no hands to track). The hands are bodies compiled into the
@@ -195,8 +199,9 @@ does. With the switch on, the session also asks for `hand-tracking`.
 `available` is false when the loaded scene cannot take the hands, and `reason` says why: a
 compiled `.mjb` has no MJCF to add them to, and a policy scene whose model does not
 namespace its elements would feed its traced graphs a wider input, the same rule that
-withholds [Grab](#pointer-interaction) there. The switch stays as set, and applies again on
-a scene that can take the hands.
+withholds [Grab](#pointer-interaction) there. A scene loaded with a policy stays a policy
+scene after that policy is cleared, so the policy can come back to the model it was sized
+for. The switch stays as set, and applies again on a scene that can take the hands.
 
 ### Inputs
 
