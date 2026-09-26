@@ -22,9 +22,9 @@ import {
 import { PointerTracker, type PointerClaim, type PointerGesture } from './pointer';
 import { InteractionWrench } from './wrench';
 import type { InteractionMode, InteractionSim, ModeContext } from './modes/mode';
-import { LookMode } from './modes/look';
 import { PullMode } from './modes/pull';
 import { PushMode } from './modes/push';
+import { ViewMode } from './modes/view';
 import { WeldMode } from './modes/weld';
 import type { WeldHold } from '../grab/weldHold';
 
@@ -69,7 +69,7 @@ export class InteractionManager {
     this.canvas = options.renderer.domElement;
     this.arrow = new DragArrow(options.scene);
     this.ring = new PushRing(options.scene);
-    for (const mode of [new LookMode(), new PullMode(), new PushMode(), new WeldMode()]) {
+    for (const mode of [new ViewMode(), new PullMode(), new PushMode(), new WeldMode()]) {
       this.modes.set(mode.id, mode);
     }
 

@@ -7,9 +7,9 @@
  * (ADR-less by design: there is no plugin path in, and adding one is a code change here).
  */
 
-export type InteractionModeId = 'look' | 'pull' | 'push' | 'weld';
+export type InteractionModeId = 'view' | 'pull' | 'push' | 'weld';
 
-export const INTERACTION_MODE_IDS: readonly InteractionModeId[] = ['look', 'pull', 'push', 'weld'];
+export const INTERACTION_MODE_IDS: readonly InteractionModeId[] = ['view', 'pull', 'push', 'weld'];
 
 export interface InteractionParamSpec {
   name: string;
@@ -42,7 +42,7 @@ export interface InteractionModeSpec {
 export const INTERACTION_MODES: readonly InteractionModeSpec[] = [
   // Every press is the camera's. For a scene whose bodies fill the frame, where on a
   // phone there is no empty sky left to orbit from.
-  { id: 'look', label: 'Look', params: [] },
+  { id: 'view', label: 'View', params: [] },
   {
     id: 'pull',
     label: 'Pull',

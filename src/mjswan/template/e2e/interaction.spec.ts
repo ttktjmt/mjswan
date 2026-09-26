@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
  * between a `pointerdown` and a body moving (the raycast, the coordinate swizzle, the
  * claim handed to `OrbitControls`, the step-loop hook) is only exercised here. Each mode
  * is asserted on the effect it is *for*, so none of them can quietly become a no-op, and
- * Look on the camera it leaves the press to.
+ * View on the camera it leaves the press to.
  */
 
 interface ModeReport {
@@ -35,7 +35,7 @@ test('every pointer mode does its own job', async ({ page }) => {
   await page.waitForFunction(() => window.__ready === true, undefined, { timeout: 90_000 });
 
   const modes = await page.evaluate(() => (window.__engine as HarnessEngine).getState().interactions);
-  expect(modes.map((m) => m.id)).toEqual(['look', 'pull', 'push', 'weld']);
+  expect(modes.map((m) => m.id)).toEqual(['view', 'pull', 'push', 'weld']);
   expect(modes.filter((m) => !m.available).map((m) => `${m.id}: ${m.reason}`)).toEqual([]);
 
   const canvas = (await page.locator('canvas').boundingBox())!;
@@ -54,8 +54,8 @@ test('every pointer mode does its own job', async ({ page }) => {
     await page.evaluate(() => window.__probe!.reset());
   };
 
-  // ── look: the same drag on the block orbits instead, and touches nothing ──
-  await arm('look');
+  // ── view: the same drag on the block orbits instead, and touches nothing ──
+  await arm('view');
   const view = () => page.evaluate(() => (window.__engine as HarnessEngine).camera.get());
   const before = await view();
   await page.mouse.move(x, y);
@@ -63,10 +63,10 @@ test('every pointer mode does its own job', async ({ page }) => {
   for (let step = 1; step <= 8; step++) await page.mouse.move(x + step * 12, y);
   await page.mouse.up();
   await page.waitForTimeout(300);
-  const looked = await page.evaluate(() => window.__probe!.read());
-  expect((await view()).azimuth, 'look hands the press to the camera').not.toBeCloseTo(before.azimuth, 1);
-  expect(looked.peakForce, 'look puts nothing on the block').toBe(0);
-  expect(looked.welded, 'look holds nothing').toBe(false);
+  const viewed = await page.evaluate(() => window.__probe!.read());
+  expect((await view()).azimuth, 'view hands the press to the camera').not.toBeCloseTo(before.azimuth, 1);
+  expect(viewed.peakForce, 'view puts nothing on the block').toBe(0);
+  expect(viewed.welded, 'view holds nothing').toBe(false);
 
   // ── pull: a held drag has to put the block under a force ──────────────
   await arm('pull');

@@ -2,8 +2,8 @@
 import type { InteractionMode } from './mode';
 import type { PointerClaim } from '../pointer';
 
-export class LookMode implements InteractionMode {
-  readonly id = 'look' as const;
+export class ViewMode implements InteractionMode {
+  readonly id = 'view' as const;
 
   onDown(): PointerClaim {
     return 'none';
