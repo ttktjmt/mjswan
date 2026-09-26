@@ -14,6 +14,14 @@ shortcuts.
 
 ### Added
 
+- **WebXR entry through the engine API**: `engine.xr` (`enter(id)`, `exit()`,
+  `setHandTracking(enabled)`), `state.xrSessions` and `state.handTracking`. The engine
+  reports which sessions the device can start (`vr`, `ar`) with the label a host prints,
+  and the host enters one from its own click, the gesture the browser requires. The app's
+  control panel gains a **WebXR** section below **Interact**, folded like it and present
+  only where a session can start: **Enter VR**, **Start AR** and the **Hand tracking**
+  switch.
+
 - **Whole MuJoCo models load from the Hugging Face Hub**: `ProjectHandle.add_scene_hf()`
   beside `add_scene_mjlab`, and `source.hf.fetch_dir()` behind it. A model is rarely one
   file (the MJCF names meshes MuJoCo resolves relative to it), so the XML's whole
@@ -243,6 +251,25 @@ shortcuts.
 - The `mjlab-to-mjswan` agent skill ([skills/mjlab-to-mjswan/](skills/mjlab-to-mjswan/)), published from this repo as the `mjswan` Claude Code plugin (`/mjswan:mjlab-to-mjswan`): it ports one mjlab task from any repo into a browser app.
 
 ### Changed
+
+- **The engine no longer draws ENTER VR / START AR.** It appended them to `document.body`,
+  outside any host's UI, where they covered the host's own controls: in mjswan Cloud's
+  player a narrow embed put START AR over the Settings gear. A host driving `createEngine`
+  itself now draws its way in from `state.xrSessions`. three's `VRButton` also called
+  `navigator.xr.offerSession`, so a browser that offered its own VR entry for the page no
+  longer does.
+- **Hand tracking is a switch, applied at the next model build.** The hands are bodies a
+  scene is compiled with, so `engine.xr.setHandTracking` records the switch and rebuilds
+  nothing; the next scene load builds them in, and entering VR or AR rebuilds the model
+  first when it was built the other way. The session is requested before that rebuild,
+  while the click still counts, and handed to three once the model is ready. The rebuild
+  keeps the policy, motion, command values, debug drawings, event schedules, splat and
+  camera, and starts the simulation over. `createEngine({ handTracking })` now sets the
+  switch's starting state.
+- **The hands follow the grab anchor's rule.** A policy scene whose model does not
+  namespace its elements counts every body as its entity's, so the hand bones would widen
+  a traced graph's input; such a scene now reports `handTracking.available: false` with a
+  reason instead of taking them, as a compiled `.mjb` does.
 
 - **`mjswan demo` lists the demos instead of running one.** Every demo downloads models
   and checkpoints before it shows anything, which is not what to do to someone who typed
@@ -523,6 +550,9 @@ shortcuts.
   weekly CI parity sweep catches upstream drift. The `examples` extra adds `onnxruntime`.
 
 ### Removed
+
+- **`?hands=1`.** Hand tracking follows the viewer's other settings: off each time the page
+  opens, and never in the URL. It is on the control panel's WebXR section instead.
 
 - **The pre-0.8 compatibility aliases** (`mjswan._compat`), which were due to go in 0.9:
   the renamed methods (`add_mjlab_scene`, `add_policy_from_wandb`, `set_viewer_config`,
