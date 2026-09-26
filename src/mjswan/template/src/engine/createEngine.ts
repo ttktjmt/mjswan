@@ -246,8 +246,8 @@ class Engine implements MjswanEngine {
   }
 
   /**
-   * Asks for the session at once, inside the host's click, and waits its turn only for
-   * the rebuild, so a load in flight delays entry instead of refusing it.
+   * Asks for the session at once, inside the host's click; only the rebuild waits its turn,
+   * so a load already running delays entry.
    */
   private async enterXr(id: XrSessionId): Promise<void> {
     if (this.disposed) return;
@@ -263,8 +263,7 @@ class Engine implements MjswanEngine {
         }),
       );
     } catch (err) {
-      // A failed rebuild leaves no model behind, which the host must hear about as it
-      // would a failed load.
+      // A failed rebuild leaves no model, which the host must hear about as a failed load.
       if (rebuilt) this.error = asError(err);
       throw err;
     } finally {

@@ -265,8 +265,8 @@ export class mjswanRuntime {
   /** A policy is loaded, or will load onto the model being built. */
   private sceneHasPolicy = false;
   /**
-   * The scene arrived with a policy. Still true once that policy is cleared: the scene's
-   * policies are sized to the model as loaded, so a rebuild adds nothing that would widen it.
+   * The scene came with a policy. Stays true once that policy is cleared: its policies are
+   * sized to the model as loaded, so a rebuild adds nothing that would widen it.
    */
   private sceneLoadedWithPolicy = false;
   private policyRunner: PolicyRunner | null;
@@ -756,7 +756,7 @@ export class mjswanRuntime {
   }
 
   async startLoop(): Promise<void> {
-    // Whatever reaches here late, nothing runs on a disposed runtime.
+    // A load or rebuild finishing after dispose must not restart the loop.
     if (this.disposed) {
       this.running = false;
       return;
@@ -949,7 +949,7 @@ export class mjswanRuntime {
       }
       const hands = request.hands && this.wantsHands();
       try {
-        // No model is a rebuild that failed before: this one retries it.
+        // No model means an earlier rebuild failed; this retries it.
         if ((hands !== this.modelHasHands || !this.mjModel) && this.sceneXml) {
           onRebuild?.(hands);
           await this.rebuildModel(hands);
@@ -1062,7 +1062,7 @@ export class mjswanRuntime {
     } catch (error) {
       // As `buildSceneFromModel` does, or the next scene load waits on this failure.
       this.loadingScene = null;
-      // A half-bound model is not left to run: no model is what the next entry retries.
+      // Free any half-built model, so the next entry finds none and retries.
       this.releaseModel();
       kept.module?.dispose();
       throw isWasmOom(error) ? new WasmMemoryLimitError() : error;
@@ -1222,10 +1222,7 @@ export class mjswanRuntime {
     }
   }
 
-  /**
-   * `kept` comes from a rebuild: the policy's ONNX sessions, which no model is bound into,
-   * so the reload reuses them rather than building every one again.
-   */
+  /** `kept` holds a rebuild's ONNX sessions: bound to no model, they are reused, not rebuilt. */
   async loadPolicyConfig(
     policy: ResolvedPolicy | null,
     kept?: { module: OnnxModule | null },

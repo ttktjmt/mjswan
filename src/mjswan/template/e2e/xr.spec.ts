@@ -31,7 +31,7 @@ interface HarnessEngine {
     exit(): Promise<void>;
     setHandTracking(enabled: boolean): void;
   };
-  // Past the public API: what a test has to see is the model, and the steps that swap it.
+  // Past the public API: the tests watch the model and the steps that swap it.
   runtime: {
     mjModel: { nbody: number } | null;
     mjData: { time: number } | null;
