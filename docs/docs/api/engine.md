@@ -124,16 +124,16 @@ through `engine.commands`.
 
 ### Pointer interaction
 
-What a press on the canvas does. The set of modes is closed, and `state.interactions`
-describes it, so a host draws the switch and the sliders generically rather than naming
-modes itself. The viewer starts in Pull, the drag it has always had.
+What a press on the canvas does. The set of modes is closed and `state.interactions`
+describes it, so a host draws the mode switch and its controls without naming modes itself.
+The viewer starts in Pull.
 
 | Mode | `id` | Does | Parameters |
 |---|---|---|---|
-| View | `view` | Nothing: a press on a body orbits the camera, as a press on the sky does, for a scene whose bodies fill the frame. | none |
-| Pull | `pull` | Drags a body toward the pointer on a spring for as long as the press is held. The arrow thickens with the force. | `spring` (N/m, default 100) |
+| View | `view` | Nothing: a press on a body orbits the camera, as one on the sky does. For a scene whose bodies fill the frame. | none |
+| Pull | `pull` | Drags a body toward the pointer on a spring while the press is held. The arrow thickens with the force. | `spring` (N/m, default 100) |
 | Push | `push` | Taps a body to shove it along the inward normal of the face that was hit. | `impulse` (N s, default 10) |
-| Grab | `weld` | Carries a body where you put it, and releasing leaves it with the speed the carry gave it. The cursor shows a closed hand while something is held. | `softness` (s, default 0.02), `torqueScale` (checkbox, default 1) |
+| Grab | `weld` | Carries a body with the pointer; on release it keeps the speed the carry gave it. The cursor shows a closed hand while something is held. | `softness` (s, default 0.02), `torqueScale` (checkbox, default 1) |
 
 Each `InteractionModeDescriptor` carries an `id`, a `label`, an `available` flag with a
 `reason` when it is false, and a `params` list. A parameter gives `name`, `label`, `unit`,
@@ -153,17 +153,17 @@ takes to catch up with the pointer, so a larger value carries it on a looser spr
 `weld.torqueScale` is `eq_data[10]`; at 1 the body keeps the pose it was grabbed in, at 0
 it hangs from the grab point.
 
-**Input bindings are not configurable, by design.** A press that hits a geom belongs to the
-active mode and a press that misses belongs to the camera, on a mouse and on a touchscreen
-alike, with no hover, no modifier key and no right click. Switching mode is the only input
-decision a host makes, through `setMode`. Call `cancel()` before taking the pointer away
-(entering an overlay, say) so a held body is let go rather than left under a force.
+**Input bindings are not configurable, by design.** A press on a body that can move belongs
+to the active mode and any other press belongs to the camera, on a mouse and a touchscreen
+alike, with nothing bound to hover, a modifier key or a right click. Switching mode is the
+only input decision a host makes, through `setMode`. Call `cancel()` before taking the
+pointer away (entering an overlay, say) so a held body is let go rather than left under a
+force.
 
 `available` is false when the loaded scene cannot run a mode, and `reason` says why. Grab
-needs the weld the viewer injects into the scene MJCF, which a scene loaded as a compiled
-`.mjb` does not have, and which is also withheld from a policy scene whose model does not
-namespace its elements: one more body there would change the width of a traced graph's
-input.
+needs a weld the viewer injects into the scene MJCF, so a scene loaded as a compiled `.mjb`
+lacks it, and it is withheld from a policy scene whose model does not namespace its
+elements, where one more body would widen a traced graph's input.
 
 ### Inputs
 
