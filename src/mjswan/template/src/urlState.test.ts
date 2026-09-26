@@ -28,9 +28,9 @@ describe('applyUrlState', () => {
   });
 
   it('leaves parameters it does not own alone', () => {
-    const search = '?manifest=/other/manifest.json&hands=1';
+    const search = '?manifest=/other/manifest.json&utm_source=paper';
     expect(applyUrlState(search, SELECTED)).toBe(
-      'manifest=%2Fother%2Fmanifest.json&hands=1&project=demo_two&scene=humanoid&policy=walk',
+      'manifest=%2Fother%2Fmanifest.json&utm_source=paper&project=demo_two&scene=humanoid&policy=walk',
     );
   });
 

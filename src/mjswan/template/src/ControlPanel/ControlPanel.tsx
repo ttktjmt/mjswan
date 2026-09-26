@@ -27,14 +27,18 @@ import FloatingPanel from './FloatingPanel';
 import { LabeledInput } from './LabeledInput';
 import { CommandSection } from './CommandSection';
 import { InteractionSection } from './InteractionSection';
+import { WebXrSection } from './WebXrSection';
 import { SliderRow } from './SliderRow';
 import { SplatSection } from './SplatSection';
 import type {
   CommandDescriptor,
   DebugVisDescriptor,
   EventDescriptor,
+  HandTrackingDescriptor,
   InteractionModeDescriptor,
   InteractionModeId,
+  XrSessionDescriptor,
+  XrSessionId,
 } from '../engine';
 
 export interface SelectOption {
@@ -98,6 +102,11 @@ interface ControlPanelProps {
   interactionParams?: Readonly<Record<string, Readonly<Record<string, number>>>>;
   onInteractionModeChange?: (mode: InteractionModeId) => void;
   onInteractionParamChange?: (mode: InteractionModeId, name: string, value: number) => void;
+  /** WebXR sessions this device can start; the section is absent when there are none. */
+  xrSessions?: XrSessionDescriptor[];
+  handTracking?: HandTrackingDescriptor | null;
+  onXrSessionPress?: (id: XrSessionId, active: boolean) => void;
+  onHandTrackingChange?: (enabled: boolean) => void;
 }
 
 function isEditableElement(element: Element | null): boolean {
@@ -254,6 +263,10 @@ function ControlPanel(props: ControlPanelProps) {
     interactionParams = {},
     onInteractionModeChange,
     onInteractionParamChange,
+    xrSessions = [],
+    handTracking = null,
+    onXrSessionPress,
+    onHandTrackingChange,
   } = props;
 
   const [aboutModalOpened, { open: openAbout, close: closeAbout }] = useDisclosure(false);
@@ -735,6 +748,15 @@ function ControlPanel(props: ControlPanelProps) {
               params={interactionParams}
               onModeChange={onInteractionModeChange}
               onParamChange={onInteractionParamChange}
+            />
+          )}
+
+          {onXrSessionPress && onHandTrackingChange && (
+            <WebXrSection
+              sessions={xrSessions}
+              handTracking={handTracking}
+              onSessionPress={onXrSessionPress}
+              onHandTrackingChange={onHandTrackingChange}
             />
           )}
 
