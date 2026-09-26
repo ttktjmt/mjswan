@@ -19,7 +19,8 @@ interface InteractionSectionProps {
  *
  * Only the active mode's parameters are drawn, in a folder of their own: one level down,
  * as a command group is, so the label, slider and number columns line up with the
- * commands above. A mode the scene cannot run says why on hover.
+ * commands above; Look has none, so it draws no folder. A mode the scene cannot run says
+ * why on hover.
  */
 export function InteractionSection({
   modes,
@@ -57,7 +58,7 @@ export function InteractionSection({
           }))}
         />
       </Box>
-      {active?.available && (
+      {active?.available && active.params.length > 0 && (
         <CommandSection label={active.label}>
           {active.params.map((param) => {
             const id = `interaction:${mode}:${param.name}`;

@@ -7,9 +7,9 @@
  * (ADR-less by design: there is no plugin path in, and adding one is a code change here).
  */
 
-export type InteractionModeId = 'pull' | 'push' | 'weld';
+export type InteractionModeId = 'look' | 'pull' | 'push' | 'weld';
 
-export const INTERACTION_MODE_IDS: readonly InteractionModeId[] = ['pull', 'push', 'weld'];
+export const INTERACTION_MODE_IDS: readonly InteractionModeId[] = ['look', 'pull', 'push', 'weld'];
 
 export interface InteractionParamSpec {
   name: string;
@@ -40,6 +40,9 @@ export interface InteractionModeSpec {
 // The hard limits are there to keep a typo out of the solver, not to judge what is too
 // much: finite and non-negative, at about ten times what the slider reaches.
 export const INTERACTION_MODES: readonly InteractionModeSpec[] = [
+  // Every press is the camera's. For a scene whose bodies fill the frame, where on a
+  // phone there is no empty sky left to orbit from.
+  { id: 'look', label: 'Look', params: [] },
   {
     id: 'pull',
     label: 'Pull',

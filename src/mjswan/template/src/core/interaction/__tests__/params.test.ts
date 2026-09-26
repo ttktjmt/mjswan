@@ -20,7 +20,6 @@ describe('interaction parameter table', () => {
   // A default outside its own slider is a control that moves the moment it is touched.
   it('gives every parameter a default on its slider, inside limits that hold the slider', () => {
     for (const mode of INTERACTION_MODES) {
-      expect(mode.params.length, mode.id).toBeGreaterThan(0);
       const names = mode.params.map((p) => p.name);
       expect(new Set(names).size, mode.id).toBe(names.length);
       for (const param of mode.params) {
@@ -53,6 +52,12 @@ describe('interaction parameter table', () => {
       }
       expect(Object.keys(values[mode.id]).sort()).toEqual(mode.params.map((p) => p.name).sort());
     }
+  });
+
+  // Look is the camera's alone; every other mode has something to tune.
+  it('gives only Look no parameters', () => {
+    const bare = INTERACTION_MODES.filter((m) => m.params.length === 0).map((m) => m.id);
+    expect(bare).toEqual(['look']);
   });
 
   it('clamps to the hard limits, not the slider, and never lets NaN through', () => {

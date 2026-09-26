@@ -126,10 +126,11 @@ through `engine.commands`.
 
 What a press on the canvas does. The set of modes is closed, and `state.interactions`
 describes it, so a host draws the switch and the sliders generically rather than naming
-modes itself.
+modes itself. The viewer starts in Pull, the drag it has always had.
 
 | Mode | `id` | Does | Parameters |
 |---|---|---|---|
+| Look | `look` | Nothing: a press on a body orbits the camera, as a press on the sky does, for a scene whose bodies fill the frame. | none |
 | Pull | `pull` | Drags a body toward the pointer on a spring for as long as the press is held. The arrow thickens with the force. | `spring` (N/m, default 100) |
 | Push | `push` | Taps a body to shove it along the inward normal of the face that was hit. | `impulse` (N s, default 10) |
 | Grab | `weld` | Carries a body where you put it, and releasing leaves it with the speed the carry gave it. The cursor shows a closed hand while something is held. | `softness` (s, default 0.02), `torqueScale` (checkbox, default 1) |

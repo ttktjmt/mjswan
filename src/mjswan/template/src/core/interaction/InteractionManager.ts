@@ -22,6 +22,7 @@ import {
 import { PointerTracker, type PointerClaim, type PointerGesture } from './pointer';
 import { InteractionWrench } from './wrench';
 import type { InteractionMode, InteractionSim, ModeContext } from './modes/mode';
+import { LookMode } from './modes/look';
 import { PullMode } from './modes/pull';
 import { PushMode } from './modes/push';
 import { WeldMode } from './modes/weld';
@@ -68,7 +69,9 @@ export class InteractionManager {
     this.canvas = options.renderer.domElement;
     this.arrow = new DragArrow(options.scene);
     this.ring = new PushRing(options.scene);
-    for (const mode of [new PullMode(), new PushMode(), new WeldMode()]) this.modes.set(mode.id, mode);
+    for (const mode of [new LookMode(), new PullMode(), new PushMode(), new WeldMode()]) {
+      this.modes.set(mode.id, mode);
+    }
 
     this.pointer = new PointerTracker({
       scene: options.scene,

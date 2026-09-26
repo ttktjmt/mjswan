@@ -138,7 +138,7 @@ export interface EventControls {
 }
 
 /** Which pointer gesture the viewer is in. The set is closed: there is no plugin path in. */
-export type InteractionModeId = 'pull' | 'push' | 'weld';
+export type InteractionModeId = 'look' | 'pull' | 'push' | 'weld';
 
 /** One number a mode exposes, with everything a generic control needs to draw it. */
 export interface InteractionParamDescriptor {
