@@ -51,7 +51,7 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
 |---|---|---|---|
 | `multithreaded` | `boolean` | `false` | Load the `mujoco/mt` build. Uses `SharedArrayBuffer`, so it requires [COOP/COEP headers](../guides/deployment.md#cross-origin-isolation-headers-for-multi-threading). |
 | `termSeed` | `number` | built-in default | Seed for the single PRNG every traced term's `rand` input comes from. Pass back the value read from `MjswanEngineState.termSeed` to re-run a recorded session. |
-| `handTracking` | `boolean` | `false` | The hand-tracking switch's starting state, as [`xr.setHandTracking`](#webxr) sets it later. With it on, a headset's tracked hands enter the simulation as mocap-driven capsules, so a viewer can push and grasp what they see ([details](../guides/embedding.md#hand-tracking-in-vr)). |
+| `handTracking` | `boolean` | `false` | Starting state of the hand-tracking switch ([`xr.setHandTracking`](#webxr)). When on, a headset's tracked hands enter the simulation as mocap-driven capsules, so a viewer can push and grasp what they see ([details](../guides/embedding.md#hand-tracking-in-vr)). |
 
 !!! note "The one thing the engine does fetch"
     `dist/mjswan.js` resolves its own WebAssembly — MuJoCo's and ORT's — relative to itself
@@ -112,9 +112,9 @@ interface MjswanEngineState {
   interactionMode: InteractionModeId;
   /** Current parameter values, per mode. */
   interactionParams: Readonly<Record<InteractionModeId, Readonly<Record<string, number>>>>;
-  /** The WebXR sessions this device can start; empty where it can start none. */
+  /** The WebXR sessions this device can start. */
   xrSessions: ReadonlyArray<XrSessionDescriptor>;
-  /** Null where no session this device starts could track hands. */
+  /** Null on a device without `immersive-vr`, where no session could track hands. */
   handTracking: HandTrackingDescriptor | null;
   /** The seed in use, so an app recording a session can persist it. */
   termSeed: number;
@@ -173,10 +173,8 @@ elements, where one more body would widen a traced graph's input.
 ### WebXR
 
 The engine draws no button of its own. `state.xrSessions` lists the sessions this device
-can start, and a host draws the way in from that list, as the mjswan app's Control Panel
-and mjswan Cloud's Settings menu do. It is empty on a device with no headset and in a frame
-not granted `xr-spatial-tracking`, so a host that draws only what the list holds shows
-nothing there.
+can start, for the host to draw its buttons from. It is empty on a device with no headset
+and in a frame not granted `xr-spatial-tracking`.
 
 | `id` | Session | `label` | Asks for |
 |---|---|---|---|
@@ -187,14 +185,12 @@ Call `xr.enter(id)` from the click that asks for the session: the browser grants
 inside a user gesture. `xr.exit()` ends it, as does the headset's own menu.
 
 `state.handTracking` is the tracked-hands switch, or `null` on a device that cannot start a
-VR session (AR on a phone has no hands to track). Hand tracking puts the wearer's hands in
-the physics as bodies, which a scene has to be compiled with, so **the switch never rebuilds
-the model itself**. `xr.setHandTracking(enabled)` records it, and the next build applies it:
-the next scene load, or `xr.enter` when the model was built the other way. Entering then
-requests the session first, while the click still counts, rebuilds the model with or
-without the hands while the headset waits, and starts rendering once it is done. The rebuild
-keeps the policy, motion, command values, splat and camera; the simulation starts over, as
-after a reset. With the switch on, the session also asks for `hand-tracking`.
+VR session (AR on a phone has no hands to track). The hands are bodies compiled into the
+model, so **the switch never rebuilds the model itself**: `xr.setHandTracking(enabled)`
+applies at the next scene load, or at `xr.enter` when the model was built the other way.
+That rebuild runs after the session is granted and before `enter` resolves; it keeps the
+policy, motion, command values, splat and camera, and restarts the simulation as a reset
+does. With the switch on, the session also asks for `hand-tracking`.
 
 `available` is false when the loaded scene cannot take the hands, and `reason` says why: a
 compiled `.mjb` has no MJCF to add them to, and a policy scene whose model does not

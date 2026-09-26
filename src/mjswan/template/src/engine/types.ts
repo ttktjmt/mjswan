@@ -195,8 +195,8 @@ export interface XrSessionDescriptor {
 
 /**
  * The tracked hands as bodies inside the simulation. The switch never rebuilds the model
- * by itself: the next build takes it, whether a scene load or entering a session with the
- * model built the other way.
+ * by itself: it applies at the next scene load, or on entering a session when the model
+ * was built the other way.
  */
 export interface HandTrackingDescriptor {
   /** False when the loaded scene cannot take the hand bodies; `reason` says why. */
@@ -233,9 +233,9 @@ export interface MjswanEngineState {
   interactionMode: InteractionModeId;
   /** Current parameter values, per mode. */
   interactionParams: Readonly<Record<InteractionModeId, Readonly<Record<string, number>>>>;
-  /** The WebXR sessions this device can start; empty where it can start none. */
+  /** The WebXR sessions this device can start. */
   xrSessions: ReadonlyArray<XrSessionDescriptor>;
-  /** Null where no session this device starts could track hands (no `immersive-vr`). */
+  /** Null on a device without `immersive-vr`, where no session could track hands. */
   handTracking: HandTrackingDescriptor | null;
   /** Reported so an app recording a session can persist it rather than guess. */
   termSeed: number;

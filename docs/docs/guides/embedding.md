@@ -104,10 +104,9 @@ bar into your `src`.
 
 ### Entering VR and AR
 
-On a device that can start a WebXR session, the control panel gains a **WebXR** section,
-folded like **Interact** until you open it: **Enter VR**, **Start AR** where the device
-supports passthrough, and the **Hand tracking** switch. A browser with no headset shows no
-such section at all.
+On a device that can start a WebXR session, the control panel has a collapsed **WebXR**
+section: **Enter VR**, **Start AR** where the device supports passthrough, and the **Hand
+tracking** switch. Where no session can start, the section is absent.
 
 ### Moving around in VR
 
@@ -134,17 +133,17 @@ rest one on an open palm, and pick one up: pinch to grab, release to drop. What 
 three.js's own hand model, and the physics under it is sized to the wearer's hand rather
 than to a nominal adult one.
 
-The hands are bodies the scene is compiled with, so flipping the switch costs nothing on
+The hands are bodies the scene is compiled with, so flipping the switch does nothing on
 its own: the scene is rebuilt with them when you enter VR or AR, or at the next scene you
 open, whichever comes first. That rebuild keeps your policy, motion and camera and starts
 the simulation over. The switch is off every time the page opens, and nothing about it
 goes into the URL.
 
-It is a switch because both halves cost something: a scene with the hands runs roughly
-1.6x the physics cost, and the headset must grant the `hand-tracking` feature — **Meta
-Quest** is the recommended one, since its browser ships WebXR hand tracking with nothing to
-install. When you drive the engine yourself, `engine.xr.setHandTracking(true)` is the same
-switch (see [WebXR](../api/engine.md#webxr)).
+It is off by default: a scene with the hands costs roughly 1.6x per physics step, and the
+headset must grant the `hand-tracking` feature. **Meta Quest** is the recommended headset,
+since its browser ships WebXR hand tracking with nothing to install. When you drive the
+engine yourself, `engine.xr.setHandTracking(true)` is the same switch (see
+[WebXR](../api/engine.md#webxr)).
 
 Some scenes cannot take the hands, and the switch is greyed there with the reason on
 hover: a scene added as `add_scene(model=...)` (a compiled `.mjb`, with no MJCF to add them
@@ -154,7 +153,7 @@ otherwise read the extra bodies.
 ### Passthrough AR
 
 A device that supports `immersive-ar` gets **Start AR** beside **Enter VR** in the WebXR
-section. The simulation is the same one — same physics, same policy — but the skybox
+section. The simulation is the same, physics and policy included, but the skybox
 and the ground planes stop being drawn, so the room shows through and the robot stands on
 your own floor rather than on MuJoCo's checkerboard. The session asks for the
 `local-floor` reference space, which is what puts the model's `z = 0` at floor level

@@ -212,7 +212,7 @@ class Engine implements MjswanEngine {
     }
   }
 
-  /** A scene load in flight owns the model; entering waits for the next press. */
+  /** No-op while a scene loads, since the load owns the model. */
   private async enterXr(id: XrSessionId): Promise<void> {
     if (this.loading) return;
     let rebuilt = false;

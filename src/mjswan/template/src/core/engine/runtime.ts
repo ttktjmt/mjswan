@@ -254,7 +254,7 @@ export class mjswanRuntime {
   private injectedWithoutPolicy = false;
   /** Every body the viewer added: never part of the scene's own bounds or camera target. */
   private injectedBodyIds: ReadonlySet<number> = new Set();
-  /** A policy is loaded, or is about to be with the model now building. */
+  /** A policy is loaded, or will load onto the model being built. */
   private sceneHasPolicy = false;
   private policyRunner: PolicyRunner | null;
   private policyStateBuilder: PolicyStateBuilder | null;
@@ -268,31 +268,27 @@ export class mjswanRuntime {
   private terminationManager: TerminationManager | null;
   private eventManager: EventManager | null;
   private terrainData: TerrainData | null;
-  /** The XR support checks are async: a late one must not report after teardown. */
+  /** A late async XR support check must not report after teardown. */
   private disposed = false;
   private readonly passthrough: Passthrough;
   private readonly handMocap: HandMocap;
-  /** The hand-tracking switch. Never rebuilds by itself: the next model build applies it. */
+  /** The hand-tracking switch, applied at the next model build. */
   private handTrackingEnabled: boolean;
-  /** Whether the model now loaded was compiled with the hand bones. */
   private modelHasHands = false;
   private xrSupported: Record<XrSessionId, boolean> = { vr: false, ar: false };
   /** The session `enterXr` started, until it ends. */
   private xrSession: XRSession | null = null;
   private activeXr: XrSessionId | null = null;
   private enteringXr = false;
-  /** Told whenever what `xrSessions` / `handTrackingReport` return may have changed. */
+  /** Called when `xrSessions()` or `handTrackingReport()` may have changed. */
   onXrChange: (() => void) | null = null;
-  /**
-   * The scene MJCF before the viewer's bodies went in, so the model can be compiled again
-   * with or without the hands. Null for a compiled `.mjb`, which has no MJCF.
-   */
+  /** The scene MJCF as shipped, so a rebuild can add or drop the hands. Null for `.mjb`. */
   private sceneXml: { file: string; text: string } | null = null;
   private modelFormat: ModelFormat | null = null;
   private scenePrefixed = false;
-  /** The policy loaded now, which a rebuild loads again onto the new model. */
+  /** Loaded again onto the new model by a rebuild. */
   private currentPolicy: ResolvedPolicy | null = null;
-  /** Held here because a policy load shows the reference again; a rebuild puts it back. */
+  /** Restored by a rebuild, since the policy load shows the reference again. */
   private referenceVisible = true;
   /** Parent of the camera and hands: what XR locomotion moves. Identity outside a session. */
   private readonly xrRig: THREE.Group;
@@ -404,8 +400,7 @@ export class mjswanRuntime {
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.container.appendChild(this.renderer.domElement);
 
-    // The hand spaces only fill in once a session is granted `hand-tracking`, so they cost
-    // nothing until the switch is on and a session starts.
+    // Always created: the hand spaces stay empty until a session is granted `hand-tracking`.
     const hands = [0, 1].map((i) => this.renderer.xr.getHand(i));
     // Spheres, not the `mesh` profile: that one fetches a glTF from a CDN, and a built
     // mjswan app is self-contained.
@@ -718,14 +713,12 @@ export class mjswanRuntime {
   }
 
   /**
-   * Write the scene MJCF back to the VFS with the viewer's own bodies added, ready to
-   * compile. Always from the text as the scene shipped it, so a rebuild can drop the hands
-   * as well as add them.
+   * Write the scene MJCF to the VFS with the viewer's bodies added. Always starts from the
+   * shipped text, so a rebuild can drop the hands as well as add them.
    *
-   * The grab anchor and the hands are both skipped for an unprefixed model with a policy:
-   * `buildEntityIndex` counts every body of such a model as the entity's, so any more would
-   * widen a traced graph's input. On a prefixed model (`robot/torso`) they fall outside
-   * every entity.
+   * For an unprefixed model with a policy, the grab anchor is skipped here and the hands by
+   * `handTrackingBlocker`: `buildEntityIndex` counts every body of such a model as the
+   * entity's, so extra bodies would widen a traced graph's input.
    */
   private injectViewerBodies(hands: boolean): void {
     if (!this.sceneXml) return;
@@ -879,12 +872,12 @@ export class mjswanRuntime {
 
   // ── WebXR ─────────────────────────────────────────────────────────────
 
-  /** The sessions this device can start, for a host to draw its own buttons from. */
+  /** The sessions this device can start. */
   xrSessions(): XrSessionReport[] {
     return xrSessionReports(this.xrSupported, this.activeXr);
   }
 
-  /** Null where no session this device starts could track hands: one that has no VR. */
+  /** Null on a device without VR, where no session could track hands. */
   handTrackingReport(): { available: boolean; reason?: string; enabled: boolean } | null {
     if (!this.xrSupported.vr) return null;
     const reason = this.handTrackingBlockerNow();
@@ -900,11 +893,9 @@ export class mjswanRuntime {
   }
 
   /**
-   * Start a session from the host's click. It is requested first, while the click still
-   * counts as the gesture `requestSession` needs, and handed to three only once the model
-   * matches the hand-tracking switch: a rebuild for the hands can outlast that gesture, and
-   * three must not start rendering a model about to be replaced. Until then the page draws
-   * nothing into the session.
+   * Requests the session first, while the host's click still counts as the user gesture,
+   * and hands it to three only after any rebuild for the hand switch: the rebuild can
+   * outlast the gesture, and three must not render a model about to be replaced.
    */
   async enterXr(id: XrSessionId, onRebuild?: (addingHands: boolean) => void): Promise<void> {
     const xr = navigator.xr;
@@ -946,7 +937,6 @@ export class mjswanRuntime {
     this.onXrChange?.();
   }
 
-  /** The switch, where this device can track hands and the model can take them. */
   private wantsHands(): boolean {
     return this.handTrackingEnabled && this.xrSupported.vr && this.handTrackingBlockerNow() === null;
   }
@@ -969,7 +959,7 @@ export class mjswanRuntime {
       try {
         supported[id] = await xr.isSessionSupported(XR_SESSION_MODES[id]);
       } catch (error: unknown) {
-        // A frame not granted `xr-spatial-tracking` is refused outright.
+        // Throws in a frame not granted `xr-spatial-tracking`.
         console.warn(`[mjswan] isSessionSupported('${XR_SESSION_MODES[id]}') failed:`, error);
         supported[id] = false;
       }
@@ -985,10 +975,10 @@ export class mjswanRuntime {
   };
 
   /**
-   * Compile the loaded scene again with or without the hand bones, keeping what was chosen
-   * around it: the policy, motion, reference ghost, command values, debug drawings, event
-   * schedules, splat and camera. The simulation itself starts over, as after a reset.
-   * Appending keeps every original body id, so a camera tracking a body still finds it.
+   * Recompile the loaded scene with or without the hand bones, keeping the policy, motion,
+   * reference ghost, command values, debug drawings, event schedules, splat and camera. The
+   * simulation restarts as after a reset. The hands are appended, so original body ids (and
+   * a camera tracking one) stay valid.
    */
   private async rebuildModel(hands: boolean): Promise<void> {
     const wasRunning = this.running;
@@ -999,8 +989,7 @@ export class mjswanRuntime {
     const drawings = this.commandManager.getDebugVisTerms();
     const schedules = this.eventManager?.controls().filter((c) => c.kind === 'interval') ?? [];
 
-    // Everything that holds the old model goes before it is freed: the command terms still
-    // draw from it every frame.
+    // Drop everything holding the old model before freeing it: command terms read it every frame.
     this.commandManager.clear();
     this.eventManager = null;
     this.onnxModule?.dispose();

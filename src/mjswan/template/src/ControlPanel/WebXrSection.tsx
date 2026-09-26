@@ -12,10 +12,7 @@ interface WebXrSectionProps {
   onHandTrackingChange: (enabled: boolean) => void;
 }
 
-/**
- * The way into VR and AR, shown only where the device can start a session. The hand switch
- * waits for the next model build, which entering makes when the model disagrees with it.
- */
+/** The hand switch applies at the next model build: a scene load, or entering a session. */
 export function WebXrSection({ sessions, handTracking, onSessionPress, onHandTrackingChange }: WebXrSectionProps) {
   if (sessions.length === 0) {
     return null;
@@ -29,7 +26,7 @@ export function WebXrSection({ sessions, handTracking, onSessionPress, onHandTra
             disabled={handTracking.available}
             withArrow
           >
-            {/* A disabled input takes no pointer events, so the tip hangs off its box. */}
+            {/* A disabled input gets no pointer events, so the tooltip hangs off a wrapper. */}
             <span style={{ display: 'inline-flex' }}>
               <Checkbox
                 id="webxr:hands"

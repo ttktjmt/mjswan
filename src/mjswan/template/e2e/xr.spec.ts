@@ -1,10 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * WebXR entry through the engine API, on a browser with no headset: `navigator.xr` is a
- * stand-in that reports both sessions and records what each request asks for, and three's
- * `setSession` is stubbed, since no fake session satisfies it. What is real is everything
- * this change owns: the reports, the hand switch, and rebuilding the model on entry.
+ * No headset: `navigator.xr` is a stand-in that supports both sessions and records each
+ * request, and three's `setSession` is stubbed, since no fake session satisfies it.
  */
 
 /** Two hands of 7 grip bones (a mocap target and its welded body) and 9 wall bones. */
@@ -74,7 +72,7 @@ test('the host enters XR through the API, and the model takes the hands on entry
   const errors: string[] = [];
   await openHarness(page, errors);
 
-  // The engine no longer draws its own ENTER VR / START AR.
+  // The engine draws no XR buttons of its own.
   await expect(page.locator('button')).toHaveCount(0);
 
   const initial = await state(page);

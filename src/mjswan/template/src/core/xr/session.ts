@@ -1,8 +1,4 @@
-/**
- * What a WebXR session asks for, and what the host is told it can start. The engine draws
- * no button: a host renders these reports and calls `engine.xr.enter` from its own click,
- * which is the gesture `requestSession` requires.
- */
+/** WebXR session options, and the reports a host draws its own XR buttons from. */
 import type { ModelFormat } from '../scene/scene';
 
 export type XrSessionId = 'vr' | 'ar';
@@ -14,7 +10,6 @@ export const XR_SESSION_MODES: Readonly<Record<XrSessionId, XRSessionMode>> = {
   ar: 'immersive-ar',
 };
 
-/** What a host prints for each session, to enter it and while it runs. */
 const LABELS: Readonly<Record<XrSessionId, { enter: string; exit: string }>> = {
   vr: { enter: 'Enter VR', exit: 'Exit VR' },
   ar: { enter: 'Start AR', exit: 'Stop AR' },
@@ -22,12 +17,10 @@ const LABELS: Readonly<Record<XrSessionId, { enter: string; exit: string }>> = {
 
 export interface XrSessionReport {
   id: XrSessionId;
-  /** The action a press takes now: entering the session, or leaving it while it runs. */
   label: string;
   active: boolean;
 }
 
-/** Every session this device can start, in a fixed order, with the one running marked. */
 export function xrSessionReports(
   supported: Readonly<Record<XrSessionId, boolean>>,
   active: XrSessionId | null,
@@ -40,7 +33,7 @@ export function xrSessionReports(
 }
 
 /**
- * VR asks for what three's `VRButton` did. AR asks for `local-floor` so MuJoCo's z = 0
+ * VR asks for three's `VRButton` defaults. AR asks for `local-floor` so MuJoCo's z = 0
  * lands on the real floor rather than at eye height, where `local` would put it.
  */
 export function xrSessionInit(id: XrSessionId, hands: boolean): XRSessionInit {
@@ -51,10 +44,8 @@ export function xrSessionInit(id: XrSessionId, hands: boolean): XRSessionInit {
 }
 
 /**
- * Why the loaded scene cannot take the hand bodies, or null when it can. The same rule
- * keeps the pointer's grab anchor out of such a model (`injectViewerBodies`): an
- * unprefixed model's bodies all count as its entity's, so a policy's traced graphs would
- * be fed a wider input.
+ * Why the loaded scene cannot take the hand bodies, or null when it can. Same rule as the
+ * grab anchor in `injectViewerBodies`.
  */
 export function handTrackingBlocker(scene: {
   format: ModelFormat;
