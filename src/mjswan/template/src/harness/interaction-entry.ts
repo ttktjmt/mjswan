@@ -1,13 +1,7 @@
 /**
- * Browser glue for the pointer-interaction E2E.
- *
- * The modes are the one part of the engine whose unit tests cannot reach what actually
- * breaks: they drive MuJoCo directly, with no pointer, no camera and no raycast. This
- * loads a scene and leaves the engine on `window` so Playwright can press a real mouse
- * against a real canvas and watch the simulation answer.
- *
- * A pull lasts as long as the drag but a push lasts one control step, so the effects are
- * *latched* by a sampler rather than read at a moment the test would have to guess.
+ * Browser glue for the pointer-interaction E2E: loads a scene and puts the engine on
+ * `window` for Playwright. A push lasts one control step, so a sampler latches the effects
+ * rather than the test reading them at a guessed moment.
  */
 import { createEngine } from '../engine';
 
@@ -39,9 +33,8 @@ async function main(): Promise<void> {
   await engine.loadScene({ model });
   window.__engine = engine;
 
-  // Reaching past the public API on purpose: there is no public read of simulation state,
-  // and "did the body actually feel it" is the only honest assertion for a mode. Test-only
-  // glue, which is what src/harness is.
+  // Past the public API on purpose: it has no read of simulation state, and what the body
+  // felt is what a mode test has to assert.
   const runtime = (
     engine as unknown as {
       runtime: {

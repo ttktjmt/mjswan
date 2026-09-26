@@ -1,13 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Runtime tier for the pointer modes: a real mouse against a real canvas.
- *
- * The unit tests drive the mechanisms with the real WASM but no browser, so everything
- * between a `pointerdown` and a body moving (the raycast, the coordinate swizzle, the
- * claim handed to `OrbitControls`, the step-loop hook) is only exercised here. Each mode
- * is asserted on the effect it is *for*, so none of them can quietly become a no-op, and
- * View on the camera it leaves the press to.
+ * The pointer modes with a real mouse on a real canvas: the raycast, the coordinate
+ * swizzle, the `OrbitControls` claim and the step-loop hook, which the WASM unit tests
+ * never reach. Each mode is asserted on its effect, so none can quietly become a no-op.
  */
 
 interface ModeReport {
@@ -54,7 +50,7 @@ test('every pointer mode does its own job', async ({ page }) => {
     await page.evaluate(() => window.__probe!.reset());
   };
 
-  // ── view: the same drag on the block orbits instead, and touches nothing ──
+  // ── view: a drag on the block orbits and touches nothing ──────────────
   await arm('view');
   const view = () => page.evaluate(() => (window.__engine as HarnessEngine).camera.get());
   const before = await view();

@@ -25,10 +25,7 @@ export function SliderRow({
   value: number;
   min: number;
   max: number;
-  /**
-   * How far the number box reaches, when a typed value may go past the slider. The thumb
-   * then pins at the end of the track.
-   */
+  /** How far typing may reach past the slider; the thumb then pins at the end. */
   inputMin?: number;
   inputMax?: number;
   /** A slider descriptor always carries one; Mantine's own default stands in if not. */

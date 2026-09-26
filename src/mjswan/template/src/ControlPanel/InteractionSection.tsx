@@ -15,12 +15,8 @@ interface InteractionSectionProps {
 }
 
 /**
- * What the pointer does, and the numbers behind it.
- *
- * Only the active mode's parameters are drawn, in a folder of their own: one level down,
- * as a command group is, so the label, slider and number columns line up with the
- * commands above; View has none, so it draws no folder. A mode the scene cannot run says
- * why on hover.
+ * The pointer mode switch, and the active mode's parameters in a nested folder, as a
+ * command group is, so the columns line up with the commands above.
  */
 export function InteractionSection({
   modes,
@@ -40,8 +36,7 @@ export function InteractionSection({
           fullWidth
           size="xs"
           radius="xs"
-          // The panel's buttons print at `sm`; `xs` would set the mode names smaller than
-          // the Reset below them.
+          // Match the panel's `sm` buttons; `xs` would print the names smaller than Reset.
           styles={{ label: { fontSize: 'var(--mantine-font-size-sm)' } }}
           value={mode}
           onChange={(next) => onModeChange(next as InteractionModeId)}

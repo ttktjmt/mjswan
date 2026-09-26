@@ -1,4 +1,4 @@
-/** The pull arrow is the one place a force's size is visible; it has to say it. */
+/** The pull arrow, the one place a force's size is visible. */
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 
@@ -29,8 +29,7 @@ describe('DragArrow', () => {
       expect(tip.distanceTo(to), `tip at ${force} N`).toBeLessThan(1e-6);
     }
     for (let i = 1; i < girths.length; i++) expect(girths[i]).toBeGreaterThan(girths[i - 1]);
-    // No clamp to scale against, so it has to stay bounded on its own: past a hard pull,
-    // a thousand times the force adds almost nothing.
+    // Bounded without a clamp: past a hard pull, far more force barely thickens it.
     arrow.show(from, to, 1e9);
     expect(tipOf(scene).girth - girths[girths.length - 1]).toBeLessThan(0.01 * girths[girths.length - 1]);
     arrow.dispose();

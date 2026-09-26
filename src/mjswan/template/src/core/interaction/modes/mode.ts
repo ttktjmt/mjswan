@@ -31,7 +31,7 @@ export interface ModeContext {
   ring: PushRing;
   /** Shared with the XR hand: the slots a scene compiled in for holding things. */
   weld: WeldHold;
-  /** The canvas's CSS cursor; '' hands it back. A touchscreen shows none of it. */
+  /** The canvas's CSS cursor; '' restores the default. */
   setCursor(cursor: string): void;
 }
 
@@ -40,7 +40,7 @@ export interface InteractionMode {
   onDown(gesture: PointerGesture, ctx: ModeContext): PointerClaim;
   onMove?(gesture: PointerGesture, ctx: ModeContext): void;
   onUp?(gesture: PointerGesture, ctx: ModeContext): void;
-  /** Pointer lost, mode switched, scene reloaded, viewer paused. */
+  /** Abandon the gesture and let go of anything it holds. */
   onCancel(ctx: ModeContext): void;
   /** Once per control step, with the live gesture or null. */
   preStep(gesture: PointerGesture | null, ctx: ModeContext): void;

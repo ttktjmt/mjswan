@@ -1,7 +1,6 @@
 /**
- * The drag force, against the real WASM: it has to land the same motion MuJoCo's own
- * `mj_applyFT` lands for the same force at the same grab point, on a body whose frame is
- * not its centre of mass.
+ * applyDragPull against the real WASM: it must move a body as `mj_applyFT` does for the
+ * same force at the same grab point.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -13,9 +12,8 @@ type MjData = import('mujoco').MjData;
 type MjvPerturb = import('mujoco').MjvPerturb;
 
 /**
- * One free body whose geom, and so its COM, sits 0.4 m off the body frame's origin.
- * That gap is the whole point: a moment taken about `xpos` instead of `xipos` is wrong by
- * `(xipos - xpos) x F`, which is zero for a centred primitive and large for a robot link.
+ * A free body whose COM sits 0.4 m off its frame's origin, so a moment taken about `xpos`
+ * instead of `xipos` is off by `(xipos - xpos) x F`.
  */
 const OFFSET_COM = `<mujoco>
   <option timestep="0.002" gravity="0 0 0"/>
@@ -47,8 +45,7 @@ describe('applyDragPull against the real WASM', () => {
     const mjData = new (mujoco as unknown as { MjData: new (m: MjModel) => MjData }).MjData(
       mjModel,
     );
-    // A pose with a real rotation, so the body-frame grab point has to be rotated to reach
-    // the world: an implementation that skips that passes an axis-aligned test.
+    // Rotated, or an implementation that never rotates the grab point into the world would pass.
     const half = Math.SQRT1_2;
     mjData.qpos[3] = half;
     mjData.qpos[6] = half; // 90 deg about z

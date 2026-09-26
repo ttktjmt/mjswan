@@ -5,8 +5,7 @@
  * serving `dist/` from its own origin executes and fetches nothing it did not serve (issue
  * #123). The SPA build leaves the default alone: Vite resolves ORT's assets for it.
  *
- * Every import is `onnxruntime-web/wasm`, the CPU-only build; see vite.wasm.ts for why
- * the one that also carries WebGPU cannot be shipped.
+ * Every import is `onnxruntime-web/wasm`, the CPU-only build: see `ORT_ENTRY` in vite.wasm.ts.
  */
 import * as ort from 'onnxruntime-web/wasm';
 

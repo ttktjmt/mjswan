@@ -1,14 +1,10 @@
 /**
  * The one place pointer events reach the simulation.
  *
- * Two rules, both fixed here rather than configurable:
- *
- * - **A press that hits a geom belongs to the active mode; a press that hits nothing
- *   belongs to the camera.** One sentence covers every mode, needs no modifier key and no
- *   hover, and leaves "drag the sky to orbit" working everywhere.
- * - **Only the first pointer is ours.** Every later touch stays with `OrbitControls`, so
- *   pinch-zoom and two-finger orbit survive mid-gesture. (The drag this replaces tracked
- *   no pointer id at all, so a second finger's `pointerup` ended the first finger's drag.)
+ * - A press on a body a mode can act on belongs to the active mode; any other press
+ *   belongs to the camera. No modifier key, no hover.
+ * - Only the first pointer is tracked. Later touches stay with `OrbitControls`, so
+ *   pinch-zoom and two-finger orbit keep working mid-gesture.
  */
 import * as THREE from 'three';
 
@@ -30,14 +26,13 @@ export interface PointerGesture {
   ray: THREE.Vector3;
   /** Unit direction of the current ray: what a mode falls back to with no surface normal. */
   direction: THREE.Vector3;
-  /** Screen travel since the press, CSS px. Tap and drag are told apart by this. */
+  /** Farthest the pointer has moved from the press, CSS px: what tells a tap from a drag. */
   travel: number;
 }
 
 /**
- * Who owns a press. `shared` is for a mode whose gesture is a tap: it wants the press
- * reported, but a drag from the same point should still orbit the camera, and
- * `OrbitControls` cannot be handed a drag it already missed the start of.
+ * Who owns a press. `shared` reports it to the mode but leaves the camera enabled, for a
+ * tap: `OrbitControls` cannot pick up a drag whose start it missed.
  */
 export type PointerClaim = 'none' | 'exclusive' | 'shared';
 
@@ -71,7 +66,7 @@ export class PointerTracker {
   private handlers: PointerHandlers | null = null;
 
   private readonly raycaster = new THREE.Raycaster();
-  /** Normalized device coords of the pointer, kept so the ray can be re-cast as the camera moves. */
+  /** The pointer in NDC, kept so the ray can be re-cast as the camera moves. */
   private readonly ndc = new THREE.Vector2();
   private readonly ray = new THREE.Vector3();
   private readonly direction = new THREE.Vector3();
@@ -118,10 +113,8 @@ export class PointerTracker {
   }
 
   /**
-   * Re-cast the stored screen position against the current camera and hand back the live
-   * gesture. Driven from the physics loop, not from `pointermove`: a body the camera is
-   * following keeps moving while the pointer is still, and a target read from the last
-   * move event would lag it by a frame.
+   * The live gesture, re-cast from the stored screen position through the current camera,
+   * so the target keeps up with a moving camera while the pointer is still.
    */
   current(): PointerGesture | null {
     if (!this.hit) return null;
@@ -131,7 +124,7 @@ export class PointerTracker {
     return { hit: this.hit, ray: this.ray, direction: this.direction, travel: this.travel };
   }
 
-  /** Drop the gesture without telling the mode, for teardown paths that already know. */
+  /** Drop the gesture without telling the mode. */
   release(): void {
     this.pointerId = null;
     this.hit = null;
@@ -139,7 +132,7 @@ export class PointerTracker {
     this.controls.enabled = true;
   }
 
-  /** Drop the gesture and tell the mode, for pause / scene switch / entering XR. */
+  /** Drop the gesture and tell the mode. */
   cancel(): void {
     if (this.pointerId === null) return;
     this.release();
@@ -227,16 +220,13 @@ export class PointerTracker {
   };
 }
 
-/**
- * The scene builder tags every drawn body; gizmos and overlays carry no id. The worldbody
- * is not a body a mode can act on, so a press on the floor reads as a miss.
- */
+/** The MuJoCo body an object draws, or null for untagged objects and the worldbody. */
 export function bodyIdOf(object: THREE.Object3D): number | null {
   if (!('bodyID' in object) || typeof object.bodyID !== 'number') return null;
   return object.bodyID > 0 ? object.bodyID : null;
 }
 
-/** Opt-outs: the mode gizmos, and anything a scene marks itself. */
+/** Opt-outs: the mode gizmos, and anything tagged `ignoreDragForce`. */
 function isIgnored(object: THREE.Object3D): boolean {
   let current: THREE.Object3D | null = object;
   while (current) {
@@ -248,12 +238,7 @@ function isIgnored(object: THREE.Object3D): boolean {
   return false;
 }
 
-/**
- * The hit face's normal in world space, flipped to face the viewer.
- *
- * Instanced geometry and lines report no face, and a normal is only ever an improvement
- * on the view direction, so the caller falls back rather than refusing the hit.
- */
+/** The hit face's world normal, flipped toward the viewer; null when the hit has no face. */
 function worldNormal(
   intersect: THREE.Intersection,
   rayDirection: THREE.Vector3,

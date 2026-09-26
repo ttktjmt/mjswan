@@ -72,12 +72,8 @@ const DEFAULT_TERM_SEED = 0x5eed;
 
 
 /**
- * The scene's own drawn bounds, skipping the viewer's injected bodies.
- *
- * Walked by hand rather than filtered on `mujocoRoot.children`: the scene builder parents
- * every body under body 0, so the root has one child and a per-body flag on it never
- * matches. `expandByObject` would then take the parked rows in with everything else and
- * frame a scene 120 m tall.
+ * The scene's drawn bounds without the viewer's injected bodies. Recursive because every
+ * body hangs under body 0, so a flag checked on the root's children alone never matches.
  */
 function expandSceneBounds(box: THREE.Box3, object: THREE.Object3D): void {
   if (object.userData.injected) return;
@@ -242,25 +238,15 @@ export class mjswanRuntime {
   private controlDt: number | null;
   private loadingScene: Promise<void> | null;
   private resizeObserver: ResizeObserver | null;
-  /** Pointer modes: drag, shove, and whatever else `core/interaction` grows. */
   private readonly interaction: InteractionManager;
   /** The weld slots a scene carries, shared by the pointer and the tracked hands. */
   private readonly weldHold = new WeldHold();
-  /**
-   * Whether this scene got the pointer's injected anchor. Declined for an unprefixed
-   * model that arrived with a policy: there, `buildEntityIndex` counts every body in the
-   * model as the entity's, so one more body changes the width of a traced graph's input.
-   */
+  /** Whether this scene got the grab anchor (see `injectViewerBodies`). */
   private grabInjected = false;
-  /**
-   * Injected because the scene arrived without a policy, into a model whose elements are
-   * not entity-prefixed: the one combination where a later `setPolicy` would disagree
-   * with the traced graphs about how wide the entity is.
-   */
+  /** The anchor went into an unprefixed model only because no policy came with it. */
   private injectedWithoutPolicy = false;
   /** Every body the viewer added: never part of the scene's own bounds or camera target. */
   private injectedBodyIds: ReadonlySet<number> = new Set();
-  /** Set before the model is built, which is when the injection is decided. */
   private sceneHasPolicy = false;
   private policyRunner: PolicyRunner | null;
   private policyStateBuilder: PolicyStateBuilder | null;
@@ -499,7 +485,7 @@ export class mjswanRuntime {
     await this.stop();
     this.scenePlugins = scene.plugins ?? {};
     this.terrainData = scene.terrainData ?? null;
-    // Read before the model is built: it decides what gets injected into the MJCF.
+    // Before the model is built: it decides whether the grab anchor is injected.
     this.sceneHasPolicy = !!scene.policy;
     // Needed before `buildSceneFromModel`, which derives `decimation` from it.
     this.controlDt = scene.controlDt && scene.controlDt > 0 ? scene.controlDt : null;
@@ -668,7 +654,6 @@ export class mjswanRuntime {
       this.lastSimState.bodies.clear();
       this.updateCachedState();
 
-      // Body ids from the previous model mean nothing now.
       this.interaction.onSceneLoaded();
 
       this.loadingScene = null;
@@ -691,8 +676,7 @@ export class mjswanRuntime {
       let modelPath: string;
       if (format === 'mjb') {
         // `loadSceneFromURL` reads a `.mjb` path with `mj_loadModel`. A compiled model has
-        // no XML to add the XR hands to, so they stay off (`HandMocap.bind` warns), and
-        // the pointer's grab anchor with them, so `grab` reports itself unavailable.
+        // no XML to inject into, so the XR hands (`HandMocap.bind` warns) and Grab stay off.
         modelPath = 'scene.mjb';
         this.mujoco.FS.writeFile(`/working/${modelPath}`, new Uint8Array(model));
         this.grabInjected = false;
@@ -711,18 +695,16 @@ export class mjswanRuntime {
   }
 
   /**
-   * Add the viewer's own bodies to the scene MJCF, in the VFS, before it is compiled.
+   * Add the viewer's own bodies to the scene MJCF in the VFS, before it is compiled.
    *
-   * The pointer's anchor is declined for an unprefixed model carrying a policy. On a model
-   * mjlab attached (`robot/torso`), an injected body has no prefix and so falls outside
-   * every entity; on a plain one, `buildEntityIndex` treats the whole model as the entity,
-   * and a traced graph whose input is `(bodies, 7)` wide would be handed one row too many.
-   * A scene with no policy has no traced graph to disagree with, so it always gets one.
+   * The grab anchor is skipped for an unprefixed model with a policy: `buildEntityIndex`
+   * counts every body of such a model as the entity's, so one more would widen a traced
+   * graph's input. On a prefixed model (`robot/torso`) the anchor falls outside every entity.
    */
   private injectViewerBodies(path: string): void {
     const xml = readMjcfFile(this.mujoco, path);
     let injected = xml;
-    // Not gated: hand tracking is opt-in per engine and has always injected unconditionally.
+    // Not gated like the anchor: hand tracking is an explicit opt-in.
     if (this.handMocap) injected = injectHandMocapXml(injected);
     const prefixed = isEntityPrefixed(xml);
     this.grabInjected = prefixed || !this.sceneHasPolicy;
@@ -859,7 +841,6 @@ export class mjswanRuntime {
     this.interaction.cancel();
   }
 
-  /** Re-read per call: a scene switch replaces the model, the data and the body set. */
   private interactionSim(): InteractionSim {
     return {
       mujoco: this.mujoco,
@@ -1056,11 +1037,7 @@ export class mjswanRuntime {
     }
 
     if (this.injectedWithoutPolicy) {
-      // The gate in `injectViewerBodies` runs before the model is compiled and can only
-      // see the policy this scene was *loaded* with. `setPolicy` can bring one later, and
-      // by then the extra bodies are in the model: on a model whose elements carry no
-      // entity prefix, `buildEntityIndex` counts them as the entity's, so any traced graph
-      // indexed by body, geom or site is about to be fed a row too many.
+      // `injectViewerBodies` only saw the policy the scene was loaded with, not this one.
       console.warn(
         '[mjswan] this scene was loaded without a policy, so the viewer added its grab ' +
           'anchor to a model that does not namespace its elements. A traced graph indexed ' +
@@ -1526,7 +1503,6 @@ export class mjswanRuntime {
     }
     // After the qpos writes above, which do not cover the injected hand bodies.
     this.handMocap?.park(this.mjData);
-    // `mj_resetData` puts `eq_active` back but leaves the retargeting on the model.
     this.interaction.onReset();
     // With the sim state, as mjlab does: a force from before the reset would otherwise
     // keep an `illegal_contact` term firing.
@@ -1799,8 +1775,7 @@ export class mjswanRuntime {
 
   /** Kept as an offset: the orbit target goes on tracking a moving body through a session. */
   private onXrSessionStart = (): void => {
-    // The pointer is no longer on the stage; a gesture held into the session would keep
-    // pulling at a body nobody can see the cursor for.
+    // A gesture held into the session would keep pulling with no cursor to show it.
     this.interaction.cancel();
     this.preXrCameraOffset = this.camera.position.clone().sub(this.controls.target);
     this.xrClock.start();

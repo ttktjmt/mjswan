@@ -1,15 +1,9 @@
 /**
- * Holding a body where you put it, by retargeting a weld that was declared with the model.
+ * Holding a body by retargeting a weld declared with the model.
  *
- * MuJoCo compiles a model once and offers no way to add a constraint to a live one, so the
- * weld has to exist before the scene loads (declared `active="false"`, pointing at
- * nothing in particular) and is aimed at a pair of bodies when something actually grabs.
- * The XR hand has worked this way since it learned to carry a load rather than shove one;
- * this is that machinery with the hand taken out of it, so the pointer can use it too.
- *
- * What is **not** shared is the trigger. A hand grabs from contact and a pinch gesture; a
- * pointer grabs from a raycast. Those are different questions about the world and they
- * stay in their own callers. Only the hold is here.
+ * A compiled model cannot gain a constraint, so each weld is injected inactive before the
+ * scene loads and aimed at a pair of bodies when something grabs. Shared by the XR hand
+ * and the pointer; what triggers a grab stays with each caller.
  */
 import type { MainModule, MjData, MjModel } from 'mujoco';
 
@@ -22,7 +16,7 @@ export interface HoldOptions {
   solrefTime?: number;
 }
 
-/** One slot's compiled values, so a release can put the model back as it was. */
+/** One slot's compiled values, for `restore`. */
 interface SlotDefaults {
   obj1: number;
   obj2: number;
@@ -31,10 +25,8 @@ interface SlotDefaults {
 }
 
 /**
- * The weld slots a scene carries, and which body each is holding.
- *
- * Bodies are held by at most one slot: a hand and a pointer pulling the same crate through
- * two welds is a fight the solver has no reason to win.
+ * The weld slots a scene carries, and which body each holds. A body is held by at most one
+ * slot, since two welds on it would fight in the solver.
  */
 export class WeldHold {
   private neqData = 11;
@@ -43,11 +35,7 @@ export class WeldHold {
   private readonly defaults = new Map<string, SlotDefaults>();
   private readonly holding = new Map<string, number>();
 
-  /**
-   * Resolve every named slot against a freshly compiled model and remember what it
-   * compiled to. Slots the model does not carry are dropped, so a scene built without an
-   * injection simply has none.
-   */
+  /** Resolve the named slots on a freshly compiled model; names it lacks are skipped. */
   bind(mujoco: MainModule, mjModel: MjModel, names: readonly string[]): void {
     this.neqData = mujoco.mjNEQDATA;
     this.nRef = mujoco.mjNREF;
@@ -85,12 +73,11 @@ export class WeldHold {
   }
 
   /**
-   * Weld `target` to `anchor` in the pose it is already in, so activating the constraint
-   * holds it rather than snapping it. Refuses a body another slot already has.
+   * Weld `target` to `anchor` in its current pose, so the constraint holds it rather than
+   * snapping it. Refuses a body another slot already holds.
    *
-   * `eq_data` for a weld is `[anchor(3), relpose pos(3), relpose quat(4), torquescale(1)]`,
-   * and its relpose is body2 expressed in body1's frame, the opposite of the obvious
-   * reading.
+   * A weld's `eq_data` is `[anchor(3), relpose pos(3), relpose quat(4), torquescale(1)]`,
+   * and its relpose is body2 in body1's frame, the opposite of the obvious reading.
    */
   hold(
     mjModel: MjModel,
@@ -129,7 +116,7 @@ export class WeldHold {
     return true;
   }
 
-  /** Let go. The body keeps whatever momentum the hold gave it, which is how a throw works. */
+  /** Let go; the body keeps the momentum the hold gave it. */
   release(mjData: MjData, name: string): void {
     const id = this.slots.get(name);
     if (id === undefined) return;
@@ -138,12 +125,9 @@ export class WeldHold {
   }
 
   /**
-   * Put every slot back exactly as it compiled.
-   *
-   * `mj_resetData` restores `eq_active` on its own, but `eq_obj*id` / `eq_data` /
-   * `eq_solref` live on the **model**, so a reset leaves a retargeted weld aimed at
-   * whatever it last grabbed, where the next policy's startup randomization, or a
-   * `modelFieldDefaults` snapshot, would find it.
+   * Put every slot back as it compiled. `mj_resetData` restores `eq_active` but not
+   * `eq_obj*id` / `eq_data` / `eq_solref`, which live on the model, where startup
+   * randomization or a `modelFieldDefaults` snapshot would find a retargeted weld.
    */
   restore(mjModel: MjModel, mjData: MjData | null): void {
     for (const [name, id] of this.slots) {

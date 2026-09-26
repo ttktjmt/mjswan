@@ -1,10 +1,7 @@
 /**
- * What a mode draws while it is doing something.
- *
- * All of it hangs off the three.js scene rather than the MuJoCo root, so it is outside
- * `frameCamera`'s bounds by construction, and every object carries `interactionGizmo` so
- * the pointer's own raycast skips it: otherwise the arrow you are dragging becomes the
- * thing you grab next.
+ * What a mode draws while it acts. Parented to the three.js scene, not the MuJoCo root, so
+ * `frameCamera` never frames it, and tagged `interactionGizmo` so the pointer's raycast
+ * skips it.
  */
 import * as THREE from 'three';
 
@@ -17,11 +14,7 @@ function tag(object: THREE.Object3D): void {
   });
 }
 
-/**
- * The pull arrow: from the grab point to the pointer, thicker the harder it pulls. The
- * tip stays on the pointer, so the length still says where the body is being pulled to
- * and the girth is left to say how hard.
- */
+/** The pull arrow: length from the grab point to the pointer, girth from the force. */
 export class DragArrow {
   private readonly scene: THREE.Scene;
   private readonly group = new THREE.Group();
@@ -66,8 +59,7 @@ export class DragArrow {
     this.group.position.copy(from);
     this.group.quaternion.setFromUnitVectors(DragArrow.UP, offset.normalize());
 
-    // Saturating rather than linear: there is no clamp to scale against, and a heavy robot
-    // takes forces a block never sees, so the girth has to stay readable across both.
+    // Saturating, since the force is unbounded and a heavy robot takes forces a block never sees.
     const f = Number.isFinite(force) && force > 0 ? force : 0;
     const t = f / (f + DragArrow.HALF_FORCE);
     const size = ({ rest, full }: { rest: number; full: number }) => rest + (full - rest) * t;
@@ -95,7 +87,7 @@ export class DragArrow {
   }
 }
 
-/** A ring that opens where a push landed, so a tap that did something looks different from one that missed. */
+/** A ring that opens where a push landed, so a tap that hit reads differently from a miss. */
 export class PushRing {
   private static readonly LIFETIME = 0.25;
   private static readonly RADIUS = 0.12;
@@ -119,7 +111,7 @@ export class PushRing {
     scene.add(this.mesh);
   }
 
-  /** `normal` orients the ring against the surface; null lays it in the view plane. */
+  /** `normal` lays the ring on the surface; null keeps its last orientation. */
   fire(at: THREE.Vector3, normal: THREE.Vector3 | null): void {
     this.mesh.position.copy(at);
     if (normal) this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal.clone().normalize());

@@ -54,7 +54,6 @@ describe('interaction parameter table', () => {
     }
   });
 
-  // View is the camera's alone; every other mode has something to tune.
   it('gives only View no parameters', () => {
     const bare = INTERACTION_MODES.filter((m) => m.params.length === 0).map((m) => m.id);
     expect(bare).toEqual(['view']);

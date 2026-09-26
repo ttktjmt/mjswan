@@ -1,10 +1,7 @@
 /**
- * What each pointer mode is, and every number it exposes.
- *
- * One table, because three places have to agree on it: the manager clamps against it, the
- * engine publishes it as descriptors, and the panel draws a control per entry. A mode with
- * no entry here has no UI and no API surface, which is the point: modes are a closed set
- * (ADR-less by design: there is no plugin path in, and adding one is a code change here).
+ * Every pointer mode and the parameters it exposes: the one table the manager clamps
+ * against, the engine publishes as descriptors and the panel draws. The set is closed, so
+ * a new mode is a code change here.
  */
 
 export type InteractionModeId = 'view' | 'pull' | 'push' | 'weld';
@@ -21,10 +18,7 @@ export interface InteractionParamSpec {
   /** What `setParam` clamps to, and so what the number box accepts. */
   min: number;
   max: number;
-  /**
-   * The span the slider drags over, inside `min`..`max`; absent means the same. A value
-   * typed past it pins the thumb at the end, as Blender's soft limits do.
-   */
+  /** The slider's span inside `min`..`max`, like Blender's soft limits; absent means the same. */
   softMin?: number;
   softMax?: number;
   step: number;
@@ -37,18 +31,16 @@ export interface InteractionModeSpec {
   params: readonly InteractionParamSpec[];
 }
 
-// The hard limits are there to keep a typo out of the solver, not to judge what is too
-// much: finite and non-negative, at about ten times what the slider reaches.
+// Hard limits only keep a typo out of the solver, so where a slider has a soft range they
+// sit about ten times past it.
 export const INTERACTION_MODES: readonly InteractionModeSpec[] = [
-  // Every press is the camera's. For a scene whose bodies fill the frame, where on a
-  // phone there is no empty sky left to orbit from.
+  // Every press is the camera's, for a scene whose bodies leave no empty sky to orbit from.
   { id: 'view', label: 'View', params: [] },
   {
     id: 'pull',
     label: 'Pull',
     params: [
-      // A spring constant between the grab point and the pointer. The pre-mode viewer
-      // pulled with a hard-coded 100 N/m, so this default is the drag people already know.
+      // Between the grab point and the pointer.
       {
         name: 'spring', label: 'Spring', unit: 'N/m', type: 'slider',
         min: 0, max: 2000, softMin: 0, softMax: 200, step: 1, default: 100,
@@ -59,8 +51,6 @@ export const INTERACTION_MODES: readonly InteractionModeSpec[] = [
     id: 'push',
     label: 'Push',
     params: [
-      // An impulse, not a force: divided by the control step on the way in, so the shove
-      // feels the same whatever a scene's decimation is.
       {
         name: 'impulse', label: 'Impulse', unit: 'N·s', type: 'slider',
         min: 0.1, max: 500, softMin: 0.1, softMax: 50, step: 0.1, default: 10,

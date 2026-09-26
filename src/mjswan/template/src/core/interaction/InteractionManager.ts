@@ -1,11 +1,6 @@
 /**
- * Pointer interaction for the viewer: which mode the pointer drives, what each mode's
- * numbers are, and the one hook the step loop calls.
- *
- * This sits beside `xr/`, not inside the MDP layer: nothing here is part of a task's
- * definition, and nothing here reaches Python, the manifest or the `.swn` document. The
- * XR hand keeps its own driver (contact-driven pinching is a different gesture from a
- * raycast) and shares only the machinery under it.
+ * Pointer interaction: the active mode, each mode's parameters, and the hook the step loop
+ * calls. Viewer-only: nothing here is part of a task or reaches Python.
  */
 import * as THREE from 'three';
 import type { MjvPerturb } from 'mujoco';
@@ -128,7 +123,7 @@ export class InteractionManager {
     });
   }
 
-  /** Drop any held gesture: pausing, switching scene, entering XR, tearing down. */
+  /** Drop any held gesture and the force it was applying. */
   cancel(): void {
     this.pointer.cancel();
     this.current()?.onCancel(this.context());
@@ -136,10 +131,7 @@ export class InteractionManager {
     this.arrow.hide();
   }
 
-  /**
-   * The sim went back to its initial state. Welds are dropped here rather than left to
-   * `mj_resetData`, which restores `eq_active` but not the model-side retargeting.
-   */
+  /** The sim was reset. `mj_resetData` leaves the welds retargeted, so restore them here. */
   onReset(): void {
     const { mjModel, mjData } = this.readSim();
     this.current()?.onCancel(this.context());
@@ -150,11 +142,8 @@ export class InteractionManager {
   }
 
   /**
-   * A new model: body ids from the old one mean nothing now.
-   *
-   * The mode is cancelled rather than just released, because a gesture can outlive the
-   * scene it started in: a queued shove fired on the new scene's first step would land
-   * `impulse / controlDt` newtons on whatever body inherited that id.
+   * A new model, whose body ids mean nothing to the old gesture. The mode is cancelled too,
+   * or a queued shove would land on whichever body inherited the id.
    */
   onSceneLoaded(): void {
     this.pointer.release();
@@ -164,10 +153,7 @@ export class InteractionManager {
     this.refreshPickable();
   }
 
-  /**
-   * One control step's worth of interaction, run before the physics substeps: the slot
-   * the mouse drag has always occupied.
-   */
+  /** Once per control step, before the physics substeps. */
   preStep(): void {
     const sim = this.readSim();
     if (!sim.mjData) return;
@@ -189,9 +175,7 @@ export class InteractionManager {
     const mode = this.current();
     if (!mode) return 'none';
     const context = this.context();
-    // A mode the scene cannot run stays selected (the panel shows it greyed with its
-    // reason), but it must not keep taking presses, or the camera stops orbiting in a
-    // scene where the mode does nothing at all.
+    // An unavailable mode can stay selected; its presses go to the camera.
     if (mode.unavailable?.(context)) return 'none';
     return mode.onDown(gesture, context);
   }
@@ -200,7 +184,7 @@ export class InteractionManager {
     return this.modes.get(this.active);
   }
 
-  /** Every mode acts on a body, so a press that misses one is the camera's. */
+  /** Only a body with a degree of freedom can be acted on; any other press is the camera's. */
   private refreshPickable(): void {
     this.pointer.setActableBodyIds(this.readSim().dynamicBodyIds);
   }

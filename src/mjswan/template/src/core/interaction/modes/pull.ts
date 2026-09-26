@@ -1,9 +1,6 @@
 /**
- * Drag a body toward the pointer with a spring.
- *
- * The grab point is stored in the body's own frame at the press and rotated back out
- * every step, so it stays on the spot that was grabbed while the body tumbles. The force
- * itself is MuJoCo's (`interaction/perturbForce`).
+ * Drag a body toward the pointer on a spring. The grab point is kept in the body's frame,
+ * so it stays on the grabbed spot as the body tumbles.
  */
 import type { InteractionMode, ModeContext } from './mode';
 import { fromBodyFrame, toBodyFrame, toMjc } from './mode';

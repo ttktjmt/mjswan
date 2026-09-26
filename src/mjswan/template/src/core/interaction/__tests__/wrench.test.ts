@@ -1,7 +1,4 @@
-/**
- * The single writer of `xfrc_applied`, against the real WASM: a shove has to deliver the
- * impulse it says it does, and it has to stop delivering it on the next step.
- */
+/** InteractionWrench against the real WASM: a shove delivers its impulse in one step, then stops. */
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { InteractionWrench } from '../wrench';
@@ -103,7 +100,7 @@ describe('InteractionWrench against the real WASM', () => {
     const applied = () =>
       Math.hypot(...Array.from(mjData.xfrc_applied.slice(bodyId * 6, bodyId * 6 + 3) as ArrayLike<number>));
 
-    // A spring: 100 N/m over 0.3 m, then over 5 m, with nothing capping the second.
+    // A spring: 100 N/m over 0.3 m, then over 5 m, uncapped.
     expect(pull([0.3, 0, 1])).toBeCloseTo(30, 3);
     expect(pull([0.3, 0, 1])).toBeCloseTo(applied(), 9);
     expect(pull([5, 0, 1])).toBeCloseTo(500, 3);
@@ -114,8 +111,7 @@ describe('InteractionWrench against the real WASM', () => {
   it('leaves rows it never wrote alone', () => {
     const { mjModel, mjData, bodyId } = load();
     const wrench = new InteractionWrench();
-    // Something outside the interaction layer (a custom plugin, say) parks a wrench on
-    // the world body. The drag this replaced zeroed the entire array every step.
+    // A wrench another writer (a plugin, say) left on the world body.
     mjData.xfrc_applied[2] = 1.5;
     wrench.begin(mjData);
     wrench.push(mujoco, mjData, bodyId, CONTACT_POINT, [0, 0, -1]);

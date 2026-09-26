@@ -1,8 +1,4 @@
-/**
- * The shared hold, against the real WASM: it has to carry a body, and it has to hand the
- * model back exactly as it compiled: `mj_resetData` restores `eq_active` but not the
- * retargeting, so anything this leaves behind outlives the reset.
- */
+/** WeldHold against the real WASM: it carries a body and puts the model back as it compiled. */
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { WeldHold } from '../weldHold';
@@ -75,8 +71,7 @@ describe('WeldHold against the real WASM', () => {
     expect(weld.hold(mjModel, mjData, POINTER_WELD, anchor, cube)).toBe(true);
     expect(weld.holderOf(cube)).toBe(POINTER_WELD);
 
-    // Lift over half a second. The floor is right there, so a weld that did not take
-    // would leave the cube resting rather than following.
+    // Lift over half a second: a weld that did not take leaves the cube on the floor.
     for (let k = 1; k <= 25; k++) {
       moveAnchor(mjModel, mjData, anchor, [0, 0, CUBE_HALF + 0.4 * (k / 25)]);
       for (let s = 0; s < SUBSTEPS; s++) mujoco.mj_step(mjModel, mjData);
@@ -109,9 +104,8 @@ describe('WeldHold against the real WASM', () => {
   });
 
   it('refuses a body another slot is already holding', () => {
-    // A hand-tracking scene, so the second slot is one the model really carries: asking
-    // for a slot that does not exist would be refused by the wrong branch and the guard
-    // this names would never run.
+    // With the hand welds injected, so the refusal comes from the holder check, not a
+    // missing slot.
     const mjModel = (
       mujoco as unknown as { MjModel: { from_xml_string(s: string): MjModel } }
     ).MjModel.from_xml_string(injectHandMocapXml(injectPointerGrabXml(SCENE)));

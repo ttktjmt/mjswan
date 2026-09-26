@@ -120,8 +120,7 @@ class Engine implements MjswanEngine {
       },
     };
     this.interaction = {
-      // Every one of these changes the snapshot, so each refreshes; the runtime has no
-      // event of its own to subscribe to, and a mode switch is always host-driven.
+      // The setters refresh the snapshot themselves: the runtime emits no event for them.
       setMode: (id) => {
         this.runtime.setInteractionMode(id);
         this.refresh();

@@ -1,16 +1,9 @@
 /**
- * Grab a body and carry it.
+ * Grab a body and carry it, welded to a mocap anchor the pointer drives (`grab/weldHold`).
  *
- * The hold is a weld to a mocap anchor the pointer drives, which is the same constraint
- * the XR hand uses (`core/grab/weldHold`); only the trigger differs, raycast here and
- * pinch there. Two consequences worth knowing:
- *
- * - **Letting go throws.** Release only deactivates the constraint, so the body leaves
- *   with the velocity the carry gave it. There is no separate throw mode because this is
- *   already one.
- * - **A policy cannot feel it directly.** The constraint force lands in `qfrc_constraint`,
- *   and mjlab recovers `qfrc_external` from the smooth-dynamics identity, which does not
- *   include it. The robot feels a held limb through its own state, not as an applied force.
+ * - Letting go throws: release only deactivates the weld, so the body keeps its velocity.
+ * - A policy never reads the hold as an external force: it lands in `qfrc_constraint`,
+ *   which mjlab's `qfrc_external` leaves out.
  */
 import type { InteractionMode, ModeContext } from './mode';
 import { toMjc } from './mode';
@@ -33,12 +26,12 @@ export class WeldMode implements InteractionMode {
     if (!mjModel || !mjData || gesture.hit.bodyId <= 0) return 'none';
     const anchorId = mujoco.mj_name2id(mjModel, mujoco.mjtObj.mjOBJ_BODY.value, POINTER_ANCHOR_BODY);
     if (anchorId < 0) return 'none';
-    // A hand already carrying this one keeps it; two welds on one body is a fight.
+    // A hand already holding it keeps it.
     if (ctx.weld.holderOf(gesture.hit.bodyId) !== null) return 'none';
 
     this.moveAnchor(ctx, toMjc(gesture.hit.point));
-    // The anchor's `xpos` comes from `mocap_pos` only at a forward, and it was parked 100 m
-    // up until a moment ago: welding against the stale pose would fling the body there.
+    // `xpos` follows `mocap_pos` only at a forward; welding to the parked pose would fling
+    // the body 100 m up.
     mujoco.mj_forward(mjModel, mjData);
     const params = ctx.params();
     const grabbed = ctx.weld.hold(mjModel, mjData, POINTER_WELD, anchorId, gesture.hit.bodyId, {
@@ -47,7 +40,6 @@ export class WeldMode implements InteractionMode {
     });
     if (!grabbed) return 'none';
     this.held = gesture.hit.bodyId;
-    // No arrow: the body is at the pointer already, and a line to it says nothing more.
     ctx.setCursor('grabbing');
     return 'exclusive';
   }
@@ -75,10 +67,7 @@ export class WeldMode implements InteractionMode {
     this.moveAnchor(ctx, toMjc(gesture.ray));
   }
 
-  /**
-   * The anchor's orientation stays as it was at the grab, so turning the camera does not
-   * twist what you are carrying.
-   */
+  /** Always at identity orientation, so turning the camera never twists the held body. */
   private moveAnchor(ctx: ModeContext, position: readonly [number, number, number]): void {
     const { mujoco, mjModel, mjData } = ctx.sim();
     if (!mjModel || !mjData) return;

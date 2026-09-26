@@ -1,18 +1,13 @@
 /**
- * Appending to a compiled-from-text MJCF scene.
+ * Adding the viewer's own sections to a scene's MJCF text before it compiles.
  *
- * MJCF merges repeated top-level sections, so a second `<worldbody>` and `<equality>` at
- * the end of the file add to the first, which is what lets the viewer put its own bodies
- * into a model it knows nothing about, including one whose bodies live in `<include>`d
- * files.
+ * MJCF merges repeated top-level sections, so a `<worldbody>` or `<equality>` appended at
+ * the end adds to the model, even one whose bodies live in `<include>`d files. Appending,
+ * never inserting, keeps every existing body id and `qpos` address, which
+ * `PolicyStateBuilder` and a traced graph's `sim` slots index by.
  *
- * **Appended, never inserted.** Everything already in the model keeps its body id and its
- * `qpos` address, and the additions take the tail. `PolicyStateBuilder` reads the robot's
- * root at `qpos[0]`, and a traced graph's `sim` slots index by the ids the build saw.
- *
- * **No `/` in an injected name.** `slotReader/indexing.ts` decides whether a model is
- * entity-prefixed by looking for one anywhere in the names; a name like `injected/box`
- * flips that verdict for the whole model and empties every entity's element list.
+ * No `/` in an injected name: `slotReader/indexing.ts` calls a model entity-prefixed if
+ * any joint, body or site name has one, so a single `injected/box` empties every entity.
  */
 import type { MainModule } from 'mujoco';
 
@@ -31,19 +26,16 @@ export function rewriteMjcfFile(mujoco: MainModule, path: string, rewrite: (xml:
   mujoco.FS.writeFile(path, rewrite(xml));
 }
 
-/** The MJCF text of a scene in the VFS, for a check that has to happen before compiling. */
+/** The MJCF text of a scene in the VFS. */
 export function readMjcfFile(mujoco: MainModule, path: string): string {
   return new TextDecoder().decode(mujoco.FS.readFile(path));
 }
 
 /**
  * Whether the model namespaces its elements, as mjlab's `attach` does (`robot/torso`).
- *
- * This is the same verdict `buildEntityIndex` reaches from the compiled model, read off
- * the text instead because the decision it gates (whether to inject extra bodies) has
- * to be made before compiling. Deliberately a scan of the raw text: a name attribute is
- * a name attribute wherever it appears, and over-reporting here only means declining to
- * inject into a model that would have tolerated it.
+ * `buildEntityIndex`'s verdict, read off the text because injection is decided before
+ * compiling. It matches every `name` attribute, where that checks only joints, bodies
+ * and sites.
  */
 export function isEntityPrefixed(xml: string): boolean {
   return /\bname\s*=\s*"[^"]*\/[^"]*"/.test(xml);

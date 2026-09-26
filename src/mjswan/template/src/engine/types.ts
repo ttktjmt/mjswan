@@ -169,9 +169,8 @@ export interface InteractionModeDescriptor {
 }
 
 /**
- * Which pointer mode is live, and its numbers. Input *bindings* are deliberately not here:
- * a press that hits a geom belongs to the mode and a press that misses belongs to the
- * camera, always, so there is nothing to configure.
+ * The live pointer mode and its parameters. Bindings are fixed, not configurable: a press
+ * on a body goes to the mode, any other press to the camera.
  */
 export interface InteractionControls {
   setMode(id: InteractionModeId): void;

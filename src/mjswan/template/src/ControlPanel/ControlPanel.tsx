@@ -727,8 +727,7 @@ function ControlPanel(props: ControlPanelProps) {
             </CommandSection>
           )}
 
-          {/* What the pointer does. Scene-level, so it sits below the policy's own
-              controls and above the reset. */}
+          {/* Scene-level, so below the policy's controls and above the reset. */}
           {onInteractionModeChange && onInteractionParamChange && (
             <InteractionSection
               modes={interactions}

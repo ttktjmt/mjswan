@@ -1,10 +1,6 @@
 /**
- * The bodies and constraints the pointer needs, declared with the model.
- *
- * One mocap body to hold onto and one inactive weld to hold with, with no degrees of
- * freedom between them, so a scene that never grabs anything pays nothing for carrying it. Both
- * names are flat: a `/` in an injected name changes how `slotReader/indexing.ts` reads
- * the *whole* model (see `scene/mjcfInject`).
+ * The pointer's grab, declared with the model: one mocap anchor and one inactive weld,
+ * adding no degrees of freedom. Names stay flat (no `/`, see `scene/mjcfInject`).
  */
 import { appendToMjcf } from '../scene/mjcfInject';
 
@@ -12,13 +8,13 @@ import { appendToMjcf } from '../scene/mjcfInject';
 export const POINTER_ANCHOR_BODY = 'mjswan_ptr_anchor';
 export const POINTER_WELD = 'mjswan_ptr_hold';
 
-/** Where the anchor waits: above any scene, clear of a floor plane that is solid downward. */
+/** Where the anchor waits between grabs, above any scene. */
 export const POINTER_PARK_Z = 100;
 
 /**
- * `solref` and `solimp` are the hand's values, which were tuned so a grabbed object stops
- * at a surface instead of punching through it and so a reacquired grip does not arrive as
- * one impulse. `softness` retunes the first number per grab.
+ * `solref` / `solimp` are the hand's suspension values (`WELD` in `xr/handMocap`), soft so
+ * a carried body stops at a surface rather than punching through. `softness` overrides
+ * `solref[0]` per grab.
  */
 const GRAB_BLOCK =
   `  <worldbody>\n` +
