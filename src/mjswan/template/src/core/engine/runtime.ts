@@ -14,11 +14,19 @@ import { type Bytes } from '../utils/bytes';
 import type { EnginePlugins } from '../plugins';
 import { type SplatTransform, type SplatMesh, loadSplat, disposeSplat, applySplatTransform } from '../scene/splat';
 import { loadCollider, disposeCollider } from '../scene/collider';
-import { DragStateManager } from '../utils/dragStateManager';
+import { InteractionManager, type InteractionSim } from '../interaction/InteractionManager';
+import type { InteractionModeId } from '../interaction/params';
 import { createTendonState, updateTendonGeometry, updateTendonRendering } from '../scene/tendons';
 import { updateHeadlightFromCamera, updateLightsFromData } from '../scene/lights';
 import { mjcToThreeCoordinate, threeToMjcCoordinate } from '../scene/coordinate';
-import { HandMocap, injectHandMocapFile } from '../xr/handMocap';
+import { HandMocap, handWeldNames, injectHandMocapXml } from '../xr/handMocap';
+import { WeldHold } from '../grab/weldHold';
+import { isEntityPrefixed, readMjcfFile } from '../scene/mjcfInject';
+import {
+  POINTER_ANCHOR_BODY,
+  POINTER_WELD,
+  injectPointerGrabXml,
+} from '../interaction/grabInject';
 import { updateXrLocomotion } from '../xr/locomotion';
 import { updateRigGrounding } from '../xr/grounding';
 import { createArButton } from '../xr/arButton';
@@ -61,6 +69,17 @@ import { SeededRng } from '../rng';
 
 /** Fixed rather than time-derived, so a plain page load replays identically. */
 const DEFAULT_TERM_SEED = 0x5eed;
+
+
+/**
+ * The scene's drawn bounds without the viewer's injected bodies. Recursive because every
+ * body hangs under body 0, so a flag checked on the root's children alone never matches.
+ */
+function expandSceneBounds(box: THREE.Box3, object: THREE.Object3D): void {
+  if (object.userData.injected) return;
+  if ((object as THREE.Mesh).isMesh) box.expandByObject(object);
+  for (const child of object.children) expandSceneBounds(box, child);
+}
 
 const EMPTY_ACTIONS = new Float32Array(0);
 /** Only the `direct` muscle mode reads an actuator range; the rest carry none. */
@@ -219,8 +238,16 @@ export class mjswanRuntime {
   private controlDt: number | null;
   private loadingScene: Promise<void> | null;
   private resizeObserver: ResizeObserver | null;
-  private dragStateManager: DragStateManager | null;
-  private dragForceScale: number;
+  private readonly interaction: InteractionManager;
+  /** The weld slots a scene carries, shared by the pointer and the tracked hands. */
+  private readonly weldHold = new WeldHold();
+  /** Whether this scene got the grab anchor (see `injectViewerBodies`). */
+  private grabInjected = false;
+  /** The anchor went into an unprefixed model only because no policy came with it. */
+  private injectedWithoutPolicy = false;
+  /** Every body the viewer added: never part of the scene's own bounds or camera target. */
+  private injectedBodyIds: ReadonlySet<number> = new Set();
+  private sceneHasPolicy = false;
   private policyRunner: PolicyRunner | null;
   private policyStateBuilder: PolicyStateBuilder | null;
   private initialQpos: number[] | null;
@@ -359,7 +386,7 @@ export class mjswanRuntime {
         hand.add(handModels.createHandModel(hand, 'spheres'));
         this.xrRig.add(hand);
       }
-      this.handMocap = new HandMocap(hands);
+      this.handMocap = new HandMocap(hands, this.weldHold);
     }
 
     // Asked for in both modes: a Quest leaves hands untracked without it.
@@ -391,6 +418,16 @@ export class mjswanRuntime {
     this.controls.dampingFactor = 0.1;
     this.controls.screenSpacePanning = true;
     this.controls.update();
+
+    this.interaction = new InteractionManager({
+      scene: this.scene,
+      renderer: this.renderer,
+      camera: this.camera,
+      container: this.container,
+      controls: this.controls,
+      sim: () => this.interactionSim(),
+      weld: this.weldHold,
+    });
 
     this.passthrough = new Passthrough(this.scene);
     this.preXrCameraOffset = null;
@@ -424,8 +461,6 @@ export class mjswanRuntime {
     this.decimation = 1;
     this.controlDt = null;
     this.loadingScene = null;
-    this.dragStateManager = null;
-    this.dragForceScale = 100.0;
     this.policyRunner = null;
     this.policyStateBuilder = null;
     this.initialQpos = null;
@@ -450,6 +485,8 @@ export class mjswanRuntime {
     await this.stop();
     this.scenePlugins = scene.plugins ?? {};
     this.terrainData = scene.terrainData ?? null;
+    // Before the model is built: it decides whether the grab anchor is injected.
+    this.sceneHasPolicy = !!scene.policy;
     // Needed before `buildSceneFromModel`, which derives `decimation` from it.
     this.controlDt = scene.controlDt && scene.controlDt > 0 ? scene.controlDt : null;
     // Reseed so two loads of the same scene draw the same randomness.
@@ -590,15 +627,20 @@ export class mjswanRuntime {
       this.syncStaticBodiesFromData();
 
       this.handMocap?.bind(this.mujoco, this.mjModel);
+      this.weldHold.bind(this.mujoco, this.mjModel, [
+        ...(this.grabInjected ? [POINTER_WELD] : []),
+        ...(this.handMocap ? handWeldNames() : []),
+      ]);
       // A scene with no policy never reaches `resetSimulationState`, and a keyframe
       // written before injection zero-pads the appended free joints: without this the
       // fingertips spawn at the world origin, inside the scene.
       this.handMocap?.park(this.mjData);
       // Tagged so `frameCamera` can leave them out: a parked hand waits 100 m up, and
       // with DEBUG_DRAW_BONES on it is drawn there.
-      for (const bodyId of this.handMocap?.bodyIds() ?? []) {
+      this.injectedBodyIds = this.collectInjectedBodyIds();
+      for (const bodyId of this.injectedBodyIds) {
         if (this.bodies[bodyId]) {
-          this.bodies[bodyId].userData.xrHand = true;
+          this.bodies[bodyId].userData.injected = true;
         }
       }
 
@@ -612,19 +654,7 @@ export class mjswanRuntime {
       this.lastSimState.bodies.clear();
       this.updateCachedState();
 
-      // Initialize DragStateManager
-      if (!this.dragStateManager) {
-        this.dragStateManager = new DragStateManager({
-          scene: this.scene,
-          renderer: this.renderer,
-          camera: this.camera,
-          container: this.container,
-          controls: this.controls,
-          draggableBodyIds: this.dynamicBodyIds,
-        });
-      } else {
-        this.dragStateManager.setDraggableBodyIds(this.dynamicBodyIds);
-      }
+      this.interaction.onSceneLoaded();
 
       this.loadingScene = null;
     })();
@@ -646,14 +676,13 @@ export class mjswanRuntime {
       let modelPath: string;
       if (format === 'mjb') {
         // `loadSceneFromURL` reads a `.mjb` path with `mj_loadModel`. A compiled model has
-        // no XML to add the XR hands to, so they stay off (`HandMocap.bind` warns).
+        // no XML to inject into, so the XR hands (`HandMocap.bind` warns) and Grab stay off.
         modelPath = 'scene.mjb';
         this.mujoco.FS.writeFile(`/working/${modelPath}`, new Uint8Array(model));
+        this.grabInjected = false;
       } else {
         modelPath = await loadMjzFile(this.mujoco, model);
-        if (this.handMocap) {
-          injectHandMocapFile(this.mujoco, `/working/${modelPath}`);
-        }
+        this.injectViewerBodies(`/working/${modelPath}`);
       }
       await this.buildScene(modelPath);
     } catch (error) {
@@ -663,6 +692,32 @@ export class mjswanRuntime {
       }
       throw error;
     }
+  }
+
+  /**
+   * Add the viewer's own bodies to the scene MJCF in the VFS, before it is compiled.
+   *
+   * The grab anchor is skipped for an unprefixed model with a policy: `buildEntityIndex`
+   * counts every body of such a model as the entity's, so one more would widen a traced
+   * graph's input. On a prefixed model (`robot/torso`) the anchor falls outside every entity.
+   */
+  private injectViewerBodies(path: string): void {
+    const xml = readMjcfFile(this.mujoco, path);
+    let injected = xml;
+    // Not gated like the anchor: hand tracking is an explicit opt-in.
+    if (this.handMocap) injected = injectHandMocapXml(injected);
+    const prefixed = isEntityPrefixed(xml);
+    this.grabInjected = prefixed || !this.sceneHasPolicy;
+    this.injectedWithoutPolicy = this.grabInjected && !prefixed;
+    if (this.grabInjected) {
+      injected = injectPointerGrabXml(injected);
+    } else {
+      console.warn(
+        '[mjswan] grab is off for this scene: a policy is loaded and the model is not ' +
+          'entity-prefixed, so an extra body would change a traced graph\'s input width.',
+      );
+    }
+    if (injected !== xml) this.mujoco.FS.writeFile(path, injected);
   }
 
   async startLoop(): Promise<void> {
@@ -755,7 +810,45 @@ export class mjswanRuntime {
 
   /** Halt physics; rendering continues so a frozen frame can be orbited. */
   pause(): void {
+    // A held body would otherwise keep its force the moment play resumes.
+    this.interaction.cancel();
     void this.stop();
+  }
+
+  // ── pointer interaction ───────────────────────────────────────────────
+
+  getInteractionMode(): InteractionModeId {
+    return this.interaction.getMode();
+  }
+
+  setInteractionMode(mode: InteractionModeId): void {
+    this.interaction.setMode(mode);
+  }
+
+  getInteractionParams(mode: InteractionModeId): Readonly<Record<string, number>> {
+    return this.interaction.getParams(mode);
+  }
+
+  setInteractionParam(mode: InteractionModeId, name: string, value: number): void {
+    this.interaction.setParam(mode, name, value);
+  }
+
+  interactionModes(): ReturnType<InteractionManager['report']> {
+    return this.interaction.report();
+  }
+
+  cancelInteraction(): void {
+    this.interaction.cancel();
+  }
+
+  private interactionSim(): InteractionSim {
+    return {
+      mujoco: this.mujoco,
+      mjModel: this.mjModel,
+      mjData: this.mjData,
+      dynamicBodyIds: this.dynamicBodyIds,
+      controlDt: this.timestep * this.decimation,
+    };
   }
 
   get isRunning(): boolean {
@@ -801,11 +894,7 @@ export class mjswanRuntime {
       return;
     }
     const box = new THREE.Box3();
-    for (const child of this.mujocoRoot.children) {
-      if (!child.userData.xrHand) {
-        box.expandByObject(child);
-      }
-    }
+    expandSceneBounds(box, this.mujocoRoot);
     if (box.isEmpty()) {
       return;
     }
@@ -945,6 +1034,16 @@ export class mjswanRuntime {
       // A caller-ordering mistake, not a bad bundle — unreachable from the app.
       console.warn('Policy config loaded before MuJoCo model is ready.');
       return;
+    }
+
+    if (this.injectedWithoutPolicy) {
+      // `injectViewerBodies` only saw the policy the scene was loaded with, not this one.
+      console.warn(
+        '[mjswan] this scene was loaded without a policy, so the viewer added its grab ' +
+          'anchor to a model that does not namespace its elements. A traced graph indexed ' +
+          'by body or geom will be fed the wrong width. Load the scene with the policy ' +
+          'selected to get the model without it.',
+      );
     }
 
     try {
@@ -1404,6 +1503,7 @@ export class mjswanRuntime {
     }
     // After the qpos writes above, which do not cover the injected hand bodies.
     this.handMocap?.park(this.mjData);
+    this.interaction.onReset();
     // With the sim state, as mjlab does: a force from before the reset would otherwise
     // keep an `illegal_contact` term firing.
     this.contactSensors.reset();
@@ -1434,8 +1534,8 @@ export class mjswanRuntime {
     if (!this.mjModel || !this.mjData) {
       return;
     }
-    // Viewer-only: mouse-drag forces and tracked hands, not part of the MDP.
-    this.applyDragForces();
+    // Viewer-only: pointer modes and tracked hands, not part of the MDP.
+    this.interaction.preStep();
     this.handMocap?.update(this.mjModel, this.mjData);
 
     this.refreshActionReferences();
@@ -1537,73 +1637,6 @@ export class mjswanRuntime {
     }
   }
 
-  private applyDragForces(): void {
-    if (!this.dragStateManager || !this.mjModel || !this.mjData || !this.bodies) {
-      return;
-    }
-
-    // Clear xfrc_applied (reset to zero at each step)
-    for (let i = 0; i < this.mjData.xfrc_applied.length; i++) {
-      this.mjData.xfrc_applied[i] = 0.0;
-    }
-
-    const dragged = this.dragStateManager.physicsObject;
-    if (!dragged || !('bodyID' in dragged) || typeof dragged.bodyID !== 'number' || dragged.bodyID <= 0) {
-      return;
-    }
-
-    const bodyId = dragged.bodyID as number;
-    if (this.dynamicBodyIds && !this.dynamicBodyIds.has(bodyId)) {
-      return;
-    }
-
-    // Update body positions (for drag calculation)
-    for (let b = 0; b < this.mjModel.nbody; b++) {
-      if (this.bodies[b]) {
-        getPosition(this.mjData.xpos, b, this.bodies[b].position);
-        getQuaternion(this.mjData.xquat, b, this.bodies[b].quaternion);
-        this.bodies[b].updateWorldMatrix(true, false);
-      }
-    }
-
-    // Update offset
-    this.dragStateManager.update();
-
-    // Calculate force (Three.js coordinate system → MuJoCo coordinate system)
-    const forceThree = this.dragStateManager.offset
-      .clone()
-      .multiplyScalar(this.dragForceScale);
-    const force = threeToMjcCoordinate(forceThree);
-
-    // Point where force is applied (world coordinates)
-    const pointThree = this.dragStateManager.worldHit.clone();
-    const point = threeToMjcCoordinate(pointThree);
-    // Body position
-    const bodyPos = new THREE.Vector3(
-      this.mjData.xpos[bodyId * 3 + 0],
-      this.mjData.xpos[bodyId * 3 + 1],
-      this.mjData.xpos[bodyId * 3 + 2]
-    );
-
-    // Calculate torque: τ = r × F
-    const r = new THREE.Vector3(
-      point.x - bodyPos.x,
-      point.y - bodyPos.y,
-      point.z - bodyPos.z
-    );
-    const f = new THREE.Vector3(force.x, force.y, force.z);
-    const torque = new THREE.Vector3().crossVectors(r, f);
-
-    // Set xfrc_applied xfrc_applied: (nbody, 6) = [fx, fy, fz, tx, ty, tz] for each body
-    const offset = bodyId * 6;
-    this.mjData.xfrc_applied[offset + 0] = force.x;
-    this.mjData.xfrc_applied[offset + 1] = force.y;
-    this.mjData.xfrc_applied[offset + 2] = force.z;
-    this.mjData.xfrc_applied[offset + 3] = torque.x;
-    this.mjData.xfrc_applied[offset + 4] = torque.y;
-    this.mjData.xfrc_applied[offset + 5] = torque.z;
-  }
-
   private updateCachedState(): void {
     if (!this.mjModel || !this.mjData || !this.bodies) {
       return;
@@ -1640,7 +1673,28 @@ export class mjswanRuntime {
   }
 
   private applyViewerConfig(config: ViewerConfig | null): void {
-    this.cameraState = applyViewerConfig(config, this.camera, this.controls, this.mjModel, this.mjData);
+    this.cameraState = applyViewerConfig(
+      config,
+      this.camera,
+      this.controls,
+      this.mjModel,
+      this.mjData,
+      this.injectedBodyIds,
+    );
+  }
+
+  /** Hand bones and the pointer's grab anchor, once the model is built. */
+  private collectInjectedBodyIds(): Set<number> {
+    const ids = new Set<number>(this.handMocap?.bodyIds() ?? []);
+    if (this.mjModel && this.grabInjected) {
+      const anchor = this.mujoco.mj_name2id(
+        this.mjModel,
+        this.mujoco.mjtObj.mjOBJ_BODY.value,
+        POINTER_ANCHOR_BODY,
+      );
+      if (anchor > 0) ids.add(anchor);
+    }
+    return ids;
   }
 
   private computeDynamicBodyIds(mjModel: MjModel): Set<number> {
@@ -1721,6 +1775,8 @@ export class mjswanRuntime {
 
   /** Kept as an offset: the orbit target goes on tracking a moving body through a session. */
   private onXrSessionStart = (): void => {
+    // A gesture held into the session would keep pulling with no cursor to show it.
+    this.interaction.cancel();
     this.preXrCameraOffset = this.camera.position.clone().sub(this.controls.target);
     this.xrClock.start();
     this.xrFirstFrame = true;
@@ -1882,10 +1938,7 @@ export class mjswanRuntime {
       this.colliderMesh = null;
     }
 
-    if (this.dragStateManager) {
-      this.dragStateManager.dispose();
-      this.dragStateManager = null;
-    }
+    this.interaction.dispose();
 
     this.releaseModel();
 

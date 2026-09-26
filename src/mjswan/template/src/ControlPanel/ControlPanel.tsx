@@ -6,13 +6,10 @@ import {
   Button,
   Checkbox,
   Divider,
-  Flex,
   Image,
   Menu,
   Modal,
-  NumberInput,
   Select,
-  Slider,
   Stack,
   Text,
   Tooltip,
@@ -29,8 +26,16 @@ import { MJSWAN_VERSION, GITHUB_CONTRIBUTORS, type Contributor } from '../Versio
 import FloatingPanel from './FloatingPanel';
 import { LabeledInput } from './LabeledInput';
 import { CommandSection } from './CommandSection';
+import { InteractionSection } from './InteractionSection';
+import { SliderRow } from './SliderRow';
 import { SplatSection } from './SplatSection';
-import type { CommandDescriptor, DebugVisDescriptor, EventDescriptor } from '../engine';
+import type {
+  CommandDescriptor,
+  DebugVisDescriptor,
+  EventDescriptor,
+  InteractionModeDescriptor,
+  InteractionModeId,
+} from '../engine';
 
 export interface SelectOption {
   value: string;
@@ -87,6 +92,12 @@ interface ControlPanelProps {
   onDebugVisChange?: (term: string, enabled: boolean) => void;
   /** Reset the simulation (engine.reset). */
   onReset?: () => void;
+  /** Pointer modes the viewer offers, as the engine reports them. */
+  interactions?: InteractionModeDescriptor[];
+  interactionMode?: InteractionModeId;
+  interactionParams?: Readonly<Record<string, Readonly<Record<string, number>>>>;
+  onInteractionModeChange?: (mode: InteractionModeId) => void;
+  onInteractionParamChange?: (mode: InteractionModeId, name: string, value: number) => void;
 }
 
 function isEditableElement(element: Element | null): boolean {
@@ -113,70 +124,6 @@ function formatGroupName(groupName: string): string {
     .split('_')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
-}
-
-/** The bound as printed under a track end, without float noise. */
-function formatBound(value: number): string {
-  return String(Number(value.toFixed(3)));
-}
-
-/** One row: the label, the track with both ends marked, and a box that takes typing. */
-function SliderRow({
-  id,
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  disabled,
-}: {
-  id: string;
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  /** A slider descriptor always carries one; Mantine's own default stands in if not. */
-  step?: number;
-  onChange: (value: number) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <LabeledInput id={id} label={label}>
-      <Flex justify="space-between">
-        <Slider
-          id={id}
-          value={value}
-          onChange={onChange}
-          min={min}
-          max={max}
-          step={step}
-          disabled={disabled}
-          marks={[
-            { value: min, label: formatBound(min) },
-            { value: max, label: formatBound(max) },
-          ]}
-          style={{ flexGrow: 1 }}
-        />
-        <NumberInput
-          value={value}
-          onChange={(next) => {
-            const parsed = typeof next === 'number' ? next : Number(next);
-            if (Number.isFinite(parsed)) onChange(parsed);
-          }}
-          min={min}
-          max={max}
-          step={step}
-          size="xs"
-          hideControls
-          clampBehavior="strict"
-          decimalScale={3}
-          disabled={disabled}
-          style={{ width: '3rem', marginLeft: 'var(--mantine-spacing-xs)' }}
-        />
-      </Flex>
-    </LabeledInput>
-  );
 }
 
 /** One command's slider, preceded by its "Max" companion — the order mjlab declares. */
@@ -302,6 +249,11 @@ function ControlPanel(props: ControlPanelProps) {
     debugVis = [],
     onDebugVisChange,
     onReset,
+    interactions = [],
+    interactionMode = 'pull',
+    interactionParams = {},
+    onInteractionModeChange,
+    onInteractionParamChange,
   } = props;
 
   const [aboutModalOpened, { open: openAbout, close: closeAbout }] = useDisclosure(false);
@@ -773,6 +725,17 @@ function ControlPanel(props: ControlPanelProps) {
                 </LabeledInput>
               ))}
             </CommandSection>
+          )}
+
+          {/* Scene-level, so below the policy's controls and above the reset. */}
+          {onInteractionModeChange && onInteractionParamChange && (
+            <InteractionSection
+              modes={interactions}
+              mode={interactionMode}
+              params={interactionParams}
+              onModeChange={onInteractionModeChange}
+              onParamChange={onInteractionParamChange}
+            />
           )}
 
           {/* Reset Button - always at bottom */}

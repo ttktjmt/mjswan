@@ -84,6 +84,7 @@ Verbs are named for their cost: `loadScene` rebuilds the model, everything else 
 | `commands` | `CommandControls` | `set(id, value)`, `trigger(id)`. |
 | `debugVis` | `DebugVisControls` | `set(term, enabled)`: show or hide a command term's drawing, such as the velocity arrows. |
 | `events` | `EventControls` | `fire(name)` for a `manual` term, `setArmed(name, armed)` for an `interval` one. |
+| `interaction` | `InteractionControls` | `setMode(id)`, `getMode()`, `setParam(mode, name, value)`, `getParams(mode)`, `cancel()`. See [Pointer interaction](#pointer-interaction). |
 | `getState` | `() => MjswanEngineState` | Current snapshot. |
 | `subscribe` | `(listener) => () => void` | Returns an unsubscribe function. |
 | `captureThumbnail` | `(opts?: { maxDim?, quality? }) => Promise<Blob>` | JPEG of the current frame. |
@@ -105,6 +106,11 @@ interface MjswanEngineState {
   debugVis: ReadonlyArray<DebugVisDescriptor>;
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
+  /** Every pointer mode, with whether this scene can run it. */
+  interactions: ReadonlyArray<InteractionModeDescriptor>;
+  interactionMode: InteractionModeId;
+  /** Current parameter values, per mode. */
+  interactionParams: Readonly<Record<InteractionModeId, Readonly<Record<string, number>>>>;
   /** The seed in use, so an app recording a session can persist it. */
   termSeed: number;
 }
@@ -115,6 +121,49 @@ an `id` (`"group:name"`), a `type` of `'slider' | 'checkbox' | 'button'`, a `lab
 for a slider — `min` / `max` / `step`, an optional `enabledWhen` naming a gating checkbox,
 and an optional `adjustableRange` companion. Render them however you like and drive them
 through `engine.commands`.
+
+### Pointer interaction
+
+What a press on the canvas does. The set of modes is closed and `state.interactions`
+describes it, so a host draws the mode switch and its controls without naming modes itself.
+The viewer starts in Pull.
+
+| Mode | `id` | Does | Parameters |
+|---|---|---|---|
+| View | `view` | Nothing: a press on a body orbits the camera, as one on the sky does. For a scene whose bodies fill the frame. | none |
+| Pull | `pull` | Drags a body toward the pointer on a spring while the press is held. The arrow thickens with the force. | `spring` (N/m, default 100) |
+| Push | `push` | Taps a body to shove it along the inward normal of the face that was hit. | `impulse` (N s, default 10) |
+| Grab | `weld` | Carries a body with the pointer; on release it keeps the speed the carry gave it. The cursor shows a closed hand while something is held. | `softness` (s, default 0.02), `torqueScale` (checkbox, default 1) |
+
+Each `InteractionModeDescriptor` carries an `id`, a `label`, an `available` flag with a
+`reason` when it is false, and a `params` list. A parameter gives `name`, `label`, `unit`,
+`type` (`'slider'` or `'checkbox'`, the latter holding 0 or 1), `step`, `default`, and two
+ranges: `min` / `max` is what `setParam` clamps to, and `softMin` / `softMax`, when
+present, is the narrower span a slider should drag over. The viewer's number box takes
+anything inside `min` / `max`, and a value past the slider pins its thumb at the end.
+
+| Parameter | Slider | Accepted |
+|---|---|---|
+| `pull.spring` | 0 to 200 | 0 to 2000 |
+| `push.impulse` | 0.1 to 50 | 0.1 to 500 |
+| `weld.softness` | 0.004 to 0.2 | the same |
+
+`weld.softness` is the weld's time constant (`eq_solref[0]`): how long the held body
+takes to catch up with the pointer, so a larger value carries it on a looser spring.
+`weld.torqueScale` is `eq_data[10]`; at 1 the body keeps the pose it was grabbed in, at 0
+it hangs from the grab point.
+
+**Input bindings are not configurable, by design.** A press on a body that can move belongs
+to the active mode and any other press belongs to the camera, on a mouse and a touchscreen
+alike, with nothing bound to hover, a modifier key or a right click. Switching mode is the
+only input decision a host makes, through `setMode`. Call `cancel()` before taking the
+pointer away (entering an overlay, say) so a held body is let go rather than left under a
+force.
+
+`available` is false when the loaded scene cannot run a mode, and `reason` says why. Grab
+needs a weld the viewer injects into the scene MJCF, so a scene loaded as a compiled `.mjb`
+lacks it, and it is withheld from a policy scene whose model does not namespace its
+elements, where one more body would widen a traced graph's input.
 
 ### Inputs
 

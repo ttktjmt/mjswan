@@ -137,6 +137,51 @@ export interface EventControls {
   setArmed(name: string, armed: boolean): void;
 }
 
+/** Which pointer gesture the viewer is in. The set is closed: there is no plugin path in. */
+export type InteractionModeId = 'view' | 'pull' | 'push' | 'weld';
+
+/** One number a mode exposes, with everything a generic control needs to draw it. */
+export interface InteractionParamDescriptor {
+  /** The id {@link InteractionControls.setParam} takes. */
+  name: string;
+  label: string;
+  /** Printed beside the label; '' for a dimensionless one. */
+  unit: string;
+  /** A `checkbox` holds 0 or 1. */
+  type: 'slider' | 'checkbox';
+  /** What `setParam` clamps to, and so what a typed value may reach. */
+  min: number;
+  max: number;
+  /** The span a slider drags over, inside `min`..`max`; absent means the same. */
+  softMin?: number;
+  softMax?: number;
+  step: number;
+  default: number;
+}
+
+export interface InteractionModeDescriptor {
+  id: InteractionModeId;
+  label: string;
+  /** False when the loaded scene cannot run this mode; `reason` says why. */
+  available: boolean;
+  reason?: string;
+  params: ReadonlyArray<InteractionParamDescriptor>;
+}
+
+/**
+ * The live pointer mode and its parameters. Bindings are fixed, not configurable: a press
+ * on a body goes to the mode, any other press to the camera.
+ */
+export interface InteractionControls {
+  setMode(id: InteractionModeId): void;
+  getMode(): InteractionModeId;
+  /** Out-of-range values are clamped to the descriptor, not refused. */
+  setParam(mode: InteractionModeId, name: string, value: number): void;
+  getParams(mode: InteractionModeId): Readonly<Record<string, number>>;
+  /** Drop whatever is held, for a host that is about to take the pointer away. */
+  cancel(): void;
+}
+
 /** Immutable snapshot pushed to {@link MjswanEngine.subscribe} listeners. */
 export interface MjswanEngineState {
   phase: 'running' | 'paused';
@@ -149,6 +194,11 @@ export interface MjswanEngineState {
   debugVis: ReadonlyArray<DebugVisDescriptor>;
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
+  /** Every pointer mode, with whether this scene can run it. */
+  interactions: ReadonlyArray<InteractionModeDescriptor>;
+  interactionMode: InteractionModeId;
+  /** Current parameter values, per mode. */
+  interactionParams: Readonly<Record<InteractionModeId, Readonly<Record<string, number>>>>;
   /** Reported so an app recording a session can persist it rather than guess. */
   termSeed: number;
 }
@@ -186,6 +236,7 @@ export interface MjswanEngine {
   readonly commands: CommandControls;
   readonly debugVis: DebugVisControls;
   readonly events: EventControls;
+  readonly interaction: InteractionControls;
 
   // state
   getState(): MjswanEngineState;

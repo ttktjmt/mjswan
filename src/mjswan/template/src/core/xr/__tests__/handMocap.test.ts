@@ -6,7 +6,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 
-import { HAND_SEGMENTS, injectHandMocapXml, quatFromZ, HandMocap } from '../handMocap';
+import { HAND_SEGMENTS, handWeldNames, injectHandMocapXml, quatFromZ, HandMocap } from '../handMocap';
+import { WeldHold } from '../../grab/weldHold';
 
 type MainModule = import('mujoco').MainModule;
 type MjModel = import('mujoco').MjModel;
@@ -230,7 +231,9 @@ describe('HandMocap against the real WASM', () => {
     );
 
     const hand = new FakeHand();
-    const mocap = new HandMocap([hand as unknown as THREE.XRHandSpace]);
+    const weld = new WeldHold();
+    weld.bind(mujoco, mjModel, handWeldNames());
+    const mocap = new HandMocap([hand as unknown as THREE.XRHandSpace], weld);
     mocap.bind(mujoco, mjModel);
     mocap.park(mjData);
     mujoco.mj_forward(mjModel, mjData);
@@ -315,7 +318,9 @@ describe('HandMocap against the real WASM', () => {
     ).MjModel.from_xml_string(xml);
     const mjData = new (mujoco as unknown as { MjData: new (m: MjModel) => MjData }).MjData(mjModel);
     const hand = new FakeHand();
-    const mocap = new HandMocap([hand as unknown as THREE.XRHandSpace]);
+    const weld = new WeldHold();
+    weld.bind(mujoco, mjModel, handWeldNames());
+    const mocap = new HandMocap([hand as unknown as THREE.XRHandSpace], weld);
     mocap.bind(mujoco, mjModel);
     mocap.park(mjData);
     const bodyOf = (to: string) =>

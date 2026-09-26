@@ -1,0 +1,81 @@
+/**
+ * Grab a body and carry it, welded to a mocap anchor the pointer drives (`grab/weldHold`).
+ *
+ * - Letting go throws: release only deactivates the weld, so the body keeps its velocity.
+ * - A policy never reads the hold as an external force: it lands in `qfrc_constraint`,
+ *   which mjlab's `qfrc_external` leaves out.
+ */
+import type { InteractionMode, ModeContext } from './mode';
+import { toMjc } from './mode';
+import { POINTER_ANCHOR_BODY, POINTER_PARK_Z, POINTER_WELD } from '../grabInject';
+import type { PointerClaim, PointerGesture } from '../pointer';
+
+const IDENTITY_QUAT = [1, 0, 0, 0];
+const PARKED: [number, number, number] = [0, 0, POINTER_PARK_Z];
+
+export class WeldMode implements InteractionMode {
+  readonly id = 'weld' as const;
+  private held = 0;
+
+  unavailable(ctx: ModeContext): string | null {
+    return ctx.weld.has(POINTER_WELD) ? null : 'This scene was built without a grab anchor.';
+  }
+
+  onDown(gesture: PointerGesture, ctx: ModeContext): PointerClaim {
+    const { mujoco, mjModel, mjData } = ctx.sim();
+    if (!mjModel || !mjData || gesture.hit.bodyId <= 0) return 'none';
+    const anchorId = mujoco.mj_name2id(mjModel, mujoco.mjtObj.mjOBJ_BODY.value, POINTER_ANCHOR_BODY);
+    if (anchorId < 0) return 'none';
+    // A hand already holding it keeps it.
+    if (ctx.weld.holderOf(gesture.hit.bodyId) !== null) return 'none';
+
+    this.moveAnchor(ctx, toMjc(gesture.hit.point));
+    // `xpos` follows `mocap_pos` only at a forward; welding to the parked pose would fling
+    // the body 100 m up.
+    mujoco.mj_forward(mjModel, mjData);
+    const params = ctx.params();
+    const grabbed = ctx.weld.hold(mjModel, mjData, POINTER_WELD, anchorId, gesture.hit.bodyId, {
+      torqueScale: params.torqueScale,
+      solrefTime: params.softness,
+    });
+    if (!grabbed) return 'none';
+    this.held = gesture.hit.bodyId;
+    ctx.setCursor('grabbing');
+    return 'exclusive';
+  }
+
+  onUp(_gesture: PointerGesture, ctx: ModeContext): void {
+    this.onCancel(ctx);
+  }
+
+  onCancel(ctx: ModeContext): void {
+    const { mjData } = ctx.sim();
+    if (!mjData) {
+      this.held = 0;
+      ctx.setCursor('');
+      return;
+    }
+    ctx.weld.release(mjData, POINTER_WELD);
+    this.moveAnchor(ctx, PARKED);
+    this.held = 0;
+    ctx.setCursor('');
+  }
+
+  preStep(gesture: PointerGesture | null, ctx: ModeContext): void {
+    const { mjData } = ctx.sim();
+    if (!gesture || !this.held || !mjData) return;
+    this.moveAnchor(ctx, toMjc(gesture.ray));
+  }
+
+  /** Always at identity orientation, so turning the camera never twists the held body. */
+  private moveAnchor(ctx: ModeContext, position: readonly [number, number, number]): void {
+    const { mujoco, mjModel, mjData } = ctx.sim();
+    if (!mjModel || !mjData) return;
+    const anchorId = mujoco.mj_name2id(mjModel, mujoco.mjtObj.mjOBJ_BODY.value, POINTER_ANCHOR_BODY);
+    if (anchorId < 0) return;
+    const mocapId = mjModel.body_mocapid[anchorId];
+    if (mocapId < 0) return;
+    for (let i = 0; i < 3; i++) mjData.mocap_pos[mocapId * 3 + i] = position[i];
+    for (let i = 0; i < 4; i++) mjData.mocap_quat[mocapId * 4 + i] = IDENTITY_QUAT[i];
+  }
+}

@@ -10,6 +10,7 @@ import { mjswanRuntime, type ResolvedPolicy, type ResolvedScene, type ResolvedSp
 import { type Bytes, resolveBytes } from '../core/utils/bytes';
 import type { CommandDefinition, CommandEventListener } from '../core/command';
 import type { PolicyConfig } from '../core/policy/types';
+import { INTERACTION_MODES, INTERACTION_MODE_IDS } from '../core/interaction/params';
 import type {
   CameraControls,
   CommandControls,
@@ -17,7 +18,9 @@ import type {
   CreateEngineOptions,
   DebugVisControls,
   EventControls,
+  InteractionControls,
   MjswanEngine,
+  InteractionModeId,
   MjswanEngineState,
   PolicyInput,
   SceneInput,
@@ -86,6 +89,7 @@ class Engine implements MjswanEngine {
   readonly commands: CommandControls;
   readonly debugVis: DebugVisControls;
   readonly events: EventControls;
+  readonly interaction: InteractionControls;
 
   constructor(runtime: mjswanRuntime) {
     this.runtime = runtime;
@@ -115,6 +119,20 @@ class Engine implements MjswanEngine {
         this.refresh();
       },
     };
+    this.interaction = {
+      // The setters refresh the snapshot themselves: the runtime emits no event for them.
+      setMode: (id) => {
+        this.runtime.setInteractionMode(id);
+        this.refresh();
+      },
+      getMode: () => this.runtime.getInteractionMode(),
+      setParam: (mode, name, value) => {
+        this.runtime.setInteractionParam(mode, name, value);
+        this.refresh();
+      },
+      getParams: (mode) => this.runtime.getInteractionParams(mode),
+      cancel: () => this.runtime.cancelInteraction(),
+    };
   }
 
   private onCommandEvent: CommandEventListener = () => this.refresh();
@@ -130,6 +148,15 @@ class Engine implements MjswanEngine {
       commandValues: cm.getValues(),
       debugVis: cm.getDebugVisTerms().map(({ name, enabled }) => ({ term: name, enabled })),
       events: this.runtime.eventControls(),
+      interactions: this.runtime.interactionModes().map((mode) => ({
+        ...mode,
+        params: INTERACTION_MODES.find((spec) => spec.id === mode.id)?.params ?? [],
+      })),
+      interactionMode: this.runtime.getInteractionMode(),
+      interactionParams: INTERACTION_MODE_IDS.reduce(
+        (all, id) => ({ ...all, [id]: this.runtime.getInteractionParams(id) }),
+        {} as Record<InteractionModeId, Readonly<Record<string, number>>>,
+      ),
       termSeed: this.runtime.seed,
     };
   }
@@ -250,5 +277,7 @@ export async function createEngine(
 ): Promise<MjswanEngine> {
   const mujocoModule = options.multithreaded ? await import('mujoco/mt') : await import('mujoco');
   const mujoco = await mujocoModule.default();
-  return new Engine(new mjswanRuntime(mujoco, element, options.termSeed, options.handTracking));
+  return new Engine(
+    new mjswanRuntime(mujoco, element, options.termSeed, options.handTracking),
+  );
 }
