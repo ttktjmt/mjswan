@@ -11,6 +11,7 @@ import { type Bytes, resolveBytes } from '../core/utils/bytes';
 import type { CommandDefinition, CommandEventListener } from '../core/command';
 import type { PolicyConfig } from '../core/policy/types';
 import { INTERACTION_MODES, INTERACTION_MODE_IDS } from '../core/interaction/params';
+import { createSerial } from './serial';
 import type {
   CameraControls,
   CommandControls,
@@ -26,6 +27,8 @@ import type {
   SceneInput,
   SplatInput,
   SplatTransform,
+  XrControls,
+  XrSessionId,
 } from './types';
 
 function toDescriptor(def: CommandDefinition): CommandDescriptor {
@@ -76,12 +79,24 @@ async function resolveSplat(input: SplatInput): Promise<ResolvedSplat> {
   };
 }
 
+function asError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err));
+}
+
 class Engine implements MjswanEngine {
   private readonly runtime: mjswanRuntime;
   private phase: 'running' | 'paused' = 'paused';
   private loading = false;
   private loadingMessage: string | null = null;
+  /** Loads in flight: a scene load can wait behind an XR rebuild, and each clears only its own. */
+  private loads = 0;
   private error: Error | null = null;
+  /**
+   * Scene and policy loads, motion switches and the XR rebuild each replace what the
+   * others bind to the model, so they run one at a time, and `dispose` after them.
+   */
+  private readonly serial = createSerial();
+  private disposed = false;
   private state: MjswanEngineState;
   private readonly listeners = new Set<(state: MjswanEngineState) => void>();
 
@@ -90,12 +105,15 @@ class Engine implements MjswanEngine {
   readonly debugVis: DebugVisControls;
   readonly events: EventControls;
   readonly interaction: InteractionControls;
+  readonly xr: XrControls;
 
   constructor(runtime: mjswanRuntime) {
     this.runtime = runtime;
     this.state = this.buildState();
     // The CommandManager outlives individual loads, so one listener covers every change.
     this.runtime.commands.addEventListener(this.onCommandEvent);
+    // Device support resolves late, and sessions start and end outside any verb.
+    this.runtime.onXrChange = () => this.refresh();
 
     this.camera = {
       set: (view) => this.runtime.setCameraView(view),
@@ -133,6 +151,11 @@ class Engine implements MjswanEngine {
       getParams: (mode) => this.runtime.getInteractionParams(mode),
       cancel: () => this.runtime.cancelInteraction(),
     };
+    this.xr = {
+      enter: (id) => this.enterXr(id),
+      exit: () => this.runtime.exitXr(),
+      setHandTracking: (enabled) => this.runtime.setHandTracking(enabled),
+    };
   }
 
   private onCommandEvent: CommandEventListener = () => this.refresh();
@@ -157,11 +180,36 @@ class Engine implements MjswanEngine {
         (all, id) => ({ ...all, [id]: this.runtime.getInteractionParams(id) }),
         {} as Record<InteractionModeId, Readonly<Record<string, number>>>,
       ),
+      xrSessions: this.runtime.xrSessions(),
+      handTracking: this.runtime.handTrackingReport(),
       termSeed: this.runtime.seed,
     };
   }
 
+  private beginLoad(message: string): void {
+    this.loads += 1;
+    this.loading = true;
+    this.loadingMessage = message;
+    this.refresh();
+  }
+
+  private endLoad(): void {
+    this.loads -= 1;
+    if (this.loads === 0) {
+      this.loading = false;
+      this.loadingMessage = null;
+    }
+    this.refresh();
+  }
+
+  /** Model work in turn; none starts once the engine is disposed. */
+  private exclusive<T>(work: () => Promise<T>, whenDisposed: T): Promise<T> {
+    return this.serial(() => (this.disposed ? Promise.resolve(whenDisposed) : work()));
+  }
+
   private refresh(): void {
+    // Nobody is listening, and the runtime may already be freed.
+    if (this.disposed) return;
     this.state = this.buildState();
     for (const listener of this.listeners) {
       try {
@@ -173,11 +221,10 @@ class Engine implements MjswanEngine {
   }
 
   async loadScene(input: SceneInput): Promise<void> {
-    this.loading = true;
-    this.loadingMessage = 'Loading scene…';
     this.error = null;
-    this.refresh();
+    this.beginLoad('Loading scene…');
     try {
+      // Resolved before taking a turn: a slow fetch must not hold up the others.
       const scene: ResolvedScene = {
         model: await resolveBytes(input.model),
         modelFormat: input.modelFormat,
@@ -188,15 +235,42 @@ class Engine implements MjswanEngine {
         controlDt: input.controlDt ?? null,
         plugins: input.plugins,
       };
-      await this.runtime.loadEnvironment(scene);
+      await this.exclusive(() => this.runtime.loadEnvironment(scene), undefined);
       this.phase = this.runtime.isRunning ? 'running' : 'paused';
     } catch (err) {
-      this.error = err instanceof Error ? err : new Error(String(err));
+      this.error = asError(err);
       throw err;
     } finally {
-      this.loading = false;
-      this.loadingMessage = null;
-      this.refresh();
+      this.endLoad();
+    }
+  }
+
+  /**
+   * Asks for the session at once, inside the host's click; only the rebuild waits its turn,
+   * so a load already running delays entry.
+   */
+  private async enterXr(id: XrSessionId): Promise<void> {
+    if (this.disposed) return;
+    const request = await this.runtime.requestXr(id);
+    if (!request) return;
+    let rebuilt = false;
+    try {
+      // Not `exclusive`: after `dispose` this still has to end the granted session.
+      await this.serial(() =>
+        this.runtime.startXr(request, (addingHands) => {
+          rebuilt = true;
+          this.beginLoad(addingHands ? 'Adding tracked hands…' : 'Removing tracked hands…');
+        }),
+      );
+    } catch (err) {
+      // A failed rebuild leaves no model, which the host must hear about as a failed load.
+      if (rebuilt) this.error = asError(err);
+      throw err;
+    } finally {
+      if (rebuilt) {
+        this.phase = this.runtime.isRunning ? 'running' : 'paused';
+        this.endLoad();
+      }
     }
   }
 
@@ -204,9 +278,10 @@ class Engine implements MjswanEngine {
     // Records and rethrows like `loadScene`. `refresh()` runs either way, so a rejected
     // `setPolicy` still leaves the snapshot describing what is loaded — on failure, nothing.
     try {
-      await this.runtime.loadPolicyConfig(input ? await resolvePolicy(input) : null);
+      const policy = input ? await resolvePolicy(input) : null;
+      await this.exclusive(() => this.runtime.loadPolicyConfig(policy), undefined);
     } catch (err) {
-      this.error = err instanceof Error ? err : new Error(String(err));
+      this.error = asError(err);
       throw err;
     } finally {
       this.refresh();
@@ -218,7 +293,7 @@ class Engine implements MjswanEngine {
   }
 
   setMotion(name: string | null): Promise<boolean> {
-    return this.runtime.setSelectedMotion(name);
+    return this.exclusive(() => this.runtime.setSelectedMotion(name), false);
   }
 
   setReferenceVisible(visible: boolean): void {
@@ -261,9 +336,12 @@ class Engine implements MjswanEngine {
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.runtime.onXrChange = null;
     this.runtime.commands.removeEventListener(this.onCommandEvent);
     this.listeners.clear();
-    void this.runtime.dispose();
+    // Behind the model work in flight, which would otherwise rebuild what dispose frees.
+    void this.serial(() => this.runtime.dispose());
   }
 }
 

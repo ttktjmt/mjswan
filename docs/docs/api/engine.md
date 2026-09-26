@@ -51,7 +51,7 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
 |---|---|---|---|
 | `multithreaded` | `boolean` | `false` | Load the `mujoco/mt` build. Uses `SharedArrayBuffer`, so it requires [COOP/COEP headers](../guides/deployment.md#cross-origin-isolation-headers-for-multi-threading). |
 | `termSeed` | `number` | built-in default | Seed for the single PRNG every traced term's `rand` input comes from. Pass back the value read from `MjswanEngineState.termSeed` to re-run a recorded session. |
-| `handTracking` | `boolean` | `false` | Put a headset's WebXR-tracked hands in the simulation as mocap-driven capsules, so a VR viewer can push and grasp what it sees ([details](../guides/embedding.md#hand-tracking-in-vr)). Every scene loaded gains the hand bodies, at about 1.6x per physics step. |
+| `handTracking` | `boolean` | `false` | Starting state of the hand-tracking switch ([`xr.setHandTracking`](#webxr)). When on, a headset's tracked hands enter the simulation as mocap-driven capsules, so a viewer can push and grasp what they see ([details](../guides/embedding.md#hand-tracking-in-vr)). |
 
 !!! note "The one thing the engine does fetch"
     `dist/mjswan.js` resolves its own WebAssembly — MuJoCo's and ORT's — relative to itself
@@ -69,7 +69,10 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
 
 ### `MjswanEngine`
 
-Verbs are named for their cost: `loadScene` rebuilds the model, everything else is live.
+Verbs are named for their cost: `loadScene` rebuilds the model, and so does `xr.enter` when
+the hand-tracking switch disagrees with it; everything else is live. The verbs that touch
+the model (`loadScene`, `setPolicy`, `setMotion` and that rebuild) run one at a time, in
+call order, and `dispose` waits for the one running.
 
 | Member | Signature | Notes |
 |---|---|---|
@@ -85,6 +88,7 @@ Verbs are named for their cost: `loadScene` rebuilds the model, everything else 
 | `debugVis` | `DebugVisControls` | `set(term, enabled)`: show or hide a command term's drawing, such as the velocity arrows. |
 | `events` | `EventControls` | `fire(name)` for a `manual` term, `setArmed(name, armed)` for an `interval` one. |
 | `interaction` | `InteractionControls` | `setMode(id)`, `getMode()`, `setParam(mode, name, value)`, `getParams(mode)`, `cancel()`. See [Pointer interaction](#pointer-interaction). |
+| `xr` | `XrControls` | `enter(id)`, `exit()`, `setHandTracking(enabled)`. See [WebXR](#webxr). |
 | `getState` | `() => MjswanEngineState` | Current snapshot. |
 | `subscribe` | `(listener) => () => void` | Returns an unsubscribe function. |
 | `captureThumbnail` | `(opts?: { maxDim?, quality? }) => Promise<Blob>` | JPEG of the current frame. |
@@ -111,6 +115,10 @@ interface MjswanEngineState {
   interactionMode: InteractionModeId;
   /** Current parameter values, per mode. */
   interactionParams: Readonly<Record<InteractionModeId, Readonly<Record<string, number>>>>;
+  /** The WebXR sessions this device can start. */
+  xrSessions: ReadonlyArray<XrSessionDescriptor>;
+  /** Null on a device without `immersive-vr`, where no session could track hands. */
+  handTracking: HandTrackingDescriptor | null;
   /** The seed in use, so an app recording a session can persist it. */
   termSeed: number;
 }
@@ -164,6 +172,36 @@ force.
 needs a weld the viewer injects into the scene MJCF, so a scene loaded as a compiled `.mjb`
 lacks it, and it is withheld from a policy scene whose model does not namespace its
 elements, where one more body would widen a traced graph's input.
+
+### WebXR
+
+The engine draws no button of its own. `state.xrSessions` lists the sessions this device
+can start, for the host to draw its buttons from. It is empty on a device with no headset
+and in a frame not granted `xr-spatial-tracking`.
+
+| `id` | Session | `label` | Asks for |
+|---|---|---|---|
+| `vr` | `immersive-vr` | `Enter VR`, then `Exit VR` while it runs | `local-floor`, `bounded-floor`, `layers` |
+| `ar` | `immersive-ar` (passthrough) | `Start AR`, then `Stop AR` | `local-floor` |
+
+Call `xr.enter(id)` from the click that asks for the session: the browser grants one only
+inside a user gesture. A scene or policy load already running finishes before the session
+starts. `xr.exit()` ends it, as does the headset's own menu.
+
+`state.handTracking` is the tracked-hands switch, or `null` on a device that cannot start a
+VR session (AR on a phone has no hands to track). The hands are bodies compiled into the
+model, so **the switch never rebuilds the model itself**: `xr.setHandTracking(enabled)`
+applies at the next scene load, or at `xr.enter` when the model was built the other way.
+That rebuild runs after the session is granted and before `enter` resolves; it keeps the
+policy, motion, command values, splat and camera, and restarts the simulation as a reset
+does. With the switch on, the session also asks for `hand-tracking`.
+
+`available` is false when the loaded scene cannot take the hands, and `reason` says why: a
+compiled `.mjb` has no MJCF to add them to, and a policy scene whose model does not
+namespace its elements would feed its traced graphs a wider input, the same rule that
+withholds [Grab](#pointer-interaction) there. A scene loaded with a policy stays a policy
+scene after that policy is cleared, so the policy can come back to the model it was sized
+for. The switch stays as set, and applies again on a scene that can take the hands.
 
 ### Inputs
 

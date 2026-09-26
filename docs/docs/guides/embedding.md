@@ -93,7 +93,6 @@ and chrome you mean rather than the first thing in the build:
 | `panel` | `panel=0` starts with the control panel hidden. Useful in a small iframe. |
 | `ref` | `ref=0` starts with the motion-tracking reference ghost hidden. |
 | `manifest` | Load a `manifest.json` from another URL entirely, relative to the page. |
-| `hands` | `hands=1` puts WebXR-tracked hands in the simulation, see below. |
 
 `panel` and `ref` are booleans read as "off only when exactly `0`", and the app writes the
 current state back into the URL — so you can arrange a view by hand and copy the address
@@ -102,6 +101,12 @@ bar into your `src`.
 ```html
 <iframe src="https://ttktjmt.github.io/mjswan/?project=showcase&scene=g1_on_street&policy=locomotion&panel=0" …></iframe>
 ```
+
+### Entering VR and AR
+
+On a device that can start a WebXR session, the control panel has a collapsed **WebXR**
+section: **Enter VR**, **Start AR** where the device supports passthrough, and the **Hand
+tracking** switch. Where no session can start, the section is absent.
 
 ### Moving around in VR
 
@@ -122,31 +127,38 @@ keeps you on top of a slope instead of inside it.
 
 ### Hand tracking in VR
 
-`hands=1`, or `createEngine(element, { handTracking: true })` when you drive the engine
-yourself, makes a headset's tracked hands part of the physics rather than a pair of
-floating models. On **Enter VR**, a Quest 3 can bat a scene's objects around, rest one on
-an open palm, and pick one up: pinch to grab, release to drop. What you see is three.js's
-own hand model, and the physics under it is sized to the wearer's hand rather than to a
-nominal adult one.
+**Hand tracking** in the WebXR section makes a headset's tracked hands part of the physics
+rather than a pair of floating models. In VR, a Quest 3 can bat a scene's objects around,
+rest one on an open palm, and pick one up: pinch to grab, release to drop. What you see is
+three.js's own hand model, and the physics under it is sized to the wearer's hand rather
+than to a nominal adult one.
 
-It is opt-in because both halves cost something: every scene the build loads gains the
-hand bodies, roughly 1.6x the physics cost, and the headset must grant the
-`hand-tracking` feature — **Meta Quest** is the recommended one, since its browser ships
-WebXR hand tracking with nothing to install. Ordinary desktop and mobile viewing is
-unaffected: untracked hands sit parked far above the scene.
+The hands are bodies the scene is compiled with, so flipping the switch does nothing on
+its own: the scene is rebuilt with them when you enter VR or AR, or at the next scene you
+open, whichever comes first. That rebuild keeps your policy, motion and camera and starts
+the simulation over. The switch is off every time the page opens, and nothing about it
+goes into the URL.
 
-The hand bodies are added to the scene's MJCF, so a scene added as `add_scene(model=...)`
-(a compiled `.mjb`, with no MJCF) goes without them.
+It is off by default: a scene with the hands costs roughly 1.6x per physics step, and the
+headset must grant the `hand-tracking` feature. **Meta Quest** is the recommended headset,
+since its browser ships WebXR hand tracking with nothing to install. When you drive the
+engine yourself, `engine.xr.setHandTracking(true)` is the same switch (see
+[WebXR](../api/engine.md#webxr)).
+
+Some scenes cannot take the hands, and the switch is greyed there with the reason on
+hover: a scene added as `add_scene(model=...)` (a compiled `.mjb`, with no MJCF to add them
+to), and a policy scene whose model does not namespace its elements, whose policy would
+otherwise read the extra bodies.
 
 ### Passthrough AR
 
-A headset that supports `immersive-ar` gets a second button, **Start AR**, next to
-**Enter VR**. The simulation is the same one — same physics, same policy — but the skybox
+A device that supports `immersive-ar` gets **Start AR** beside **Enter VR** in the WebXR
+section. The simulation is the same, physics and policy included, but the skybox
 and the ground planes stop being drawn, so the room shows through and the robot stands on
 your own floor rather than on MuJoCo's checkerboard. The session asks for the
 `local-floor` reference space, which is what puts the model's `z = 0` at floor level
 instead of at eye level; the sticks move you as they do in VR, so you can walk the scene
-to where you want it. Hand tracking works the same here, under the same `hands=1`.
+to where you want it. Hand tracking works the same here, under the same switch.
 
 What is not there yet: nothing occludes the scene, so a robot behind your real sofa is
 drawn in front of it, and no shadow falls on your floor.

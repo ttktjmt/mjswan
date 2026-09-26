@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 import {
@@ -29,7 +28,15 @@ import {
 } from '../interaction/grabInject';
 import { updateXrLocomotion } from '../xr/locomotion';
 import { updateRigGrounding } from '../xr/grounding';
-import { createArButton } from '../xr/arButton';
+import {
+  XR_SESSION_IDS,
+  XR_SESSION_MODES,
+  handTrackingBlocker,
+  xrSessionInit,
+  xrSessionReports,
+  type XrSessionId,
+  type XrSessionReport,
+} from '../xr/session';
 import { Passthrough } from '../xr/passthrough';
 import {
   type CameraView,
@@ -169,6 +176,14 @@ export type ResolvedScene = {
   plugins?: EnginePlugins;
 };
 
+/** A session granted from the host's click, waiting for `startXr`. */
+export type XrRequest = {
+  id: XrSessionId;
+  session: XRSession;
+  /** Whether it asked for `hand-tracking`: a session granted without it tracks none. */
+  hands: boolean;
+};
+
 type MotionCommandTerm = {
   setSelectedMotion(name: string | null): Promise<boolean> | boolean;
   setReferenceVisible?(visible: boolean): void;
@@ -247,7 +262,13 @@ export class mjswanRuntime {
   private injectedWithoutPolicy = false;
   /** Every body the viewer added: never part of the scene's own bounds or camera target. */
   private injectedBodyIds: ReadonlySet<number> = new Set();
+  /** A policy is loaded, or will load onto the model being built. */
   private sceneHasPolicy = false;
+  /**
+   * The scene came with a policy. Stays true once that policy is cleared: its policies are
+   * sized to the model as loaded, so a rebuild adds nothing that would widen it.
+   */
+  private sceneLoadedWithPolicy = false;
   private policyRunner: PolicyRunner | null;
   private policyStateBuilder: PolicyStateBuilder | null;
   private initialQpos: number[] | null;
@@ -260,12 +281,30 @@ export class mjswanRuntime {
   private terminationManager: TerminationManager | null;
   private eventManager: EventManager | null;
   private terrainData: TerrainData | null;
-  private vrButton: HTMLElement | null;
-  private arButton: HTMLElement | null;
-  /** Both XR support checks are async: a late one must not add a button after teardown. */
+  /** A late async XR support check must not report after teardown. */
   private disposed = false;
   private readonly passthrough: Passthrough;
-  private handMocap: HandMocap | null;
+  private readonly handMocap: HandMocap;
+  /** The hand-tracking switch, applied at the next model build. */
+  private handTrackingEnabled: boolean;
+  private modelHasHands = false;
+  private xrSupported: Record<XrSessionId, boolean> = { vr: false, ar: false };
+  /** Counts support checks, so a slower earlier one cannot overwrite a later answer. */
+  private xrCheck = 0;
+  /** The session `requestXr` was granted, until it ends. */
+  private xrSession: XRSession | null = null;
+  private activeXr: XrSessionId | null = null;
+  private enteringXr = false;
+  /** Called when `xrSessions()` or `handTrackingReport()` may have changed. */
+  onXrChange: (() => void) | null = null;
+  /** The scene MJCF as shipped, so a rebuild can add or drop the hands. Null for `.mjb`. */
+  private sceneXml: { file: string; text: string } | null = null;
+  private modelFormat: ModelFormat | null = null;
+  private scenePrefixed = false;
+  /** Loaded again onto the new model by a rebuild. */
+  private currentPolicy: ResolvedPolicy | null = null;
+  /** Restored by a rebuild, since the policy load shows the reference again. */
+  private referenceVisible = true;
   /** Parent of the camera and hands: what XR locomotion moves. Identity outside a session. */
   private readonly xrRig: THREE.Group;
   private readonly xrClock = new THREE.Clock(false);
@@ -376,39 +415,20 @@ export class mjswanRuntime {
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.container.appendChild(this.renderer.domElement);
 
-    this.handMocap = null;
-    if (handTracking) {
-      const hands = [0, 1].map((i) => this.renderer.xr.getHand(i));
-      // Spheres, not the `mesh` profile: that one fetches a glTF from a CDN, and a built
-      // mjswan app is self-contained.
-      const handModels = new XRHandModelFactory();
-      for (const hand of hands) {
-        hand.add(handModels.createHandModel(hand, 'spheres'));
-        this.xrRig.add(hand);
-      }
-      this.handMocap = new HandMocap(hands, this.weldHold);
+    // Always created: the hand spaces stay empty until a session is granted `hand-tracking`.
+    const hands = [0, 1].map((i) => this.renderer.xr.getHand(i));
+    // Spheres, not the `mesh` profile: that one fetches a glTF from a CDN, and a built
+    // mjswan app is self-contained.
+    const handModels = new XRHandModelFactory();
+    for (const hand of hands) {
+      hand.add(handModels.createHandModel(hand, 'spheres'));
+      this.xrRig.add(hand);
     }
+    this.handMocap = new HandMocap(hands, this.weldHold);
+    this.handTrackingEnabled = handTracking;
 
-    // Asked for in both modes: a Quest leaves hands untracked without it.
-    const sessionInit: XRSessionInit = handTracking ? { optionalFeatures: ['hand-tracking'] } : {};
-
-    this.vrButton = null;
-    navigator.xr?.isSessionSupported('immersive-vr').then((supported) => {
-      if (supported && !this.disposed) {
-        this.vrButton = VRButton.createButton(this.renderer, sessionInit);
-        document.body.appendChild(this.vrButton);
-        this.layoutArButton();
-      }
-    });
-
-    this.arButton = null;
-    createArButton(this.renderer, sessionInit).then((button) => {
-      if (button && !this.disposed) {
-        this.arButton = button;
-        document.body.appendChild(this.arButton);
-        this.layoutArButton();
-      }
-    });
+    void this.checkXrSupport();
+    navigator.xr?.addEventListener('devicechange', this.onXrDeviceChange);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.target.set(0, 0.2, 0);
@@ -487,6 +507,7 @@ export class mjswanRuntime {
     this.terrainData = scene.terrainData ?? null;
     // Before the model is built: it decides whether the grab anchor is injected.
     this.sceneHasPolicy = !!scene.policy;
+    this.sceneLoadedWithPolicy = !!scene.policy;
     // Needed before `buildSceneFromModel`, which derives `decimation` from it.
     this.controlDt = scene.controlDt && scene.controlDt > 0 ? scene.controlDt : null;
     // Reseed so two loads of the same scene draw the same randomness.
@@ -587,6 +608,7 @@ export class mjswanRuntime {
   }
 
   setReferenceVisible(visible: boolean): void {
+    this.referenceVisible = visible;
     const term = this.commandManager.getTerm('motion');
     if (!isMotionCommandTerm(term) || typeof term.setReferenceVisible !== 'function') {
       return;
@@ -626,15 +648,19 @@ export class mjswanRuntime {
       this.dynamicBodyIds = this.computeDynamicBodyIds(this.mjModel);
       this.syncStaticBodiesFromData();
 
-      this.handMocap?.bind(this.mujoco, this.mjModel);
+      if (this.modelHasHands) {
+        this.handMocap.bind(this.mujoco, this.mjModel);
+      } else {
+        this.handMocap.clear();
+      }
       this.weldHold.bind(this.mujoco, this.mjModel, [
         ...(this.grabInjected ? [POINTER_WELD] : []),
-        ...(this.handMocap ? handWeldNames() : []),
+        ...(this.modelHasHands ? handWeldNames() : []),
       ]);
       // A scene with no policy never reaches `resetSimulationState`, and a keyframe
       // written before injection zero-pads the appended free joints: without this the
       // fingertips spawn at the world origin, inside the scene.
-      this.handMocap?.park(this.mjData);
+      if (this.modelHasHands) this.handMocap.park(this.mjData);
       // Tagged so `frameCamera` can leave them out: a parked hand waits 100 m up, and
       // with DEBUG_DRAW_BONES on it is drawn there.
       this.injectedBodyIds = this.collectInjectedBodyIds();
@@ -674,15 +700,23 @@ export class mjswanRuntime {
   private async buildSceneFromModel(model: ArrayBuffer, format: ModelFormat): Promise<void> {
     try {
       let modelPath: string;
+      this.modelFormat = format;
       if (format === 'mjb') {
         // `loadSceneFromURL` reads a `.mjb` path with `mj_loadModel`. A compiled model has
-        // no XML to inject into, so the XR hands (`HandMocap.bind` warns) and Grab stay off.
+        // no XML to inject into, so the XR hands and Grab stay off.
         modelPath = 'scene.mjb';
         this.mujoco.FS.writeFile(`/working/${modelPath}`, new Uint8Array(model));
+        this.sceneXml = null;
+        this.scenePrefixed = false;
         this.grabInjected = false;
+        this.injectedWithoutPolicy = false;
+        this.modelHasHands = false;
       } else {
         modelPath = await loadMjzFile(this.mujoco, model);
-        this.injectViewerBodies(`/working/${modelPath}`);
+        const text = readMjcfFile(this.mujoco, `/working/${modelPath}`);
+        this.sceneXml = { file: modelPath, text };
+        this.scenePrefixed = isEntityPrefixed(text);
+        this.injectViewerBodies(this.wantsHands());
       }
       await this.buildScene(modelPath);
     } catch (error) {
@@ -695,32 +729,38 @@ export class mjswanRuntime {
   }
 
   /**
-   * Add the viewer's own bodies to the scene MJCF in the VFS, before it is compiled.
+   * Write the scene MJCF to the VFS with the viewer's bodies added. Always starts from the
+   * shipped text, so a rebuild can drop the hands as well as add them.
    *
-   * The grab anchor is skipped for an unprefixed model with a policy: `buildEntityIndex`
-   * counts every body of such a model as the entity's, so one more would widen a traced
-   * graph's input. On a prefixed model (`robot/torso`) the anchor falls outside every entity.
+   * For an unprefixed model of a policy scene, the grab anchor is skipped here and the hands
+   * by `handTrackingBlocker`: `buildEntityIndex` counts every body of such a model as the
+   * entity's, so extra bodies would widen a traced graph's input.
    */
-  private injectViewerBodies(path: string): void {
-    const xml = readMjcfFile(this.mujoco, path);
-    let injected = xml;
-    // Not gated like the anchor: hand tracking is an explicit opt-in.
-    if (this.handMocap) injected = injectHandMocapXml(injected);
-    const prefixed = isEntityPrefixed(xml);
-    this.grabInjected = prefixed || !this.sceneHasPolicy;
-    this.injectedWithoutPolicy = this.grabInjected && !prefixed;
+  private injectViewerBodies(hands: boolean): void {
+    if (!this.sceneXml) return;
+    const { file, text } = this.sceneXml;
+    let injected = text;
+    this.modelHasHands = hands;
+    if (hands) injected = injectHandMocapXml(injected);
+    this.grabInjected = this.scenePrefixed || !this.policyScene;
+    this.injectedWithoutPolicy = (this.grabInjected || hands) && !this.scenePrefixed;
     if (this.grabInjected) {
       injected = injectPointerGrabXml(injected);
     } else {
       console.warn(
-        '[mjswan] grab is off for this scene: a policy is loaded and the model is not ' +
+        '[mjswan] grab is off for this scene: it has a policy and the model is not ' +
           'entity-prefixed, so an extra body would change a traced graph\'s input width.',
       );
     }
-    if (injected !== xml) this.mujoco.FS.writeFile(path, injected);
+    this.mujoco.FS.writeFile(`/working/${file}`, injected);
   }
 
   async startLoop(): Promise<void> {
+    // A load or rebuild finishing after dispose must not restart the loop.
+    if (this.disposed) {
+      this.running = false;
+      return;
+    }
     if (this.loopPromise) {
       return this.loopPromise;
     }
@@ -849,6 +889,196 @@ export class mjswanRuntime {
       dynamicBodyIds: this.dynamicBodyIds,
       controlDt: this.timestep * this.decimation,
     };
+  }
+
+  // ── WebXR ─────────────────────────────────────────────────────────────
+
+  /** The sessions this device can start. */
+  xrSessions(): XrSessionReport[] {
+    return xrSessionReports(this.xrSupported, this.activeXr);
+  }
+
+  /** Null on a device without VR, where no session could track hands. */
+  handTrackingReport(): { available: boolean; reason?: string; enabled: boolean } | null {
+    if (!this.xrSupported.vr) return null;
+    const reason = this.handTrackingBlockerNow();
+    return reason === null
+      ? { available: true, enabled: this.handTrackingEnabled }
+      : { available: false, reason, enabled: this.handTrackingEnabled };
+  }
+
+  setHandTracking(enabled: boolean): void {
+    if (enabled === this.handTrackingEnabled) return;
+    this.handTrackingEnabled = enabled;
+    this.onXrChange?.();
+  }
+
+  /**
+   * Asks for the session from the host's click: the browser grants one only inside that
+   * gesture, so nothing is awaited before the request. `hand-tracking` is decided here,
+   * since it has to be in the request. Null when no entry is possible now.
+   */
+  async requestXr(id: XrSessionId): Promise<XrRequest | null> {
+    const xr = navigator.xr;
+    if (this.disposed || !xr || !this.xrSupported[id] || this.enteringXr || this.xrSession) return null;
+    this.enteringXr = true;
+    const hands = this.wantsHands();
+    try {
+      const session = await xr.requestSession(XR_SESSION_MODES[id], xrSessionInit(id, hands));
+      this.xrSession = session;
+      session.addEventListener('end', () => this.onXrSessionClosed(session), { once: true });
+      return { id, session, hands };
+    } catch (error) {
+      this.enteringXr = false;
+      throw error;
+    }
+  }
+
+  /**
+   * Rebuilds the model when it disagrees with the hand switch, then hands the session to
+   * three, which must not render a model about to be replaced. Runs once no other load
+   * is, so the scene may have changed since the request, and the hands are decided again.
+   */
+  async startXr(request: XrRequest, onRebuild?: (addingHands: boolean) => void): Promise<void> {
+    const { id, session } = request;
+    try {
+      // Disposed, or ended from the headset, while it waited.
+      if (this.disposed || this.xrSession !== session) {
+        await session.end().catch(() => {});
+        return;
+      }
+      const hands = request.hands && this.wantsHands();
+      try {
+        // No model means an earlier rebuild failed; this retries it.
+        if ((hands !== this.modelHasHands || !this.mjModel) && this.sceneXml) {
+          onRebuild?.(hands);
+          await this.rebuildModel(hands);
+        }
+        if (this.xrSession !== session) return;
+        this.renderer.xr.setReferenceSpaceType('local-floor');
+        await this.renderer.xr.setSession(session);
+      } catch (error) {
+        await session.end().catch(() => {});
+        throw error;
+      }
+      this.activeXr = id;
+      this.onXrChange?.();
+    } finally {
+      this.enteringXr = false;
+    }
+  }
+
+  async exitXr(): Promise<void> {
+    await this.xrSession?.end();
+  }
+
+  private onXrSessionClosed(session: XRSession): void {
+    if (this.xrSession !== session) return;
+    this.xrSession = null;
+    this.activeXr = null;
+    this.onXrChange?.();
+  }
+
+  private wantsHands(): boolean {
+    return this.handTrackingEnabled && this.xrSupported.vr && this.handTrackingBlockerNow() === null;
+  }
+
+  private handTrackingBlockerNow(): string | null {
+    if (this.modelFormat === null) return null;
+    return handTrackingBlocker({
+      format: this.modelFormat,
+      prefixed: this.scenePrefixed,
+      hasPolicy: this.policyScene,
+    });
+  }
+
+  /** A policy runs on this model, or came with the scene and may run on it again. */
+  private get policyScene(): boolean {
+    return this.sceneHasPolicy || this.sceneLoadedWithPolicy;
+  }
+
+  /** Asked again on `devicechange`, since a PC headset can be plugged in after load. */
+  private async checkXrSupport(): Promise<void> {
+    const xr = navigator.xr;
+    if (!xr) return;
+    const check = ++this.xrCheck;
+    const answers = await Promise.all(
+      XR_SESSION_IDS.map(async (id) => {
+        try {
+          return await xr.isSessionSupported(XR_SESSION_MODES[id]);
+        } catch (error: unknown) {
+          // Throws in a frame not granted `xr-spatial-tracking`.
+          console.warn(`[mjswan] isSessionSupported('${XR_SESSION_MODES[id]}') failed:`, error);
+          return false;
+        }
+      }),
+    );
+    if (this.disposed || check !== this.xrCheck) return;
+    const supported = { ...this.xrSupported };
+    XR_SESSION_IDS.forEach((id, i) => {
+      supported[id] = answers[i];
+    });
+    const changed = XR_SESSION_IDS.some((id) => supported[id] !== this.xrSupported[id]);
+    this.xrSupported = supported;
+    if (changed) this.onXrChange?.();
+  }
+
+  private onXrDeviceChange = (): void => {
+    void this.checkXrSupport();
+  };
+
+  /**
+   * Recompile the loaded scene with or without the hand bones, keeping the policy, motion,
+   * reference ghost, command values, debug drawings, event schedules, splat and camera. The
+   * simulation restarts as after a reset. The hands are appended, so original body ids (and
+   * a camera tracking one) stay valid.
+   */
+  private async rebuildModel(hands: boolean): Promise<void> {
+    const wasRunning = this.running;
+    await this.stop();
+    this.interaction.cancel();
+    const motion = this.getSelectedMotionName();
+    // Before the policy reload, which shows the ghost again.
+    const reference = this.referenceVisible;
+    const values = this.commandManager.getValues();
+    const drawings = this.commandManager.getDebugVisTerms();
+    const schedules = this.eventManager?.controls().filter((c) => c.kind === 'interval') ?? [];
+    const kept = { module: this.onnxModule };
+
+    // Drop everything holding the old model before freeing it: command terms read it every frame.
+    this.commandManager.clear();
+    this.eventManager = null;
+    this.onnxModule = null;
+    this.modelFieldDefaults = null;
+    this.releaseModel();
+    this.bodies = null;
+    this.lights = [];
+    this.mujocoRoot = null;
+    this.dynamicBodyIds = null;
+
+    this.injectViewerBodies(hands);
+    try {
+      await this.buildScene(this.sceneXml!.file);
+    } catch (error) {
+      // As `buildSceneFromModel` does, or the next scene load waits on this failure.
+      this.loadingScene = null;
+      // Free any half-built model, so the next entry finds none and retries.
+      this.releaseModel();
+      kept.module?.dispose();
+      throw isWasmOom(error) ? new WasmMemoryLimitError() : error;
+    }
+    if (this.mjModel) this.modelFieldDefaults = new ModelFieldDefaults(this.mjModel);
+    await this.loadPolicyConfig(this.currentPolicy, kept);
+    if (motion !== null) await this.setSelectedMotion(motion);
+    this.setReferenceVisible(reference);
+    for (const [id, value] of Object.entries(values)) this.commandManager.setValue(id, value);
+    for (const { name, enabled } of drawings) this.commandManager.setDebugVisEnabled(name, enabled);
+    for (const { name, armed } of schedules) this.setEventArmed(name, armed);
+
+    if (wasRunning) {
+      this.running = true;
+      void this.startLoop();
+    }
   }
 
   get isRunning(): boolean {
@@ -992,7 +1222,13 @@ export class mjswanRuntime {
     }
   }
 
-  async loadPolicyConfig(policy: ResolvedPolicy | null): Promise<void> {
+  /** `kept` holds a rebuild's ONNX sessions: bound to no model, they are reused, not rebuilt. */
+  async loadPolicyConfig(
+    policy: ResolvedPolicy | null,
+    kept?: { module: OnnxModule | null },
+  ): Promise<void> {
+    this.currentPolicy = policy;
+    this.sceneHasPolicy = policy !== null;
     this.policyPlugins = policy?.plugins ?? {};
     this.policyRunner = null;
     this.policyStateBuilder = null;
@@ -1006,7 +1242,7 @@ export class mjswanRuntime {
     this.eventManager = null;
     // Before the release below — `setPolicy` runs live.
     this.commandManager.clear();
-    await this.policyGraphs.clear();
+    if (!kept) await this.policyGraphs.clear();
     this.jointBias.clear();
     this.clipActions = null;
     this.raycastSensors = {};
@@ -1037,18 +1273,18 @@ export class mjswanRuntime {
     }
 
     if (this.injectedWithoutPolicy) {
-      // `injectViewerBodies` only saw the policy the scene was loaded with, not this one.
+      // `injectViewerBodies` only saw the policy the model was built for, not this one.
       console.warn(
         '[mjswan] this scene was loaded without a policy, so the viewer added its grab ' +
-          'anchor to a model that does not namespace its elements. A traced graph indexed ' +
-          'by body or geom will be fed the wrong width. Load the scene with the policy ' +
-          'selected to get the model without it.',
+          'anchor or tracked hands to a model that does not namespace its elements. A ' +
+          'traced graph indexed by body or geom will be fed the wrong width. Load the ' +
+          'scene with the policy selected to get the model without them.',
       );
     }
 
     try {
       const config = policy.config;
-      await this.policyGraphs.load(policy.graphs ?? []);
+      if (!kept) await this.policyGraphs.load(policy.graphs ?? []);
       if (config.events && config.events.length > 0) {
         this.eventManager = new EventManager(
           config.events,
@@ -1115,7 +1351,8 @@ export class mjswanRuntime {
               ?? config.motions?.[0]?.name
               ?? null
           );
-          motionTerm.setReferenceVisible?.(true);
+          // Through the setter, so a rebuild restores the ghost as shown.
+          this.setReferenceVisible(true);
         }
         this.mujoco.mj_forward(this.mjModel, this.mjData);
         this.updateCachedState();
@@ -1174,8 +1411,9 @@ export class mjswanRuntime {
         console.log(`[TerminationManager] ${this.terminationManager.size} termination term(s) loaded`);
       }
 
-      const module = new OnnxModule(policy.onnx, { in_keys: config.in_keys, out_keys: config.out_keys });
-      await module.init();
+      const module =
+        kept?.module ?? new OnnxModule(policy.onnx, { in_keys: config.in_keys, out_keys: config.out_keys });
+      if (module !== kept?.module) await module.init();
       this.onnxModule = module;
       this.onnxInputDict = module.initInput();
 
@@ -1187,6 +1425,7 @@ export class mjswanRuntime {
     } catch (error) {
       // Everything above is load-bearing, so rethrow rather than report success, and
       // clear the partially-assigned fields so a failure leaves no policy, not half of one.
+      kept?.module?.dispose();
       this.policyRunner = null;
       this.policyStateBuilder = null;
       this.policyControl = null;
@@ -1194,6 +1433,8 @@ export class mjswanRuntime {
       this.onnxInputDict = null;
       this.terminationManager = null;
       this.eventManager = null;
+      this.currentPolicy = null;
+      this.sceneHasPolicy = false;
       throw error;
     }
   }
@@ -1502,7 +1743,7 @@ export class mjswanRuntime {
       }
     }
     // After the qpos writes above, which do not cover the injected hand bodies.
-    this.handMocap?.park(this.mjData);
+    if (this.modelHasHands) this.handMocap.park(this.mjData);
     this.interaction.onReset();
     // With the sim state, as mjlab does: a force from before the reset would otherwise
     // keep an `illegal_contact` term firing.
@@ -1536,7 +1777,7 @@ export class mjswanRuntime {
     }
     // Viewer-only: pointer modes and tracked hands, not part of the MDP.
     this.interaction.preStep();
-    this.handMocap?.update(this.mjModel, this.mjData);
+    if (this.modelHasHands) this.handMocap.update(this.mjModel, this.mjData);
 
     this.refreshActionReferences();
     stepPhysics(
@@ -1685,7 +1926,7 @@ export class mjswanRuntime {
 
   /** Hand bones and the pointer's grab anchor, once the model is built. */
   private collectInjectedBodyIds(): Set<number> {
-    const ids = new Set<number>(this.handMocap?.bodyIds() ?? []);
+    const ids = new Set<number>(this.handMocap.bodyIds());
     if (this.mjModel && this.grabInjected) {
       const anchor = this.mujoco.mj_name2id(
         this.mjModel,
@@ -1721,7 +1962,7 @@ export class mjswanRuntime {
     if (!this.mjModel || !this.bodies) {
       return;
     }
-    for (const bodyId of this.handMocap?.bodyIds() ?? []) {
+    for (const bodyId of this.handMocap.bodyIds()) {
       const mesh = this.bodies[bodyId]?.children[0] as THREE.Mesh | undefined;
       const geomId = mesh?.userData.geomId as number | undefined;
       if (!mesh || geomId === undefined) {
@@ -1760,17 +2001,6 @@ export class mjswanRuntime {
       getPosition(this.mjData.xpos, bodyId, body.position);
       getQuaternion(this.mjData.xquat, bodyId, body.quaternion);
     }
-  }
-
-  /**
-   * Right of the VR button, or centred when there is none. Only the AR button moves:
-   * `VRButton` re-centres itself when its own check resolves, after this runs.
-   */
-  private layoutArButton(): void {
-    if (!this.arButton) {
-      return;
-    }
-    this.arButton.style.left = this.vrButton ? 'calc(50% + 60px)' : 'calc(50% - 50px)';
   }
 
   /** Kept as an offset: the orbit target goes on tracking a moving body through a session. */
@@ -1915,6 +2145,9 @@ export class mjswanRuntime {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    navigator.xr?.removeEventListener('devicechange', this.onXrDeviceChange);
+    // The headset would otherwise stay on a scene nothing renders any more.
+    void this.xrSession?.end().catch(() => {});
     // Await stop so the loop halts before we free the state it reads.
     await this.stop();
     this.policyRunner = null;
@@ -1958,16 +2191,6 @@ export class mjswanRuntime {
 
     if (this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
-    }
-
-    if (this.vrButton?.parentElement) {
-      this.vrButton.parentElement.removeChild(this.vrButton);
-      this.vrButton = null;
-    }
-
-    if (this.arButton?.parentElement) {
-      this.arButton.parentElement.removeChild(this.arButton);
-      this.arButton = null;
     }
 
     this.bodies = null;

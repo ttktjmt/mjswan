@@ -11,14 +11,8 @@ import { parseManifest, sanitizeName, type Catalog, type ProjectCatalog, type By
 import { applyUrlState, PANEL_PARAM, POLICY_PARAM, PROJECT_PARAM, REF_PARAM, SCENE_PARAM } from './urlState';
 import './App.css';
 
-const HANDS_PARAM = 'hands';
-
 function paramFlag(param: string): boolean {
   return new URLSearchParams(window.location.search).get(param) !== '0';
-}
-
-function paramEnabled(param: string): boolean {
-  return new URLSearchParams(window.location.search).get(param) === '1';
 }
 
 /** Lazy fetch of a build-relative asset path against the SPA base URL. */
@@ -144,7 +138,6 @@ function AppContent() {
       showLoading('Loading MuJoCo…');
       const engine = await createEngine(container, {
         multithreaded: __MUJOCO_MT__,
-        handTracking: paramEnabled(HANDS_PARAM),
       });
       if (disposed) {
         engine.dispose();
@@ -377,6 +370,16 @@ function AppContent() {
             onInteractionParamChange={(mode, name, value) =>
               engineRef.current?.interaction.setParam(mode, name, value)
             }
+            xrSessions={engineState?.xrSessions ? [...engineState.xrSessions] : []}
+            handTracking={engineState?.handTracking ?? null}
+            onXrSessionPress={(id, active) => {
+              const xr = engineRef.current?.xr;
+              if (!xr) return;
+              (active ? xr.exit() : xr.enter(id)).catch((err: unknown) => {
+                console.warn('[WebXR] session failed:', err);
+              });
+            }}
+            onHandTrackingChange={(enabled) => engineRef.current?.xr.setHandTracking(enabled)}
             onReset={() => engineRef.current?.reset()}
           />
         )}

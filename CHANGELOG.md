@@ -14,6 +14,13 @@ shortcuts.
 
 ### Added
 
+- **WebXR entry through the engine API**: `engine.xr` (`enter(id)`, `exit()`,
+  `setHandTracking(enabled)`), `state.xrSessions` and `state.handTracking`. The host draws
+  its own buttons from `state.xrSessions` and calls `enter` from its click, the gesture the
+  browser requires. The app's control panel gains a collapsed **WebXR** section below
+  **Interact**, shown only where a session can start: **Enter VR**, **Start AR** and the
+  **Hand tracking** switch.
+
 - **Whole MuJoCo models load from the Hugging Face Hub**: `ProjectHandle.add_scene_hf()`
   beside `add_scene_mjlab`, and `source.hf.fetch_dir()` behind it. A model is rarely one
   file (the MJCF names meshes MuJoCo resolves relative to it), so the XML's whole
@@ -168,11 +175,11 @@ shortcuts.
   in the browser, completing `height_scan`) and `ContactSensor`.
 - Seeded PRNG behind every term's randomness (`createEngine({ termSeed })`, reported
   back as `MjswanEngineState.termSeed`), so a recorded session replays.
-- **WebXR hand tracking as bodies in the simulation** (`createEngine({ handTracking:
-  true })`, or `?hands=1` on the bundled app). A headset can bat a scene's objects around,
-  rest one on an open palm, and pinch to pick one up: a 2 kg box, lifted by friction
-  alone. Opt-in: the bodies are added to every scene loaded from MJCF, at about 1.6x per
-  physics step.
+- **WebXR hand tracking as bodies in the simulation** (the **Hand tracking** switch, or
+  `engine.xr.setHandTracking`). A headset can bat a scene's objects around, rest one on an
+  open palm, and pinch to pick one up: a 2 kg box, lifted by friction alone. Opt-in: the
+  bodies go into a scene built from MJCF while the switch is on, at about 1.6x per physics
+  step.
 - **Thumbstick locomotion in VR.** The camera and the tracked hands now hang off an XR
   rig, which is what a session moves: the left stick slides the viewer along its heading,
   and the right stick turns it about the head for as long as it is held, at a rate the
@@ -243,6 +250,26 @@ shortcuts.
 - The `mjlab-to-mjswan` agent skill ([skills/mjlab-to-mjswan/](skills/mjlab-to-mjswan/)), published from this repo as the `mjswan` Claude Code plugin (`/mjswan:mjlab-to-mjswan`): it ports one mjlab task from any repo into a browser app.
 
 ### Changed
+
+- **The engine no longer draws ENTER VR / START AR.** They sat on `document.body`, over the
+  host's own controls; a host driving `createEngine` now draws its own from
+  `state.xrSessions`. Without three's `VRButton` the page no longer calls
+  `navigator.xr.offerSession`, so a browser stops offering its own VR entry for it.
+- **Hand tracking is a switch, applied at the next model build.** The hands are compiled
+  into the model, so `engine.xr.setHandTracking` rebuilds nothing: the next scene load
+  builds them in, and entering VR or AR first rebuilds a model built the other way. The
+  rebuild keeps the policy, motion, command values, debug drawings, event schedules, splat
+  and camera, and starts the simulation over. `createEngine({ handTracking })` now sets the
+  switch's starting state.
+- **The hands follow the grab anchor's rule.** A policy scene whose model does not
+  namespace its elements now reports `handTracking.available: false` with a reason, as a
+  compiled `.mjb` does, since the hand bones would widen its traced graphs' input. A scene
+  loaded with a policy keeps the rule after the policy is cleared, so neither the hands nor
+  the anchor go into a model its policy may come back to.
+- **The model verbs run one at a time.** `loadScene`, `setPolicy` and `setMotion` used to
+  interleave when called together; they now run in call order, `xr.enter` waits for them
+  before any rebuild, and `dispose` waits for the one running rather than freeing a model
+  it is still building.
 
 - **`mjswan demo` lists the demos instead of running one.** Every demo downloads models
   and checkpoints before it shows anything, which is not what to do to someone who typed
@@ -523,6 +550,9 @@ shortcuts.
   weekly CI parity sweep catches upstream drift. The `examples` extra adds `onnxruntime`.
 
 ### Removed
+
+- **`?hands=1`.** Use the **Hand tracking** switch in the control panel's WebXR section
+  instead. It starts off on every page load and is not written to the URL.
 
 - **The pre-0.8 compatibility aliases** (`mjswan._compat`), which were due to go in 0.9:
   the renamed methods (`add_mjlab_scene`, `add_policy_from_wandb`, `set_viewer_config`,
