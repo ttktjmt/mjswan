@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://ttktjmt.github.io/mjswan/"><img src="assets/demo.gif" width="70%"/></a>
+  <a href="https://ttktjmt.github.io/mjswan/"><img src="assets/demo.webp" width="70%"/></a>
 </p>
 
 <p align="center">
@@ -31,8 +31,8 @@
 ## News
 
 - **2026-08-17**: Created [mjswan_playground](https://github.com/ttktjmt/mjswan_playground), a collection of mjswan demos
-- **2026-08-15**: Became mjlab-native, covering most tasks in [mjlab](https://github.com/mujocolab/mjlab)
-- **2026-06-02**: Adopted for the [MuscleMimic](https://github.com/amathislab/musclemimic) live demo [[Demo](https://mjswan-musclemimic.pages.dev/)]
+- **2026-08-15**: Became mjlab-native, covering most [mjlab](https://github.com/mujocolab/mjlab) tasks
+- **2026-06-02**: Adopted for the [MuscleMimic](https://github.com/amathislab/musclemimic) live demo [[Demo](https://mjswan-musclemimic.pages.dev/), [X](https://x.com/ckli85/status/2100242247547572394)]
 - **2026-05-06**: Adopted for the [GentleHumanoid](https://gentle-humanoid.axell.top/#/) live demo [[Demo](https://mjswan-gentlehumanoid.pages.dev/), [X](https://x.com/Axell_wppr/status/2051878574874148953)]
 - **2026-04-08**: Featured in the [MuJoCo README](https://github.com/google-deepmind/mujoco#first-party-bindings)
 
