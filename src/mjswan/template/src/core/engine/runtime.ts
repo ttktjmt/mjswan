@@ -1064,7 +1064,7 @@ export class mjswanRuntime {
       this.loadingScene = null;
       // Free any half-built model, so the next entry finds none and retries.
       this.releaseModel();
-      kept.module?.dispose();
+      await kept.module?.dispose();
       throw isWasmOom(error) ? new WasmMemoryLimitError() : error;
     }
     if (this.mjModel) this.modelFieldDefaults = new ModelFieldDefaults(this.mjModel);
@@ -1227,6 +1227,7 @@ export class mjswanRuntime {
     policy: ResolvedPolicy | null,
     kept?: { module: OnnxModule | null },
   ): Promise<void> {
+    const outgoing = this.onnxModule;
     this.currentPolicy = policy;
     this.sceneHasPolicy = policy !== null;
     this.policyPlugins = policy?.plugins ?? {};
@@ -1240,8 +1241,9 @@ export class mjswanRuntime {
     this.terminationManager = null;
     // The outgoing MDP's events go with it; `terrainData` stays, it is the scene's.
     this.eventManager = null;
-    // Before the release below — `setPolicy` runs live.
+    // Before the releases below: `setPolicy` runs live.
     this.commandManager.clear();
+    if (outgoing && outgoing !== kept?.module) await outgoing.dispose();
     if (!kept) await this.policyGraphs.clear();
     this.jointBias.clear();
     this.clipActions = null;
@@ -1425,7 +1427,7 @@ export class mjswanRuntime {
     } catch (error) {
       // Everything above is load-bearing, so rethrow rather than report success, and
       // clear the partially-assigned fields so a failure leaves no policy, not half of one.
-      kept?.module?.dispose();
+      await kept?.module?.dispose();
       this.policyRunner = null;
       this.policyStateBuilder = null;
       this.policyControl = null;
@@ -2154,10 +2156,9 @@ export class mjswanRuntime {
     this.policyStateBuilder = null;
 
     // Not cache-managed, so they leak across navigations unless freed here.
-    if (this.onnxModule) {
-      this.onnxModule.dispose();
-      this.onnxModule = null;
-    }
+    const module = this.onnxModule;
+    this.onnxModule = null;
+    await module?.dispose();
     this.onnxInputDict = null;
     this.onnxInferencing = false;
     await this.policyGraphs.clear();
