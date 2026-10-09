@@ -21,6 +21,7 @@ mjswan --help
 | [`mjswan login`](#mjswan-login-whoami-logout) | Sign in to mjswan Cloud via GitHub |
 | [`mjswan whoami`](#mjswan-login-whoami-logout) | Show the signed-in account |
 | [`mjswan logout`](#mjswan-login-whoami-logout) | Remove the stored session |
+| [`mjswan version`](#mjswan-version) | Print the installed mjswan version (also `mjswan --version`) |
 
 ## `mjswan view`
 
@@ -162,3 +163,12 @@ mjswan logout              # remove the stored session
 `--no-open` prints the authorization URL instead of opening a browser — useful over SSH.
 The session is stored locally; `mjswan whoami` exits non-zero when there is none, or when
 one exists locally but is no longer valid server-side.
+
+## `mjswan version`
+
+```bash
+mjswan version
+mjswan --version
+```
+
+Print the installed mjswan version, e.g. `mjswan 0.11.3`.

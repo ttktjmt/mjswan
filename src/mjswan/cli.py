@@ -11,6 +11,8 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+from mjswan import __version__
+
 app = typer.Typer(
     name="mjswan",
     help="Browser-based MuJoCo simulation with real-time policy control.",
@@ -522,3 +524,33 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
                     f"[dim]mdp={escape(str(policy.get('mdp')))}{size_str}[/dim]"
                 )
     return total_bytes
+
+
+# ── version ───────────────────────────────────────────────────
+
+
+@app.command("version")
+def version_cmd() -> None:
+    """Show the mjswan version."""
+    console.print(f"mjswan {__version__}")
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        version_cmd()
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show the version and exit.",
+        ),
+    ] = False,
+) -> None:
+    pass

@@ -14,6 +14,8 @@ shortcuts.
 
 ### Added
 
+- **`mjswan version` and `mjswan --version`** print the installed mjswan version.
+
 - **A traced command can read another command.** `env.command_manager.get_command()` and
   `get_term(...).<field>` inside `_resample_command` / `_update_command` become
   `{command, field}` input slots, served from that command's state as an observation's

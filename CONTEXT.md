@@ -246,6 +246,7 @@ The primary CLI is `mjswan` (Typer-based, defined in `cli.py:app`). Subcommands:
 | `mjswan info <dist-dir \| document.swn>` | Show a tree of projects/scenes/policies and asset sizes |
 | `mjswan publish <dist-dir>` | Upload a built dist's data files to mjswan Cloud (rejects custom-TS builds) |
 | `mjswan login` / `whoami` / `logout` | mjswan Cloud session (loopback GitHub OAuth) |
+| `mjswan version` / `--version` | Print the installed mjswan version |
 
 
 ## Tooling and workflow
