@@ -274,6 +274,9 @@ def build_single_entity_trace_env(
             raise ValueError(f"control_dt must be positive, got {control_dt!r}.")
         # decimation=1 keeps step_dt exact; an ulp off can shift the horizon a step.
         env_cfg.sim.mujoco.timestep = control_dt
+    # Nothing traced reads a contact, and more collision candidates than the one-env
+    # `nconmax` holds overrun mujoco_warp's narrowphase buffer and can crash `reset()`.
+    env_cfg.sim.mujoco.disableflags = ("contact",)
     # Through `build_mjlab_env` for its quieting.
     env = build_mjlab_env(env_cfg, device=device)
     env.reset()

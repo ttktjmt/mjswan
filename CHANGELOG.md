@@ -727,6 +727,10 @@ shortcuts.
 
 ### Fixed
 
+- **`build_single_entity_trace_env` computes no contacts.** A scene with more collision
+  candidates than the one-env `nconmax` holds could crash the build with a bus error in
+  `reset()`; nothing traced reads a contact.
+
 - **`apply_mjlab_sim_options` writes the whole `MujocoCfg` for any caller.** It fell
   back to copying the flags alone unless `add_scene_mjlab` had installed
   `MujocoCfg.apply_to_spec` first, so a scene built from XML that called it ran at

@@ -65,6 +65,23 @@ def test_default_joint_pos_comes_from_the_models_keyframe():
     assert dict(zip(names, defaults)) == pytest.approx(STAND)
 
 
+def test_the_trace_env_computes_no_contacts():
+    """Nothing traced reads a contact; too many can crash mujoco_warp in `reset()`."""
+    resting = """
+    <mujoco>
+      <worldbody>
+        <geom type="plane" size="1 1 0.1"/>
+        <body name="base" pos="0 0 0.05">
+          <freejoint/>
+          <geom type="box" size="0.1 0.1 0.1"/>
+        </body>
+      </worldbody>
+    </mujoco>
+    """
+    env = build_single_entity_trace_env(lambda: mujoco.MjSpec.from_string(resting))
+    assert int(env.sim.data.nacon[0]) == 0
+
+
 def test_a_model_without_a_keyframe_keeps_mjlabs_zero_default():
     """No keyframe means the zero pose *is* the rest pose — mjlab's own default."""
     env = build_single_entity_trace_env(_spec_fn(""))
