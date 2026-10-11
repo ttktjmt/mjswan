@@ -98,6 +98,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Single-threaded apps never load `mujoco/mt`; the stub keeps its 10 MB build out of `dist/`.
+      ...(isMt ? {} : { 'mujoco/mt': path.resolve(__dirname, 'src/engine/mujocoMtStub.ts') }),
     },
   },
   optimizeDeps: {
