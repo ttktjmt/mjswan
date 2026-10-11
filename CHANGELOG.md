@@ -727,6 +727,11 @@ shortcuts.
 
 ### Fixed
 
+- **A single-threaded build no longer ships the multithreaded MuJoCo.** Built without
+  `Builder(mt=True)`, the SPA resolves `mujoco/mt` to a stub, which leaves out the
+  10.5 MB build its app never loads: the engine goes from 36 MB to 26 MB. An `mt=True`
+  build ships both, as before.
+
 - **`build_single_entity_trace_env` computes no contacts.** A scene with more collision
   candidates than the one-env `nconmax` holds could crash the build with a bus error in
   `reset()`; nothing traced reads a contact.
