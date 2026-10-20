@@ -10,6 +10,7 @@ from ._version import __version__ as __version__
 os.environ.setdefault("MUJOCO_GL", "disable")
 
 from .app import MjswanApp
+from .avatar import AvatarConfig
 from .builder import Builder
 from .envs.mdp import MdpBinding
 from .envs.mdp.actions import (
@@ -61,6 +62,7 @@ __all__ = [
     "ProjectConfig",
     "SceneConfig",
     "ViewerConfig",
+    "AvatarConfig",
     "SplatConfig",
     "PolicyConfig",
     "MdpConfig",

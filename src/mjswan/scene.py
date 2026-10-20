@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 import mujoco
 import numpy as np
 
+from .avatar import AvatarConfig, resolve_avatar
 from .document.ids import assign_id, assign_name, name2id, unique_id
 from .envs.mdp.actions import CommandJointPositionActionCfg
 from .license import Attribution, resolve_license, resolve_notice
@@ -379,6 +380,10 @@ class SceneConfig:
 
     viewer: ViewerConfig | None = None
     """Optional viewer configuration for this scene."""
+
+    avatar: AvatarConfig | None = None
+    """A VRM avatar drawn beside the robot, posed from its bodies; render only. Its
+    ``source`` is a local file once :meth:`SceneHandle.set_avatar` has run."""
 
     events: dict[str, Any] | None = None
     """The scene's event terms (mjswan or mjlab ``EventTermCfg``), adapted.
@@ -1665,6 +1670,28 @@ class SceneHandle:
             ))
         """
         self._config.viewer = config
+        return self
+
+    def set_avatar(self, config: AvatarConfig) -> SceneHandle:
+        """Draw a VRM avatar beside the robot, posed every frame from its bodies.
+
+        A render layer only: physics, collision and the policy are unchanged. A URL
+        source is downloaded now, and the build bundles the file unmodified, so its
+        embedded license metadata travels with it. The bone map is checked against the
+        scene's model here rather than at playback.
+
+        Args:
+            config: The avatar's file, bone map, rest offsets, scale and placement.
+
+        Returns:
+            Self for method chaining.
+
+        Raises:
+            FileNotFoundError: The source file does not exist.
+            urllib.error.URLError: The source URL does not download.
+            ValueError: The file is not a VRM, or a mapped body is not in the model.
+        """
+        self._config.avatar = resolve_avatar(config, _get_scene_model(self._config))
         return self
 
     def set_events(

@@ -517,6 +517,16 @@ Set the camera, tracking mode, and rendering options for the scene. See [`Viewer
 
 Returns `self` for chaining.
 
+### SceneHandle.set_avatar
+
+```python
+def set_avatar(config: AvatarConfig) -> SceneHandle
+```
+
+Draw a VRM avatar beside the robot, posed every frame from its bodies (proof of concept). Render only: physics, collision and the policy are unchanged. A URL `source` is downloaded here; a missing file raises `FileNotFoundError`, a URL that does not download `urllib.error.URLError`, and a file that is not binary glTF or a bone map naming a body the model lacks `ValueError`. The build copies the file unmodified to `assets/avatar.vrm`, so its embedded license metadata ships as authored. `mjswan publish` refuses a build with an avatar. See [`AvatarConfig`](#avatarconfig).
+
+Returns `self` for chaining.
+
 ### SceneHandle.set_events
 
 ```python
@@ -864,6 +874,31 @@ def from_position(
 ```
 
 Build a `ViewerConfig` from explicit Cartesian viewer/target positions — `lookat`, `distance`, `elevation`, and `azimuth` are computed.
+
+## AvatarConfig
+
+```python
+@dataclass(frozen=True)
+class mjswan.AvatarConfig(
+    bones: Mapping[str, str],
+    source: str | None = None,
+    rest_offsets: Mapping[str, tuple[float, float, float]] = {},
+    height_ratio: float | None = None,
+    offset: tuple[float, float, float] = (0.0, 1.0, 0.0),
+)
+```
+
+Everything one avatar needs, so swapping avatars swaps only this object. The browser rotates each mapped VRM humanoid bone the way its robot body has turned since the robot's zero pose (rotation only, no IK), and moves the hips with the robot's root. VRM 0.x and 1.0 take the same config.
+
+| Field | Description |
+|---|---|
+| `bones` | VRM humanoid bone (VRM 1.0 names, e.g. `"leftUpperArm"`) to robot body. Several bones may share a body; a body may leave out its entity prefix. `hips` is required. |
+| `source` | Local path or http(s) URL of the `.vrm`. Required by `set_avatar`; `dataclasses.replace` sets it on a shared config. |
+| `rest_offsets` | VRM bone to the rotation, in degrees about the avatar's x, then y, then z axis (y up, facing +z, its left toward +x), from its T-pose to where it sits while the robot is at its zero pose. |
+| `height_ratio` | Scale from the robot root's position to the avatar's hips. `None` takes the avatar's hips height over the root's height at the model's zero pose. |
+| `offset` | Added to the avatar's position, in MuJoCo's world frame, metres: it moves where the robot moves, this far aside. |
+
+`examples/demo/spinkick_avatar.py` is a complete G1 configuration.
 
 ---
 
@@ -1274,7 +1309,8 @@ dist/
         ├── policy/<policy-id>.onnx    ← the trained network, one per policy
         ├── assets/
         │   ├── <motion-id>.npz        ← one per distinct clip, shared by the scene's policies
-        │   └── <splat-id>.spz         ← only when source= is used
+        │   ├── <splat-id>.spz         ← only when source= is used
+        │   └── avatar.vrm             ← only with set_avatar, copied unmodified
         ├── LICENSE.<component>        ← a third-party component's license (detected or add_attribution)
         └── NOTICE.<component>         ← its notice
 ```

@@ -9,14 +9,21 @@ import type { Bytes } from '../core/utils/bytes';
 import type { SplatTransform } from '../core/scene/splat';
 import type { ModelFormat } from '../core/scene/scene';
 import type { EnginePlugins } from '../core/plugins';
+import type { AvatarConfig } from '../core/avatar/avatar';
 
 // Bytes: asset bytes or a lazy loader. EnginePlugins: custom MDP terms, trusted-only.
-export type { Bytes, SplatTransform, ModelFormat, EnginePlugins };
+export type { Bytes, SplatTransform, ModelFormat, EnginePlugins, AvatarConfig };
 
 export interface SplatInput {
   data: Bytes;            // .spz
   collider?: Bytes;       // optional collider mesh
   transform?: SplatTransform;
+}
+
+/** A VRM avatar posed from the robot's bodies; drawn only, never simulated. */
+export interface AvatarInput {
+  data: Bytes;            // .vrm
+  config: AvatarConfig;
 }
 
 export interface MotionInput {
@@ -54,6 +61,8 @@ export interface SceneInput {
   modelFormat?: ModelFormat;
   policy?: PolicyInput | null;
   splat?: SplatInput | null;
+  /** A file that fails to load warns and leaves the scene without it. */
+  avatar?: AvatarInput | null;
   viewer?: ViewerConfig;
   /**
    * Spawn positions (flat patches) any policy's event terms may draw from. The events

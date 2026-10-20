@@ -138,11 +138,16 @@ def _add_mjlab_tasks(builder: mjswan.Builder) -> None:
         # model's keyframe (cartpole's exports carry none).
         scene.add_policy_hf(HF_REPO, filename=_checkpoints_for(task_id, repo_onnx))
 
-    _add_tracking_scene(project, repo_onnx)
+    add_tracking_scene(project, repo_onnx)
 
 
-def _add_tracking_scene(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> None:
-    """G1 Spinkick: the one task whose policy needs a reference motion beside it."""
+def add_tracking_scene(
+    project: mjswan.ProjectHandle, repo_onnx: list[str]
+) -> mjswan.SceneHandle:
+    """G1 Spinkick: the one task whose policy needs a reference motion beside it.
+
+    Shared with ``spinkick_avatar.py``, which runs this scene on its own.
+    """
     env_cfg = load_env_cfg(TRACKING_TASK, play=True)
     motion_term = env_cfg.commands["motion"]
     scene = project.add_scene_mjlab(TRACKING_TASK, env_cfg=env_cfg)
@@ -176,6 +181,7 @@ def _add_tracking_scene(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> 
             body_names=list(motion_term.body_names),
             default=True,
         )
+    return scene
 
 
 # Project B: Showcase

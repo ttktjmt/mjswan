@@ -12,6 +12,7 @@ import type { Bytes } from '../core/utils/bytes';
 import type { ViewerConfig } from '../core/engine/viewer_config';
 import type { EventConfig, TerrainData } from '../core/event/EventBase';
 import type { SplatTransform } from '../core/scene/splat';
+import type { AvatarConfig } from '../core/avatar/avatar';
 import { policyGraphRefs } from '../core/onnx/graphRefs';
 import type { PolicyInput, SceneInput, SplatInput } from '../engine/types';
 
@@ -49,6 +50,10 @@ export interface ManifestSplat {
   yaw?: number;
   collider_url?: string;
   control?: boolean;
+}
+export interface ManifestAvatar extends AvatarConfig {
+  /** Scene-relative path of the bundled `.vrm` (`assets/avatar.vrm`). */
+  path: string;
 }
 export interface ManifestMotion {
   name: string;
@@ -98,6 +103,7 @@ export interface ManifestScene {
   terrain_data?: TerrainData;
   splat_section?: boolean;
   splats?: ManifestSplat[];
+  avatar?: ManifestAvatar;
   mdps: ManifestMdp[];
   policies: ManifestPolicy[];
 }
@@ -387,6 +393,9 @@ function toSceneEntry(
         modelFormat: scene.scene.endsWith('.mjb') ? 'mjb' : 'mjz',
         policy: policy ? buildPolicy(dir, scene, policy, source) : null,
         splat: splat ? buildSplat(dir, splat, source) : null,
+        avatar: scene.avatar
+          ? { data: source(inScene(dir, scene.avatar.path)), config: scene.avatar }
+          : null,
         viewer: toViewerConfig(scene.camera, format),
         terrainData: scene.terrain_data,
         controlDt: scene.control_dt,

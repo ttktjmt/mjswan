@@ -235,6 +235,7 @@ The engine never fetches. Every asset arrives as `Bytes` — an `ArrayBuffer`, o
       modelFormat?: 'mjz' | 'mjb';         // 'mjz' (default) from add_scene(spec=...), 'mjb' from model=
       policy?: PolicyInput | null;
       splat?: SplatInput | null;
+      avatar?: AvatarInput | null;         // a VRM posed from the robot; one that fails to load is skipped
       viewer?: ViewerConfig;
       terrainData?: TerrainData;           // spawn patches the policies' events may draw from
       controlDt?: number;                  // mjlab's timestep * decimation
@@ -261,6 +262,15 @@ The engine never fetches. Every asset arrives as `Bytes` — an `ArrayBuffer`, o
       data: Bytes;                         // .spz
       collider?: Bytes;                    // optional collision mesh
       transform?: SplatTransform;
+    }
+    ```
+
+=== "AvatarInput"
+
+    ```ts
+    interface AvatarInput {
+      data: Bytes;                         // .vrm (VRM 0.x or 1.0)
+      config: AvatarConfig;                // the manifest's scene `avatar` entry
     }
     ```
 

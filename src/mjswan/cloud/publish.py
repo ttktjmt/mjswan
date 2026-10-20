@@ -249,9 +249,9 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
     """Validate ``dist_dir`` and build the upload plan without any network I/O.
 
     Raises :class:`PublishError` on any client-side constraint violation:
-    missing/invalid config, custom-TS build, a ``.mjb`` scene, too many/too-large
-    files, a path that escapes the upload root, or a license file whose terms forbid
-    redistribution (ADR 0007 §3).
+    missing/invalid config, custom-TS build, a ``.mjb`` scene, an avatar, too
+    many/too-large files, a path that escapes the upload root, or a license file whose
+    terms forbid redistribution (ADR 0007 §3).
     """
     dist_dir = Path(dist_dir).expanduser().resolve()
     if not dist_dir.is_dir():
@@ -275,6 +275,14 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
     # An .mjb is not uploaded (DATA_EXTENSIONS), so the scene would publish without it.
     for project in config.get("projects", []):
         for scene in project.get("scenes", []):
+            # A local preview only: a VRM's terms can forbid redistribution, and the
+            # Cloud engine does not draw one.
+            if "avatar" in scene:
+                raise PublishError(
+                    f"Scene {scene.get('name')!r} carries a VRM avatar, which mjswan "
+                    "Cloud does not take. Build it without set_avatar() to publish it.",
+                    file="manifest.json",
+                )
             if scene.get("scene", "").endswith(".mjb"):
                 raise PublishError(
                     f"Scene {scene.get('name')!r} was built with add_scene(model=...), "

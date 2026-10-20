@@ -13,6 +13,7 @@ import { type Bytes } from '../utils/bytes';
 import type { EnginePlugins } from '../plugins';
 import { type SplatTransform, type SplatMesh, loadSplat, disposeSplat, applySplatTransform } from '../scene/splat';
 import { loadCollider, disposeCollider } from '../scene/collider';
+import { Avatar, type AvatarConfig } from '../avatar/avatar';
 import { InteractionManager, type InteractionSim } from '../interaction/InteractionManager';
 import type { InteractionModeId } from '../interaction/params';
 import { createTendonState, updateTendonGeometry, updateTendonRendering } from '../scene/tendons';
@@ -181,6 +182,12 @@ export type ResolvedSplat = {
   transform?: SplatTransform;
 };
 
+/** An avatar with its bytes resolved. */
+export type ResolvedAvatar = {
+  data: ArrayBuffer;
+  config: AvatarConfig;
+};
+
 /** A full scene ready to build: model bytes plus resolved policy/splat/config. */
 export type ResolvedScene = {
   model: ArrayBuffer;
@@ -188,6 +195,7 @@ export type ResolvedScene = {
   modelFormat?: ModelFormat;
   policy?: ResolvedPolicy | null;
   splat?: ResolvedSplat | null;
+  avatar?: ResolvedAvatar | null;
   viewer?: ViewerConfig | null;
   /** Spawn positions the event terms of any policy on this scene may draw from. */
   terrainData?: TerrainData | null;
@@ -339,6 +347,8 @@ export class mjswanRuntime {
   private splatMesh: SplatMesh | null;
   private colliderMesh: THREE.Group | null;
   private currentSplatTransform: SplatTransform;
+  /** Drawn beside the robot, posed from its bodies; outside the model. */
+  private avatar: Avatar | null = null;
   private cameraState: ViewerState;
   /** mjviser's "Track camera": whether the view follows the tracked body. */
   private cameraTracking = true;
@@ -558,6 +568,8 @@ export class mjswanRuntime {
       disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
+    this.avatar?.dispose();
+    this.avatar = null;
 
     // Initialize CommandManager with default velocity commands
     this.initializeCommands();
@@ -575,6 +587,9 @@ export class mjswanRuntime {
 
     if (scene.splat) {
       await this.applySplat(scene.splat);
+    }
+    if (scene.avatar) {
+      await this.applyAvatar(scene.avatar);
     }
 
     // Builds the MDP's event manager and fires its startup pass before the reset.
@@ -813,6 +828,22 @@ export class mjswanRuntime {
     this.splatMesh = loadSplat(splat.data, this.currentSplatTransform, this.scene);
     if (splat.collider) {
       this.colliderMesh = await loadCollider(splat.collider, this.scene);
+    }
+  }
+
+  /** Render only, so a file that does not load costs the avatar and nothing else. */
+  private async applyAvatar(input: ResolvedAvatar): Promise<void> {
+    try {
+      const avatar = await Avatar.load(input.data, input.config);
+      if (this.disposed || !this.mjModel) {
+        avatar.dispose();
+        return;
+      }
+      avatar.bind(this.mujoco, this.mjModel);
+      this.scene.add(avatar.root);
+      this.avatar = avatar;
+    } catch (error) {
+      console.warn('[mjswanRuntime] avatar not loaded; the scene runs without it:', error);
     }
   }
 
@@ -2212,6 +2243,8 @@ export class mjswanRuntime {
           body.quaternion.copy(state.quaternion);
         }
       }
+      // From the poses just drawn, so the avatar is never a frame behind the robot.
+      this.avatar?.update(this.bodies, performance.now());
 
       this.resizeHandBoneMeshes();
       updateLightsFromData(this.mujoco, this.mjData, this.lights);
@@ -2303,6 +2336,8 @@ export class mjswanRuntime {
       disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
+    this.avatar?.dispose();
+    this.avatar = null;
 
     this.interaction.dispose();
 

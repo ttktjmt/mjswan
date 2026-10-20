@@ -6,13 +6,20 @@
  * switch verbs, and folds the runtime's command events into one immutable state
  * snapshot for `subscribe`. No React, no catalog, no config.json, no fetch.
  */
-import { mjswanRuntime, type ResolvedPolicy, type ResolvedScene, type ResolvedSplat } from '../core/engine/runtime';
+import {
+  mjswanRuntime,
+  type ResolvedAvatar,
+  type ResolvedPolicy,
+  type ResolvedScene,
+  type ResolvedSplat,
+} from '../core/engine/runtime';
 import { type Bytes, resolveBytes } from '../core/utils/bytes';
 import type { CommandDefinition, CommandEventListener } from '../core/command';
 import type { PolicyConfig } from '../core/policy/types';
 import { INTERACTION_MODES, INTERACTION_MODE_IDS } from '../core/interaction/params';
 import { createSerial } from './serial';
 import type {
+  AvatarInput,
   CameraControls,
   CommandControls,
   CommandDescriptor,
@@ -77,6 +84,10 @@ async function resolveSplat(input: SplatInput): Promise<ResolvedSplat> {
     collider: input.collider ? await resolveBytes(input.collider) : null,
     transform: input.transform,
   };
+}
+
+async function resolveAvatar(input: AvatarInput): Promise<ResolvedAvatar> {
+  return { data: await resolveBytes(input.data), config: input.config };
 }
 
 function asError(err: unknown): Error {
@@ -247,6 +258,7 @@ class Engine implements MjswanEngine {
         modelFormat: input.modelFormat,
         policy: input.policy ? await resolvePolicy(input.policy) : null,
         splat: input.splat ? await resolveSplat(input.splat) : null,
+        avatar: input.avatar ? await resolveAvatar(input.avatar) : null,
         viewer: input.viewer ?? null,
         terrainData: input.terrainData ?? null,
         controlDt: input.controlDt ?? null,
