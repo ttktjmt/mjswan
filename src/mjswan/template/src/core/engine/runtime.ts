@@ -89,6 +89,9 @@ import { SeededRng } from '../rng';
 /** Fixed rather than time-derived, so a plain page load replays identically. */
 const DEFAULT_TERM_SEED = 0x5eed;
 
+/** The avatar's Debug Viz switch, which "Enabled" does not hide: the avatar is no drawing. */
+const SKIN_SWITCH = 'avatar:skin';
+
 
 /**
  * The scene's drawn bounds without the viewer's injected bodies. Recursive because every
@@ -568,8 +571,7 @@ export class mjswanRuntime {
       disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
-    this.avatar?.dispose();
-    this.avatar = null;
+    this.disposeAvatar();
 
     // Initialize CommandManager with default velocity commands
     this.initializeCommands();
@@ -842,24 +844,39 @@ export class mjswanRuntime {
       avatar.bind(this.mujoco, this.mjModel);
       this.scene.add(avatar.root);
       this.avatar = avatar;
-      this.hideRobotUnderAvatar();
+      this.debugVizSet.addSwitch(SKIN_SWITCH, {
+        label: 'Skin',
+        get: () => avatar.shown,
+        set: (shown) => {
+          avatar.setShown(shown);
+          this.drawRobotUnderAvatar();
+        },
+      });
+      this.drawRobotUnderAvatar();
     } catch (error) {
       console.warn('[mjswanRuntime] avatar not loaded; the scene runs without it:', error);
     }
   }
 
+  private disposeAvatar(): void {
+    this.debugVizSet.removeSwitch(SKIN_SWITCH);
+    this.avatar?.dispose();
+    this.avatar = null;
+  }
+
   /**
-   * The avatar as the robot's skin. Hidden by material, each geom's own: neither drawn
-   * nor shadowed, still hit by the pointer's raycast, and the tracking ghost, a clone
-   * with materials of its own, still shows.
+   * With `hide_robot`, the robot is drawn only while its skin is off. Hidden by material,
+   * each geom's own: neither drawn nor shadowed, still hit by the pointer's raycast, and
+   * the tracking ghost, a clone with materials of its own, still shows.
    */
-  private hideRobotUnderAvatar(): void {
+  private drawRobotUnderAvatar(): void {
     if (!this.avatar || !this.bodies) return;
+    const drawn = !this.avatar.shown;
     for (const bodyId of this.avatar.hiddenBodies) {
       this.bodies[bodyId]?.traverse((object) => {
         if (!(object as THREE.Mesh).isMesh) return;
         const material = (object as THREE.Mesh).material;
-        for (const m of Array.isArray(material) ? material : [material]) m.visible = false;
+        for (const m of Array.isArray(material) ? material : [material]) m.visible = drawn;
       });
     }
   }
@@ -1143,8 +1160,8 @@ export class mjswanRuntime {
       throw isWasmOom(error) ? new WasmMemoryLimitError() : error;
     }
     if (this.mjModel) this.modelFieldDefaults = new ModelFieldDefaults(this.mjModel);
-    // New body groups, drawn again; the avatar's body ids hold, as the hands are appended.
-    this.hideRobotUnderAvatar();
+    // New body groups, all drawn; the avatar's body ids hold, as the hands are appended.
+    this.drawRobotUnderAvatar();
     await this.loadPolicyConfig(this.currentPolicy, kept);
     if (motion !== null) await this.setSelectedMotion(motion);
     for (const [id, value] of Object.entries(values)) this.commandManager.setValue(id, value);
@@ -2355,8 +2372,7 @@ export class mjswanRuntime {
       disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
-    this.avatar?.dispose();
-    this.avatar = null;
+    this.disposeAvatar();
 
     this.interaction.dispose();
 

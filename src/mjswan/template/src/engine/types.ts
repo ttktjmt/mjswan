@@ -119,9 +119,12 @@ export interface CommandControls {
   trigger(id: string): void;
 }
 
-/** One of mjlab's Debug Viz switches: a command term's, raycast sensor's or reward term's drawing. */
+/**
+ * One of mjlab's Debug Viz switches: a command term's, raycast sensor's or reward term's
+ * drawing; or `avatar:skin`, the scene's VRM avatar, which "Enabled" does not hide.
+ */
 export interface DebugVisDescriptor {
-  /** `command:<term>`, `sensor:<name>` or `reward:<term>`; the id {@link DebugVisControls.set} takes. */
+  /** `command:<term>`, `sensor:<name>`, `reward:<term>` or `avatar:skin`; the id {@link DebugVisControls.set} takes. */
   id: string;
   /** As mjlab's checkbox reads: a command term capitalized, a sensor or reward term as named. */
   label: string;

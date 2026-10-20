@@ -19,7 +19,8 @@ shortcuts.
   bone the way its robot body has turned since the zero pose, so physics, collision and
   the policy never see it. The config is the whole avatar: file (path or URL, bundled
   unmodified), VRM-bone to body map, rest offsets, height ratio and placement, and
-  `hide_robot`, which with a zero offset makes the avatar the robot's skin. VRM 0.x and
+  `hide_robot`, which with a zero offset makes the avatar the robot's skin. A **Skin**
+  switch under Debug Viz shows or hides it, outside **Enabled**. VRM 0.x and
   1.0 load alike through `@pixiv/three-vrm`, loaded only for a scene that has an avatar.
   Spring bones integrate at a fixed 1/120 s through interpolated poses. `mjswan publish`
   refuses a build with one. `examples/demo/spinkick_avatar.py` runs the G1 Spinkick with

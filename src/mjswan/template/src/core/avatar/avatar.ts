@@ -113,6 +113,16 @@ export class Avatar {
     return this.vrm.meta?.metaVersion;
   }
 
+  get shown(): boolean {
+    return this.root.visible;
+  }
+
+  /** Hidden, it is not posed either; shown again, its springs start from the pose. */
+  setShown(shown: boolean): void {
+    this.root.visible = shown;
+    this.lastTime = null;
+  }
+
   /** Resolve the bone map against a (re)built model. Unresolved bones are left at rest. */
   bind(mujoco: MainModule, mjModel: MjModel): void {
     const humanoid = this.vrm.humanoid;
@@ -177,7 +187,7 @@ export class Avatar {
    */
   update(bodies: Record<number, THREE.Object3D>, time: number): void {
     const rig = this.rig;
-    if (!rig) return;
+    if (!rig || !this.shown) return;
     const dt = this.lastTime === null ? 0 : Math.min((time - this.lastTime) / 1000, MAX_FRAME_SECONDS);
     this.lastTime = time;
 

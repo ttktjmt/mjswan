@@ -523,7 +523,7 @@ Returns `self` for chaining.
 def set_avatar(config: AvatarConfig) -> SceneHandle
 ```
 
-Draw a VRM avatar beside the robot, posed every frame from its bodies (proof of concept). Render only: physics, collision and the policy are unchanged. A URL `source` is downloaded here; a missing file raises `FileNotFoundError`, a URL that does not download `urllib.error.URLError`, and a file that is not binary glTF or a bone map naming a body the model lacks `ValueError`. The build copies the file unmodified to `assets/avatar.vrm`, so its embedded license metadata ships as authored. `mjswan publish` refuses a build with an avatar. See [`AvatarConfig`](#avatarconfig).
+Draw a VRM avatar beside the robot, posed every frame from its bodies (proof of concept). Render only: physics, collision and the policy are unchanged. A URL `source` is downloaded here; a missing file raises `FileNotFoundError`, a URL that does not download `urllib.error.URLError`, and a file that is not binary glTF or a bone map naming a body the model lacks `ValueError`. The build copies the file unmodified to `assets/avatar.vrm`, so its embedded license metadata ships as authored. The viewer lists a **Skin** switch under Debug Viz that shows or hides the avatar (and, with `hide_robot`, brings the robot back). `mjswan publish` refuses a build with an avatar. See [`AvatarConfig`](#avatarconfig).
 
 Returns `self` for chaining.
 

@@ -129,6 +129,42 @@ describe('DebugViz', () => {
   });
 });
 
+describe('viewer switches', () => {
+  function withSkin() {
+    const viz = new DebugViz(commandsStub().commands, () => ({ mjModel: model, mjData: data }));
+    const skin = { on: true, set: [] as boolean[] };
+    viz.addSwitch('avatar:skin', {
+      label: 'Skin',
+      get: () => skin.on,
+      set: (enabled) => {
+        skin.set.push(enabled);
+        skin.on = enabled;
+      },
+    });
+    return { viz, skin };
+  }
+
+  it('lists a switch after the drawings, and sets it', () => {
+    const { viz, skin } = withSkin();
+    viz.load(CONFIG, mujoco, new THREE.Group());
+    const last = () => viz.entries()[viz.entries().length - 1];
+    expect(last()).toEqual({ id: 'avatar:skin', label: 'Skin', enabled: true });
+    viz.set('avatar:skin', false);
+    expect(skin.set).toEqual([false]);
+    expect(last().enabled).toBe(false);
+  });
+
+  it('is not hidden by "Enabled", and outlives a policy load', () => {
+    const { viz, skin } = withSkin();
+    viz.setShown(false);
+    expect(skin.set).toEqual([]);
+    viz.load(undefined, mujoco, new THREE.Group());
+    expect(viz.entries().map((entry) => entry.id)).toEqual(['command:base_velocity', 'avatar:skin']);
+    viz.removeSwitch('avatar:skin');
+    expect(viz.entries().map((entry) => entry.id)).toEqual(['command:base_velocity']);
+  });
+});
+
 describe('capitalize', () => {
   it("is Python's str.capitalize", () => {
     expect(capitalize('twist')).toBe('Twist');

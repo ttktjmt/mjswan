@@ -170,6 +170,26 @@ describe('Avatar', () => {
     expect(skin.hiddenBodies).toEqual([1, 2, 3, 4, 5]);
   });
 
+  it('is not posed while hidden, and takes up the pose when shown again', async () => {
+    const avatar = await Avatar.load(vrmFile('1'), CONFIG);
+    avatar.bind(mujoco, robot);
+    const hand = () => {
+      avatar.root.updateMatrixWorld(true);
+      return avatar.root.getObjectByName('leftHand')!.getWorldPosition(new THREE.Vector3());
+    };
+    avatar.update(bodies(0, 0), 0);
+    const atRest = hand();
+
+    avatar.setShown(false);
+    avatar.update(bodies(0, -1.2), 16);
+    expect(avatar.root.visible).toBe(false);
+    expect(hand().distanceTo(atRest)).toBeLessThan(1e-9);
+
+    avatar.setShown(true);
+    avatar.update(bodies(0, -1.2), 32);
+    expect(hand().distanceTo(atRest)).toBeGreaterThan(0.1);
+  });
+
   it('skips a bone the file lacks and a body the model lacks', async () => {
     const avatar = await Avatar.load(vrmFile('1'), {
       ...CONFIG,

@@ -144,6 +144,7 @@ checkbox reads, and whether it is `enabled`:
 | `command:<term>` | The term name capitalized (`Twist`, `Motion`) | The term's `_debug_vis_impl`: a velocity command's arrows, a tracking command's ghost (or body frames in `viz.mode="frames"`), and any drawing a binding's `viz` declares. |
 | `sensor:<name>` | The sensor name | A raycast sensor with `debug_vis`: a sphere at each hit, plus the rays and surface normals when its `viz` asks for them. |
 | `reward:<term>` | The term name | mjlab's `upright` reward: the fitted terrain normal and the body's up axis, when it rates tilt against terrain sensors. |
+| `avatar:skin` | `Skin` | The scene's VRM avatar, listed last whenever one is loaded. Off, the avatar is hidden and a robot it replaces (`hide_robot`) is drawn again. Not a drawing, so **Enabled** does not hide it. |
 
 `state.debugVisEnabled` is the folder's **Enabled**. mjlab's **All envs** has no
 counterpart: the browser runs one env. The bundled app draws the folder inside mjlab's
