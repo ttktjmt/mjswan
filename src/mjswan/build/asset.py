@@ -1,5 +1,5 @@
 """What lands in a scene's ``assets/``: the clips its policies carry, its splats, and
-its avatar."""
+its skins."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..avatar import AVATAR_PATH
 from ..document.ids import name2id, unique_id
 
 if TYPE_CHECKING:
@@ -108,17 +107,18 @@ def write_scene_splats(scene: SceneConfig, scene_dir: Path) -> None:
             )
 
 
-def write_scene_avatar(scene: SceneConfig, scene_dir: Path) -> None:
-    """Copy the avatar's ``.vrm`` unmodified, so its license metadata ships as authored."""
-    if scene.avatar is None or scene.avatar.source is None:
-        return
-    shutil.copyfile(scene.avatar.source, scene_dir / AVATAR_PATH)
+def write_scene_skins(scene: SceneConfig, scene_dir: Path) -> None:
+    """Copy each skin's ``.vrm`` to ``<scene_dir>/<id>.vrm`` unmodified, so its license
+    metadata ships as authored."""
+    for skin in scene.skins:
+        if skin.source is not None:
+            shutil.copyfile(skin.source, scene_dir / f"{skin.id}.vrm")
 
 
 __all__ = [
     "motion_key",
     "point_env_cfg_at_bundled_motion",
-    "write_scene_avatar",
     "write_scene_motions",
+    "write_scene_skins",
     "write_scene_splats",
 ]

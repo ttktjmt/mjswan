@@ -13,7 +13,7 @@ Output structure (ADR 0006 §2, license files ADR 0007 §1)::
             ├── scene.mjz | scene.mjb
             ├── mdp/<mdp-id>/{obs,term,command,event}/<name>.onnx
             ├── policy/<policy-id>.onnx
-            ├── assets/    (<motion>.npz, <splat>.spz, avatar.vrm)
+            ├── assets/    (<motion>.npz, <splat>.spz, <skin>.vrm)
             └── LICENSE.<component>, NOTICE.<component>  (third-party)
 """
 
@@ -42,8 +42,8 @@ from ..envs.mdp.actions.actions import (
 from ..mjlab.env import mdp_episode_length
 from .asset import (
     point_env_cfg_at_bundled_motion,
-    write_scene_avatar,
     write_scene_motions,
+    write_scene_skins,
     write_scene_splats,
 )
 from .frontend import TEMPLATE_DIR, ClientBuilder, install_spa, uses_custom_js
@@ -190,7 +190,7 @@ def write_app(
 
                 steps.on("copying splats")
                 write_scene_splats(scene, scene_assets_dir)
-                write_scene_avatar(scene, scene_dir)
+                write_scene_skins(scene, scene_assets_dir)
                 if not any(scene_assets_dir.iterdir()):
                     scene_assets_dir.rmdir()
 

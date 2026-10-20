@@ -20,7 +20,7 @@ src/mjswan/          Python package source: the object model at the root, one pa
   policy.py            PolicyConfig / PolicyHandle; the ONNX slot and width checks a policy passes
   motion.py            MotionConfig / MotionHandle; attaching a tracking task's clip
   splat.py             SplatConfig / SplatHandle (Gaussian Splat)
-  avatar.py            AvatarConfig: a VRM drawn beside the robot, posed from its bodies
+  skin.py              SkinConfig: a VRM avatar posed from the robot's bodies, render only
   viewer.py            ViewerConfig
   mdp.py               MdpConfig: the five term sets a policy runs against, as one shared unit
   cli.py               Typer-based `mjswan` CLI
@@ -57,7 +57,7 @@ src/mjswan/          Python package source: the object model at the root, one pa
 examples/            Runnable examples. Python only: assets are fetched at run time
   demo/                main.py (the deployed app: mjlab Tasks + Showcase, everything
                        from mjlab or the Hub), spinkick_avatar.py (main.py's Spinkick
-                       alone, with a VRM avatar), simple.py (one task, one checkpoint),
+                       alone, with VRM skins), simple.py (one task, one checkpoint),
                        minimum_policy.py (the smallest complete policy) and
                        mujoco_models.py (a gallery, no policy). `mjswan demo` runs
                        the three named ones; minimum_policy.py is read, not run
@@ -94,7 +94,7 @@ Builder(base_path, gtm_id, mt, debug)
               ├── .add_splat(name, source|url, ...) → SplatHandle
               ├── .add_splat_hf(repo_id, filename, ...) → SplatHandle  # downloaded, then bundled
               ├── .set_viewer(ViewerConfig)
-              ├── .set_avatar(AvatarConfig)         # a VRM posed from the robot; render only
+              ├── .add_skin(name, SkinConfig) → SkinHandle  # a VRM posed from the robot; render only
               ├── .set_events(events)             # the scene's default events for its policies
               └── .set_trace_env(env)             # required for a non-mjlab policy scene
 
@@ -171,8 +171,8 @@ A scene owns one MuJoCo model (as `MjModel` → binary `.mjb` or `MjSpec` → XM
 ### `splat.py` — `SplatConfig` / `SplatHandle`
 Configures a 3D Gaussian Splat (`.spz` format) background: scale, position offsets, Euler rotations, optional collider mesh URL, and a `control` flag exposing live calibration sliders.
 
-### `avatar.py`: `AvatarConfig`
-A VRM avatar drawn beside the robot, never part of the model: physics, collision and the policy are untouched. One frozen config is the whole avatar (the `.vrm` path or URL, a VRM-humanoid-bone to robot-body map, per-bone rest offsets, a height ratio, a placement, and `hide_robot`, which stops drawing the robot's own meshes so the avatar is its skin), so swapping avatars swaps the config. `set_avatar` downloads a URL, checks the file is binary glTF and every body is in the scene's model (bare names find `<entity>/<name>`), and the build copies the file unmodified to `assets/avatar.vrm`, embedded license metadata included. `mjswan publish` refuses a build carrying one. The browser side is `core/avatar/`.
+### `skin.py`: `SkinConfig`
+A skin is a VRM avatar drawn with the robot, never part of the model: physics, collision and the policy are untouched. One frozen config is the whole avatar (the `.vrm` path or URL, a VRM-humanoid-bone to robot-body map, per-bone rest offsets, a height ratio, a placement, and `hide_robot`, which stops drawing the robot's own meshes so the avatar is its skin), so swapping avatars swaps the config. A scene carries any number, like its splats; the viewer's Skin menu shows one at a time, the first by default. `add_skin(name, config)` downloads a URL, checks the file is binary glTF and every body is in the scene's model (bare names find `<entity>/<name>`), and the build copies each file unmodified to `assets/<skin-id>.vrm`, embedded license metadata included. `mjswan publish` refuses a build carrying one. The browser side is `core/skin/`.
 
 ### `viewer.py` — `ViewerConfig`
 Camera parameters (lookat, distance, fovy, elevation, azimuth) + tracking mode (`OriginType`: AUTO / WORLD / ASSET_ROOT / ASSET_BODY). Elevation and azimuth are MuJoCo's (the direction the camera looks), so an mjlab task's values carry over unchanged. `ViewerConfig.from_position()` computes spherical params from a Cartesian viewer position.
@@ -226,7 +226,7 @@ TypeScript + React + Vite + three.js. Built by `Builder.build()` via `build/fron
 
 `src/core/` mirrors mjlab's layout (`observation/`, `termination/`, `action/`, `event/`, `command/`) plus `onnx/` (`session.ts` caches split by lifetime, `runQueue.ts`, `slotReader/` serving graph inputs from `mjModel`/`mjData` (`indexing.ts` resolves an entity's elements as mjlab's `EntityIndexing` does, `fields/` holds every `EntityData` property as a reader, one file per section of mjlab's `entity/data.py`, `model.ts` resolves an `mjModel` field's elements by name, and `index.ts` dispatches a slot by namespace), `raycast.ts` casting height-scan rays with `mj_ray`, `contact.ts`, `graphRefs.ts`), `rng.ts` (xoshiro128\*\*, snapshot-able), `policy/`, `scene/`, `xr/` (`handMocap.ts` injects a capsule per hand bone and writes `mocap_pos`/`mocap_quat`; `session.ts` builds each session's options and decides whether a scene can take the hands), and `engine/` (`runtime.ts` step loop and episode step counter, `yieldToBrowser.ts`, `resetChain.ts`, `viewer_config.ts`). Each manager is native orchestration around ONNX term bodies: `FusedObservation`/`OnnxObservation`/`NativeObservation`/`HistoryObservation`, `FusedTermination`/`OnnxTermination` (awaited every step) and `TimeOutTermination` (a pre-format-4 document's native `time_out`), `OnnxEvent` + `triggers.ts` + `entityWrite.ts` + `modelWrite.ts` (and `modelFieldDr.ts`, a pre-format-5 document's model-field descriptor), `OnnxCommand`. Action splits as mjlab's does (ADR 0009): `ActionManager` runs each term's `process` once per control step (`applyAction.ts`'s native formulas, or a traced term's `OnnxActionProcess`, awaited) and its reset graphs in the reset chain; `applyAction` runs every substep, synchronous, with the ramp, hold, relative target, `commandDelay.ts` and the PD a motor needs.
 
-`core/avatar/` is render-only too: `retarget.ts` turns each mapped body's rotation since the robot's zero pose into a VRM normalized-bone rotation (rotation only, no IK; a VRM 0.x file's half turn about y folded in, so one config fits both versions), and `avatar.ts` loads the VRM with `@pixiv/three-vrm` (a lazy chunk), poses it in `render()` from the body transforms just drawn, so it is never a frame behind, and integrates spring bones at a fixed 1/120 s through poses interpolated between frames. The runtime lists it under Debug Viz as `avatar:skin` (`DebugViz.addSwitch`: a viewer switch after the drawings, which **Enabled** does not hide and a policy load keeps); off, the avatar is not posed and a robot it replaces is drawn again.
+`core/skin/` is render-only too: `retarget.ts` turns each mapped body's rotation since the robot's zero pose into a VRM normalized-bone rotation (rotation only, no IK; a VRM 0.x file's half turn about y folded in, so one config fits both versions), and `skin.ts` loads the VRM with `@pixiv/three-vrm` (a lazy chunk), poses it in `render()` from the body transforms just drawn, so it is never a frame behind, and integrates spring bones at a fixed 1/120 s through poses interpolated between frames. The runtime holds one skin at a time (`setSkin` swaps it live) and lists it under Debug Viz as `skin` (`DebugViz.addSwitch`: a viewer switch after the drawings, which **Enabled** hides with them, kept across skin swaps and policy loads); off, the skin is not posed and a robot it replaces is drawn again.
 
 Two more directories under `src/core/` are viewer-only, outside any MDP: `interaction/` (the pointer's view, pull, push and grab modes behind one `InteractionManager`, the only writer of `xfrc_applied`) and `grab/` (`weldHold.ts`, the weld hold the pointer and the tracked hands share, each with its own trigger). Neither reaches Python, the manifest or the `.swn` document.
 

@@ -1,7 +1,7 @@
 /**
  * mjlab's Debug Viz folder: "Enabled" over one switch per drawing (command terms, then
  * raycast sensors, then reward terms). A drawing shows only while both are on. The
- * viewer's own switches (the avatar's Skin) follow, outside "Enabled".
+ * viewer's own switches (the skin's) follow, under "Enabled" alike.
  */
 
 import type * as THREE from 'three';
@@ -22,11 +22,14 @@ export interface DebugVizEntry {
   enabled: boolean;
 }
 
-/** A switch the viewer adds for something of its own, which "Enabled" does not hide. */
+/**
+ * A switch the viewer adds for something of its own. `apply` gets whether it shows, its
+ * own switch and "Enabled" together, whenever either changes.
+ */
 export interface ViewerSwitch {
   label: string;
-  get(): boolean;
-  set(enabled: boolean): void;
+  enabled: boolean;
+  apply(visible: boolean): void;
 }
 
 /** Python's `str.capitalize`, which mjlab labels a command term's checkbox with. */
@@ -74,6 +77,7 @@ export class DebugViz {
   /** List `id` after the drawings until `removeSwitch`; a policy load keeps it. */
   addSwitch(id: string, entry: ViewerSwitch): void {
     this.switches.set(id, entry);
+    entry.apply(this.shown && entry.enabled);
   }
 
   removeSwitch(id: string): void {
@@ -101,7 +105,7 @@ export class DebugViz {
     const switches = [...this.switches].map(([id, entry]) => ({
       id,
       label: entry.label,
-      enabled: entry.get(),
+      enabled: entry.enabled,
     }));
     return [...commands, ...others, ...switches];
   }
@@ -109,7 +113,8 @@ export class DebugViz {
   set(id: string, enabled: boolean): void {
     const viewerSwitch = this.switches.get(id);
     if (viewerSwitch) {
-      viewerSwitch.set(enabled);
+      viewerSwitch.enabled = enabled;
+      viewerSwitch.apply(this.shown && enabled);
       return;
     }
     if (id.startsWith('command:')) {
@@ -129,6 +134,7 @@ export class DebugViz {
 
   setShown(shown: boolean): void {
     this.shown = shown;
+    for (const entry of this.switches.values()) entry.apply(shown && entry.enabled);
     this.update();
   }
 

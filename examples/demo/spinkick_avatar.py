@@ -1,15 +1,15 @@
 """Spinkick with a VRM avatar
 
-The G1 Spinkick scene from ``main.py`` on its own, with a VRM avatar posed from the
-robot every frame: beside it, or with ``--skin`` in its place, the G1 itself undrawn.
-The avatar is drawn only: physics, collisions and the policy are the G1's, exactly as
-in ``main.py``.
+The G1 Spinkick scene from ``main.py`` on its own, with VRM avatars as skins, posed
+from the robot every frame: beside it, or with ``--skin`` in its place, the G1 itself
+undrawn. The viewer's Skin menu picks one. A skin is drawn only: physics, collisions
+and the policy are the G1's, exactly as in ``main.py``.
 
     uv run python examples/demo/spinkick_avatar.py [--skin]
 
-The avatar's file is named in its config below, and the build copies it into the app,
-as a splat's ``.spz`` is. Without the file the scene runs without the avatar. Run it as
-a script (not ``python -m``): it imports this directory's ``main.py``.
+Each skin's file is named in its config below, and the build copies it into the app,
+as a splat's ``.spz`` is. A skin whose file is missing is left out. Run it as a script
+(not ``python -m``): it imports this directory's ``main.py``.
 
 Needs `pip install 'mjswan[hf,mjlab]'`.
 """
@@ -71,43 +71,50 @@ G1_REST_OFFSETS = {
 # metadata stays as distributed (never relabeled as CC0), it is shown only as a fixed
 # avatar (no appearance editing), it is never behind a paid feature, and nothing implies
 # pixiv or VRoid endorse mjswan. Never commit the file (`*.vrm` is git-ignored).
-AVATAR_SAMPLE_A = mjswan.AvatarConfig(
+AVATAR_SAMPLE_A = mjswan.SkinConfig(
     source=str(HERE / "8590256991748008892.vrm"),
     bones=G1_BONES,
     rest_offsets=G1_REST_OFFSETS,
-    offset=(0.0, 1.0, 0.0),
 )
 
-# Drop-in alternative, CC0 (VRM 0.x): Sendagaya Shino,
+# CC0 (VRM 0.x): Sendagaya Shino, saved beside this script as SendagayaShino.vrm:
 #   https://hub.vroid.com/characters/5860098757548846785/models/6567311261748429976
 # VRM normalizes every avatar's rest pose to a T-pose, so the G1 tables above fit it as
-# they are: only the file differs (name it as you saved it).
+# they are: only the file differs.
 SENDAGAYA_SHINO = replace(AVATAR_SAMPLE_A, source=str(HERE / "SendagayaShino.vrm"))
 
-#: The avatar this script draws. Swap in SENDAGAYA_SHINO to change avatars.
-AVATAR = AVATAR_SAMPLE_A
+#: The viewer's Skin menu, in order; the first one found is shown on load.
+SKINS = {
+    "AvatarSample_A": AVATAR_SAMPLE_A,
+    "Sendagaya Shino": SENDAGAYA_SHINO,
+}
 
-NO_AVATAR = (
-    "Running Spinkick without the avatar. To add AvatarSample_A, download it from "
-    "VRoid Hub (you agree to the VRoid Hub Terms of Use there):\n"
+NO_SKINS = (
+    "Running Spinkick without skins. To add AvatarSample_A, download it from VRoid Hub "
+    "(you agree to the VRoid Hub Terms of Use there):\n"
     "  https://hub.vroid.com/en/characters/2843975675147313744/models/5644550979324015604\n"
-    f"and save it as {AVATAR.source}"
+    f"and save it as {AVATAR_SAMPLE_A.source}"
 )
 
 
 def setup_builder(skin: bool = False) -> mjswan.Builder:
-    """The Spinkick scene of ``main.py``, with the avatar when its file is there."""
+    """The Spinkick scene of ``main.py``, with every skin whose file is there."""
     builder = mjswan.Builder(base_path=os.getenv("MJSWAN_BASE_PATH", "/"))
     project = builder.add_project(name="Spinkick Avatar")
     scene = add_tracking_scene(project, hf.list_repo_onnx(HF_REPO))
 
-    avatar = (
-        replace(AVATAR, offset=(0.0, 0.0, 0.0), hide_robot=True) if skin else AVATAR
-    )
-    try:
-        scene.set_avatar(avatar)
-    except (FileNotFoundError, urllib.error.URLError) as exc:
-        print(f"{exc}\n{NO_AVATAR}", file=sys.stderr)
+    added = 0
+    for name, config in SKINS.items():
+        if skin:
+            config = replace(config, offset=(0.0, 0.0, 0.0), hide_robot=True)
+        try:
+            scene.add_skin(name, config)
+        except (FileNotFoundError, urllib.error.URLError) as exc:
+            print(f"Skipping skin {name!r}: {exc}", file=sys.stderr)
+            continue
+        added += 1
+    if not added:
+        print(NO_SKINS, file=sys.stderr)
         return builder
     if skin:
         return builder  # In the G1's place, the task's own camera frames it.
@@ -137,7 +144,7 @@ def main() -> None:
     parser.add_argument(
         "--skin",
         action="store_true",
-        help="Draw the avatar in the G1's place, as its skin, instead of beside it.",
+        help="Draw each avatar in the G1's place, as its skin, instead of beside it.",
     )
     args = parser.parse_args()
 

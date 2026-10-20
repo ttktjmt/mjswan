@@ -13,7 +13,7 @@ import { type Bytes } from '../utils/bytes';
 import type { EnginePlugins } from '../plugins';
 import { type SplatTransform, type SplatMesh, loadSplat, disposeSplat, applySplatTransform } from '../scene/splat';
 import { loadCollider, disposeCollider } from '../scene/collider';
-import { Avatar, type AvatarConfig } from '../avatar/avatar';
+import { Skin, type SkinConfig } from '../skin/skin';
 import { InteractionManager, type InteractionSim } from '../interaction/InteractionManager';
 import type { InteractionModeId } from '../interaction/params';
 import { createTendonState, updateTendonGeometry, updateTendonRendering } from '../scene/tendons';
@@ -76,7 +76,7 @@ import type { ActionConfigEntry, PolicyConfig } from '../policy/types';
 import { TrackingPolicy } from '../policy/modules/TrackingPolicy';
 import { LocomotionPolicy } from '../policy/modules/LocomotionPolicy';
 import { CommandManager, type CommandTermContext, type CommandsConfig } from '../command';
-import { DebugViz } from '../debugViz/DebugViz';
+import { DebugViz, type ViewerSwitch } from '../debugViz/DebugViz';
 import { EventManager, type EventControl } from '../event/EventManager';
 import { ModelFieldDefaults } from '../event/modelWrite';
 import type { EventContext, TerrainData } from '../event/EventBase';
@@ -89,8 +89,8 @@ import { SeededRng } from '../rng';
 /** Fixed rather than time-derived, so a plain page load replays identically. */
 const DEFAULT_TERM_SEED = 0x5eed;
 
-/** The avatar's Debug Viz switch, which "Enabled" does not hide: the avatar is no drawing. */
-const SKIN_SWITCH = 'avatar:skin';
+/** The skin's Debug Viz switch, listed after mjlab's drawings and under "Enabled" alike. */
+const SKIN_SWITCH = 'skin';
 
 
 /**
@@ -185,10 +185,10 @@ export type ResolvedSplat = {
   transform?: SplatTransform;
 };
 
-/** An avatar with its bytes resolved. */
-export type ResolvedAvatar = {
+/** A skin with its bytes resolved. */
+export type ResolvedSkin = {
   data: ArrayBuffer;
-  config: AvatarConfig;
+  config: SkinConfig;
 };
 
 /** A full scene ready to build: model bytes plus resolved policy/splat/config. */
@@ -198,7 +198,7 @@ export type ResolvedScene = {
   modelFormat?: ModelFormat;
   policy?: ResolvedPolicy | null;
   splat?: ResolvedSplat | null;
-  avatar?: ResolvedAvatar | null;
+  skin?: ResolvedSkin | null;
   viewer?: ViewerConfig | null;
   /** Spawn positions the event terms of any policy on this scene may draw from. */
   terrainData?: TerrainData | null;
@@ -350,8 +350,17 @@ export class mjswanRuntime {
   private splatMesh: SplatMesh | null;
   private colliderMesh: THREE.Group | null;
   private currentSplatTransform: SplatTransform;
-  /** Drawn beside the robot, posed from its bodies; outside the model. */
-  private avatar: Avatar | null = null;
+  /** The skin on show, posed from the robot's bodies; outside the model. */
+  private skin: Skin | null = null;
+  /** One switch for every skin, so turning it off holds when the menu picks another. */
+  private readonly skinSwitch: ViewerSwitch = {
+    label: 'Skin',
+    enabled: true,
+    apply: (visible) => {
+      this.skin?.setShown(visible);
+      this.drawRobotUnderSkin();
+    },
+  };
   private cameraState: ViewerState;
   /** mjviser's "Track camera": whether the view follows the tracked body. */
   private cameraTracking = true;
@@ -571,7 +580,7 @@ export class mjswanRuntime {
       disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
-    this.disposeAvatar();
+    this.disposeSkin();
 
     // Initialize CommandManager with default velocity commands
     this.initializeCommands();
@@ -590,8 +599,8 @@ export class mjswanRuntime {
     if (scene.splat) {
       await this.applySplat(scene.splat);
     }
-    if (scene.avatar) {
-      await this.applyAvatar(scene.avatar);
+    if (scene.skin) {
+      await this.applySkin(scene.skin);
     }
 
     // Builds the MDP's event manager and fires its startup pass before the reset.
@@ -833,46 +842,50 @@ export class mjswanRuntime {
     }
   }
 
-  /** Render only, so a file that does not load costs the avatar and nothing else. */
-  private async applyAvatar(input: ResolvedAvatar): Promise<void> {
+  /** Show `skin` in place of the current one (or none); live, the model untouched. */
+  async setSkin(skin: ResolvedSkin | null): Promise<void> {
+    this.disposeSkin();
+    if (skin) await this.applySkin(skin);
+  }
+
+  /** Render only, so a file that does not load costs the skin and nothing else. */
+  private async applySkin(input: ResolvedSkin): Promise<void> {
     try {
-      const avatar = await Avatar.load(input.data, input.config);
+      const skin = await Skin.load(input.data, input.config);
       if (this.disposed || !this.mjModel) {
-        avatar.dispose();
+        skin.dispose();
         return;
       }
-      avatar.bind(this.mujoco, this.mjModel);
-      this.scene.add(avatar.root);
-      this.avatar = avatar;
-      this.debugVizSet.addSwitch(SKIN_SWITCH, {
-        label: 'Skin',
-        get: () => avatar.shown,
-        set: (shown) => {
-          avatar.setShown(shown);
-          this.drawRobotUnderAvatar();
-        },
-      });
-      this.drawRobotUnderAvatar();
+      skin.bind(this.mujoco, this.mjModel);
+      this.scene.add(skin.root);
+      this.skin = skin;
+      this.debugVizSet.addSwitch(SKIN_SWITCH, this.skinSwitch);
     } catch (error) {
-      console.warn('[mjswanRuntime] avatar not loaded; the scene runs without it:', error);
+      console.warn('[mjswanRuntime] skin not loaded; the scene runs without it:', error);
     }
   }
 
-  private disposeAvatar(): void {
+  private disposeSkin(): void {
+    const skin = this.skin;
+    if (!skin) return;
+    this.skin = null;
     this.debugVizSet.removeSwitch(SKIN_SWITCH);
-    this.avatar?.dispose();
-    this.avatar = null;
+    this.drawRobot(skin.hiddenBodies, true);
+    skin.dispose();
+  }
+
+  /** With `hide_robot`, the robot is drawn only while its skin is not. */
+  private drawRobotUnderSkin(): void {
+    if (this.skin) this.drawRobot(this.skin.hiddenBodies, !this.skin.shown);
   }
 
   /**
-   * With `hide_robot`, the robot is drawn only while its skin is off. Hidden by material,
-   * each geom's own: neither drawn nor shadowed, still hit by the pointer's raycast, and
-   * the tracking ghost, a clone with materials of its own, still shows.
+   * Hidden by material, each geom's own: neither drawn nor shadowed, still hit by the
+   * pointer's raycast, and the tracking ghost, a clone with materials of its own, shows.
    */
-  private drawRobotUnderAvatar(): void {
-    if (!this.avatar || !this.bodies) return;
-    const drawn = !this.avatar.shown;
-    for (const bodyId of this.avatar.hiddenBodies) {
+  private drawRobot(bodyIds: number[], drawn: boolean): void {
+    if (!this.bodies) return;
+    for (const bodyId of bodyIds) {
       this.bodies[bodyId]?.traverse((object) => {
         if (!(object as THREE.Mesh).isMesh) return;
         const material = (object as THREE.Mesh).material;
@@ -1160,8 +1173,8 @@ export class mjswanRuntime {
       throw isWasmOom(error) ? new WasmMemoryLimitError() : error;
     }
     if (this.mjModel) this.modelFieldDefaults = new ModelFieldDefaults(this.mjModel);
-    // New body groups, all drawn; the avatar's body ids hold, as the hands are appended.
-    this.drawRobotUnderAvatar();
+    // New body groups, all drawn; the skin's body ids hold, as the hands are appended.
+    this.drawRobotUnderSkin();
     await this.loadPolicyConfig(this.currentPolicy, kept);
     if (motion !== null) await this.setSelectedMotion(motion);
     for (const [id, value] of Object.entries(values)) this.commandManager.setValue(id, value);
@@ -2279,8 +2292,8 @@ export class mjswanRuntime {
           body.quaternion.copy(state.quaternion);
         }
       }
-      // From the poses just drawn, so the avatar is never a frame behind the robot.
-      this.avatar?.update(this.bodies, performance.now());
+      // From the poses just drawn, so the skin is never a frame behind the robot.
+      this.skin?.update(this.bodies, performance.now());
 
       this.resizeHandBoneMeshes();
       updateLightsFromData(this.mujoco, this.mjData, this.lights);
@@ -2372,7 +2385,7 @@ export class mjswanRuntime {
       disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
-    this.disposeAvatar();
+    this.disposeSkin();
 
     this.interaction.dispose();
 

@@ -75,6 +75,9 @@ interface ControlPanelProps {
   motions: SelectOption[];
   motionValue: string | null;
   onMotionChange: (value: string | null) => void;
+  skins: SelectOption[];
+  skinValue: string | null;
+  onSkinChange: (value: string | null) => void;
   /** Whether command controls are enabled */
   commandsEnabled?: boolean;
   /** Command descriptors from the engine state snapshot. */
@@ -256,6 +259,9 @@ function ControlPanel(props: ControlPanelProps) {
     motions,
     motionValue,
     onMotionChange,
+    skins,
+    skinValue,
+    onSkinChange,
     commandsEnabled = false,
     commands,
     commandValues,
@@ -634,6 +640,26 @@ function ControlPanel(props: ControlPanelProps) {
                 data={motions}
                 value={motionValue}
                 onChange={onMotionChange}
+                size="xs"
+                radius="xs"
+                searchable
+                clearable
+                styles={{
+                  input: { minHeight: '1.625rem', height: '1.625rem', padding: '0.5em' },
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+              />
+            </LabeledInput>
+          )}
+
+          {skins.length > 0 && (
+            <LabeledInput id="skin-select" label="Skin">
+              <Select
+                id="skin-select"
+                placeholder="Select skin"
+                data={skins}
+                value={skinValue}
+                onChange={onSkinChange}
                 size="xs"
                 radius="xs"
                 searchable

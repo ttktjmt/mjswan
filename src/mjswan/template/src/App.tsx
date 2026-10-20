@@ -64,6 +64,7 @@ function AppContent() {
   const [policyName, setPolicyName] = useState<string | null>(null);
   const [motionName, setMotionName] = useState<string | null>(null);
   const [splatName, setSplatName] = useState<string | null>(null);
+  const [skinName, setSkinName] = useState<string | null>(null);
   const [debugVisEnabled, setDebugVisEnabled] = useState(() => paramFlag(DEBUG_PARAM));
   const [panelVisible, setPanelVisible] = useState(() => paramFlag(PANEL_PARAM));
   const [engineState, setEngineState] = useState<MjswanEngineState | null>(null);
@@ -109,6 +110,7 @@ function AppContent() {
         setPolicyName(policy?.name ?? null);
         setMotionName(motion?.name ?? null);
         setSplatName(scene?.splats[0]?.name ?? null);
+        setSkinName(scene?.skins[0]?.name ?? null);
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : String(err));
@@ -152,6 +154,7 @@ function AppContent() {
         const input = await sceneEntry.buildScene({
           policy: sceneEntry.policies.find((p) => p.name === policyName)?.id ?? null,
           splat: sceneEntry.splats.find((s) => s.name === splatName)?.id ?? null,
+          skin: sceneEntry.skins.find((s) => s.name === skinName)?.id ?? null,
         });
         await engine.loadScene(withPlugins(input));
         if (motionName) await engine.setMotion(motionName);
@@ -211,14 +214,18 @@ function AppContent() {
     const policy = scene.policies.find((p) => p.default) ?? scene.policies[0];
     const motion = policy?.motions.find((m) => m.default) ?? policy?.motions[0];
     const splat = scene.splats[0] ?? null;
+    const skin = scene.skins[0] ?? null;
     setSceneName(scene.name);
     setPolicyName(policy?.name ?? null);
     setMotionName(motion?.name ?? null);
     setSplatName(splat?.name ?? null);
+    setSkinName(skin?.name ?? null);
     showLoading(`Loading scene "${scene.name}"…`);
     try {
       await engine.loadScene(
-        withPlugins(await scene.buildScene({ policy: policy?.id, splat: splat?.id ?? null })),
+        withPlugins(
+          await scene.buildScene({ policy: policy?.id, splat: splat?.id ?? null, skin: skin?.id ?? null }),
+        ),
       );
       if (motion) await engine.setMotion(motion.name);
     } catch (err) {
@@ -291,6 +298,21 @@ function AppContent() {
     }
   }, [sceneEntry, showLoading, hideLoading]);
 
+  const handleSkinChange = useCallback(async (value: string | null) => {
+    const engine = engineRef.current;
+    const skin = value === null ? null : sceneEntry?.skins.find((s) => s.name === value) ?? null;
+    setSkinName(value);
+    if (!engine || (value !== null && !skin)) return;
+    showLoading(value === null ? 'Removing skin…' : `Loading skin "${value}"…`);
+    try {
+      await engine.setSkin(skin ? await skin.build() : null);
+    } catch (err) {
+      console.error('Failed to load skin:', err);
+    } finally {
+      hideLoading();
+    }
+  }, [sceneEntry, showLoading, hideLoading]);
+
   const handleDebugVisEnabledChange = useCallback((enabled: boolean) => {
     setDebugVisEnabled(enabled);
     engineRef.current?.debugVis.setEnabled(enabled);
@@ -350,6 +372,9 @@ function AppContent() {
             motions={options(sceneEntry.policies.find((p) => p.name === policyName)?.motions ?? [])}
             motionValue={motionName}
             onMotionChange={handleMotionChange}
+            skins={options(sceneEntry.skins)}
+            skinValue={skinName}
+            onSkinChange={handleSkinChange}
             commandsEnabled={!!policyName}
             commands={engineState?.commands ? [...engineState.commands] : []}
             commandValues={engineState?.commandValues ?? {}}

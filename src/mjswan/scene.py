@@ -13,14 +13,13 @@ import re
 import tempfile
 import warnings
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import mujoco
 import numpy as np
 
-from .avatar import AvatarConfig, resolve_avatar
 from .document.ids import assign_id, assign_name, name2id, unique_id
 from .envs.mdp.actions import CommandJointPositionActionCfg
 from .license import Attribution, resolve_license, resolve_notice
@@ -50,6 +49,7 @@ from .policy import (
     drives_joints,
     onnx_output_width,
 )
+from .skin import SkinConfig, SkinHandle, resolve_skin
 from .splat import SplatConfig, SplatHandle
 from .viewer import ViewerConfig
 
@@ -381,9 +381,9 @@ class SceneConfig:
     viewer: ViewerConfig | None = None
     """Optional viewer configuration for this scene."""
 
-    avatar: AvatarConfig | None = None
-    """A VRM avatar drawn beside the robot, posed from its bodies; render only. Its
-    ``source`` is a local file once :meth:`SceneHandle.set_avatar` has run."""
+    skins: list[SkinConfig] = field(default_factory=list)
+    """VRM avatars posed from the robot's bodies, render only; the viewer shows one at a
+    time, the first by default. Each ``source`` is a local file once added."""
 
     events: dict[str, Any] | None = None
     """The scene's event terms (mjswan or mjlab ``EventTermCfg``), adapted.
@@ -1672,27 +1672,34 @@ class SceneHandle:
         self._config.viewer = config
         return self
 
-    def set_avatar(self, config: AvatarConfig) -> SceneHandle:
-        """Draw a VRM avatar beside the robot, posed every frame from its bodies.
+    def add_skin(self, name: str, config: SkinConfig) -> SkinHandle:
+        """Add a VRM avatar, posed every frame from the robot's bodies, to the Skin menu.
 
-        A render layer only: physics, collision and the policy are unchanged. A URL
-        source is downloaded now, and the build bundles the file unmodified, so its
+        A render layer only: physics, collision and the policy are unchanged. The viewer
+        shows one skin at a time, the first added by default. A URL source is downloaded
+        now, and the build bundles the file unmodified as ``assets/<id>.vrm``, so its
         embedded license metadata travels with it. The bone map is checked against the
         scene's model here rather than at playback.
 
         Args:
+            name: Shown in the Skin menu.
             config: The avatar's file, bone map, rest offsets, scale and placement.
 
         Returns:
-            Self for method chaining.
+            SkinHandle for the added skin.
 
         Raises:
             FileNotFoundError: The source file does not exist.
             urllib.error.URLError: The source URL does not download.
             ValueError: The file is not a VRM, or a mapped body is not in the model.
         """
-        self._config.avatar = resolve_avatar(config, _get_scene_model(self._config))
-        return self
+        name, skin_id = assign_name(
+            name, {s.id for s in self._config.skins}, kind="skin", stacklevel=3
+        )
+        resolved = resolve_skin(config, _get_scene_model(self._config))
+        skin = replace(resolved, name=name, id=skin_id)
+        self._config.skins.append(skin)
+        return SkinHandle(skin, self)
 
     def set_events(
         self, events: Mapping[str, Any], *, _explicit: bool = True
@@ -1806,4 +1813,12 @@ class SceneHandle:
         return self
 
 
-__all__ = ["ViewerConfig", "SceneConfig", "SceneHandle", "SplatConfig", "SplatHandle"]
+__all__ = [
+    "ViewerConfig",
+    "SceneConfig",
+    "SceneHandle",
+    "SkinConfig",
+    "SkinHandle",
+    "SplatConfig",
+    "SplatHandle",
+]

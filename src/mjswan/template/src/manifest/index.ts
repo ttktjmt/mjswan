@@ -1,6 +1,6 @@
 /**
  * `mjswan/manifest`: parse a build's `manifest.json` + a byte source into a typed
- * catalog of loadable scenes/policies/splats (ADR 0004 §1, §9; ADR 0006). Framework-free;
+ * catalog of loadable scenes/policies/splats/skins (ADR 0004 §1, §9; ADR 0006). Framework-free;
  * shared by the in-repo React app and mjswan Cloud. The engine itself knows nothing
  * about the manifest; the app owns the catalog and calls engine verbs.
  *
@@ -12,9 +12,9 @@ import type { Bytes } from '../core/utils/bytes';
 import type { ViewerConfig } from '../core/engine/viewer_config';
 import type { EventConfig, TerrainData } from '../core/event/EventBase';
 import type { SplatTransform } from '../core/scene/splat';
-import type { AvatarConfig } from '../core/avatar/avatar';
+import type { SkinConfig } from '../core/skin/skin';
 import { policyGraphRefs } from '../core/onnx/graphRefs';
-import type { PolicyInput, SceneInput, SplatInput } from '../engine/types';
+import type { PolicyInput, SceneInput, SkinInput, SplatInput } from '../engine/types';
 
 /** Maps a document-relative path (e.g. `demo/humanoid/scene.mjz`) to bytes. */
 export type ByteSource = (relPath: string) => Bytes;
@@ -51,8 +51,10 @@ export interface ManifestSplat {
   collider_url?: string;
   control?: boolean;
 }
-export interface ManifestAvatar extends AvatarConfig {
-  /** Scene-relative path of the bundled `.vrm` (`assets/avatar.vrm`). */
+export interface ManifestSkin extends SkinConfig {
+  id: string;
+  name: string;
+  /** Scene-relative path of the bundled `.vrm` (`assets/<id>.vrm`). */
   path: string;
 }
 export interface ManifestMotion {
@@ -103,7 +105,7 @@ export interface ManifestScene {
   terrain_data?: TerrainData;
   splat_section?: boolean;
   splats?: ManifestSplat[];
-  avatar?: ManifestAvatar;
+  skins?: ManifestSkin[];
   mdps: ManifestMdp[];
   policies: ManifestPolicy[];
 }
@@ -164,6 +166,11 @@ export interface SplatEntry {
   transform: SplatTransform;
   build(): Promise<SplatInput>;
 }
+export interface SkinEntry {
+  id: string;
+  name: string;
+  build(): Promise<SkinInput>;
+}
 export interface SceneEntry {
   id: string;
   name: string;
@@ -171,8 +178,16 @@ export interface SceneEntry {
   splatSection: boolean;
   policies: PolicyEntry[];
   splats: SplatEntry[];
-  /** Assemble a full SceneInput for a chosen policy/splat (ids; defaults if omitted). */
-  buildScene(opts?: { policy?: string | null; splat?: string | null }): Promise<SceneInput>;
+  skins: SkinEntry[];
+  /**
+   * Assemble a full SceneInput for a chosen policy/splat/skin (ids). An omitted policy is
+   * the default one; an omitted splat or skin is none.
+   */
+  buildScene(opts?: {
+    policy?: string | null;
+    splat?: string | null;
+    skin?: string | null;
+  }): Promise<SceneInput>;
 }
 export interface ProjectCatalog {
   id: string;
@@ -371,6 +386,16 @@ function toSceneEntry(
     build: async () => buildSplat(dir, s, source),
   }));
 
+  const buildSkin = (skin: ManifestSkin): SkinInput => ({
+    data: source(inScene(dir, skin.path)),
+    config: skin,
+  });
+  const skins: SkinEntry[] = (scene.skins ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    build: async () => buildSkin(s),
+  }));
+
   return {
     id: scene.id,
     name: scene.name,
@@ -378,6 +403,7 @@ function toSceneEntry(
     splatSection: scene.splat_section ?? false,
     policies,
     splats,
+    skins,
     buildScene: async (opts) => {
       const policyId = opts?.policy;
       const policy =
@@ -386,6 +412,8 @@ function toSceneEntry(
           : scene.policies.find((p) => p.id === policyId);
       const splatId = opts?.splat;
       const splat = splatId == null ? undefined : scene.splats?.find((s) => s.id === splatId);
+      const skinId = opts?.skin;
+      const skin = skinId == null ? undefined : scene.skins?.find((s) => s.id === skinId);
       // Events travel with the policy, inside its MDP (ADR 0006 §3), so the scene carries
       // only `terrainData`, which every MDP on it may draw from.
       return {
@@ -393,9 +421,7 @@ function toSceneEntry(
         modelFormat: scene.scene.endsWith('.mjb') ? 'mjb' : 'mjz',
         policy: policy ? buildPolicy(dir, scene, policy, source) : null,
         splat: splat ? buildSplat(dir, splat, source) : null,
-        avatar: scene.avatar
-          ? { data: source(inScene(dir, scene.avatar.path)), config: scene.avatar }
-          : null,
+        skin: skin ? buildSkin(skin) : null,
         viewer: toViewerConfig(scene.camera, format),
         terrainData: scene.terrain_data,
         controlDt: scene.control_dt,

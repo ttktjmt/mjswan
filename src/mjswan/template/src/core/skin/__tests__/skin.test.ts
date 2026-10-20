@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { MainModule, MjModel } from 'mujoco';
-import { Avatar, type AvatarConfig } from '../avatar';
+import { Skin, type SkinConfig } from '../skin';
 
 /** Bone, parent, offset from the parent in VRM 1.0's frame (facing +z, left at +x). */
 const SKELETON: Array<[string, string | null, [number, number, number]]> = [
@@ -96,7 +96,7 @@ const robot = {
 } as unknown as MjModel;
 const mujoco = { mjtJoint: { mjJNT_FREE: { value: 0 } } } as unknown as MainModule;
 
-const CONFIG: AvatarConfig = {
+const CONFIG: SkinConfig = {
   bones: {
     hips: 'pelvis',
     spine: 'torso',
@@ -130,16 +130,16 @@ function bodies(yaw: number, shoulder: number): Record<number, THREE.Object3D> {
 }
 
 async function handPosition(version: '0' | '1', yaw: number, shoulder: number) {
-  const avatar = await Avatar.load(vrmFile(version), CONFIG);
-  expect(avatar.metaVersion).toBe(version);
-  avatar.bind(mujoco, robot);
-  avatar.update(bodies(yaw, shoulder), 0);
-  avatar.root.updateMatrixWorld(true);
-  const hand = avatar.root.getObjectByName('leftHand')!;
+  const skin = await Skin.load(vrmFile(version), CONFIG);
+  expect(skin.metaVersion).toBe(version);
+  skin.bind(mujoco, robot);
+  skin.update(bodies(yaw, shoulder), 0);
+  skin.root.updateMatrixWorld(true);
+  const hand = skin.root.getObjectByName('leftHand')!;
   return hand.getWorldPosition(new THREE.Vector3());
 }
 
-describe('Avatar', () => {
+describe('Skin', () => {
   it.each(['0', '1'] as const)('loads VRM %s and hangs the arm as the robot does at rest', async (version) => {
     // Robot +x is three.js +x and its left is -z: shoulder (0.2 left, 1.3 up), the upper
     // arm 0.25 down, the forearm 0.25 forward.
@@ -162,40 +162,40 @@ describe('Avatar', () => {
   });
 
   it('hides the robot it follows, and nothing else, only with hide_robot', async () => {
-    const beside = await Avatar.load(vrmFile('1'), CONFIG);
+    const beside = await Skin.load(vrmFile('1'), CONFIG);
     beside.bind(mujoco, robot);
     expect(beside.hiddenBodies).toEqual([]);
-    const skin = await Avatar.load(vrmFile('1'), { ...CONFIG, hide_robot: true });
+    const skin = await Skin.load(vrmFile('1'), { ...CONFIG, hide_robot: true });
     skin.bind(mujoco, robot);
     expect(skin.hiddenBodies).toEqual([1, 2, 3, 4, 5]);
   });
 
   it('is not posed while hidden, and takes up the pose when shown again', async () => {
-    const avatar = await Avatar.load(vrmFile('1'), CONFIG);
-    avatar.bind(mujoco, robot);
+    const skin = await Skin.load(vrmFile('1'), CONFIG);
+    skin.bind(mujoco, robot);
     const hand = () => {
-      avatar.root.updateMatrixWorld(true);
-      return avatar.root.getObjectByName('leftHand')!.getWorldPosition(new THREE.Vector3());
+      skin.root.updateMatrixWorld(true);
+      return skin.root.getObjectByName('leftHand')!.getWorldPosition(new THREE.Vector3());
     };
-    avatar.update(bodies(0, 0), 0);
+    skin.update(bodies(0, 0), 0);
     const atRest = hand();
 
-    avatar.setShown(false);
-    avatar.update(bodies(0, -1.2), 16);
-    expect(avatar.root.visible).toBe(false);
+    skin.setShown(false);
+    skin.update(bodies(0, -1.2), 16);
+    expect(skin.root.visible).toBe(false);
     expect(hand().distanceTo(atRest)).toBeLessThan(1e-9);
 
-    avatar.setShown(true);
-    avatar.update(bodies(0, -1.2), 32);
+    skin.setShown(true);
+    skin.update(bodies(0, -1.2), 32);
     expect(hand().distanceTo(atRest)).toBeGreaterThan(0.1);
   });
 
   it('skips a bone the file lacks and a body the model lacks', async () => {
-    const avatar = await Avatar.load(vrmFile('1'), {
+    const skin = await Skin.load(vrmFile('1'), {
       ...CONFIG,
       bones: { ...CONFIG.bones, leftToes: 'l_hand', jaw: 'no_such_body' },
     });
-    avatar.bind(mujoco, robot);
-    expect(() => avatar.update(bodies(0, 0), 0)).not.toThrow();
+    skin.bind(mujoco, robot);
+    expect(() => skin.update(bodies(0, 0), 0)).not.toThrow();
   });
 });

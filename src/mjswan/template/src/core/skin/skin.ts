@@ -1,8 +1,9 @@
 /**
- * A VRM avatar posed from the robot's bodies every frame: render only, outside the model.
+ * A skin: a VRM avatar posed from the robot's bodies every frame, render only, outside
+ * the model.
  *
- * three-vrm loads lazily, so a scene without an avatar never fetches it. The file is
- * parsed from bytes the app already holds; nothing is fetched and nothing is evaluated.
+ * three-vrm loads lazily, so a scene without a skin never fetches it. The file is parsed
+ * from bytes the app already holds; nothing is fetched and nothing is evaluated.
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -18,8 +19,8 @@ import {
   type RetargetRig,
 } from './retarget';
 
-/** A scene's manifest `avatar` entry (see `mjswan.AvatarConfig`). */
-export interface AvatarConfig {
+/** One of a scene's manifest `skins` (see `mjswan.SkinConfig`). */
+export interface SkinConfig {
   /** VRM humanoid bone -> robot body; `hips` carries the position. */
   bones: Record<string, string>;
   /** VRM bone -> `[x, y, z, w]`, in the avatar's VRM-1.0 frame. */
@@ -28,7 +29,7 @@ export interface AvatarConfig {
   height_ratio?: number;
   /** Added to the avatar's position, in MuJoCo's world frame (x forward, y left, z up), metres. */
   offset?: ArrayLike<number>;
-  /** Stop drawing the robot the avatar follows: with a zero `offset`, the avatar is its skin. */
+  /** Stop drawing the robot the skin follows: with a zero `offset`, the avatar replaces it. */
   hide_robot?: boolean;
 }
 
@@ -63,7 +64,7 @@ function findBody(mjModel: MjModel, name: string): number {
   return matches === 1 ? suffixed : -1;
 }
 
-export class Avatar {
+export class Skin {
   /** Added to the scene by the runtime; holds the VRM at `offset`, facing the robot's way. */
   readonly root = new THREE.Group();
   /** With `hide_robot`, every body of the robot the hips follow, whose meshes go undrawn. */
@@ -84,9 +85,9 @@ export class Avatar {
   private constructor(
     private readonly module: VrmModule,
     private readonly vrm: VRM,
-    private readonly config: AvatarConfig,
+    private readonly config: SkinConfig,
   ) {
-    this.root.name = 'Avatar';
+    this.root.name = 'Skin';
     this.root.add(vrm.scene);
     vrm.scene.traverse((object) => {
       // Skinned bounds never follow the pose, and a hit test on one skins every vertex.
@@ -96,7 +97,7 @@ export class Avatar {
     });
   }
 
-  static async load(data: ArrayBuffer, config: AvatarConfig): Promise<Avatar> {
+  static async load(data: ArrayBuffer, config: SkinConfig): Promise<Skin> {
     const module = await import('@pixiv/three-vrm');
     const loader = new GLTFLoader();
     loader.register((parser) => new module.VRMLoaderPlugin(parser));
@@ -105,7 +106,7 @@ export class Avatar {
     if (!vrm) throw new Error('not a VRM file (no VRM or VRMC_vrm extension)');
     module.VRMUtils.removeUnnecessaryVertices(gltf.scene);
     module.VRMUtils.combineSkeletons(gltf.scene);
-    return new Avatar(module, vrm, config);
+    return new Skin(module, vrm, config);
   }
 
   /** VRM `meta` version: `'0'` or `'1'`. */
@@ -132,7 +133,7 @@ export class Avatar {
       const node = humanoid.getNormalizedBoneNode(bone as VRMHumanBoneName);
       const bodyId = findBody(mjModel, body);
       if (!node || bodyId < 0) {
-        console.warn(`[Avatar] ${bone} -> ${body}: ${node ? 'no such body' : 'not in this VRM'}`);
+        console.warn(`[Skin] ${bone} -> ${body}: ${node ? 'no such body' : 'not in this VRM'}`);
         continue;
       }
       const ancestors: string[] = [];

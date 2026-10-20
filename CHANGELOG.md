@@ -14,17 +14,19 @@ shortcuts.
 
 ### Added
 
-- **A VRM avatar posed from the robot (proof of concept).** `SceneHandle.set_avatar(
-  mjswan.AvatarConfig(...))` draws a VRM beside the robot and rotates each mapped humanoid
-  bone the way its robot body has turned since the zero pose, so physics, collision and
-  the policy never see it. The config is the whole avatar: file (path or URL, bundled
-  unmodified), VRM-bone to body map, rest offsets, height ratio and placement, and
-  `hide_robot`, which with a zero offset makes the avatar the robot's skin. A **Skin**
-  switch under Debug Viz shows or hides it, outside **Enabled**. VRM 0.x and
-  1.0 load alike through `@pixiv/three-vrm`, loaded only for a scene that has an avatar.
-  Spring bones integrate at a fixed 1/120 s through interpolated poses. `mjswan publish`
-  refuses a build with one. `examples/demo/spinkick_avatar.py` runs the G1 Spinkick with
-  it, beside the robot or, with `--skin`, as it.
+- **Skins: VRM avatars posed from the robot (proof of concept).** `SceneHandle.add_skin(
+  name, mjswan.SkinConfig(...))` adds a VRM to the scene's **Skin** menu and rotates
+  each mapped humanoid bone the way its robot body has turned since the zero pose, so
+  physics, collision and the policy never see it. A scene may carry several; the viewer
+  shows one at a time, the first by default. The config is the whole avatar: file (path
+  or URL, bundled unmodified as `assets/<skin-id>.vrm`), VRM-bone to body map, rest
+  offsets, height ratio and placement, and `hide_robot`, which with a zero offset makes
+  the avatar the robot's skin. A **Skin** switch under Debug Viz shows or hides it, and
+  **Enabled** hides it with the drawings. VRM 0.x and 1.0 load alike through
+  `@pixiv/three-vrm`, loaded only for a scene that has a skin. Spring bones integrate at
+  a fixed 1/120 s through interpolated poses. `mjswan publish` refuses a build with
+  one. `examples/demo/spinkick_avatar.py` runs the G1 Spinkick with two, beside the
+  robot or, with `--skin`, as it.
 - **A task's own action class runs in the browser** (ADR 0009, **document format 6**). An
   mjlab action class mjswan has no class of its own for, such as in-hand rotation's
   `JointPositionDeltaAction` or luwu's `HeldJointPositionAction`, was skipped with a

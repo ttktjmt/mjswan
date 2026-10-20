@@ -517,15 +517,17 @@ Set the camera, tracking mode, and rendering options for the scene. See [`Viewer
 
 Returns `self` for chaining.
 
-### SceneHandle.set_avatar
+### SceneHandle.add_skin
 
 ```python
-def set_avatar(config: AvatarConfig) -> SceneHandle
+def add_skin(name: str, config: SkinConfig) -> SkinHandle
 ```
 
-Draw a VRM avatar beside the robot, posed every frame from its bodies (proof of concept). Render only: physics, collision and the policy are unchanged. A URL `source` is downloaded here; a missing file raises `FileNotFoundError`, a URL that does not download `urllib.error.URLError`, and a file that is not binary glTF or a bone map naming a body the model lacks `ValueError`. The build copies the file unmodified to `assets/avatar.vrm`, so its embedded license metadata ships as authored. The viewer lists a **Skin** switch under Debug Viz that shows or hides the avatar (and, with `hide_robot`, brings the robot back). `mjswan publish` refuses a build with an avatar. See [`AvatarConfig`](#avatarconfig).
+Add a VRM avatar, posed every frame from the robot's bodies, to the scene's **Skin** menu (proof of concept). Render only: physics, collision and the policy are unchanged. A scene may carry several skins; the viewer shows one at a time, the first added by default, and the menu can clear it. `name` is shown in the menu; its id, `name2id(name)`, is unique within the scene (a clash is suffixed, with a warning).
 
-Returns `self` for chaining.
+A URL `source` is downloaded here; a missing file raises `FileNotFoundError`, a URL that does not download `urllib.error.URLError`, and a file that is not binary glTF or a bone map naming a body the model lacks `ValueError`. The build copies each file unmodified to `assets/<skin-id>.vrm`, so its embedded license metadata ships as authored. While a skin is shown, Debug Viz lists a **Skin** switch that, like the drawings, **Enabled** hides; off, the skin is hidden and a robot it replaces (`hide_robot`) is drawn again. `mjswan publish` refuses a build with skins. See [`SkinConfig`](#skinconfig).
+
+**Returns:** `SkinHandle`
 
 ### SceneHandle.set_events
 
@@ -802,6 +804,21 @@ Set a metadata entry for the splat. Returns `self` for chaining.
 
 ---
 
+## SkinHandle
+
+Returned by `SceneHandle.add_skin`. Its config is frozen; to change a skin, add a new one.
+
+### SkinHandle properties
+
+| Property | Type | Description |
+|---|---|---|
+| `name` | `str` | Shown in the Skin menu. |
+| `id` | `str` | `name2id(name)`, unique within the scene; the bundled file's stem. |
+| `source` | `str \| None` | The local file the build bundles (a URL source's download). |
+| `config` | `SkinConfig` | The config as added, its `source` a local file. |
+
+---
+
 ## MotionHandle
 
 Returned by `PolicyHandle.add_motion()`, `add_motion_wandb()` and `add_motion_hf()`.
@@ -875,11 +892,11 @@ def from_position(
 
 Build a `ViewerConfig` from explicit Cartesian viewer/target positions — `lookat`, `distance`, `elevation`, and `azimuth` are computed.
 
-## AvatarConfig
+## SkinConfig
 
 ```python
 @dataclass(frozen=True)
-class mjswan.AvatarConfig(
+class mjswan.SkinConfig(
     bones: Mapping[str, str],
     source: str | None = None,
     rest_offsets: Mapping[str, tuple[float, float, float]] = {},
@@ -889,18 +906,18 @@ class mjswan.AvatarConfig(
 )
 ```
 
-Everything one avatar needs, so swapping avatars swaps only this object. The browser rotates each mapped VRM humanoid bone the way its robot body has turned since the robot's zero pose (rotation only, no IK), and moves the hips with the robot's root. VRM 0.x and 1.0 take the same config.
+Everything one skin needs, so swapping avatars swaps only this object. The browser rotates each mapped VRM humanoid bone the way its robot body has turned since the robot's zero pose (rotation only, no IK), and moves the hips with the robot's root. VRM 0.x and 1.0 take the same config.
 
 | Field | Description |
 |---|---|
 | `bones` | VRM humanoid bone (VRM 1.0 names, e.g. `"leftUpperArm"`) to robot body. Several bones may share a body; a body may leave out its entity prefix. `hips` is required. |
-| `source` | Local path or http(s) URL of the `.vrm`. Required by `set_avatar`; `dataclasses.replace` sets it on a shared config. |
+| `source` | Local path or http(s) URL of the `.vrm`. Required by `add_skin`; `dataclasses.replace` sets it on a shared config, so one config fits several avatars. |
 | `rest_offsets` | VRM bone to the rotation, in degrees about the avatar's x, then y, then z axis (y up, facing +z, its left toward +x), from its T-pose to where it sits while the robot is at its zero pose. |
 | `height_ratio` | Scale from the robot root's height to the avatar's hips height; across the floor the hips follow the root exactly. `None` takes the avatar's hips height over the root's height at the model's zero pose. |
-| `offset` | Added to the avatar's position, in MuJoCo's world frame, metres: it moves where the robot moves, this far aside. |
+| `offset` | Added to the avatar's position, in MuJoCo's world frame, metres: it moves where the robot moves, this far aside (the default, 1 m to its left). |
 | `hide_robot` | Stop drawing the robot the avatar follows, so with `offset=(0, 0, 0)` the avatar is its skin. The robot is still simulated, collides and can be grabbed with the pointer. |
 
-`examples/demo/spinkick_avatar.py` is a complete G1 configuration.
+`examples/demo/spinkick_avatar.py` is a complete G1 configuration with two skins.
 
 ---
 
@@ -1312,7 +1329,7 @@ dist/
         ├── assets/
         │   ├── <motion-id>.npz        ← one per distinct clip, shared by the scene's policies
         │   ├── <splat-id>.spz         ← only when source= is used
-        │   └── avatar.vrm             ← only with set_avatar, copied unmodified
+        │   └── <skin-id>.vrm          ← only with add_skin, copied unmodified
         ├── LICENSE.<component>        ← a third-party component's license (detected or add_attribution)
         └── NOTICE.<component>         ← its notice
 ```

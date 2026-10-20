@@ -132,35 +132,37 @@ describe('DebugViz', () => {
 describe('viewer switches', () => {
   function withSkin() {
     const viz = new DebugViz(commandsStub().commands, () => ({ mjModel: model, mjData: data }));
-    const skin = { on: true, set: [] as boolean[] };
-    viz.addSwitch('avatar:skin', {
-      label: 'Skin',
-      get: () => skin.on,
-      set: (enabled) => {
-        skin.set.push(enabled);
-        skin.on = enabled;
-      },
-    });
-    return { viz, skin };
+    const shown: boolean[] = [];
+    viz.addSwitch('skin', { label: 'Skin', enabled: true, apply: (visible) => shown.push(visible) });
+    return { viz, shown };
   }
 
-  it('lists a switch after the drawings, and sets it', () => {
-    const { viz, skin } = withSkin();
+  it('lists a switch after the drawings, shows it on adding, and sets it', () => {
+    const { viz, shown } = withSkin();
     viz.load(CONFIG, mujoco, new THREE.Group());
     const last = () => viz.entries()[viz.entries().length - 1];
-    expect(last()).toEqual({ id: 'avatar:skin', label: 'Skin', enabled: true });
-    viz.set('avatar:skin', false);
-    expect(skin.set).toEqual([false]);
+    expect(last()).toEqual({ id: 'skin', label: 'Skin', enabled: true });
+    viz.set('skin', false);
+    expect(shown).toEqual([true, false]);
     expect(last().enabled).toBe(false);
   });
 
-  it('is not hidden by "Enabled", and outlives a policy load', () => {
-    const { viz, skin } = withSkin();
+  it('hides under "Enabled" like a drawing, keeping its own switch', () => {
+    const { viz, shown } = withSkin();
     viz.setShown(false);
-    expect(skin.set).toEqual([]);
+    viz.set('skin', false);
+    viz.set('skin', true);
+    expect(shown).toEqual([true, false, false, false]);
+    viz.setShown(true);
+    expect(shown[shown.length - 1]).toBe(true);
+    expect(viz.entries().find((entry) => entry.id === 'skin')?.enabled).toBe(true);
+  });
+
+  it('outlives a policy load until removed', () => {
+    const { viz } = withSkin();
     viz.load(undefined, mujoco, new THREE.Group());
-    expect(viz.entries().map((entry) => entry.id)).toEqual(['command:base_velocity', 'avatar:skin']);
-    viz.removeSwitch('avatar:skin');
+    expect(viz.entries().map((entry) => entry.id)).toEqual(['command:base_velocity', 'skin']);
+    viz.removeSwitch('skin');
     expect(viz.entries().map((entry) => entry.id)).toEqual(['command:base_velocity']);
   });
 });

@@ -8,9 +8,9 @@
  */
 import {
   mjswanRuntime,
-  type ResolvedAvatar,
   type ResolvedPolicy,
   type ResolvedScene,
+  type ResolvedSkin,
   type ResolvedSplat,
 } from '../core/engine/runtime';
 import { type Bytes, resolveBytes } from '../core/utils/bytes';
@@ -19,7 +19,6 @@ import type { PolicyConfig } from '../core/policy/types';
 import { INTERACTION_MODES, INTERACTION_MODE_IDS } from '../core/interaction/params';
 import { createSerial } from './serial';
 import type {
-  AvatarInput,
   CameraControls,
   CommandControls,
   CommandDescriptor,
@@ -32,6 +31,7 @@ import type {
   MjswanEngineState,
   PolicyInput,
   SceneInput,
+  SkinInput,
   SplatInput,
   SplatTransform,
   XrControls,
@@ -86,7 +86,7 @@ async function resolveSplat(input: SplatInput): Promise<ResolvedSplat> {
   };
 }
 
-async function resolveAvatar(input: AvatarInput): Promise<ResolvedAvatar> {
+async function resolveSkin(input: SkinInput): Promise<ResolvedSkin> {
   return { data: await resolveBytes(input.data), config: input.config };
 }
 
@@ -258,7 +258,7 @@ class Engine implements MjswanEngine {
         modelFormat: input.modelFormat,
         policy: input.policy ? await resolvePolicy(input.policy) : null,
         splat: input.splat ? await resolveSplat(input.splat) : null,
-        avatar: input.avatar ? await resolveAvatar(input.avatar) : null,
+        skin: input.skin ? await resolveSkin(input.skin) : null,
         viewer: input.viewer ?? null,
         terrainData: input.terrainData ?? null,
         controlDt: input.controlDt ?? null,
@@ -319,6 +319,13 @@ class Engine implements MjswanEngine {
 
   async setSplat(input: SplatInput | null): Promise<void> {
     await this.runtime.setSplat(input ? await resolveSplat(input) : null);
+  }
+
+  async setSkin(input: SkinInput | null): Promise<void> {
+    const skin = input ? await resolveSkin(input) : null;
+    // Binds to the model, so it waits its turn; the snapshot lists its Debug Viz switch.
+    await this.exclusive(() => this.runtime.setSkin(skin), undefined);
+    this.refresh();
   }
 
   setMotion(name: string | null): Promise<boolean> {

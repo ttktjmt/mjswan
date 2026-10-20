@@ -30,6 +30,10 @@ const MANIFEST: Manifest = {
           splats: [
             { id: 'room', name: 'Room', path: 'assets/room.spz', control: true, scale: 2, x_offset: 0.5 },
           ],
+          skins: [
+            { id: 'sample_a', name: 'Sample A', path: 'assets/sample_a.vrm', bones: { hips: 'pelvis' }, hide_robot: true },
+            { id: 'shino', name: 'Shino', path: 'assets/shino.vrm', bones: { hips: 'pelvis' } },
+          ],
           mdps: [
             {
               id: 'mdp_0',
@@ -78,6 +82,26 @@ describe('parseManifest', () => {
     expect(scene.policies[0].default).toBe(true);
     expect(scene.policies[0].motions).toEqual([{ name: 'clip', default: true }]);
     expect(scene.splats[0]).toMatchObject({ id: 'room', name: 'Room', control: true, transform: { scale: 2, xOffset: 0.5 } });
+    expect(scene.skins.map((s) => [s.id, s.name])).toEqual([
+      ['sample_a', 'Sample A'],
+      ['shino', 'Shino'],
+    ]);
+  });
+
+  it('builds the skin asked for, by id, and none when none is', async () => {
+    const { source, requested } = fakeSource();
+    const scene = parseManifest(MANIFEST, source).projects[0].scenes[0];
+    expect((await scene.buildScene()).skin).toBeNull();
+    expect(requested.some((r) => r.endsWith('.vrm'))).toBe(false);
+
+    const input = await scene.buildScene({ skin: 'shino' });
+    expect(input.skin?.config).toMatchObject({ bones: { hips: 'pelvis' } });
+    expect(input.skin?.config.hide_robot).toBeUndefined();
+    expect(requested).toContain('demo/humanoid/assets/shino.vrm');
+
+    const picked = await scene.skins[0].build();
+    expect(picked.config.hide_robot).toBe(true);
+    expect(requested).toContain('demo/humanoid/assets/sample_a.vrm');
   });
 
   it('resolves every path under a scene against <project-id>/<scene-id>/', async () => {
