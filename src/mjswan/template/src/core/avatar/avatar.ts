@@ -24,10 +24,12 @@ export interface AvatarConfig {
   bones: Record<string, string>;
   /** VRM bone -> `[x, y, z, w]`, in the avatar's VRM-1.0 frame. */
   rest_offsets?: Record<string, ArrayLike<number>>;
-  /** Robot root position -> avatar hips position. Absent: hips height over root height. */
+  /** Robot root height -> avatar hips height. Absent: hips height over root height at rest. */
   height_ratio?: number;
   /** Added to the avatar's position, in MuJoCo's world frame (x forward, y left, z up), metres. */
   offset?: ArrayLike<number>;
+  /** Stop drawing the robot the avatar follows: with a zero `offset`, the avatar is its skin. */
+  hide_robot?: boolean;
 }
 
 /**
@@ -64,6 +66,8 @@ function findBody(mjModel: MjModel, name: string): number {
 export class Avatar {
   /** Added to the scene by the runtime; holds the VRM at `offset`, facing the robot's way. */
   readonly root = new THREE.Group();
+  /** With `hide_robot`, every body of the robot the hips follow, whose meshes go undrawn. */
+  hiddenBodies: number[] = [];
   private rig: RetargetRig | null = null;
   private nodes: THREE.Object3D[] = [];
   private world: THREE.Quaternion[] = [];
@@ -144,6 +148,13 @@ export class Avatar {
     const hips = this.rig.bones.find((bone) => bone.name === 'hips');
     this.hips = hips ? humanoid.getNormalizedBoneNode('hips') : null;
     this.hipsBody = hips?.bodyId ?? -1;
+    this.hiddenBodies = [];
+    if (this.config.hide_robot && this.hipsBody >= 0) {
+      const robot = mjModel.body_rootid[this.hipsBody];
+      for (let b = 1; b < mjModel.nbody; b++) {
+        if (mjModel.body_rootid[b] === robot) this.hiddenBodies.push(b);
+      }
+    }
     this.heightRatio =
       this.config.height_ratio ?? this.autoHeightRatio(zeroPoseHeight(mjModel, zeroPose, this.hipsBody));
 

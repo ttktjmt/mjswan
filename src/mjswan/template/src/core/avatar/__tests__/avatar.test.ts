@@ -78,15 +78,19 @@ function vrmFile(version: '0' | '1'): ArrayBuffer {
   return glb({ asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [0] }], nodes, ...vrm });
 }
 
-/** A G1-like robot: pelvis (free), torso, left arm hanging down with the forearm forward. */
-const BODY_NAMES = ['world', 'robot/pelvis', 'robot/torso', 'robot/l_upper', 'robot/l_fore', 'robot/l_hand'];
+/**
+ * A G1-like robot: pelvis (free), torso, left arm hanging down with the forearm forward;
+ * and a box beside it, a tree of its own.
+ */
+const BODY_NAMES = ['world', 'robot/pelvis', 'robot/torso', 'robot/l_upper', 'robot/l_fore', 'robot/l_hand', 'box'];
 const robot = {
-  nbody: 6,
-  body_parentid: Int32Array.from([0, 0, 1, 2, 3, 4]),
-  body_pos: Float64Array.from([0, 0, 0, 0, 0, 0.9, 0, 0, 0.3, 0, 0.2, 0, 0, 0, -0.25, 0.25, 0, 0]),
-  body_quat: Float64Array.from(Array.from({ length: 6 }, () => [1, 0, 0, 0]).flat()),
-  body_jntadr: Int32Array.from([-1, 0, 1, 2, 3, 4]),
-  body_jntnum: Int32Array.from([0, 1, 1, 1, 1, 1]),
+  nbody: 7,
+  body_parentid: Int32Array.from([0, 0, 1, 2, 3, 4, 0]),
+  body_rootid: Int32Array.from([0, 1, 1, 1, 1, 1, 6]),
+  body_pos: Float64Array.from([0, 0, 0, 0, 0, 0.9, 0, 0, 0.3, 0, 0.2, 0, 0, 0, -0.25, 0.25, 0, 0, 1, 0, 0.1]),
+  body_quat: Float64Array.from(Array.from({ length: 7 }, () => [1, 0, 0, 0]).flat()),
+  body_jntadr: Int32Array.from([-1, 0, 1, 2, 3, 4, -1]),
+  body_jntnum: Int32Array.from([0, 1, 1, 1, 1, 1, 0]),
   jnt_type: Int32Array.from([0, 3, 3, 3, 3]),
   body: (b: number) => ({ name: BODY_NAMES[b] }),
 } as unknown as MjModel;
@@ -155,6 +159,15 @@ describe('Avatar', () => {
       const v1 = await handPosition('1', yaw, shoulder);
       expect(v0.distanceTo(v1)).toBeLessThan(1e-6);
     }
+  });
+
+  it('hides the robot it follows, and nothing else, only with hide_robot', async () => {
+    const beside = await Avatar.load(vrmFile('1'), CONFIG);
+    beside.bind(mujoco, robot);
+    expect(beside.hiddenBodies).toEqual([]);
+    const skin = await Avatar.load(vrmFile('1'), { ...CONFIG, hide_robot: true });
+    skin.bind(mujoco, robot);
+    expect(skin.hiddenBodies).toEqual([1, 2, 3, 4, 5]);
   });
 
   it('skips a bone the file lacks and a body the model lacks', async () => {

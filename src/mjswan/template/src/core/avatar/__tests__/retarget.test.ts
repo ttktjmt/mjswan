@@ -140,12 +140,12 @@ describe('hips position', () => {
   it.each([
     ['1', 1],
     ['0', -1],
-  ])('maps the robot forward to the avatar front, VRM %s', (version, sign) => {
+  ])('maps the robot forward to the avatar front and scales only the height, VRM %s', (version, sign) => {
     // MuJoCo (1, 0, 0.8) is three.js (1, 0.8, 0).
     const target = hipsPosition(rig(version), new THREE.Vector3(1, 0.8, 0), 1.1, new THREE.Vector3());
     expect(target.x).toBeCloseTo(0, 12);
     expect(target.y).toBeCloseTo(0.88, 12);
-    expect(target.z).toBeCloseTo(1.1 * sign, 12);
+    expect(target.z).toBeCloseTo(sign, 12);
   });
 
   it('agrees with the container turn', () => {

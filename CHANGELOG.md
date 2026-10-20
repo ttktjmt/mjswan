@@ -18,11 +18,12 @@ shortcuts.
   mjswan.AvatarConfig(...))` draws a VRM beside the robot and rotates each mapped humanoid
   bone the way its robot body has turned since the zero pose, so physics, collision and
   the policy never see it. The config is the whole avatar: file (path or URL, bundled
-  unmodified), VRM-bone to body map, rest offsets, height ratio and placement. VRM 0.x and
+  unmodified), VRM-bone to body map, rest offsets, height ratio and placement, and
+  `hide_robot`, which with a zero offset makes the avatar the robot's skin. VRM 0.x and
   1.0 load alike through `@pixiv/three-vrm`, loaded only for a scene that has an avatar.
   Spring bones integrate at a fixed 1/120 s through interpolated poses. `mjswan publish`
   refuses a build with one. `examples/demo/spinkick_avatar.py` runs the G1 Spinkick with
-  it.
+  it, beside the robot or, with `--skin`, as it.
 - **A task's own action class runs in the browser** (ADR 0009, **document format 6**). An
   mjlab action class mjswan has no class of its own for, such as in-hand rotation's
   `JointPositionDeltaAction` or luwu's `HeldJointPositionAction`, was skipped with a

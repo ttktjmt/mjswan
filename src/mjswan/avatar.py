@@ -85,12 +85,17 @@ class AvatarConfig:
     its zero pose (a G1 hangs its arms down there)."""
 
     height_ratio: float | None = None
-    """Scale from the robot root's position to the avatar's hips. ``None`` takes the
-    avatar's hips height over the robot root's height at the model's zero pose."""
+    """Scale from the robot root's height to the avatar's hips height; across the floor
+    the hips follow the root exactly. ``None`` takes the avatar's hips height over the
+    robot root's height at the model's zero pose."""
 
     offset: tuple[float, float, float] = (0.0, 1.0, 0.0)
     """Added to the avatar's position, in metres: it moves where the robot moves, this
     far aside (the default stands it 1 m to the robot's left)."""
+
+    hide_robot: bool = False
+    """Stop drawing the robot the avatar follows, so with ``offset=(0, 0, 0)`` the
+    avatar is its skin. Its bodies are still simulated, collide and can be grabbed."""
 
     def __post_init__(self) -> None:
         unknown = sorted(set(self.bones) - VRM_HUMAN_BONES)
@@ -119,6 +124,7 @@ class AvatarConfig:
             },
             **({"height_ratio": self.height_ratio} if self.height_ratio else {}),
             "offset": list(self.offset),
+            **({"hide_robot": True} if self.hide_robot else {}),
         }
 
 

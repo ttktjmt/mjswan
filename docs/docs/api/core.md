@@ -885,6 +885,7 @@ class mjswan.AvatarConfig(
     rest_offsets: Mapping[str, tuple[float, float, float]] = {},
     height_ratio: float | None = None,
     offset: tuple[float, float, float] = (0.0, 1.0, 0.0),
+    hide_robot: bool = False,
 )
 ```
 
@@ -895,8 +896,9 @@ Everything one avatar needs, so swapping avatars swaps only this object. The bro
 | `bones` | VRM humanoid bone (VRM 1.0 names, e.g. `"leftUpperArm"`) to robot body. Several bones may share a body; a body may leave out its entity prefix. `hips` is required. |
 | `source` | Local path or http(s) URL of the `.vrm`. Required by `set_avatar`; `dataclasses.replace` sets it on a shared config. |
 | `rest_offsets` | VRM bone to the rotation, in degrees about the avatar's x, then y, then z axis (y up, facing +z, its left toward +x), from its T-pose to where it sits while the robot is at its zero pose. |
-| `height_ratio` | Scale from the robot root's position to the avatar's hips. `None` takes the avatar's hips height over the root's height at the model's zero pose. |
+| `height_ratio` | Scale from the robot root's height to the avatar's hips height; across the floor the hips follow the root exactly. `None` takes the avatar's hips height over the root's height at the model's zero pose. |
 | `offset` | Added to the avatar's position, in MuJoCo's world frame, metres: it moves where the robot moves, this far aside. |
+| `hide_robot` | Stop drawing the robot the avatar follows, so with `offset=(0, 0, 0)` the avatar is its skin. The robot is still simulated, collides and can be grabbed with the pointer. |
 
 `examples/demo/spinkick_avatar.py` is a complete G1 configuration.
 

@@ -842,8 +842,25 @@ export class mjswanRuntime {
       avatar.bind(this.mujoco, this.mjModel);
       this.scene.add(avatar.root);
       this.avatar = avatar;
+      this.hideRobotUnderAvatar();
     } catch (error) {
       console.warn('[mjswanRuntime] avatar not loaded; the scene runs without it:', error);
+    }
+  }
+
+  /**
+   * The avatar as the robot's skin. Hidden by material, each geom's own: neither drawn
+   * nor shadowed, still hit by the pointer's raycast, and the tracking ghost, a clone
+   * with materials of its own, still shows.
+   */
+  private hideRobotUnderAvatar(): void {
+    if (!this.avatar || !this.bodies) return;
+    for (const bodyId of this.avatar.hiddenBodies) {
+      this.bodies[bodyId]?.traverse((object) => {
+        if (!(object as THREE.Mesh).isMesh) return;
+        const material = (object as THREE.Mesh).material;
+        for (const m of Array.isArray(material) ? material : [material]) m.visible = false;
+      });
     }
   }
 
@@ -1126,6 +1143,8 @@ export class mjswanRuntime {
       throw isWasmOom(error) ? new WasmMemoryLimitError() : error;
     }
     if (this.mjModel) this.modelFieldDefaults = new ModelFieldDefaults(this.mjModel);
+    // New body groups, drawn again; the avatar's body ids hold, as the hands are appended.
+    this.hideRobotUnderAvatar();
     await this.loadPolicyConfig(this.currentPolicy, kept);
     if (motion !== null) await this.setSelectedMotion(motion);
     for (const [id, value] of Object.entries(values)) this.commandManager.setValue(id, value);

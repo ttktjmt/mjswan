@@ -160,7 +160,10 @@ export function retarget(
   });
 }
 
-/** Where the hips go in the normalized rig's frame, from the robot root's world position. */
+/**
+ * Where the hips go in the normalized rig's frame: on the robot root, its height scaled.
+ * Scaling across the floor too would carry the avatar off the robot as it wanders.
+ */
 export function hipsPosition(
   rig: RetargetRig,
   rootPosition: THREE.Vector3,
@@ -168,5 +171,7 @@ export function hipsPosition(
   target: THREE.Vector3,
 ): THREE.Vector3 {
   _rigInverse.copy(rig.facing).multiply(rig.frame).invert();
-  return target.copy(rootPosition).multiplyScalar(heightRatio).applyQuaternion(_rigInverse);
+  return target
+    .set(rootPosition.x, rootPosition.y * heightRatio, rootPosition.z)
+    .applyQuaternion(_rigInverse);
 }

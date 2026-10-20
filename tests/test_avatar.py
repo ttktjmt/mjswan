@@ -84,6 +84,12 @@ class TestToDict:
         assert entry["offset"] == [0.0, 1.0, 0.0]
         assert "height_ratio" not in entry
 
+    def test_hide_robot_only_when_set(self):
+        assert "hide_robot" not in AvatarConfig(bones=BONES).to_dict()
+        assert (
+            AvatarConfig(bones=BONES, hide_robot=True).to_dict()["hide_robot"] is True
+        )
+
     def test_height_ratio_when_set(self):
         assert (
             AvatarConfig(bones=BONES, height_ratio=1.1).to_dict()["height_ratio"] == 1.1
