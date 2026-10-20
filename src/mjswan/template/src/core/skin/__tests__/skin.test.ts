@@ -28,18 +28,46 @@ const SKELETON: Array<[string, string | null, [number, number, number]]> = [
   }),
 ];
 
-function glb(json: object): ArrayBuffer {
+function glb(json: object, bin?: Uint8Array): ArrayBuffer {
   let text = JSON.stringify(json);
   while (text.length % 4) text += ' ';
   const chunk = new TextEncoder().encode(text);
-  const out = new DataView(new ArrayBuffer(12 + 8 + chunk.length));
+  const binLength = bin ? 8 + bin.length : 0;
+  const out = new DataView(new ArrayBuffer(12 + 8 + chunk.length + binLength));
   out.setUint32(0, 0x46546c67, true);
   out.setUint32(4, 2, true);
   out.setUint32(8, out.byteLength, true);
   out.setUint32(12, chunk.length, true);
   out.setUint32(16, 0x4e4f534a, true);
   new Uint8Array(out.buffer, 20).set(chunk);
+  if (bin) {
+    out.setUint32(20 + chunk.length, bin.length, true);
+    out.setUint32(24 + chunk.length, 0x004e4942, true);
+    new Uint8Array(out.buffer, 28 + chunk.length).set(bin);
+  }
   return out.buffer;
+}
+
+/** The VRM 1.0 file with one triangle drawn in MToon: lit (1, 0.8, 0.6), shade (0.5, 0.4, 0.3). */
+function toonFile(): ArrayBuffer {
+  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(vrmFile('1'), 20)).trim());
+  const triangle = new Float32Array([0, 0, 0, 0.1, 0, 0, 0, 0.1, 0]);
+  json.nodes.push({ name: 'body', mesh: 0 });
+  json.scenes[0].nodes.push(json.nodes.length - 1);
+  json.buffers = [{ byteLength: triangle.byteLength }];
+  json.bufferViews = [{ buffer: 0, byteLength: triangle.byteLength }];
+  json.accessors = [
+    { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3', min: [0, 0, 0], max: [0.1, 0.1, 0] },
+  ];
+  json.meshes = [{ primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }];
+  json.materials = [
+    {
+      pbrMetallicRoughness: { baseColorFactor: [1, 0.8, 0.6, 1] },
+      extensions: { VRMC_materials_mtoon: { specVersion: '1.0', shadeColorFactor: [0.5, 0.4, 0.3] } },
+    },
+  ];
+  json.extensionsUsed.push('VRMC_materials_mtoon');
+  return glb(json, new Uint8Array(triangle.buffer));
 }
 
 function vrmFile(version: '0' | '1'): ArrayBuffer {
@@ -188,6 +216,38 @@ describe('Skin', () => {
     skin.setShown(true);
     skin.update(bodies(0, -1.2), 32);
     expect(hand().distanceTo(atRest)).toBeGreaterThan(0.1);
+  });
+
+  it("divides its toon colours by the scene's light, never brightening them", async () => {
+    // Two lights of 0.7 and a 0.6 headlight with 0.3 ambient: 2.3, as mjlab's scenes.
+    const lit = (diffuse: number, brightness?: number) => ({
+      model: {
+        ...robot,
+        nlight: 1,
+        light_active: Uint8Array.from([1]),
+        light_diffuse: Float32Array.from([diffuse, diffuse, diffuse]),
+        light_ambient: Float32Array.from([0, 0, 0]),
+        vis: { headlight: { active: true, diffuse: [0.6, 0.6, 0.6], ambient: [0.3, 0.3, 0.3] } },
+      } as unknown as MjModel,
+      brightness,
+    });
+    const colours = async ({ model, brightness }: ReturnType<typeof lit>) => {
+      const skin = await Skin.load(toonFile(), { ...CONFIG, brightness });
+      skin.bind(mujoco, model);
+      let material: { color: THREE.Color; shadeColorFactor: THREE.Color } | undefined;
+      skin.root.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) material = (o as THREE.Mesh).material as never;
+      });
+      return [material!.color.toArray(), material!.shadeColorFactor.toArray()];
+    };
+    const near = (a: number[], b: number[]) => a.forEach((x, i) => expect(x).toBeCloseTo(b[i], 5));
+
+    const [color, shade] = await colours(lit(1.4));
+    near(color, [1 / 2.3, 0.8 / 2.3, 0.6 / 2.3]);
+    near(shade, [0.5 / 2.3, 0.4 / 2.3, 0.3 / 2.3]);
+    near((await colours(lit(1.4, 1.5)))[0], [1.5 / 2.3, 1.2 / 2.3, 0.9 / 2.3]);
+    // 0.1 + 0.6 + 0.3 = 1: nothing to take away.
+    near((await colours(lit(0.1)))[0], [1, 0.8, 0.6]);
   });
 
   it('skips a bone the file lacks and a body the model lacks', async () => {

@@ -1,6 +1,6 @@
 /**
- * A skin: a VRM avatar posed from the robot's bodies every frame, render only, outside
- * the model.
+ * A skin: a VRM avatar posed from the robot's bodies every frame, outside the scene's
+ * model. Its spring bones are simulated by MuJoCo in a model of their own (springs.ts).
  *
  * three-vrm loads lazily, so a scene without a skin never fetches it. The file is parsed
  * from bytes the app already holds; nothing is fetched and nothing is evaluated.
@@ -9,6 +9,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { MainModule, MjModel } from 'mujoco';
 import type { VRM, VRMHumanBoneName } from '@pixiv/three-vrm';
+import { lightBudget } from '../scene/lights';
+import { SpringPhysics } from './springs';
 import {
   buildRig,
   hipsPosition,
@@ -31,16 +33,22 @@ export interface SkinConfig {
   offset?: ArrayLike<number>;
   /** Stop drawing the robot the skin follows: with a zero `offset`, the avatar replaces it. */
   hide_robot?: boolean;
+  /** Scales the toon colours once they are divided by the scene's light. Absent: 1. */
+  brightness?: number;
+  /** False leaves the spring bones to three-vrm instead of MuJoCo. Absent: true. */
+  mujoco_springs?: boolean;
 }
 
 /**
- * Springs integrate at this fixed step, through poses interpolated between frames: one
- * large step whips a long chain (hair) through the body when the pose jumps, as a
- * spinkick's does at 30 fps.
+ * three-vrm's springs integrate at this fixed step, through poses interpolated between
+ * frames: one large step whips a long chain (hair) through the body when the pose jumps,
+ * as a spinkick's does at 30 fps.
  */
 const SPRING_STEP = 1 / 120;
-/** A frame longer than this (a stalled tab) is not caught up. */
+/** A frame longer than this is not caught up. */
 const MAX_FRAME_SECONDS = 1 / 30;
+/** A frame longer than this (a hidden or stalled tab) starts the springs over instead. */
+const STALL_SECONDS = 0.25;
 /** A root jump this large in one frame is a reset, not motion: the springs start over. */
 const TELEPORT_DISTANCE = 0.3;
 
@@ -48,6 +56,9 @@ const TELEPORT_DISTANCE = 0.3;
 type BodyPose = { from: THREE.Quaternion; to: THREE.Quaternion; now: THREE.Quaternion };
 
 type VrmModule = typeof import('@pixiv/three-vrm');
+
+/** The two colours of an MToon material that its lights multiply. */
+type ToonMaterial = THREE.Material & { isMToonMaterial: true; color: THREE.Color; shadeColorFactor: THREE.Color };
 
 /** The model's body `name` names: itself, else the one `<entity>/<name>` (as Python's check). */
 function findBody(mjModel: MjModel, name: string): number {
@@ -81,6 +92,10 @@ export class Skin {
   private readonly rootTo = new THREE.Vector3();
   private readonly rootNow = new THREE.Vector3();
   private lastTime: number | null = null;
+  /** Every MToon material, with the colours it came with. */
+  private readonly toon: Array<{ material: ToonMaterial; lit: THREE.Color; shade: THREE.Color }> = [];
+  private springs: SpringPhysics | null = null;
+  private springsBuilt = false;
 
   private constructor(
     private readonly module: VrmModule,
@@ -89,12 +104,31 @@ export class Skin {
   ) {
     this.root.name = 'Skin';
     this.root.add(vrm.scene);
+    const materials = new Set<THREE.Material>();
     vrm.scene.traverse((object) => {
       // Skinned bounds never follow the pose, and a hit test on one skins every vertex.
       object.frustumCulled = false;
       object.raycast = () => {};
-      if ((object as THREE.Mesh).isMesh) object.castShadow = true;
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) materials.add(material);
     });
+    for (const material of materials) {
+      // Read raw, as MuJoCo's textures are: mjswan draws to a linear target unencoded, so a
+      // decoded texture would reach the screen darker than it was painted.
+      for (const value of Object.values(material)) {
+        const texture = value as THREE.Texture | null;
+        if (texture?.isTexture && texture.colorSpace === THREE.SRGBColorSpace) {
+          texture.colorSpace = THREE.NoColorSpace;
+          texture.needsUpdate = true;
+        }
+      }
+      const toon = material as ToonMaterial;
+      if (toon.isMToonMaterial) {
+        this.toon.push({ material: toon, lit: toon.color.clone(), shade: toon.shadeColorFactor.clone() });
+      }
+    }
   }
 
   static async load(data: ArrayBuffer, config: SkinConfig): Promise<Skin> {
@@ -126,6 +160,13 @@ export class Skin {
 
   /** Resolve the bone map against a (re)built model. Unresolved bones are left at rest. */
   bind(mujoco: MainModule, mjModel: MjModel): void {
+    // First, while the avatar is still at rest: the spring model is built from that pose.
+    if (!this.springsBuilt) {
+      this.springsBuilt = true;
+      this.springs = this.buildSprings(mujoco);
+    }
+    this.normalizeToon(mjModel);
+
     const humanoid = this.vrm.humanoid;
     const parents = this.module.VRMHumanBoneParentMap;
     const mapped: Array<{ name: string; bodyId: number; ancestors: string[] }> = [];
@@ -176,6 +217,31 @@ export class Skin {
     this.lastTime = null;
   }
 
+  /** MuJoCo's springs, or null to leave them to three-vrm: asked to, none, or no model. */
+  private buildSprings(mujoco: MainModule): SpringPhysics | null {
+    const manager = this.vrm.springBoneManager;
+    if (this.config.mujoco_springs === false || !manager) return null;
+    try {
+      return SpringPhysics.build(mujoco, manager, this.vrm.scene);
+    } catch (error) {
+      console.warn('[Skin] spring model not built; three-vrm runs the springs:', error);
+      return null;
+    }
+  }
+
+  /**
+   * A toon material takes every light it faces in full, with no falloff, so the sum of
+   * MuJoCo's lights (2.3 in a default mjlab scene) clips it to white. Dividing its colours
+   * by that sum, never brightening, leaves the scene's own materials as they are.
+   */
+  private normalizeToon(mjModel: MjModel): void {
+    const scale = (this.config.brightness ?? 1) / Math.max(lightBudget(mjModel), 1);
+    for (const { material, lit, shade } of this.toon) {
+      material.color.copy(lit).multiplyScalar(scale);
+      material.shadeColorFactor.copy(shade).multiplyScalar(scale);
+    }
+  }
+
   /** The avatar's hips height over the robot root's at its zero pose, standing on z = 0. */
   private autoHeightRatio(rootHeight: number): number {
     const hips = this.vrm.humanoid.normalizedRestPose.hips?.position;
@@ -184,20 +250,35 @@ export class Skin {
 
   /**
    * Pose from the bodies as drawn this frame, then step the springs. `time` in ms. The
-   * last substep is this frame's pose, so the avatar is never behind the robot.
+   * last substep lands on this frame's pose, so the avatar is never behind the robot.
    */
   update(bodies: Record<number, THREE.Object3D>, time: number): void {
     const rig = this.rig;
     if (!rig || !this.shown) return;
-    const dt = this.lastTime === null ? 0 : Math.min((time - this.lastTime) / 1000, MAX_FRAME_SECONDS);
+    const elapsed = this.lastTime === null ? 0 : (time - this.lastTime) / 1000;
+    const dt = Math.min(elapsed, MAX_FRAME_SECONDS);
     this.lastTime = time;
 
     for (const [bodyId, pose] of this.poses) pose.to.copy(bodies[bodyId].quaternion);
     if (this.hipsBody >= 0) this.rootTo.copy(bodies[this.hipsBody].position);
-    const restart = dt === 0 || this.rootTo.distanceTo(this.rootFrom) > TELEPORT_DISTANCE;
+    const restart =
+      dt === 0 || elapsed > STALL_SECONDS || this.rootTo.distanceTo(this.rootFrom) > TELEPORT_DISTANCE;
     if (restart) {
       for (const pose of this.poses.values()) pose.from.copy(pose.to);
       this.rootFrom.copy(this.rootTo);
+    }
+
+    if (this.springs) {
+      // The anchors are interpolated between frames inside the spring model, so the
+      // avatar is posed once.
+      this.pose(rig, 1);
+      this.updateVrm(dt);
+      this.root.updateMatrixWorld(true);
+      if (restart) this.springs.reset();
+      else this.springs.step(dt);
+      for (const pose of this.poses.values()) pose.from.copy(pose.to);
+      this.rootFrom.copy(this.rootTo);
+      return;
     }
 
     const steps = restart ? 1 : Math.ceil(dt / SPRING_STEP);
@@ -215,6 +296,21 @@ export class Skin {
     this.rootFrom.copy(this.rootTo);
   }
 
+  /** `vrm.update` but for its springs, which MuJoCo turns. */
+  private updateVrm(dt: number): void {
+    const vrm = this.vrm;
+    vrm.humanoid.update();
+    vrm.lookAt?.update(dt);
+    vrm.expressionManager?.update();
+    vrm.nodeConstraintManager?.update();
+    for (const material of vrm.materials ?? []) (material as { update?(dt: number): void }).update?.(dt);
+  }
+
+  /** Spring joints MuJoCo simulates; zero when three-vrm runs them. */
+  get simulatedSpringJoints(): number {
+    return this.springs?.jointCount ?? 0;
+  }
+
   /** The normalized bones at `alpha` of the way from the previous frame's pose to this one's. */
   private pose(rig: RetargetRig, alpha: number): void {
     for (const pose of this.poses.values()) pose.now.slerpQuaternions(pose.from, pose.to, alpha);
@@ -227,6 +323,8 @@ export class Skin {
   }
 
   dispose(): void {
+    this.springs?.dispose();
+    this.springs = null;
     this.root.removeFromParent();
     this.module.VRMUtils.deepDispose(this.vrm.scene);
   }

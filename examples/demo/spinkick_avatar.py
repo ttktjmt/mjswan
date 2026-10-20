@@ -1,11 +1,12 @@
 """Spinkick with a VRM avatar
 
-The G1 Spinkick scene from ``main.py`` on its own, with VRM avatars as skins, posed
-from the robot every frame: beside it, or with ``--skin`` in its place, the G1 itself
-undrawn. The viewer's Skin menu picks one. A skin is drawn only: physics, collisions
-and the policy are the G1's, exactly as in ``main.py``.
+The G1 Spinkick scene from ``main.py`` on its own, with VRM avatars as skins: one is
+drawn in the G1's place, posed from it every frame, the G1 itself undrawn. The viewer's
+Skin menu picks which; cleared, it shows the G1 again. Physics, collisions and the
+policy are the G1's, exactly as in ``main.py``; only the avatar's hair and clothes are
+simulated, by MuJoCo, in a model of their own.
 
-    uv run python examples/demo/spinkick_avatar.py [--skin]
+    uv run python examples/demo/spinkick_avatar.py
 
 Each skin's file is named in its config below, and the build copies it into the app,
 as a splat's ``.spz`` is. A skin whose file is missing is left out. Run it as a script
@@ -14,7 +15,6 @@ as a splat's ``.spz`` is. A skin whose file is missing is left out. Run it as a 
 Needs `pip install 'mjswan[hf,mjlab]'`.
 """
 
-import argparse
 import os
 import sys
 import urllib.error
@@ -75,6 +75,8 @@ AVATAR_SAMPLE_A = mjswan.SkinConfig(
     source=str(HERE / "8590256991748008892.vrm"),
     bones=G1_BONES,
     rest_offsets=G1_REST_OFFSETS,
+    offset=(0.0, 0.0, 0.0),
+    hide_robot=True,
 )
 
 # CC0 (VRM 0.x): Sendagaya Shino, saved beside this script as SendagayaShino.vrm:
@@ -97,7 +99,7 @@ NO_SKINS = (
 )
 
 
-def setup_builder(skin: bool = False) -> mjswan.Builder:
+def setup_builder() -> mjswan.Builder:
     """The Spinkick scene of ``main.py``, with every skin whose file is there."""
     builder = mjswan.Builder(base_path=os.getenv("MJSWAN_BASE_PATH", "/"))
     project = builder.add_project(name="Spinkick Avatar")
@@ -105,8 +107,6 @@ def setup_builder(skin: bool = False) -> mjswan.Builder:
 
     added = 0
     for name, config in SKINS.items():
-        if skin:
-            config = replace(config, offset=(0.0, 0.0, 0.0), hide_robot=True)
         try:
             scene.add_skin(name, config)
         except (FileNotFoundError, urllib.error.URLError) as exc:
@@ -115,21 +115,6 @@ def setup_builder(skin: bool = False) -> mjswan.Builder:
         added += 1
     if not added:
         print(NO_SKINS, file=sys.stderr)
-        return builder
-    if skin:
-        return builder  # In the G1's place, the task's own camera frames it.
-
-    # Halfway between the two, from in front, following the robot's torso.
-    scene.set_viewer(
-        mjswan.ViewerConfig(
-            lookat=(0.0, 0.5, 0.0),
-            distance=3.5,
-            elevation=-10.0,
-            azimuth=180.0,
-            origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
-            body_name="torso_link",
-        )
-    )
     return builder
 
 
@@ -140,16 +125,8 @@ def main() -> None:
         MJSWAN_BASE_PATH: Base path for deployment (default: '/')
         MJSWAN_NO_LAUNCH: Set to '1' to skip launching the browser
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--skin",
-        action="store_true",
-        help="Draw each avatar in the G1's place, as its skin, instead of beside it.",
-    )
-    args = parser.parse_args()
-
     # Its own output directory, so main.py's dist/ is left alone.
-    app = setup_builder(args.skin).build("dist_spinkick_avatar")
+    app = setup_builder().build("dist_spinkick_avatar")
     if os.getenv("MJSWAN_NO_LAUNCH") != "1":
         app.launch()
 

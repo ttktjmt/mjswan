@@ -1,9 +1,10 @@
-"""Skins: VRM avatars posed from a robot's bodies, a render layer outside the simulation.
+"""Skins: VRM avatars posed from a robot's bodies, outside the scene's simulation.
 
 The browser rotates each mapped VRM bone the way its robot body has rotated since the
-robot's zero pose, and moves the avatar's hips with the robot's root. Physics, collision
-and the policy never see it. A scene may carry several skins; the viewer shows one at a
-time, picked from its Skin menu.
+robot's zero pose, and moves the avatar's hips with the robot's root. Its spring bones
+(hair, skirt) are simulated by MuJoCo in a model of their own, so the scene's physics,
+collision and policy never see the avatar. A scene may carry several skins; the viewer
+shows one at a time, picked from its Skin menu.
 """
 
 from __future__ import annotations
@@ -98,6 +99,16 @@ class SkinConfig:
     """Stop drawing the robot the avatar follows, so with ``offset=(0, 0, 0)`` the
     avatar is its skin. Its bodies are still simulated, collide and can be grabbed."""
 
+    brightness: float = 1.0
+    """Scales the avatar's toon (MToon) colours, which the viewer first divides by the
+    scene's summed light when that exceeds 1: a toon shader takes every light it faces
+    in full, so MuJoCo's several lights would clip it to white."""
+
+    mujoco_springs: bool = True
+    """Simulate the spring bones as MuJoCo bodies, in a model beside the scene's that
+    the robot never touches. ``False`` leaves them to three-vrm's springs, for a device
+    that cannot spare the step."""
+
     name: str = ""
     """Shown in the viewer's Skin menu. Set by :meth:`~mjswan.scene.SceneHandle.add_skin`."""
 
@@ -119,6 +130,8 @@ class SkinConfig:
             )
         if self.height_ratio is not None and self.height_ratio <= 0:
             raise ValueError(f"height_ratio must be positive, got {self.height_ratio}.")
+        if self.brightness <= 0:
+            raise ValueError(f"brightness must be positive, got {self.brightness}.")
 
     @property
     def path(self) -> str:
@@ -139,6 +152,8 @@ class SkinConfig:
             **({"height_ratio": self.height_ratio} if self.height_ratio else {}),
             "offset": list(self.offset),
             **({"hide_robot": True} if self.hide_robot else {}),
+            **({"brightness": self.brightness} if self.brightness != 1.0 else {}),
+            **({} if self.mujoco_springs else {"mujoco_springs": False}),
         }
 
 

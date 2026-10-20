@@ -23,10 +23,14 @@ shortcuts.
   offsets, height ratio and placement, and `hide_robot`, which with a zero offset makes
   the avatar the robot's skin. A **Skin** switch under Debug Viz shows or hides it, and
   **Enabled** hides it with the drawings. VRM 0.x and 1.0 load alike through
-  `@pixiv/three-vrm`, loaded only for a scene that has a skin. Spring bones integrate at
-  a fixed 1/120 s through interpolated poses. `mjswan publish` refuses a build with
-  one. `examples/demo/spinkick_avatar.py` runs the G1 Spinkick with two, beside the
-  robot or, with `--skin`, as it.
+  `@pixiv/three-vrm`, loaded only for a scene that has a skin. Spring bones (hair,
+  skirt) are simulated by MuJoCo in a model of their own beside the scene's, built in
+  the browser from the VRM's springs and colliders and stepped at 1/240 s, so they swing
+  with the motion's inertia and keep out of the colliders; `mujoco_springs=False` leaves
+  them to three-vrm. Toon colours are divided by the scene's summed light, so MuJoCo's
+  several lights no longer clip them to white (`brightness` scales the result).
+  `mjswan publish` refuses a build with one. `examples/demo/spinkick_avatar.py` runs the
+  G1 Spinkick with two, each in the G1's place.
 - **A task's own action class runs in the browser** (ADR 0009, **document format 6**). An
   mjlab action class mjswan has no class of its own for, such as in-hand rotation's
   `JointPositionDeltaAction` or luwu's `HeldJointPositionAction`, was skipped with a

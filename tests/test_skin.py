@@ -89,6 +89,17 @@ class TestToDict:
         assert "hide_robot" not in SkinConfig(bones=BONES).to_dict()
         assert SkinConfig(bones=BONES, hide_robot=True).to_dict()["hide_robot"] is True
 
+    def test_brightness_and_springs_only_when_not_the_default(self):
+        entry = SkinConfig(bones=BONES).to_dict()
+        assert "brightness" not in entry and "mujoco_springs" not in entry
+        entry = SkinConfig(bones=BONES, brightness=1.4, mujoco_springs=False).to_dict()
+        assert entry["brightness"] == 1.4
+        assert entry["mujoco_springs"] is False
+
+    def test_rejects_a_non_positive_brightness(self):
+        with pytest.raises(ValueError, match="brightness"):
+            SkinConfig(bones=BONES, brightness=0)
+
     def test_height_ratio_when_set(self):
         assert (
             SkinConfig(bones=BONES, height_ratio=1.1).to_dict()["height_ratio"] == 1.1
