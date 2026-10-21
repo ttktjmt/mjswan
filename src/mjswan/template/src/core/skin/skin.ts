@@ -38,6 +38,8 @@ export interface SkinConfig {
   height_ratio?: number;
   /** Added to the avatar's position, in MuJoCo's world frame (x forward, y left, z up), metres. */
   offset?: ArrayLike<number>;
+  /** Where the hips sit on the body `hips` maps to, in that body's frame (MuJoCo axes), metres. */
+  hips_offset?: ArrayLike<number>;
   /** Stop drawing the robot the skin follows: with a zero `offset`, the avatar replaces it. */
   hide_robot?: boolean;
   /** Scales the toon colours once they are divided by the scene's light. Absent: 1. */
@@ -93,6 +95,8 @@ export class Skin {
   private hipsBody = -1;
   private heightRatio = 1;
   private poses = new Map<number, BodyPose>();
+  /** `hips_offset` in three.js axes, in the hips body's frame. */
+  private readonly hipsOffset = new THREE.Vector3();
   private readonly rootFrom = new THREE.Vector3();
   private readonly rootTo = new THREE.Vector3();
   private readonly rootNow = new THREE.Vector3();
@@ -210,8 +214,13 @@ export class Skin {
         if (mjModel.body_rootid[b] === robot) this.hiddenBodies.push(b);
       }
     }
+    const hipsOffset = this.config.hips_offset ?? [0, 0, 0];
+    this.hipsOffset.set(hipsOffset[0], hipsOffset[2], -hipsOffset[1]);
+    const offsetHeight =
+      this.hipsBody >= 0 ? this.hipsOffset.clone().applyQuaternion(zeroPose[this.hipsBody]).y : 0;
     this.heightRatio =
-      this.config.height_ratio ?? this.autoHeightRatio(zeroPoseHeight(mjModel, zeroPose, this.hipsBody));
+      this.config.height_ratio ??
+      this.autoHeightRatio(zeroPoseHeight(mjModel, zeroPose, this.hipsBody) + offsetHeight);
 
     // The container turns the model frame onto the robot's facing; see retarget.ts.
     const offset = this.config.offset ?? [0, 0, 0];
@@ -263,7 +272,10 @@ export class Skin {
     this.lastTime = time;
 
     for (const [bodyId, pose] of this.poses) pose.to.copy(bodies[bodyId].quaternion);
-    if (this.hipsBody >= 0) this.rootTo.copy(bodies[this.hipsBody].position);
+    if (this.hipsBody >= 0) {
+      const hips = bodies[this.hipsBody];
+      this.rootTo.copy(this.hipsOffset).applyQuaternion(hips.quaternion).add(hips.position);
+    }
     const restart =
       dt === 0 || elapsed > STALL_SECONDS || this.rootTo.distanceTo(this.rootFrom) > TELEPORT_DISTANCE;
     if (restart) {

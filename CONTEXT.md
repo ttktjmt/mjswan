@@ -57,7 +57,8 @@ src/mjswan/          Python package source: the object model at the root, one pa
 examples/            Runnable examples. Python only: assets are fetched at run time
   demo/                main.py (the deployed app: mjlab Tasks + Showcase, everything
                        from mjlab or the Hub), spinkick_avatar.py (main.py's Spinkick
-                       alone, with VRM skins), simple.py (one task, one checkpoint),
+                       alone, with VRM skins), go1_avatar.py (main.py's Go1 velocity
+                       task alone, as a fox), simple.py (one task, one checkpoint),
                        minimum_policy.py (the smallest complete policy) and
                        mujoco_models.py (a gallery, no policy). `mjswan demo` runs
                        the three named ones; minimum_policy.py is read, not run
@@ -172,7 +173,7 @@ A scene owns one MuJoCo model (as `MjModel` → binary `.mjb` or `MjSpec` → XM
 Configures a 3D Gaussian Splat (`.spz` format) background: scale, position offsets, Euler rotations, optional collider mesh URL, and a `control` flag exposing live calibration sliders.
 
 ### `skin.py`: `SkinConfig`
-A skin is a VRM avatar drawn with the robot, never part of the model: physics, collision and the policy are untouched. One frozen config is the whole avatar (the `.vrm` path or URL, a VRM-humanoid-bone to robot-body map, per-bone rest offsets, a height ratio, a placement, `hide_robot`, which stops drawing the robot's own meshes so the avatar is its skin, a toon `brightness`, and `mujoco_springs`), so swapping avatars swaps the config. A scene carries any number, like its splats; the viewer's Skin menu shows one at a time, the first by default. `add_skin(name, config)` downloads a URL, checks the file is binary glTF and every body is in the scene's model (bare names find `<entity>/<name>`), and the build copies each file unmodified to `assets/<skin-id>.vrm`, embedded license metadata included. `mjswan publish` refuses a build carrying one. The browser side is `core/skin/`.
+A skin is a VRM avatar drawn with the robot, never part of the model: physics, collision and the policy are untouched. One frozen config is the whole avatar (the `.vrm` path or URL, a VRM-humanoid-bone to robot-body map, per-bone rest offsets, a height ratio, a placement, `hide_robot`, which stops drawing the robot's own meshes so the avatar is its skin, a toon `brightness`, `mujoco_springs`, and `hips_offset`, which seats the hips off the root body for a quadruped), so swapping avatars swaps the config. A scene carries any number, like its splats; the viewer's Skin menu shows one at a time, the first by default. `add_skin(name, config)` downloads a URL, checks the file is binary glTF and every body is in the scene's model (bare names find `<entity>/<name>`), and the build copies each file unmodified to `assets/<skin-id>.vrm`, embedded license metadata included. `mjswan publish` refuses a build carrying one. The browser side is `core/skin/`.
 
 ### `viewer.py` — `ViewerConfig`
 Camera parameters (lookat, distance, fovy, elevation, azimuth) + tracking mode (`OriginType`: AUTO / WORLD / ASSET_ROOT / ASSET_BODY). Elevation and azimuth are MuJoCo's (the direction the camera looks), so an mjlab task's values carry over unchanged. `ViewerConfig.from_position()` computes spherical params from a Cartesian viewer position.

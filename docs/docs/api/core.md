@@ -902,6 +902,7 @@ class mjswan.SkinConfig(
     rest_offsets: Mapping[str, tuple[float, float, float]] = {},
     height_ratio: float | None = None,
     offset: tuple[float, float, float] = (0.0, 1.0, 0.0),
+    hips_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     hide_robot: bool = False,
     brightness: float = 1.0,
     mujoco_springs: bool = True,
@@ -917,11 +918,12 @@ Everything one skin needs, so swapping avatars swaps only this object. The brows
 | `rest_offsets` | VRM bone to the rotation, in degrees about the avatar's x, then y, then z axis (y up, facing +z, its left toward +x), from its T-pose to where it sits while the robot is at its zero pose. |
 | `height_ratio` | Scale from the robot root's height to the avatar's hips height; across the floor the hips follow the root exactly. `None` takes the avatar's hips height over the root's height at the model's zero pose. |
 | `offset` | Added to the avatar's position, in MuJoCo's world frame, metres: it moves where the robot moves, this far aside (the default, 1 m to its left). |
+| `hips_offset` | Where the avatar's hips sit on the body `hips` maps to, in that body's own frame (MuJoCo axes), metres, so it turns with the robot. A quadruped's root body is mid-trunk while its avatar's hips bone is the pelvis, behind it. |
 | `hide_robot` | Stop drawing the robot the avatar follows, so with `offset=(0, 0, 0)` the avatar is its skin. The robot is still simulated, collides and can be grabbed with the pointer. |
 | `brightness` | Scales the avatar's toon (MToon) colours. The viewer first divides them by the scene's summed light when that exceeds 1 (2.3 in an mjlab scene): a toon shader takes every light it faces in full, so MuJoCo's several lights would clip it to white. The scene's own materials are left as they are. |
 | `mujoco_springs` | Simulate the spring bones as MuJoCo bodies: each spring joint a ball joint with its mass at the bone's tail, the VRM's colliders as spheres and capsules, the nodes they hang from pushed onto the posed avatar every 1/240 s substep. Stiffness, drag and gravity follow the VRM's own settings as its tools apply them at 60 fps. `False` leaves the springs to three-vrm, which costs less per frame. |
 
-`examples/demo/spinkick_avatar.py` is a complete G1 configuration with two skins.
+`examples/demo/spinkick_avatar.py` is a complete G1 configuration with two skins. `examples/demo/go1_avatar.py` puts a fox on the Go1: a quadruped whose front legs map to the VRM arms and hind legs to its legs, with rest offsets that stand the fox at rest whenever the Go1 stands. It also builds that VRM from a rigged glTF (the Khronos sample Fox), adding the humanoid bones and a tail spring.
 
 ---
 

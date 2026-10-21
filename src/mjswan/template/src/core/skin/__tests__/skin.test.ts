@@ -250,6 +250,25 @@ describe('Skin', () => {
     near((await colours(lit(0.1)))[0], [1, 0.8, 0.6]);
   });
 
+  it('sits the hips at hips_offset in the body frame, turning with the robot', async () => {
+    const hipsAt = async (yaw: number) => {
+      // 0.2 m behind the pelvis, as a quadruped's hips sit behind its mid-trunk root.
+      const skin = await Skin.load(vrmFile('1'), { ...CONFIG, hips_offset: [-0.2, 0, 0] });
+      skin.bind(mujoco, robot);
+      skin.update(bodies(yaw, 0), 0);
+      skin.root.updateMatrixWorld(true);
+      return skin.root.getObjectByName('hips')!.getWorldPosition(new THREE.Vector3());
+    };
+    const ahead = await hipsAt(0);
+    expect(ahead.x).toBeCloseTo(-0.2, 6);
+    expect(ahead.y).toBeCloseTo(0.9, 6);
+    expect(ahead.z).toBeCloseTo(0, 6);
+    // A quarter turn left: the robot's back is now three.js +z.
+    const turned = await hipsAt(Math.PI / 2);
+    expect(turned.x).toBeCloseTo(0, 6);
+    expect(turned.z).toBeCloseTo(0.2, 6);
+  });
+
   it('skips a bone the file lacks and a body the model lacks', async () => {
     const skin = await Skin.load(vrmFile('1'), {
       ...CONFIG,

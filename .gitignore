@@ -81,3 +81,4 @@ src/mjswan/template/public/_headers
 # VRM avatars: each user downloads their own copy (see examples/demo/spinkick_avatar.py)
 *.vrm
 /examples/demo/dist_spinkick_avatar/
+/examples/demo/dist_go1_avatar/

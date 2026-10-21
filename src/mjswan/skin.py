@@ -95,6 +95,11 @@ class SkinConfig:
     """Added to the avatar's position, in metres: it moves where the robot moves, this
     far aside (the default stands it 1 m to the robot's left)."""
 
+    hips_offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    """Where the avatar's hips sit on the body ``hips`` maps to, in that body's own frame
+    (MuJoCo axes), metres, so it turns with the robot. A quadruped's root is mid-trunk,
+    while its avatar's hips bone is the pelvis, behind it."""
+
     hide_robot: bool = False
     """Stop drawing the robot the avatar follows, so with ``offset=(0, 0, 0)`` the
     avatar is its skin. Its bodies are still simulated, collide and can be grabbed."""
@@ -151,6 +156,9 @@ class SkinConfig:
             },
             **({"height_ratio": self.height_ratio} if self.height_ratio else {}),
             "offset": list(self.offset),
+            **(
+                {"hips_offset": list(self.hips_offset)} if any(self.hips_offset) else {}
+            ),
             **({"hide_robot": True} if self.hide_robot else {}),
             **({"brightness": self.brightness} if self.brightness != 1.0 else {}),
             **({} if self.mujoco_springs else {"mujoco_springs": False}),

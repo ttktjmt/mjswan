@@ -96,6 +96,11 @@ class TestToDict:
         assert entry["brightness"] == 1.4
         assert entry["mujoco_springs"] is False
 
+    def test_hips_offset_only_when_set(self):
+        assert "hips_offset" not in SkinConfig(bones=BONES).to_dict()
+        entry = SkinConfig(bones=BONES, hips_offset=(-0.16, 0.0, 0.0)).to_dict()
+        assert entry["hips_offset"] == [-0.16, 0.0, 0.0]
+
     def test_rejects_a_non_positive_brightness(self):
         with pytest.raises(ValueError, match="brightness"):
             SkinConfig(bones=BONES, brightness=0)
