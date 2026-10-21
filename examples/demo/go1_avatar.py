@@ -1,9 +1,9 @@
 """Go1 with a fox skin
 
-The Go1 velocity task from ``main.py`` on its own, with a fox drawn in the Go1's place,
-posed from it every frame, the Go1 itself undrawn; the fox's tail swings, simulated by
-MuJoCo in a model of its own. Physics, collisions and the policy are the Go1's, exactly
-as in ``main.py``.
+The Go1 velocity tasks from ``main.py``, flat and rough, on their own, with a fox drawn
+in the Go1's place, posed from it every frame, the Go1 itself undrawn; the fox's tail
+swings, simulated by MuJoCo in a model of its own. Physics, collisions and the policy
+are the Go1's, exactly as in ``main.py``.
 
     uv run python examples/demo/go1_avatar.py
 
@@ -29,7 +29,8 @@ from main import HF_REPO, add_mjlab_task
 import mjswan
 from mjswan.source import hf, url
 
-TASK = "Mjlab-Velocity-Flat-Unitree-Go1"
+#: The scene list, in order: the same Go1 and fox on flat ground and on rough terrain.
+TASKS = ("Mjlab-Velocity-Flat-Unitree-Go1", "Mjlab-Velocity-Rough-Unitree-Go1")
 
 # The Fox's mesh is CC0, by PixelMannen; its rig and animation are CC BY 4.0, by
 # @tomkranis, which asks for the credit below wherever it is shown.
@@ -218,17 +219,20 @@ def fox_vrm() -> Path:
 
 
 def setup_builder() -> mjswan.Builder:
-    """The Go1 velocity scene of ``main.py``, with the fox when it downloads."""
+    """The Go1 velocity scenes of ``main.py``, with the fox when it downloads."""
     builder = mjswan.Builder(base_path=os.getenv("MJSWAN_BASE_PATH", "/"))
     project = builder.add_project(name="Go1 Avatar")
-    scene = add_mjlab_task(project, TASK, hf.list_repo_onnx(HF_REPO))
     try:
         fox = replace(FOX, source=str(fox_vrm()))
     except urllib.error.URLError as exc:
         print(f"Running the Go1 without the fox: {exc}", file=sys.stderr)
-        return builder
-    scene.add_skin("Fox", fox)
-    scene.add_attribution("fox", license="CC-BY-4.0", notice=FOX_NOTICE)
+        fox = None
+    repo_onnx = hf.list_repo_onnx(HF_REPO)
+    for task_id in TASKS:
+        scene = add_mjlab_task(project, task_id, repo_onnx)
+        if fox is not None:
+            scene.add_skin("Fox", fox)
+            scene.add_attribution("fox", license="CC-BY-4.0", notice=FOX_NOTICE)
     return builder
 
 

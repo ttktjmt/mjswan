@@ -32,7 +32,7 @@ shortcuts.
   `hips_offset` seats the hips off the root body, as a quadruped's pelvis sits behind
   its mid-trunk root. `mjswan publish` refuses a build with one.
   `examples/demo/spinkick_avatar.py` runs the G1 Spinkick with two, each in the G1's
-  place, and `examples/demo/go1_avatar.py` the Go1 velocity task as a fox, a VRM it
+  place, and `examples/demo/go1_avatar.py` the Go1 velocity tasks, flat and rough, as a fox, a VRM it
   builds from the Khronos glTF sample Fox (CC0 mesh, CC BY 4.0 rig), tail spring
   included.
 - **A task's own action class runs in the browser** (ADR 0009, **document format 6**). An

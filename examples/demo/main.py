@@ -141,7 +141,7 @@ def add_mjlab_task(
 ) -> mjswan.SceneHandle:
     """One of mjlab's tasks, as mjlab gives it, driven by its mirrored checkpoints.
 
-    Shared with ``go1_avatar.py``, which runs the Go1 velocity task on its own.
+    Shared with ``go1_avatar.py``, which runs the Go1 velocity tasks on their own.
     """
     env_cfg = load_env_cfg(task_id, play=True)
     scene = project.add_scene_mjlab(task_id, env_cfg=env_cfg)
