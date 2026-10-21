@@ -2,15 +2,16 @@
  * A skin: a VRM avatar posed from the robot's bodies every frame, outside the scene's
  * model. Its spring bones are simulated by MuJoCo in a model of their own (springs.ts).
  *
- * three-vrm loads lazily, so a scene without a skin never fetches it. The file is parsed
- * from bytes the app already holds; nothing is fetched and nothing is evaluated.
+ * three-vrm and the spring model load lazily (lazy.ts), so a scene without a skin never
+ * fetches them. The file is parsed from bytes the app already holds; nothing is fetched
+ * and nothing is evaluated.
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { MainModule, MjModel } from 'mujoco';
 import type { VRM, VRMHumanBoneName } from '@pixiv/three-vrm';
 import { lightBudget } from '../scene/lights';
-import { SpringPhysics } from './springs';
+import type { SpringPhysics } from './springs';
 import {
   buildRig,
   hipsPosition,
@@ -55,7 +56,7 @@ const TELEPORT_DISTANCE = 0.3;
 /** One body's rotation at the previous frame, this frame, and the substep between. */
 type BodyPose = { from: THREE.Quaternion; to: THREE.Quaternion; now: THREE.Quaternion };
 
-type VrmModule = typeof import('@pixiv/three-vrm');
+type SkinModule = typeof import('./lazy');
 
 /** The two colours of an MToon material that its lights multiply. */
 type ToonMaterial = THREE.Material & { isMToonMaterial: true; color: THREE.Color; shadeColorFactor: THREE.Color };
@@ -98,7 +99,7 @@ export class Skin {
   private springsBuilt = false;
 
   private constructor(
-    private readonly module: VrmModule,
+    private readonly module: SkinModule,
     private readonly vrm: VRM,
     private readonly config: SkinConfig,
   ) {
@@ -132,7 +133,7 @@ export class Skin {
   }
 
   static async load(data: ArrayBuffer, config: SkinConfig): Promise<Skin> {
-    const module = await import('@pixiv/three-vrm');
+    const module = await import('./lazy');
     const loader = new GLTFLoader();
     loader.register((parser) => new module.VRMLoaderPlugin(parser));
     const gltf = await loader.parseAsync(data, '');
@@ -222,7 +223,7 @@ export class Skin {
     const manager = this.vrm.springBoneManager;
     if (this.config.mujoco_springs === false || !manager) return null;
     try {
-      return SpringPhysics.build(mujoco, manager, this.vrm.scene);
+      return this.module.SpringPhysics.build(mujoco, manager, this.vrm.scene);
     } catch (error) {
       console.warn('[Skin] spring model not built; three-vrm runs the springs:', error);
       return null;

@@ -23,7 +23,7 @@ shortcuts.
   offsets, height ratio and placement, and `hide_robot`, which with a zero offset makes
   the avatar the robot's skin. A **Skin** switch under Debug Viz shows or hides it, and
   **Enabled** hides it with the drawings. VRM 0.x and 1.0 load alike through
-  `@pixiv/three-vrm`, loaded only for a scene that has a skin. Spring bones (hair,
+  `@pixiv/three-vrm`, which loads, with the spring model, only for a scene that has a skin. Spring bones (hair,
   skirt) are simulated by MuJoCo in a model of their own beside the scene's, built in
   the browser from the VRM's springs and colliders and stepped at 1/240 s, so they swing
   with the motion's inertia and keep out of the colliders; `mujoco_springs=False` leaves
