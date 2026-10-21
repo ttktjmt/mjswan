@@ -34,7 +34,10 @@ shortcuts.
   `examples/demo/spinkick_avatar.py` runs the G1 Spinkick with two, each in the G1's
   place, and `examples/demo/go1_avatar.py` the Go1 velocity tasks, flat and rough, as a fox, a VRM it
   builds from the Khronos glTF sample Fox (CC0 mesh, CC BY 4.0 rig), tail spring
-  included.
+  included, or as a pug from Quaternius's Farm Animals (CC0), picked from the Skin
+  menu. The pack has no stable URL, so the pug is committed as
+  `examples/demo/assets/pug.glb`, made by `make_pug.py` beside it, which reparents
+  the IK rig's feet so joint angles alone pose it.
 - **A task's own action class runs in the browser** (ADR 0009, **document format 6**). An
   mjlab action class mjswan has no class of its own for, such as in-hand rotation's
   `JointPositionDeltaAction` or luwu's `HeldJointPositionAction`, was skipped with a

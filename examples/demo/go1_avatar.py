@@ -1,17 +1,18 @@
-"""Go1 with a fox skin
+"""Go1 with a fox or a pug skin
 
-The Go1 velocity tasks from ``main.py``, flat and rough, on their own, with a fox drawn
-in the Go1's place, posed from it every frame, the Go1 itself undrawn; the fox's tail
-swings, simulated by MuJoCo in a model of its own. Physics, collisions and the policy
-are the Go1's, exactly as in ``main.py``.
+The Go1 velocity tasks from ``main.py``, flat and rough, on their own, with a fox or a
+pug (the Skin menu switches) drawn in the Go1's place, posed from it every frame, the
+Go1 itself undrawn; the fox's tail swings, simulated by MuJoCo in a model of its own.
+Physics, collisions and the policy are the Go1's, exactly as in ``main.py``.
 
     uv run python examples/demo/go1_avatar.py
 
 VRM is a humanoid format, and openly licensed four-legged VRMs are rare, so the script
-makes one: it downloads the Khronos glTF sample Fox, a rigged quadruped, and adds what
-a skin needs, its humanoid bones (the front legs as arms, the hind legs as legs) and a
-spring on its tail. Run it as a script (not ``python -m``): it imports this directory's
-``main.py``.
+makes them from rigged glTF quadrupeds, adding what a skin needs: humanoid bones (the
+front legs as arms, the hind legs as legs) and, on the fox, a tail spring. The fox is
+the Khronos glTF sample Fox, downloaded; the pug is ``assets/pug.glb``, committed, as
+its source has no stable URL (``assets/make_pug.py`` made it). Run it as a script (not
+``python -m``): it imports this directory's ``main.py``.
 
 Needs `pip install 'mjswan[hf,mjlab]'`.
 """
@@ -20,6 +21,7 @@ import json
 import os
 import struct
 import sys
+import tempfile
 import urllib.error
 from dataclasses import replace
 from pathlib import Path
@@ -114,14 +116,93 @@ FOX = mjswan.SkinConfig(
     hide_robot=True,
 )
 
+PUG_GLB = Path(__file__).parent / "assets" / "pug.glb"
+PUG_NOTICE = (
+    "Pug: from Farm Animals Animated by Quaternius (CC0 1.0), "
+    "https://quaternius.itch.io/lowpoly-animated-animals\n"
+    "Made forward-kinematic and scaled by mjswan's examples/demo/assets/make_pug.py, "
+    "turned into a VRM by its go1_avatar.py.\n"
+)
+
+#: VRM humanoid bone -> the Pug's bone. Its hips bone is mid-body, as the Go1's trunk
+#: origin is; it has no toes.
+PUG_HUMANOID = {
+    "hips": "Body",
+    "spine": "Shoulders",
+    "neck": "Neck",
+    "head": "Head",
+    "leftUpperArm": "FrontUpLeg.L",
+    "leftLowerArm": "FrontLowLeg.L",
+    "leftHand": "FrontFoot.L",
+    "rightUpperArm": "FrontUpLeg.R",
+    "rightLowerArm": "FrontLowLeg.R",
+    "rightHand": "FrontFoot.R",
+    "leftUpperLeg": "BackUpLeg.L",
+    "leftLowerLeg": "BackLowLeg.L",
+    "leftFoot": "BackFoot.L",
+    "rightUpperLeg": "BackUpLeg.R",
+    "rightLowerLeg": "BackLowLeg.R",
+    "rightFoot": "BackFoot.R",
+}
+
+PUG = mjswan.SkinConfig(
+    bones={bone: GO1_BONES[bone] for bone in PUG_HUMANOID},
+    rest_offsets={
+        bone: offset
+        for bone, offset in GO1_REST_OFFSETS.items()
+        if bone in PUG_HUMANOID
+    },
+    offset=(0.0, 0.0, 0.0),
+    hide_robot=True,
+)
+
+
+def read_glb(path: Path) -> tuple[dict, bytes]:
+    """A .glb's JSON, and its binary chunk with the chunk's own header."""
+    data = path.read_bytes()
+    json_length = struct.unpack_from("<I", data, 12)[0]
+    return json.loads(data[20 : 20 + json_length]), data[20 + json_length :]
+
+
+def write_glb(path: Path, gltf: dict, binary_chunk: bytes) -> Path:
+    text = json.dumps(gltf, separators=(",", ":")).encode()
+    text += b" " * (-len(text) % 4)
+    path.write_bytes(
+        struct.pack("<III", 0x46546C67, 2, 20 + len(text) + len(binary_chunk))
+        + struct.pack("<II", len(text), 0x4E4F534A)
+        + text
+        + binary_chunk
+    )
+    return path
+
+
+def vrm_meta(
+    name: str, authors: list[str], notice: str, license_url: str, credit: bool
+) -> dict:
+    """A VRM 1.0 meta with every permission open: the VRM license may not narrow the
+    model's own, given as its other license."""
+    return {
+        "name": name,
+        "authors": authors,
+        "copyrightInformation": notice.strip(),
+        "licenseUrl": "https://vrm.dev/licenses/1.0/",
+        "otherLicenseUrl": license_url,
+        "avatarPermission": "everyone",
+        "commercialUsage": "corporation",
+        "creditNotation": "required" if credit else "unnecessary",
+        "allowRedistribution": True,
+        "modification": "allowModificationRedistribution",
+        "allowExcessivelyViolentUsage": True,
+        "allowExcessivelySexualUsage": True,
+        "allowPoliticalOrReligiousUsage": True,
+        "allowAntisocialOrHateUsage": True,
+    }
+
 
 def fox_vrm() -> Path:
     """The Khronos sample Fox as a VRM 1.0 file: scaled, its bones named, its tail a spring."""
     glb = url.fetch_file(FOX_URL)
-    data = glb.read_bytes()
-    json_length = struct.unpack_from("<I", data, 12)[0]
-    gltf = json.loads(data[20 : 20 + json_length])
-    binary_chunk = data[20 + json_length :]
+    gltf, binary_chunk = read_glb(glb)
     nodes = {node["name"]: i for i, node in enumerate(gltf["nodes"])}
 
     gltf["nodes"][nodes["root"]]["scale"] = [FOX_SCALE] * 3
@@ -139,24 +220,16 @@ def fox_vrm() -> Path:
         {
             "VRMC_vrm": {
                 "specVersion": "1.0",
-                # Every permission open and credit required: the VRM license may not
-                # narrow CC BY 4.0, which the rig is under.
+                # Credit required: the rig is CC BY 4.0.
                 "meta": {
-                    "name": "Fox",
-                    "authors": ["PixelMannen", "tomkranis", "AsoboStudio", "scurest"],
-                    "copyrightInformation": FOX_NOTICE.strip(),
+                    **vrm_meta(
+                        "Fox",
+                        ["PixelMannen", "tomkranis", "AsoboStudio", "scurest"],
+                        FOX_NOTICE,
+                        "https://creativecommons.org/licenses/by/4.0/",
+                        credit=True,
+                    ),
                     "references": [FOX_URL],
-                    "licenseUrl": "https://vrm.dev/licenses/1.0/",
-                    "otherLicenseUrl": "https://creativecommons.org/licenses/by/4.0/",
-                    "avatarPermission": "everyone",
-                    "commercialUsage": "corporation",
-                    "creditNotation": "required",
-                    "allowRedistribution": True,
-                    "modification": "allowModificationRedistribution",
-                    "allowExcessivelyViolentUsage": True,
-                    "allowExcessivelySexualUsage": True,
-                    "allowPoliticalOrReligiousUsage": True,
-                    "allowAntisocialOrHateUsage": True,
                 },
                 "humanoid": {
                     "humanBones": {
@@ -206,33 +279,51 @@ def fox_vrm() -> Path:
         }
     )
 
-    text = json.dumps(gltf, separators=(",", ":")).encode()
-    text += b" " * (-len(text) % 4)
-    out = glb.with_suffix(".vrm")
-    out.write_bytes(
-        struct.pack("<III", 0x46546C67, 2, 20 + len(text) + len(binary_chunk))
-        + struct.pack("<II", len(text), 0x4E4F534A)
-        + text
-        + binary_chunk
-    )
-    return out
+    return write_glb(glb.with_suffix(".vrm"), gltf, binary_chunk)
+
+
+def pug_vrm() -> Path:
+    """``assets/pug.glb`` as a VRM 1.0 file, its bones named."""
+    gltf, binary_chunk = read_glb(PUG_GLB)
+    nodes = {node["name"]: i for i, node in enumerate(gltf["nodes"])}
+    gltf["extensionsUsed"] = [*gltf.get("extensionsUsed", []), "VRMC_vrm"]
+    gltf.setdefault("extensions", {})["VRMC_vrm"] = {
+        "specVersion": "1.0",
+        "meta": vrm_meta(
+            "Pug",
+            ["Quaternius"],
+            PUG_NOTICE,
+            "https://creativecommons.org/publicdomain/zero/1.0/",
+            credit=False,
+        ),
+        "humanoid": {
+            "humanBones": {bone: {"node": nodes[n]} for bone, n in PUG_HUMANOID.items()}
+        },
+    }
+    out = Path(tempfile.mkdtemp(prefix="mjswan-")) / "pug.vrm"
+    return write_glb(out, gltf, binary_chunk)
 
 
 def setup_builder() -> mjswan.Builder:
-    """The Go1 velocity scenes of ``main.py``, with the fox when it downloads."""
+    """The Go1 velocity scenes of ``main.py``, with the pug, and the fox when it downloads."""
     builder = mjswan.Builder(base_path=os.getenv("MJSWAN_BASE_PATH", "/"))
     project = builder.add_project(name="Go1 Avatar")
+    # Name -> skin and its attribution: (component, license, notice).
+    skins = {}
     try:
-        fox = replace(FOX, source=str(fox_vrm()))
+        skins["Fox"] = (
+            replace(FOX, source=str(fox_vrm())),
+            ("fox", "CC-BY-4.0", FOX_NOTICE),
+        )
     except urllib.error.URLError as exc:
         print(f"Running the Go1 without the fox: {exc}", file=sys.stderr)
-        fox = None
+    skins["Pug"] = replace(PUG, source=str(pug_vrm())), ("pug", "CC0-1.0", PUG_NOTICE)
     repo_onnx = hf.list_repo_onnx(HF_REPO)
     for task_id in TASKS:
         scene = add_mjlab_task(project, task_id, repo_onnx)
-        if fox is not None:
-            scene.add_skin("Fox", fox)
-            scene.add_attribution("fox", license="CC-BY-4.0", notice=FOX_NOTICE)
+        for name, (skin, (component, license_id, notice)) in skins.items():
+            scene.add_skin(name, skin)
+            scene.add_attribution(component, license=license_id, notice=notice)
     return builder
 
 

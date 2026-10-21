@@ -54,12 +54,13 @@ src/mjswan/          Python package source: the object model at the root, one pa
                        commands.py (ui_command presets, mjlab bindings, motion reset jitter)
   template/            TypeScript frontend (Vite + React + three.js + mujoco-wasm)
 
-examples/            Runnable examples. Python only: assets are fetched at run time
+examples/            Runnable examples. Python only: assets are fetched at run time,
+                     save demo/assets/pug.glb (CC0, no stable URL; make_pug.py made it)
   demo/                main.py (the deployed app: mjlab Tasks + Showcase, everything
                        from mjlab or the Hub), spinkick_avatar.py (main.py's Spinkick
                        alone, with VRM skins), go1_avatar.py (main.py's two Go1
-                       velocity tasks alone, as a fox), simple.py (one task, one
-                       checkpoint), minimum_policy.py (the smallest complete
+                       velocity tasks alone, as a fox or a pug), simple.py (one
+                       task, one checkpoint), minimum_policy.py (the smallest complete
                        policy) and mujoco_models.py (a gallery, no policy). `mjswan demo` runs
                        the three named ones; minimum_policy.py is read, not run
   colab/               Google Colab notebooks (demo, anymal_c_velocity)
