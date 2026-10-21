@@ -13,7 +13,7 @@ import { type Bytes } from '../utils/bytes';
 import type { EnginePlugins } from '../plugins';
 import { type SplatTransform, type SplatMesh, loadSplat, disposeSplat, applySplatTransform } from '../scene/splat';
 import { loadCollider, disposeCollider } from '../scene/collider';
-import { Skin, type SkinConfig } from '../skin/skin';
+import type { Skin, SkinConfig } from '../skin/skin';
 import { InteractionManager, type InteractionSim } from '../interaction/InteractionManager';
 import type { InteractionModeId } from '../interaction/params';
 import { createTendonState, updateTendonGeometry, updateTendonRendering } from '../scene/tendons';
@@ -851,6 +851,8 @@ export class mjswanRuntime {
   /** Render only, so a file that does not load costs the skin and nothing else. */
   private async applySkin(input: ResolvedSkin): Promise<void> {
     try {
+      // Only now: the skin module brings three-vrm and the spring model with it.
+      const { Skin } = await import('../skin/skin');
       const skin = await Skin.load(input.data, input.config);
       if (this.disposed || !this.mjModel) {
         skin.dispose();

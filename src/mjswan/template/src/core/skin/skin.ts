@@ -2,16 +2,22 @@
  * A skin: a VRM avatar posed from the robot's bodies every frame, outside the scene's
  * model. Its spring bones are simulated by MuJoCo in a model of their own (springs.ts).
  *
- * three-vrm and the spring model load lazily (lazy.ts), so a scene without a skin never
- * fetches them. The file is parsed from bytes the app already holds; nothing is fetched
- * and nothing is evaluated.
+ * The runtime imports this module only for a scene with a skin, so a scene without one
+ * never fetches it, nor three-vrm, retarget.ts and springs.ts that come with it. The file
+ * is parsed from bytes the app already holds; nothing is fetched and nothing is evaluated.
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { MainModule, MjModel } from 'mujoco';
-import type { VRM, VRMHumanBoneName } from '@pixiv/three-vrm';
+import {
+  VRMHumanBoneParentMap,
+  VRMLoaderPlugin,
+  VRMUtils,
+  type VRM,
+  type VRMHumanBoneName,
+} from '@pixiv/three-vrm';
 import { lightBudget } from '../scene/lights';
-import type { SpringPhysics } from './springs';
+import { SpringPhysics } from './springs';
 import {
   buildRig,
   hipsPosition,
@@ -56,8 +62,6 @@ const TELEPORT_DISTANCE = 0.3;
 /** One body's rotation at the previous frame, this frame, and the substep between. */
 type BodyPose = { from: THREE.Quaternion; to: THREE.Quaternion; now: THREE.Quaternion };
 
-type SkinModule = typeof import('./lazy');
-
 /** The two colours of an MToon material that its lights multiply. */
 type ToonMaterial = THREE.Material & { isMToonMaterial: true; color: THREE.Color; shadeColorFactor: THREE.Color };
 
@@ -99,7 +103,6 @@ export class Skin {
   private springsBuilt = false;
 
   private constructor(
-    private readonly module: SkinModule,
     private readonly vrm: VRM,
     private readonly config: SkinConfig,
   ) {
@@ -133,15 +136,14 @@ export class Skin {
   }
 
   static async load(data: ArrayBuffer, config: SkinConfig): Promise<Skin> {
-    const module = await import('./lazy');
     const loader = new GLTFLoader();
-    loader.register((parser) => new module.VRMLoaderPlugin(parser));
+    loader.register((parser) => new VRMLoaderPlugin(parser));
     const gltf = await loader.parseAsync(data, '');
     const vrm = gltf.userData.vrm as VRM | undefined;
     if (!vrm) throw new Error('not a VRM file (no VRM or VRMC_vrm extension)');
-    module.VRMUtils.removeUnnecessaryVertices(gltf.scene);
-    module.VRMUtils.combineSkeletons(gltf.scene);
-    return new Skin(module, vrm, config);
+    VRMUtils.removeUnnecessaryVertices(gltf.scene);
+    VRMUtils.combineSkeletons(gltf.scene);
+    return new Skin(vrm, config);
   }
 
   /** VRM `meta` version: `'0'` or `'1'`. */
@@ -169,7 +171,7 @@ export class Skin {
     this.normalizeToon(mjModel);
 
     const humanoid = this.vrm.humanoid;
-    const parents = this.module.VRMHumanBoneParentMap;
+    const parents = VRMHumanBoneParentMap;
     const mapped: Array<{ name: string; bodyId: number; ancestors: string[] }> = [];
     for (const [bone, body] of Object.entries(this.config.bones)) {
       const node = humanoid.getNormalizedBoneNode(bone as VRMHumanBoneName);
@@ -223,7 +225,7 @@ export class Skin {
     const manager = this.vrm.springBoneManager;
     if (this.config.mujoco_springs === false || !manager) return null;
     try {
-      return this.module.SpringPhysics.build(mujoco, manager, this.vrm.scene);
+      return SpringPhysics.build(mujoco, manager, this.vrm.scene);
     } catch (error) {
       console.warn('[Skin] spring model not built; three-vrm runs the springs:', error);
       return null;
@@ -327,6 +329,6 @@ export class Skin {
     this.springs?.dispose();
     this.springs = null;
     this.root.removeFromParent();
-    this.module.VRMUtils.deepDispose(this.vrm.scene);
+    VRMUtils.deepDispose(this.vrm.scene);
   }
 }
