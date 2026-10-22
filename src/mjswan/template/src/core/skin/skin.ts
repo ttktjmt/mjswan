@@ -34,8 +34,10 @@ export interface SkinConfig {
   bones: Record<string, string>;
   /** VRM bone -> `[x, y, z, w]`, in the avatar's VRM-1.0 frame. */
   rest_offsets?: Record<string, ArrayLike<number>>;
-  /** Robot root height -> avatar hips height. Absent: hips height over root height at rest. */
+  /** Robot root height -> avatar hips height. Absent: hips height over `root_height`. */
   height_ratio?: number;
+  /** The root's height in the pose the avatar's rest stands for. Absent: at the zero pose. */
+  root_height?: number;
   /** Added to the avatar's position, in MuJoCo's world frame (x forward, y left, z up), metres. */
   offset?: ArrayLike<number>;
   /** Where the hips sit on the body `hips` maps to, in that body's frame (MuJoCo axes), metres. */
@@ -218,9 +220,9 @@ export class Skin {
     this.hipsOffset.set(hipsOffset[0], hipsOffset[2], -hipsOffset[1]);
     const offsetHeight =
       this.hipsBody >= 0 ? this.hipsOffset.clone().applyQuaternion(zeroPose[this.hipsBody]).y : 0;
-    this.heightRatio =
-      this.config.height_ratio ??
-      this.autoHeightRatio(zeroPoseHeight(mjModel, zeroPose, this.hipsBody) + offsetHeight);
+    const rootHeight =
+      this.config.root_height ?? zeroPoseHeight(mjModel, zeroPose, this.hipsBody);
+    this.heightRatio = this.config.height_ratio ?? this.autoHeightRatio(rootHeight + offsetHeight);
 
     // The container turns the model frame onto the robot's facing; see retarget.ts.
     const offset = this.config.offset ?? [0, 0, 0];
@@ -254,7 +256,7 @@ export class Skin {
     }
   }
 
-  /** The avatar's hips height over the robot root's at its zero pose, standing on z = 0. */
+  /** The avatar's hips height over the robot root's at its rest, standing on z = 0. */
   private autoHeightRatio(rootHeight: number): number {
     const hips = this.vrm.humanoid.normalizedRestPose.hips?.position;
     return hips && rootHeight > 0 ? hips[1] / rootHeight : 1;

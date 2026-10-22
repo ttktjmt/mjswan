@@ -75,6 +75,14 @@ class TestSkinConfig:
         with pytest.raises(ValueError, match="height_ratio"):
             SkinConfig(bones=BONES, height_ratio=0.0)
 
+    def test_rejects_a_non_positive_root_height(self):
+        with pytest.raises(ValueError, match="root_height"):
+            SkinConfig(bones=BONES, root_height=-0.3)
+
+    def test_rejects_root_height_beside_height_ratio(self):
+        with pytest.raises(ValueError, match="not both"):
+            SkinConfig(bones=BONES, height_ratio=1.1, root_height=0.278)
+
 
 class TestToDict:
     def test_entry_names_the_bundled_file(self):
@@ -109,6 +117,11 @@ class TestToDict:
         assert (
             SkinConfig(bones=BONES, height_ratio=1.1).to_dict()["height_ratio"] == 1.1
         )
+
+    def test_root_height_only_when_set(self):
+        assert "root_height" not in SkinConfig(bones=BONES).to_dict()
+        entry = SkinConfig(bones=BONES, root_height=0.278).to_dict()
+        assert entry["root_height"] == 0.278
 
     def test_single_axis_offset_is_the_quaternion_about_that_axis(self):
         entry = SkinConfig(bones=BONES, rest_offsets={"chest": (0, 0, 90)}).to_dict()

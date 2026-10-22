@@ -27,6 +27,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from main import HF_REPO, add_mjlab_task
+from mjlab.asset_zoo.robots.unitree_go1.go1_constants import INIT_STATE
 
 import mjswan
 from mjswan.source import hf, url
@@ -101,6 +102,10 @@ STANDING = {
     "left": {"thigh": (-51.43, 4.49, 3.57), "calf": (51.43, -4.49, 3.57)},
     "right": {"thigh": (-51.43, -4.49, -3.57), "calf": (51.43, 4.49, -3.57)},
 }
+#: The trunk's height in that standing pose (mjlab's initial state, as are its angles):
+#: the skins rest whenever the trunk is there. The model itself puts the trunk at
+#: 0.445 m, which would sink them by about 0.1 m.
+GO1_STANDING_HEIGHT = INIT_STATE.pos[2]
 GO1_REST_OFFSETS = {
     bone: STANDING["left" if bone.startswith("left") else "right"][body.split("_")[1]]
     for bone, body in GO1_BONES.items()
@@ -113,6 +118,7 @@ FOX = mjswan.SkinConfig(
     offset=(0.0, 0.0, 0.0),
     # The Go1's trunk origin is mid-body; the fox's hips bone is its pelvis, behind.
     hips_offset=(-0.16, 0.0, 0.0),
+    root_height=GO1_STANDING_HEIGHT,
     hide_robot=True,
 )
 
@@ -153,7 +159,11 @@ PUG = mjswan.SkinConfig(
         if bone in PUG_HUMANOID
     },
     offset=(0.0, 0.0, 0.0),
+    root_height=GO1_STANDING_HEIGHT,
     hide_robot=True,
+    # MuJoCo's lights, shared out, leave the beige darker than the source's; this lifts
+    # it back, short of clipping.
+    brightness=1.25,
 )
 
 
@@ -286,7 +296,23 @@ def pug_vrm() -> Path:
     """``assets/pug.glb`` as a VRM 1.0 file, its bones named."""
     gltf, binary_chunk = read_glb(PUG_GLB)
     nodes = {node["name"]: i for i, node in enumerate(gltf["nodes"])}
-    gltf["extensionsUsed"] = [*gltf.get("extensionsUsed", []), "VRMC_vrm"]
+    # Toon materials: the viewer divides their colours by the scene's summed light, which
+    # would otherwise wash the pug out to white. The shaded side is 60% of the lit one,
+    # the two blending softly, as in the source's diffuse shading.
+    for material in gltf["materials"]:
+        lit = material["pbrMetallicRoughness"]["baseColorFactor"]
+        material["extensions"] = {
+            "VRMC_materials_mtoon": {
+                "specVersion": "1.0",
+                "shadeColorFactor": [c * 0.6 for c in lit[:3]],
+                "shadingToonyFactor": 0.5,
+            }
+        }
+    gltf["extensionsUsed"] = [
+        *gltf.get("extensionsUsed", []),
+        "VRMC_vrm",
+        "VRMC_materials_mtoon",
+    ]
     gltf.setdefault("extensions", {})["VRMC_vrm"] = {
         "specVersion": "1.0",
         "meta": vrm_meta(

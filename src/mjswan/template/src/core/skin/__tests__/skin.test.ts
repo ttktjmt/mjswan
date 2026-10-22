@@ -269,6 +269,22 @@ describe('Skin', () => {
     expect(turned.z).toBeCloseTo(0.2, 6);
   });
 
+  it('stands the hips at their rest height whenever the root is at root_height', async () => {
+    const hipsHeight = async (config: SkinConfig) => {
+      const skin = await Skin.load(vrmFile('1'), config);
+      skin.bind(mujoco, robot);
+      skin.update(bodies(0, 0), 0);
+      skin.root.updateMatrixWorld(true);
+      return skin.root.getObjectByName('hips')!.getWorldPosition(new THREE.Vector3()).y;
+    };
+    const auto = { ...CONFIG, height_ratio: undefined };
+    // The model puts the pelvis at 0.9 m, as high as the avatar's hips: the pelvis drawn
+    // at 0.9 m puts them there.
+    expect(await hipsHeight(auto)).toBeCloseTo(0.9, 6);
+    // Resting with the pelvis at 0.6 m, the hips go half as high again as the pelvis.
+    expect(await hipsHeight({ ...auto, root_height: 0.6 })).toBeCloseTo(1.35, 6);
+  });
+
   it('skips a bone the file lacks and a body the model lacks', async () => {
     const skin = await Skin.load(vrmFile('1'), {
       ...CONFIG,

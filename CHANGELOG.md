@@ -30,12 +30,14 @@ shortcuts.
   them to three-vrm. Toon colours are divided by the scene's summed light, so MuJoCo's
   several lights no longer clip them to white (`brightness` scales the result).
   `hips_offset` seats the hips off the root body, as a quadruped's pelvis sits behind
-  its mid-trunk root. `mjswan publish` refuses a build with one.
+  its mid-trunk root, and `root_height` gives the root's height in the pose the avatar
+  rests in when that is not the model's zero pose, as a quadruped's standing one.
+  `mjswan publish` refuses a build with one.
   `examples/demo/spinkick_avatar.py` runs the G1 Spinkick with two, each in the G1's
   place, and `examples/demo/go1_avatar.py` the Go1 velocity tasks, flat and rough, as a fox, a VRM it
   builds from the Khronos glTF sample Fox (CC0 mesh, CC BY 4.0 rig), tail spring
-  included, or as a pug from Quaternius's Farm Animals (CC0), picked from the Skin
-  menu. The pack has no stable URL, so the pug is committed as
+  included, or as a pug from Quaternius's Farm Animals (CC0) in toon materials,
+  picked from the Skin menu. The pack has no stable URL, so the pug is committed as
   `examples/demo/assets/pug.glb`, made by `make_pug.py` beside it, which reparents
   the IK rig's feet so joint angles alone pose it.
 - **A task's own action class runs in the browser** (ADR 0009, **document format 6**). An

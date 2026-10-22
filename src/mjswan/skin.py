@@ -88,8 +88,15 @@ class SkinConfig:
 
     height_ratio: float | None = None
     """Scale from the robot root's height to the avatar's hips height; across the floor
-    the hips follow the root exactly. ``None`` takes the avatar's hips height over the
-    robot root's height at the model's zero pose."""
+    the hips follow the root exactly. ``None`` takes the avatar's hips height over
+    ``root_height``."""
+
+    root_height: float | None = None
+    """The robot root's height, in metres, in the pose the avatar's rest pose stands for,
+    so the hips are at their rest height whenever the root is there. ``None`` takes the
+    root's height at the model's zero pose, which for a free root is where the model
+    puts it. Set it when ``rest_offsets`` rest the avatar at another pose, as a
+    quadruped's standing one: mjlab's Go1 is put at 0.445 m and stands at 0.278 m."""
 
     offset: tuple[float, float, float] = (0.0, 1.0, 0.0)
     """Added to the avatar's position, in metres: it moves where the robot moves, this
@@ -135,6 +142,13 @@ class SkinConfig:
             )
         if self.height_ratio is not None and self.height_ratio <= 0:
             raise ValueError(f"height_ratio must be positive, got {self.height_ratio}.")
+        if self.root_height is not None and self.root_height <= 0:
+            raise ValueError(f"root_height must be positive, got {self.root_height}.")
+        if self.height_ratio is not None and self.root_height is not None:
+            raise ValueError(
+                "Set height_ratio or root_height, not both: root_height only "
+                "derives the ratio."
+            )
         if self.brightness <= 0:
             raise ValueError(f"brightness must be positive, got {self.brightness}.")
 
@@ -155,6 +169,7 @@ class SkinConfig:
                 for bone, angles in self.rest_offsets.items()
             },
             **({"height_ratio": self.height_ratio} if self.height_ratio else {}),
+            **({"root_height": self.root_height} if self.root_height else {}),
             "offset": list(self.offset),
             **(
                 {"hips_offset": list(self.hips_offset)} if any(self.hips_offset) else {}

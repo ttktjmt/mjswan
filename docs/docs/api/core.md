@@ -901,6 +901,7 @@ class mjswan.SkinConfig(
     source: str | None = None,
     rest_offsets: Mapping[str, tuple[float, float, float]] = {},
     height_ratio: float | None = None,
+    root_height: float | None = None,
     offset: tuple[float, float, float] = (0.0, 1.0, 0.0),
     hips_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     hide_robot: bool = False,
@@ -916,7 +917,8 @@ Everything one skin needs, so swapping avatars swaps only this object. The brows
 | `bones` | VRM humanoid bone (VRM 1.0 names, e.g. `"leftUpperArm"`) to robot body. Several bones may share a body; a body may leave out its entity prefix. `hips` is required. |
 | `source` | Local path or http(s) URL of the `.vrm`. Required by `add_skin`; `dataclasses.replace` sets it on a shared config, so one config fits several avatars. |
 | `rest_offsets` | VRM bone to the rotation, in degrees about the avatar's x, then y, then z axis (y up, facing +z, its left toward +x), from its T-pose to where it sits while the robot is at its zero pose. |
-| `height_ratio` | Scale from the robot root's height to the avatar's hips height; across the floor the hips follow the root exactly. `None` takes the avatar's hips height over the root's height at the model's zero pose. |
+| `height_ratio` | Scale from the robot root's height to the avatar's hips height; across the floor the hips follow the root exactly. `None` takes the avatar's hips height over `root_height`. |
+| `root_height` | The robot root's height, metres, in the pose the avatar's rest pose stands for, so the hips are at their rest height whenever the root is there. `None` takes the root's height at the model's zero pose, which for a free root is where the model puts it. Set it when `rest_offsets` rest the avatar at another pose, as a quadruped's standing one: mjlab's Go1 is put at 0.445 m and stands at 0.278 m. |
 | `offset` | Added to the avatar's position, in MuJoCo's world frame, metres: it moves where the robot moves, this far aside (the default, 1 m to its left). |
 | `hips_offset` | Where the avatar's hips sit on the body `hips` maps to, in that body's own frame (MuJoCo axes), metres, so it turns with the robot. A quadruped's root body is mid-trunk while its avatar's hips bone is the pelvis, behind it. |
 | `hide_robot` | Stop drawing the robot the avatar follows, so with `offset=(0, 0, 0)` the avatar is its skin. The robot is still simulated, collides and can be grabbed with the pointer. |
