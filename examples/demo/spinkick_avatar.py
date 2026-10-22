@@ -76,8 +76,6 @@ AVATAR_SAMPLE_A = mjswan.SkinConfig(
     source=str(HERE / "8590256991748008892.vrm"),
     bones=G1_BONES,
     rest_offsets=G1_REST_OFFSETS,
-    offset=(0.0, 0.0, 0.0),
-    hide_robot=True,
     retarget="hybrid",
 )
 

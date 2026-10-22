@@ -31,7 +31,7 @@ const MANIFEST: Manifest = {
             { id: 'room', name: 'Room', path: 'assets/room.spz', control: true, scale: 2, x_offset: 0.5 },
           ],
           skins: [
-            { id: 'sample_a', name: 'Sample A', path: 'assets/sample_a.vrm', bones: { hips: 'pelvis' }, hide_robot: true },
+            { id: 'sample_a', name: 'Sample A', path: 'assets/sample_a.vrm', bones: { hips: 'pelvis' }, hide_robot: false },
             { id: 'shino', name: 'Shino', path: 'assets/shino.vrm', bones: { hips: 'pelvis' } },
           ],
           mdps: [
@@ -100,7 +100,7 @@ describe('parseManifest', () => {
     expect(requested).toContain('demo/humanoid/assets/shino.vrm');
 
     const picked = await scene.skins[0].build();
-    expect(picked.config.hide_robot).toBe(true);
+    expect(picked.config.hide_robot).toBe(false);
     expect(requested).toContain('demo/humanoid/assets/sample_a.vrm');
   });
 

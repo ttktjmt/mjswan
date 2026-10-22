@@ -94,12 +94,14 @@ class TestToDict:
         assert (entry["id"], entry["name"]) == ("sample_a", "Sample A")
         assert entry["path"] == "assets/sample_a.vrm"
         assert entry["bones"] == BONES
-        assert entry["offset"] == [0.0, 1.0, 0.0]
         assert "height_ratio" not in entry
 
-    def test_hide_robot_only_when_set(self):
-        assert "hide_robot" not in SkinConfig(bones=BONES).to_dict()
-        assert SkinConfig(bones=BONES, hide_robot=True).to_dict()["hide_robot"] is True
+    def test_over_the_robot_unless_told_otherwise(self):
+        entry = SkinConfig(bones=BONES).to_dict()
+        assert "offset" not in entry and "hide_robot" not in entry
+        beside = SkinConfig(bones=BONES, offset=(0.0, 1.0, 0.0), hide_robot=False)
+        assert beside.to_dict()["offset"] == [0.0, 1.0, 0.0]
+        assert beside.to_dict()["hide_robot"] is False
 
     def test_brightness_and_springs_only_when_not_the_default(self):
         entry = SkinConfig(bones=BONES).to_dict()

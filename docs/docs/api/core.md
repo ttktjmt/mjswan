@@ -902,9 +902,9 @@ class mjswan.SkinConfig(
     rest_offsets: Mapping[str, tuple[float, float, float]] = {},
     height_ratio: float | None = None,
     root_height: float | None = None,
-    offset: tuple[float, float, float] = (0.0, 1.0, 0.0),
+    offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     hips_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
-    hide_robot: bool = False,
+    hide_robot: bool = True,
     brightness: float = 1.0,
     mujoco_springs: bool = True,
     retarget: Literal["rotation", "position", "hybrid"] = "rotation",
@@ -920,9 +920,9 @@ Everything one skin needs, so swapping avatars swaps only this object. The brows
 | `rest_offsets` | VRM bone to the rotation, in degrees about the avatar's x, then y, then z axis (y up, facing +z, its left toward +x), from its T-pose to where it sits while the robot is at its zero pose. |
 | `height_ratio` | Scale from the robot root's height to the avatar's hips height, both above the ground under the robot (the first geom in group 0 straight below that is not the robot's, as mjlab's height scan sees the terrain), so a hill lifts both alike. Across the floor the hips follow the root exactly. `None` takes the avatar's hips height over `root_height`. |
 | `root_height` | The robot root's height, metres, in the pose the avatar's rest pose stands for, so the hips are at their rest height whenever the root is there. `None` takes the root's height at the model's zero pose, which for a free root is where the model puts it. Set it when `rest_offsets` rest the avatar at another pose, as a quadruped's standing one: mjlab's Go1 is put at 0.445 m and stands at 0.278 m. |
-| `offset` | Added to the avatar's position, in MuJoCo's world frame, metres: it moves where the robot moves, this far aside (the default, 1 m to its left). |
+| `offset` | Added to the avatar's position, in MuJoCo's world frame, metres: it moves where the robot moves, this far aside. The default draws it over the robot; `(0, 1, 0)` stands it 1 m to the robot's left. |
 | `hips_offset` | Where the avatar's hips sit on the body `hips` maps to, in that body's own frame (MuJoCo axes), metres, so it turns with the robot. A quadruped's root body is mid-trunk while its avatar's hips bone is the pelvis, behind it. |
-| `hide_robot` | Stop drawing the robot the avatar follows, so with `offset=(0, 0, 0)` the avatar is its skin. The robot is still simulated, collides and can be grabbed with the pointer. |
+| `hide_robot` | Stop drawing the robot the avatar follows, so the avatar is drawn in its place, the default. `False` draws both, as when `offset` stands the avatar beside the robot. A hidden robot is still simulated, collides and can be grabbed with the pointer. |
 | `brightness` | Scales the avatar's toon (MToon) colours. The viewer first divides them by the scene's summed light when that exceeds 1 (2.3 in an mjlab scene): a toon shader takes every light it faces in full, so MuJoCo's several lights would clip it to white. The scene's own materials are left as they are. |
 | `mujoco_springs` | Simulate the spring bones as MuJoCo bodies: each spring joint a ball joint with its mass at the bone's tail, the VRM's colliders as spheres and capsules, the nodes they hang from pushed onto the posed avatar every 1/240 s substep. Stiffness, drag and gravity follow the VRM's own settings as its tools apply them at 60 fps. `False` leaves the springs to three-vrm, which costs less per frame. |
 | `retarget` | How the avatar follows the robot. `"rotation"` turns each mapped bone the way its body has turned since the zero pose: the avatar keeps its own proportions, and only its hips are placed, their height scaled. `"position"` fixes each mapped bone to its body, where it sat with the avatar posed by rotation at the model's first keyframe (its zero pose without one) and moved until its lowest point was the robot's lowest collision geom, as the robot's own meshes are fixed: every part moves with its body, so the feet stay on the robot's feet, even where that keyframe sinks the robot into the floor, and where the avatar's joints are not the robot's, its mesh stretches or folds across them. `"hybrid"` poses by rotation, then bends each arm and leg whose three bones are mapped (two-bone IK, its bones keeping their lengths) so its hand or foot lands where `"position"` would put it: the proportions of the one and the contact of the other. Where the hands or feet it stands on (the lowest ones) cannot reach, the whole avatar is lowered until they do; hands held up never pull it down. |

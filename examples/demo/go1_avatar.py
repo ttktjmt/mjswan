@@ -117,11 +117,9 @@ GO1_REST_OFFSETS = {
 FOX = mjswan.SkinConfig(
     bones=GO1_BONES,
     rest_offsets=GO1_REST_OFFSETS,
-    offset=(0.0, 0.0, 0.0),
     # The Go1's trunk origin is mid-body; the fox's hips bone is its pelvis, behind.
     hips_offset=(-0.16, 0.0, 0.0),
     root_height=GO1_STANDING_HEIGHT,
-    hide_robot=True,
     retarget="hybrid",
 )
 
@@ -161,9 +159,7 @@ PUG = mjswan.SkinConfig(
         for bone, offset in GO1_REST_OFFSETS.items()
         if bone in PUG_HUMANOID
     },
-    offset=(0.0, 0.0, 0.0),
     root_height=GO1_STANDING_HEIGHT,
-    hide_robot=True,
     # MuJoCo's lights, shared out, leave the beige darker than the source's; this lifts
     # it back, short of clipping.
     brightness=1.25,

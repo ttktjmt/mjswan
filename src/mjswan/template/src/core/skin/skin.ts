@@ -43,11 +43,11 @@ export interface SkinConfig {
   height_ratio?: number;
   /** The root's height in the pose the avatar's rest stands for. Absent: at the zero pose. */
   root_height?: number;
-  /** Added to the avatar's position, in MuJoCo's world frame (x forward, y left, z up), metres. */
+  /** Added to the avatar's position, in MuJoCo's world frame (x forward, y left, z up), metres. Absent: zero. */
   offset?: ArrayLike<number>;
   /** Where the hips sit on the body `hips` maps to, in that body's frame (MuJoCo axes), metres. */
   hips_offset?: ArrayLike<number>;
-  /** Stop drawing the robot the skin follows: with a zero `offset`, the avatar replaces it. */
+  /** Stop drawing the robot the skin follows, the avatar in its place. Absent: true; false draws both. */
   hide_robot?: boolean;
   /** Scales the toon colours once they are divided by the scene's light. Absent: 1. */
   brightness?: number;
@@ -301,7 +301,7 @@ export class Skin {
     this.hipsBody = hips?.bodyId ?? -1;
     this.robotRoot = this.hipsBody >= 0 ? mjModel.body_rootid[this.hipsBody] : -1;
     this.hiddenBodies = [];
-    if (this.config.hide_robot && this.hipsBody >= 0) {
+    if (this.config.hide_robot !== false && this.hipsBody >= 0) {
       for (let b = 1; b < mjModel.nbody; b++) {
         if (mjModel.body_rootid[b] === this.robotRoot) this.hiddenBodies.push(b);
       }

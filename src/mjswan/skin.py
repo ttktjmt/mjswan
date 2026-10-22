@@ -100,18 +100,20 @@ class SkinConfig:
     puts it. Set it when ``rest_offsets`` rest the avatar at another pose, as a
     quadruped's standing one: mjlab's Go1 is put at 0.445 m and stands at 0.278 m."""
 
-    offset: tuple[float, float, float] = (0.0, 1.0, 0.0)
+    offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
     """Added to the avatar's position, in metres: it moves where the robot moves, this
-    far aside (the default stands it 1 m to the robot's left)."""
+    far aside. The default draws it over the robot; ``(0, 1, 0)`` stands it 1 m to the
+    robot's left."""
 
     hips_offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
     """Where the avatar's hips sit on the body ``hips`` maps to, in that body's own frame
     (MuJoCo axes), metres, so it turns with the robot. A quadruped's root is mid-trunk,
     while its avatar's hips bone is the pelvis, behind it."""
 
-    hide_robot: bool = False
-    """Stop drawing the robot the avatar follows, so with ``offset=(0, 0, 0)`` the
-    avatar is its skin. Its bodies are still simulated, collide and can be grabbed."""
+    hide_robot: bool = True
+    """Stop drawing the robot the avatar follows, so the avatar is drawn in its place.
+    ``False`` draws both, as when ``offset`` stands the avatar beside the robot. A
+    hidden robot is still simulated, collides and can be grabbed."""
 
     brightness: float = 1.0
     """Scales the avatar's toon (MToon) colours, which the viewer first divides by the
@@ -191,11 +193,11 @@ class SkinConfig:
             },
             **({"height_ratio": self.height_ratio} if self.height_ratio else {}),
             **({"root_height": self.root_height} if self.root_height else {}),
-            "offset": list(self.offset),
+            **({"offset": list(self.offset)} if any(self.offset) else {}),
             **(
                 {"hips_offset": list(self.hips_offset)} if any(self.hips_offset) else {}
             ),
-            **({"hide_robot": True} if self.hide_robot else {}),
+            **({} if self.hide_robot else {"hide_robot": False}),
             **({"brightness": self.brightness} if self.brightness != 1.0 else {}),
             **({} if self.mujoco_springs else {"mujoco_springs": False}),
             **({"retarget": self.retarget} if self.retarget != "rotation" else {}),

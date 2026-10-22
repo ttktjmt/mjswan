@@ -213,13 +213,13 @@ describe('Skin', () => {
     }
   });
 
-  it('hides the robot it follows, and nothing else, only with hide_robot', async () => {
-    const beside = await Skin.load(vrmFile('1'), CONFIG);
-    beside.bind(mujoco, robot);
-    expect(beside.hiddenBodies).toEqual([]);
-    const skin = await Skin.load(vrmFile('1'), { ...CONFIG, hide_robot: true });
+  it('hides the robot it follows, and nothing else, unless hide_robot is false', async () => {
+    const skin = await Skin.load(vrmFile('1'), CONFIG);
     skin.bind(mujoco, robot);
     expect(skin.hiddenBodies).toEqual([1, 2, 3, 4, 5]);
+    const beside = await Skin.load(vrmFile('1'), { ...CONFIG, hide_robot: false });
+    beside.bind(mujoco, robot);
+    expect(beside.hiddenBodies).toEqual([]);
   });
 
   it('is not posed while hidden, and takes up the pose when shown again', async () => {
