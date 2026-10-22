@@ -87,9 +87,11 @@ class SkinConfig:
     its zero pose (a G1 hangs its arms down there)."""
 
     height_ratio: float | None = None
-    """Scale from the robot root's height to the avatar's hips height; across the floor
-    the hips follow the root exactly. ``None`` takes the avatar's hips height over
-    ``root_height``."""
+    """Scale from the robot root's height to the avatar's hips height, both above the
+    ground under the robot (the first geom in group 0 straight below that is not the
+    robot's, as mjlab's height scan sees the terrain), so a hill lifts both alike. Across
+    the floor the hips follow the root exactly. ``None`` takes the avatar's hips height
+    over ``root_height``."""
 
     root_height: float | None = None
     """The robot root's height, in metres, in the pose the avatar's rest pose stands for,

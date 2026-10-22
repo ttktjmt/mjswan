@@ -161,17 +161,19 @@ export function retarget(
 }
 
 /**
- * Where the hips go in the normalized rig's frame: on the robot root, its height scaled.
- * Scaling across the floor too would carry the avatar off the robot as it wanders.
+ * Where the hips go in the normalized rig's frame: on the robot root, its height above
+ * `ground` (three.js y) scaled. Scaling across the floor too would carry the avatar off
+ * the robot as it wanders, and scaling the ground's own height would lift it off a hill.
  */
 export function hipsPosition(
   rig: RetargetRig,
   rootPosition: THREE.Vector3,
   heightRatio: number,
+  ground: number,
   target: THREE.Vector3,
 ): THREE.Vector3 {
   _rigInverse.copy(rig.facing).multiply(rig.frame).invert();
   return target
-    .set(rootPosition.x, rootPosition.y * heightRatio, rootPosition.z)
+    .set(rootPosition.x, ground + (rootPosition.y - ground) * heightRatio, rootPosition.z)
     .applyQuaternion(_rigInverse);
 }

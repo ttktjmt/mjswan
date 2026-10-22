@@ -2295,7 +2295,7 @@ export class mjswanRuntime {
         }
       }
       // From the poses just drawn, so the skin is never a frame behind the robot.
-      this.skin?.update(this.bodies, performance.now());
+      this.skin?.update(this.bodies, performance.now(), this.mjData);
 
       this.resizeHandBoneMeshes();
       updateLightsFromData(this.mujoco, this.mjData, this.lights);

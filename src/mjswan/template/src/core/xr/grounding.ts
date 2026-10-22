@@ -19,7 +19,7 @@ type MainModule = import('mujoco').MainModule;
  * Group 0 only, the mask mjlab's height scan uses to miss the robot's own legs. A scene
  * that leaves everything there can have a ray land on the robot; the rate limit bounds it.
  */
-const TERRAIN_GROUP = geomGroupMask([0]);
+export const TERRAIN_GROUP = geomGroupMask([0]);
 
 /** Straight down in MuJoCo's frame, where z is up. */
 const DOWN: number[] = [0, 0, -1];

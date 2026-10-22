@@ -142,16 +142,22 @@ describe('hips position', () => {
     ['0', -1],
   ])('maps the robot forward to the avatar front and scales only the height, VRM %s', (version, sign) => {
     // MuJoCo (1, 0, 0.8) is three.js (1, 0.8, 0).
-    const target = hipsPosition(rig(version), new THREE.Vector3(1, 0.8, 0), 1.1, new THREE.Vector3());
+    const target = hipsPosition(rig(version), new THREE.Vector3(1, 0.8, 0), 1.1, 0, new THREE.Vector3());
     expect(target.x).toBeCloseTo(0, 12);
     expect(target.y).toBeCloseTo(0.88, 12);
     expect(target.z).toBeCloseTo(sign, 12);
   });
 
+  it('scales the height above the ground, not the ground with it', () => {
+    // On a 1.5 m hill the root is 0.8 m up, as on the floor: so are the hips, scaled.
+    const target = hipsPosition(rig('1'), new THREE.Vector3(1, 2.3, 0), 1.1, 1.5, new THREE.Vector3());
+    expect(target.y).toBeCloseTo(1.5 + 0.88, 12);
+  });
+
   it('agrees with the container turn', () => {
     const r = rig('0');
     const root = new THREE.Vector3(0.3, 0.7, -0.4);
-    const local = hipsPosition(r, root, 1, new THREE.Vector3());
+    const local = hipsPosition(r, root, 1, 0, new THREE.Vector3());
     const container = AVATAR_TO_ROBOT_FACING.clone().multiply(r.frame);
     const back = local.applyQuaternion(container);
     expect(back.distanceTo(root)).toBeCloseTo(0, 12);

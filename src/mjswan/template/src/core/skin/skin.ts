@@ -8,7 +8,7 @@
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import type { MainModule, MjModel } from 'mujoco';
+import type { MainModule, MjData, MjModel } from 'mujoco';
 import {
   VRMHumanBoneParentMap,
   VRMLoaderPlugin,
@@ -17,6 +17,8 @@ import {
   type VRMHumanBoneName,
 } from '@pixiv/three-vrm';
 import { lightBudget } from '../scene/lights';
+import { threeToMjcCoordinate } from '../scene/coordinate';
+import { TERRAIN_GROUP } from '../xr/grounding';
 import { SpringPhysics } from './springs';
 import {
   buildRig,
@@ -62,6 +64,12 @@ const MAX_FRAME_SECONDS = 1 / 30;
 const STALL_SECONDS = 0.25;
 /** A root jump this large in one frame is a reset, not motion: the springs start over. */
 const TELEPORT_DISTANCE = 0.3;
+/** Straight down in MuJoCo's frame. */
+const DOWN = [0, 0, -1];
+/** Geoms of the robot's own a ray under it may pass before it gives up. */
+const MAX_ROBOT_HITS = 8;
+/** `mj_ray` writes the geom it hit here. */
+const hitGeom = new Int32Array(1);
 
 /** One body's rotation at the previous frame, this frame, and the substep between. */
 type BodyPose = { from: THREE.Quaternion; to: THREE.Quaternion; now: THREE.Quaternion };
@@ -95,13 +103,20 @@ export class Skin {
   private local: THREE.Quaternion[] = [];
   private hips: THREE.Object3D | null = null;
   private hipsBody = -1;
+  /** The tree the hips body is in: the robot, whose own geoms are not its ground. */
+  private robotRoot = -1;
   private heightRatio = 1;
+  private mujoco: MainModule | null = null;
+  private mjModel: MjModel | null = null;
   private poses = new Map<number, BodyPose>();
   /** `hips_offset` in three.js axes, in the hips body's frame. */
   private readonly hipsOffset = new THREE.Vector3();
   private readonly rootFrom = new THREE.Vector3();
   private readonly rootTo = new THREE.Vector3();
   private readonly rootNow = new THREE.Vector3();
+  /** The ground's height (three.js y) under the hips: the height ratio scales from it. */
+  private groundFrom = 0;
+  private groundTo = 0;
   private lastTime: number | null = null;
   /** Every MToon material, with the colours it came with. */
   private readonly toon: Array<{ material: ToonMaterial; lit: THREE.Color; shade: THREE.Color }> = [];
@@ -175,6 +190,8 @@ export class Skin {
       this.springs = this.buildSprings(mujoco);
     }
     this.normalizeToon(mjModel);
+    this.mujoco = mujoco;
+    this.mjModel = mjModel;
 
     const humanoid = this.vrm.humanoid;
     const parents = VRMHumanBoneParentMap;
@@ -209,11 +226,11 @@ export class Skin {
     const hips = this.rig.bones.find((bone) => bone.name === 'hips');
     this.hips = hips ? humanoid.getNormalizedBoneNode('hips') : null;
     this.hipsBody = hips?.bodyId ?? -1;
+    this.robotRoot = this.hipsBody >= 0 ? mjModel.body_rootid[this.hipsBody] : -1;
     this.hiddenBodies = [];
     if (this.config.hide_robot && this.hipsBody >= 0) {
-      const robot = mjModel.body_rootid[this.hipsBody];
       for (let b = 1; b < mjModel.nbody; b++) {
-        if (mjModel.body_rootid[b] === robot) this.hiddenBodies.push(b);
+        if (mjModel.body_rootid[b] === this.robotRoot) this.hiddenBodies.push(b);
       }
     }
     const hipsOffset = this.config.hips_offset ?? [0, 0, 0];
@@ -265,8 +282,9 @@ export class Skin {
   /**
    * Pose from the bodies as drawn this frame, then step the springs. `time` in ms. The
    * last substep lands on this frame's pose, so the avatar is never behind the robot.
+   * `mjData` finds the ground under it; without it the ground is z = 0.
    */
-  update(bodies: Record<number, THREE.Object3D>, time: number): void {
+  update(bodies: Record<number, THREE.Object3D>, time: number, mjData?: MjData): void {
     const rig = this.rig;
     if (!rig || !this.shown) return;
     const elapsed = this.lastTime === null ? 0 : (time - this.lastTime) / 1000;
@@ -277,12 +295,14 @@ export class Skin {
     if (this.hipsBody >= 0) {
       const hips = bodies[this.hipsBody];
       this.rootTo.copy(this.hipsOffset).applyQuaternion(hips.quaternion).add(hips.position);
+      if (mjData) this.groundTo = this.groundUnder(this.rootTo, mjData) ?? this.groundTo;
     }
     const restart =
       dt === 0 || elapsed > STALL_SECONDS || this.rootTo.distanceTo(this.rootFrom) > TELEPORT_DISTANCE;
     if (restart) {
       for (const pose of this.poses.values()) pose.from.copy(pose.to);
       this.rootFrom.copy(this.rootTo);
+      this.groundFrom = this.groundTo;
     }
 
     if (this.springs) {
@@ -295,6 +315,7 @@ export class Skin {
       else this.springs.step(dt);
       for (const pose of this.poses.values()) pose.from.copy(pose.to);
       this.rootFrom.copy(this.rootTo);
+      this.groundFrom = this.groundTo;
       return;
     }
 
@@ -311,6 +332,37 @@ export class Skin {
 
     for (const pose of this.poses.values()) pose.from.copy(pose.to);
     this.rootFrom.copy(this.rootTo);
+    this.groundFrom = this.groundTo;
+  }
+
+  /**
+   * The height (three.js y) of the ground under `point`: the first geom straight below
+   * in the terrain group, as mjlab's height scan sees it, that is not the robot's own.
+   * Null where there is none.
+   */
+  private groundUnder(point: THREE.Vector3, mjData: MjData): number | null {
+    const mujoco = this.mujoco!;
+    const model = this.mjModel!;
+    const origin = threeToMjcCoordinate(point).toArray();
+    for (let hit = 0; hit < MAX_ROBOT_HITS; hit++) {
+      const distance = mujoco.mj_ray(
+        model,
+        mjData,
+        origin,
+        DOWN,
+        TERRAIN_GROUP as unknown as number[],
+        true,
+        -1,
+        hitGeom,
+        null,
+      );
+      if (distance < 0) return null;
+      // MuJoCo's z is three.js's y.
+      origin[2] -= distance;
+      if (model.body_rootid[model.geom_bodyid[hitGeom[0]]] !== this.robotRoot) return origin[2];
+      origin[2] -= 1e-6;
+    }
+    return null;
   }
 
   /** `vrm.update` but for its springs, which MuJoCo turns. */
@@ -335,7 +387,8 @@ export class Skin {
     for (let i = 0; i < this.nodes.length; i++) this.nodes[i].quaternion.copy(this.local[i]);
     if (this.hips) {
       this.rootNow.lerpVectors(this.rootFrom, this.rootTo, alpha);
-      hipsPosition(rig, this.rootNow, this.heightRatio, this.hips.position);
+      const ground = THREE.MathUtils.lerp(this.groundFrom, this.groundTo, alpha);
+      hipsPosition(rig, this.rootNow, this.heightRatio, ground, this.hips.position);
     }
   }
 

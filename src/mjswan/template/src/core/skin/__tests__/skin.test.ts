@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import type { MainModule, MjModel } from 'mujoco';
+import type { MainModule, MjData, MjModel } from 'mujoco';
 import { Skin, type SkinConfig } from '../skin';
 
 /** Bone, parent, offset from the parent in VRM 1.0's frame (facing +z, left at +x). */
@@ -283,6 +283,36 @@ describe('Skin', () => {
     expect(await hipsHeight(auto)).toBeCloseTo(0.9, 6);
     // Resting with the pelvis at 0.6 m, the hips go half as high again as the pelvis.
     expect(await hipsHeight({ ...auto, root_height: 0.6 })).toBeCloseTo(1.35, 6);
+  });
+
+  it('stands the hips on the ground under the robot, past its own geoms', async () => {
+    // Straight down from the pelvis: first the robot's own hand (body 5), then the box's
+    // top (body 6) at 1 m, a step the robot stands on.
+    const hits: Array<[number, number]> = [
+      [5, 1.4],
+      [6, 1],
+    ];
+    const rays: number[] = [];
+    const withRay = {
+      ...mujoco,
+      mj_ray: (_m: MjModel, _d: MjData, origin: number[], _v: number[], _g: number[], _s: boolean, _b: number, geom: Int32Array) => {
+        rays.push(origin[2]);
+        const [body, height] = hits.find(([, h]) => h < origin[2]) ?? [-1, 0];
+        if (body < 0) return -1;
+        geom[0] = body;
+        return origin[2] - height;
+      },
+    } as unknown as MainModule;
+    const model = { ...robot, geom_bodyid: Int32Array.from([0, 1, 2, 3, 4, 5, 6]) } as unknown as MjModel;
+    const skin = await Skin.load(vrmFile('1'), { ...CONFIG, height_ratio: 2 });
+    skin.bind(withRay, model);
+    const raised = bodies(0, 0);
+    for (const body of Object.values(raised)) body.position.y = 1.9;
+    skin.update(raised, 0, {} as MjData);
+    skin.root.updateMatrixWorld(true);
+    // 0.9 m above the step, twice that above it: not twice the pelvis's 1.9 m.
+    expect(skin.root.getObjectByName('hips')!.getWorldPosition(new THREE.Vector3()).y).toBeCloseTo(1 + 1.8, 6);
+    expect(rays).toEqual([1.9, expect.closeTo(1.4, 5)]);
   });
 
   it('skips a bone the file lacks and a body the model lacks', async () => {
