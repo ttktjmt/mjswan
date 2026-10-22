@@ -14,7 +14,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import mujoco
 
@@ -123,6 +123,15 @@ class SkinConfig:
     the robot never touches. ``False`` leaves them to three-vrm's springs, for a device
     that cannot spare the step."""
 
+    retarget: Literal["rotation", "position"] = "rotation"
+    """How the avatar follows the robot. ``"rotation"`` turns each mapped bone the way
+    its body has turned since the zero pose: the avatar keeps its own proportions and
+    only its hips are placed, their height scaled. ``"position"`` fixes each mapped bone
+    to its body, where it sat with the avatar posed by rotation at the model's first
+    keyframe (its zero pose without one), as a robot's own meshes are fixed: every part
+    moves with its body, so the feet stay on the robot's feet, and where the avatar's
+    joints are not the robot's, its mesh stretches or folds across them."""
+
     name: str = ""
     """Shown in the viewer's Skin menu. Set by :meth:`~mjswan.scene.SceneHandle.add_skin`."""
 
@@ -153,6 +162,10 @@ class SkinConfig:
             )
         if self.brightness <= 0:
             raise ValueError(f"brightness must be positive, got {self.brightness}.")
+        if self.retarget not in ("rotation", "position"):
+            raise ValueError(
+                f"retarget must be 'rotation' or 'position', got {self.retarget!r}."
+            )
 
     @property
     def path(self) -> str:
@@ -179,6 +192,7 @@ class SkinConfig:
             **({"hide_robot": True} if self.hide_robot else {}),
             **({"brightness": self.brightness} if self.brightness != 1.0 else {}),
             **({} if self.mujoco_springs else {"mujoco_springs": False}),
+            **({"retarget": self.retarget} if self.retarget != "rotation" else {}),
         }
 
 

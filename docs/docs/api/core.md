@@ -907,6 +907,7 @@ class mjswan.SkinConfig(
     hide_robot: bool = False,
     brightness: float = 1.0,
     mujoco_springs: bool = True,
+    retarget: Literal["rotation", "position"] = "rotation",
 )
 ```
 
@@ -924,6 +925,7 @@ Everything one skin needs, so swapping avatars swaps only this object. The brows
 | `hide_robot` | Stop drawing the robot the avatar follows, so with `offset=(0, 0, 0)` the avatar is its skin. The robot is still simulated, collides and can be grabbed with the pointer. |
 | `brightness` | Scales the avatar's toon (MToon) colours. The viewer first divides them by the scene's summed light when that exceeds 1 (2.3 in an mjlab scene): a toon shader takes every light it faces in full, so MuJoCo's several lights would clip it to white. The scene's own materials are left as they are. |
 | `mujoco_springs` | Simulate the spring bones as MuJoCo bodies: each spring joint a ball joint with its mass at the bone's tail, the VRM's colliders as spheres and capsules, the nodes they hang from pushed onto the posed avatar every 1/240 s substep. Stiffness, drag and gravity follow the VRM's own settings as its tools apply them at 60 fps. `False` leaves the springs to three-vrm, which costs less per frame. |
+| `retarget` | How the avatar follows the robot. `"rotation"` turns each mapped bone the way its body has turned since the zero pose: the avatar keeps its own proportions, and only its hips are placed, their height scaled. `"position"` fixes each mapped bone to its body, where it sat with the avatar posed by rotation at the model's first keyframe (its zero pose without one), as the robot's own meshes are fixed: every part moves with its body, so the feet stay on the robot's feet, and where the avatar's joints are not the robot's, its mesh stretches or folds across them. |
 
 `examples/demo/spinkick_avatar.py` is a complete G1 configuration with two skins. `examples/demo/go1_avatar.py` puts a fox on the Go1, on flat ground and on rough terrain: a quadruped whose front legs map to the VRM arms and hind legs to its legs, with rest offsets that stand the fox at rest whenever the Go1 stands. It also builds that VRM from a rigged glTF (the Khronos sample Fox), adding the humanoid bones and a tail spring. A second skin, a pug from Quaternius's Farm Animals pack (CC0), picked from the Skin menu, maps another rig the same way; its glTF is committed beside the script, made by `examples/demo/assets/make_pug.py`, which reparents the IK rig's feet to the lower legs so the Go1's joint angles alone pose it.
 

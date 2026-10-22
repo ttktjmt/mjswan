@@ -79,6 +79,10 @@ class TestSkinConfig:
         with pytest.raises(ValueError, match="root_height"):
             SkinConfig(bones=BONES, root_height=-0.3)
 
+    def test_rejects_an_unknown_retarget(self):
+        with pytest.raises(ValueError, match="retarget"):
+            SkinConfig(bones=BONES, retarget="ik")  # type: ignore[arg-type]
+
     def test_rejects_root_height_beside_height_ratio(self):
         with pytest.raises(ValueError, match="not both"):
             SkinConfig(bones=BONES, height_ratio=1.1, root_height=0.278)
@@ -117,6 +121,11 @@ class TestToDict:
         assert (
             SkinConfig(bones=BONES, height_ratio=1.1).to_dict()["height_ratio"] == 1.1
         )
+
+    def test_retarget_only_when_position(self):
+        assert "retarget" not in SkinConfig(bones=BONES).to_dict()
+        entry = SkinConfig(bones=BONES, retarget="position").to_dict()
+        assert entry["retarget"] == "position"
 
     def test_root_height_only_when_set(self):
         assert "root_height" not in SkinConfig(bones=BONES).to_dict()

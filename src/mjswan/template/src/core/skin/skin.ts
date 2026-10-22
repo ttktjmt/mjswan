@@ -22,6 +22,7 @@ import { TERRAIN_GROUP } from '../xr/grounding';
 import { SpringPhysics } from './springs';
 import {
   buildRig,
+  fromMujoco,
   hipsPosition,
   modelFrame,
   retarget,
@@ -50,6 +51,11 @@ export interface SkinConfig {
   brightness?: number;
   /** False leaves the spring bones to three-vrm instead of MuJoCo. Absent: true. */
   mujoco_springs?: boolean;
+  /**
+   * `'position'` fixes each mapped bone to its body, as a robot's own meshes are. Absent:
+   * `'rotation'`, each bone turned as its body has, only the hips placed.
+   */
+  retarget?: 'rotation' | 'position';
 }
 
 /**
@@ -68,11 +74,24 @@ const TELEPORT_DISTANCE = 0.3;
 const DOWN = [0, 0, -1];
 /** Geoms of the robot's own a ray under it may pass before it gives up. */
 const MAX_ROBOT_HITS = 8;
+const ONE = new THREE.Vector3(1, 1, 1);
+const _placed = new THREE.Matrix4();
+const _at = new THREE.Vector3();
 /** `mj_ray` writes the geom it hit here. */
 const hitGeom = new Int32Array(1);
 
-/** One body's rotation at the previous frame, this frame, and the substep between. */
-type BodyPose = { from: THREE.Quaternion; to: THREE.Quaternion; now: THREE.Quaternion };
+/** One body's pose at the previous frame, this frame, and the substep between. */
+type BodyPose = {
+  from: THREE.Quaternion;
+  to: THREE.Quaternion;
+  now: THREE.Quaternion;
+  fromAt: THREE.Vector3;
+  toAt: THREE.Vector3;
+  nowAt: THREE.Vector3;
+};
+
+/** With `retarget: 'position'`, a raw bone fixed to a body: where it sits in the body's frame. */
+type Attachment = { bone: THREE.Object3D; bodyId: number; inBody: THREE.Matrix4 };
 
 /** The two colours of an MToon material that its lights multiply. */
 type ToonMaterial = THREE.Material & { isMToonMaterial: true; color: THREE.Color; shadeColorFactor: THREE.Color };
@@ -122,6 +141,8 @@ export class Skin {
   private readonly toon: Array<{ material: ToonMaterial; lit: THREE.Color; shade: THREE.Color }> = [];
   private springs: SpringPhysics | null = null;
   private springsBuilt = false;
+  /** With `retarget: 'position'`, every mapped bone, ancestors first; else empty. */
+  private attached: Attachment[] = [];
 
   private constructor(
     private readonly vrm: VRM,
@@ -219,7 +240,14 @@ export class Skin {
     this.poses = new Map(
       this.rig.bones.map((bone) => [
         bone.bodyId,
-        { from: new THREE.Quaternion(), to: new THREE.Quaternion(), now: new THREE.Quaternion() },
+        {
+          from: new THREE.Quaternion(),
+          to: new THREE.Quaternion(),
+          now: new THREE.Quaternion(),
+          fromAt: new THREE.Vector3(),
+          toAt: new THREE.Vector3(),
+          nowAt: new THREE.Vector3(),
+        },
       ]),
     );
 
@@ -245,7 +273,59 @@ export class Skin {
     const offset = this.config.offset ?? [0, 0, 0];
     this.root.position.set(offset[0], offset[2], -offset[1]);
     this.root.quaternion.copy(this.rig.facing).multiply(frame);
+    this.attached = this.config.retarget === 'position' ? this.attach(mujoco, mjModel) : [];
     this.lastTime = null;
+  }
+
+  /**
+   * Each mapped bone's place in its body's frame, read with the avatar posed by rotation
+   * at the model's first keyframe (its zero pose without one), standing on z = 0, so
+   * at that pose the two ways agree. From then on the raw bones are driven directly.
+   */
+  private attach(mujoco: MainModule, mjModel: MjModel): Attachment[] {
+    const rig = this.rig!;
+    const humanoid = this.vrm.humanoid;
+    const data = new mujoco.MjData(mjModel);
+    try {
+      if (mjModel.nkey > 0) mujoco.mj_resetDataKeyframe(mjModel, data, 0);
+      mujoco.mj_kinematics(mjModel, data);
+      const position = (b: number) =>
+        new THREE.Vector3(data.xpos[b * 3], data.xpos[b * 3 + 2], -data.xpos[b * 3 + 1]);
+      const rotation = (b: number) => fromMujoco(data.xquat, b, new THREE.Quaternion());
+
+      humanoid.autoUpdateHumanBones = true;
+      humanoid.resetRawPose();
+      retarget(rig, rotation, this.world, this.local);
+      for (let i = 0; i < this.nodes.length; i++) this.nodes[i].quaternion.copy(this.local[i]);
+      if (this.hips) {
+        const root = this.hipsOffset.clone().applyQuaternion(rotation(this.hipsBody)).add(position(this.hipsBody));
+        hipsPosition(rig, root, this.heightRatio, 0, this.hips.position);
+      }
+      humanoid.update();
+      humanoid.autoUpdateHumanBones = false;
+
+      // In the robot's frame: the offset is added back as each bone is placed.
+      const offset = this.root.position.clone();
+      this.root.position.set(0, 0, 0);
+      this.root.updateMatrixWorld(true);
+      const body = new THREE.Matrix4();
+      const attached = rig.bones.flatMap((bone) => {
+        const node = humanoid.getRawBoneNode(bone.name as VRMHumanBoneName);
+        if (!node) return [];
+        body.compose(position(bone.bodyId), rotation(bone.bodyId), ONE).invert();
+        return [{ bone: node, bodyId: bone.bodyId, inBody: body.clone().multiply(node.matrixWorld) }];
+      });
+      this.root.position.copy(offset);
+      this.root.updateMatrixWorld(true);
+      const depth = (node: THREE.Object3D) => {
+        let d = 0;
+        for (let p = node.parent; p; p = p.parent) d++;
+        return d;
+      };
+      return attached.sort((a, b) => depth(a.bone) - depth(b.bone));
+    } finally {
+      data.delete();
+    }
   }
 
   /** MuJoCo's springs, or null to leave them to three-vrm: asked to, none, or no model. */
@@ -291,19 +371,19 @@ export class Skin {
     const dt = Math.min(elapsed, MAX_FRAME_SECONDS);
     this.lastTime = time;
 
-    for (const [bodyId, pose] of this.poses) pose.to.copy(bodies[bodyId].quaternion);
+    for (const [bodyId, pose] of this.poses) {
+      pose.to.copy(bodies[bodyId].quaternion);
+      pose.toAt.copy(bodies[bodyId].position);
+    }
     if (this.hipsBody >= 0) {
       const hips = bodies[this.hipsBody];
       this.rootTo.copy(this.hipsOffset).applyQuaternion(hips.quaternion).add(hips.position);
-      if (mjData) this.groundTo = this.groundUnder(this.rootTo, mjData) ?? this.groundTo;
+      // Bones fixed to their bodies need no ground.
+      if (mjData && !this.attached.length) this.groundTo = this.groundUnder(this.rootTo, mjData) ?? this.groundTo;
     }
     const restart =
       dt === 0 || elapsed > STALL_SECONDS || this.rootTo.distanceTo(this.rootFrom) > TELEPORT_DISTANCE;
-    if (restart) {
-      for (const pose of this.poses.values()) pose.from.copy(pose.to);
-      this.rootFrom.copy(this.rootTo);
-      this.groundFrom = this.groundTo;
-    }
+    if (restart) this.settle();
 
     if (this.springs) {
       // The anchors are interpolated between frames inside the spring model, so the
@@ -313,9 +393,7 @@ export class Skin {
       this.root.updateMatrixWorld(true);
       if (restart) this.springs.reset();
       else this.springs.step(dt);
-      for (const pose of this.poses.values()) pose.from.copy(pose.to);
-      this.rootFrom.copy(this.rootTo);
-      this.groundFrom = this.groundTo;
+      this.settle();
       return;
     }
 
@@ -329,8 +407,15 @@ export class Skin {
       }
       this.vrm.update(dt / steps);
     }
+    this.settle();
+  }
 
-    for (const pose of this.poses.values()) pose.from.copy(pose.to);
+  /** This frame's pose becomes the one the next frame's substeps start from. */
+  private settle(): void {
+    for (const pose of this.poses.values()) {
+      pose.from.copy(pose.to);
+      pose.fromAt.copy(pose.toAt);
+    }
     this.rootFrom.copy(this.rootTo);
     this.groundFrom = this.groundTo;
   }
@@ -380,15 +465,38 @@ export class Skin {
     return this.springs?.jointCount ?? 0;
   }
 
-  /** The normalized bones at `alpha` of the way from the previous frame's pose to this one's. */
+  /** The bones at `alpha` of the way from the previous frame's pose to this one's. */
   private pose(rig: RetargetRig, alpha: number): void {
-    for (const pose of this.poses.values()) pose.now.slerpQuaternions(pose.from, pose.to, alpha);
+    for (const pose of this.poses.values()) {
+      pose.now.slerpQuaternions(pose.from, pose.to, alpha);
+      pose.nowAt.lerpVectors(pose.fromAt, pose.toAt, alpha);
+    }
+    if (this.attached.length) {
+      this.fix();
+      return;
+    }
     retarget(rig, (bodyId) => this.poses.get(bodyId)!.now, this.world, this.local);
     for (let i = 0; i < this.nodes.length; i++) this.nodes[i].quaternion.copy(this.local[i]);
     if (this.hips) {
       this.rootNow.lerpVectors(this.rootFrom, this.rootTo, alpha);
       const ground = THREE.MathUtils.lerp(this.groundFrom, this.groundTo, alpha);
       hipsPosition(rig, this.rootNow, this.heightRatio, ground, this.hips.position);
+    }
+  }
+
+  /**
+   * Every fixed bone where its body carries it, set on the raw bone through its parent,
+   * ancestors first. Where the avatar's joints are not the robot's, the mesh across them
+   * stretches or folds.
+   */
+  private fix(): void {
+    this.root.updateMatrixWorld(true);
+    for (const { bone, bodyId, inBody } of this.attached) {
+      const pose = this.poses.get(bodyId)!;
+      _placed.compose(_at.copy(pose.nowAt).add(this.root.position), pose.now, ONE).multiply(inBody);
+      bone.matrix.copy(bone.parent!.matrixWorld).invert().multiply(_placed);
+      bone.matrix.decompose(bone.position, bone.quaternion, bone.scale);
+      bone.updateMatrixWorld(true);
     }
   }
 

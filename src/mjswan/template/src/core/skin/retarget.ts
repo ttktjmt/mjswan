@@ -48,7 +48,7 @@ export interface RetargetRig {
 }
 
 /** A MuJoCo `(w, x, y, z)` quaternion as the same rotation in three.js's frame. */
-function fromMujoco(q: ArrayLike<number>, i: number, target: THREE.Quaternion): THREE.Quaternion {
+export function fromMujoco(q: ArrayLike<number>, i: number, target: THREE.Quaternion): THREE.Quaternion {
   return target.set(q[i * 4 + 1], q[i * 4 + 3], -q[i * 4 + 2], q[i * 4]);
 }
 

@@ -315,6 +315,81 @@ describe('Skin', () => {
     expect(rays).toEqual([1.9, expect.closeTo(1.4, 5)]);
   });
 
+  describe("retarget: 'position'", () => {
+    // The zero pose as MuJoCo's kinematics give it: this robot's bodies are not turned.
+    const kinematics = {
+      ...mujoco,
+      MjData: class {
+        xpos: Float64Array;
+        xquat: Float64Array;
+        constructor(model: MjModel) {
+          this.xpos = new Float64Array(model.nbody * 3);
+          this.xquat = new Float64Array(model.nbody * 4);
+        }
+        delete() {}
+      },
+      mj_resetDataKeyframe: () => {},
+      mj_kinematics: (model: MjModel, data: { xpos: Float64Array; xquat: Float64Array }) => {
+        for (let b = 0; b < model.nbody; b++) {
+          data.xquat[b * 4] = 1;
+          const p = model.body_parentid[b];
+          for (let k = 0; k < 3 && b > 0; k++) data.xpos[b * 3 + k] = data.xpos[p * 3 + k] + model.body_pos[b * 3 + k];
+        }
+      },
+    } as unknown as MainModule;
+    // Each body where the zero pose puts it, in three.js axes, `lift` metres higher.
+    const zeroPose = (lift = 0): Record<number, THREE.Object3D> => {
+      const at = [[0, 0, 0]];
+      for (let b = 1; b < 6; b++) {
+        const p = at[robot.body_parentid[b]];
+        at.push([0, 1, 2].map((k) => p[k] + robot.body_pos[b * 3 + k]));
+      }
+      const out: Record<number, THREE.Object3D> = {};
+      at.forEach(([x, y, z], b) => {
+        const body = new THREE.Object3D();
+        body.position.set(x, z + lift, -y);
+        out[b] = body;
+      });
+      return out;
+    };
+    const boneAt = (skin: Skin, name: string) => skin.root.getObjectByName(name)!.getWorldPosition(new THREE.Vector3());
+
+    it('lifts the hips exactly as far as the robot, the height unscaled', async () => {
+      const skin = await Skin.load(vrmFile('1'), { ...CONFIG, height_ratio: 2, retarget: 'position' });
+      skin.bind(kinematics, robot);
+      skin.update(zeroPose(), 0);
+      skin.root.updateMatrixWorld(true);
+      const before = boneAt(skin, 'hips');
+      skin.update(zeroPose(0.5), 16);
+      skin.root.updateMatrixWorld(true);
+      // By rotation, a height ratio of 2 would lift them 1 m.
+      expect(boneAt(skin, 'hips').y - before.y).toBeCloseTo(0.5, 6);
+    });
+
+    it('carries each bone with its body, as a rigid part', async () => {
+      const skin = await Skin.load(vrmFile('1'), { ...CONFIG, retarget: 'position' });
+      skin.bind(kinematics, robot);
+      const rest = zeroPose();
+      skin.update(rest, 0);
+      skin.root.updateMatrixWorld(true);
+      const hand = boneAt(skin, 'leftHand');
+      const spine = boneAt(skin, 'spine');
+      // The arm swung a quarter turn about the vertical through the shoulder.
+      const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+      const pivot = rest[3].position.clone();
+      const swung = zeroPose();
+      for (const b of [3, 4, 5]) {
+        swung[b].position.sub(pivot).applyQuaternion(turn).add(pivot);
+        swung[b].quaternion.copy(turn);
+      }
+      skin.update(swung, 16);
+      skin.root.updateMatrixWorld(true);
+      const expected = hand.clone().sub(pivot).applyQuaternion(turn).add(pivot);
+      expect(boneAt(skin, 'leftHand').distanceTo(expected)).toBeCloseTo(0, 6);
+      expect(boneAt(skin, 'spine').distanceTo(spine)).toBeCloseTo(0, 6);
+    });
+  });
+
   it('skips a bone the file lacks and a body the model lacks', async () => {
     const skin = await Skin.load(vrmFile('1'), {
       ...CONFIG,
