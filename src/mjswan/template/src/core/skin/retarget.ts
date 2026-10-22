@@ -1,5 +1,6 @@
 /**
- * Robot pose -> VRM normalized-bone pose, by rotation (no IK).
+ * Robot pose -> VRM normalized-bone pose, by rotation, and the two-bone IK that bends a
+ * limb onto a target (`reachLimb` and `dropToReach`, for `retarget: 'hybrid'`).
  *
  * Every frame below is three.js's (y up). A robot body `b` has rotated by
  * `Δ_b = Q_b · Q0_b⁻¹` since the robot's zero pose (`Q0`). The avatar turns that into its
@@ -176,4 +177,107 @@ export function hipsPosition(
   return target
     .set(rootPosition.x, ground + (rootPosition.y - ground) * heightRatio, rootPosition.z)
     .applyQuaternion(_rigInverse);
+}
+
+const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
+const _c = new THREE.Vector3();
+const _ca = new THREE.Vector3();
+const _ba = new THREE.Vector3();
+const _ta = new THREE.Vector3();
+const _ab = new THREE.Vector3();
+const _cb = new THREE.Vector3();
+const _axis0 = new THREE.Vector3();
+const _axis1 = new THREE.Vector3();
+const _qa = new THREE.Quaternion();
+const _qb = new THREE.Quaternion();
+const _qc = new THREE.Quaternion();
+const _qp = new THREE.Quaternion();
+const _qi = new THREE.Quaternion();
+const _r0 = new THREE.Quaternion();
+const _r1 = new THREE.Quaternion();
+const _r2 = new THREE.Quaternion();
+/** How far short of straight, in metres, a limb stops reaching. */
+const REACH_MARGIN = 1e-4;
+
+/**
+ * Two-bone IK: turns `upper` and `lower`, each keeping its length, so `end` lands on
+ * `target`, or as near as the limb reaches, bending in the plane it already bends in;
+ * `end` then takes `turn` as its world rotation, or keeps its own. `lower` is `upper`'s
+ * child and `end` is `lower`'s. `bend` keeps that plane's normal for a frame the limb is
+ * found straight. World matrices must be current; the limb's are left current.
+ */
+export function reachLimb(
+  upper: THREE.Object3D,
+  lower: THREE.Object3D,
+  end: THREE.Object3D,
+  target: THREE.Vector3,
+  bend: THREE.Vector3,
+  turn?: THREE.Quaternion,
+): void {
+  upper.getWorldPosition(_a);
+  lower.getWorldPosition(_b);
+  end.getWorldPosition(_c);
+  upper.getWorldQuaternion(_qa);
+  lower.getWorldQuaternion(_qb);
+  end.getWorldQuaternion(_qc);
+  const lab = _a.distanceTo(_b);
+  const lcb = _b.distanceTo(_c);
+  const lat = THREE.MathUtils.clamp(
+    _a.distanceTo(target),
+    Math.abs(lab - lcb) + REACH_MARGIN,
+    lab + lcb - REACH_MARGIN,
+  );
+  _ca.subVectors(_c, _a);
+  _ba.subVectors(_b, _a);
+  _ta.subVectors(target, _a);
+  const clamp = (v: number) => THREE.MathUtils.clamp(v, -1, 1);
+  // Angles at the upper joint (bone to chord) and at the lower one, now and once the
+  // chord is `lat` long (the law of cosines).
+  const atUpper = _ca.angleTo(_ba);
+  const atLower = _ab.subVectors(_a, _b).angleTo(_cb.subVectors(_c, _b));
+  const atUpperWanted = Math.acos(clamp((lcb * lcb - lab * lab - lat * lat) / (-2 * lab * lat)));
+  const atLowerWanted = Math.acos(clamp((lat * lat - lab * lab - lcb * lcb) / (-2 * lab * lcb)));
+  _axis0.crossVectors(_ca, _ba);
+  if (_axis0.lengthSq() > 1e-12) bend.copy(_axis0.normalize());
+  else _axis0.copy(bend);
+  _r0.setFromAxisAngle(_axis0, atUpperWanted - atUpper);
+  _r1.setFromAxisAngle(_axis0, atLowerWanted - atLower);
+  // Then the whole limb swung about the upper joint, its chord onto the target.
+  _axis1.crossVectors(_ca, _ta);
+  if (_axis1.lengthSq() > 1e-12) _r2.setFromAxisAngle(_axis1.normalize(), _ca.angleTo(_ta));
+  else _r2.identity();
+
+  // World rotations: upper r2·r0, lower r2·r1·r0 (each about a fixed world axis).
+  _qa.premultiply(_r0).premultiply(_r2);
+  _qb.premultiply(_r0).premultiply(_r1).premultiply(_r2);
+  upper.parent!.getWorldQuaternion(_qp);
+  upper.quaternion.copy(_qp.invert().multiply(_qa));
+  lower.quaternion.copy(_qi.copy(_qa).invert().multiply(_qb));
+  end.quaternion.copy(_qb.invert().multiply(turn ?? _qc));
+  upper.updateMatrixWorld(true);
+}
+
+/**
+ * How far `upper`'s joint must move straight down (three.js -y) for `reachLimb` to put
+ * `end` on `target`: 0 when it already can, and when no move down brings it within reach.
+ */
+export function dropToReach(
+  upper: THREE.Object3D,
+  lower: THREE.Object3D,
+  end: THREE.Object3D,
+  target: THREE.Vector3,
+): number {
+  upper.getWorldPosition(_a);
+  lower.getWorldPosition(_b);
+  end.getWorldPosition(_c);
+  const reach = _a.distanceTo(_b) + _b.distanceTo(_c) - REACH_MARGIN;
+  _ta.subVectors(target, _a);
+  const beyond = _ta.lengthSq() - reach * reach;
+  // Dropped by d, the target is (below - d) down and as far across: the least d that
+  // brings that within `reach`.
+  const below = -_ta.y;
+  const room = below * below - beyond;
+  if (beyond <= 0 || room < 0) return 0;
+  return Math.max(0, below - Math.sqrt(room));
 }

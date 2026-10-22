@@ -22,9 +22,11 @@ import { TERRAIN_GROUP } from '../xr/grounding';
 import { SpringPhysics } from './springs';
 import {
   buildRig,
+  dropToReach,
   fromMujoco,
   hipsPosition,
   modelFrame,
+  reachLimb,
   retarget,
   zeroPoseHeight,
   zeroPoseRotations,
@@ -52,10 +54,11 @@ export interface SkinConfig {
   /** False leaves the spring bones to three-vrm instead of MuJoCo. Absent: true. */
   mujoco_springs?: boolean;
   /**
-   * `'position'` fixes each mapped bone to its body, as a robot's own meshes are. Absent:
-   * `'rotation'`, each bone turned as its body has, only the hips placed.
+   * `'position'` fixes each mapped bone to its body, as a robot's own meshes are;
+   * `'hybrid'` turns them, then bends each limb to put its end where `'position'` would.
+   * Absent: `'rotation'`, each bone turned as its body has, only the hips placed.
    */
-  retarget?: 'rotation' | 'position';
+  retarget?: 'rotation' | 'position' | 'hybrid';
 }
 
 /**
@@ -74,9 +77,16 @@ const TELEPORT_DISTANCE = 0.3;
 const DOWN = [0, 0, -1];
 /** Geoms of the robot's own a ray under it may pass before it gives up. */
 const MAX_ROBOT_HITS = 8;
+/**
+ * With `retarget: 'hybrid'`, how far above the lowest hand or foot another still carries
+ * the body, as a share of its limb's length: those lower the avatar when they cannot
+ * reach, a humanoid's hands held up never do.
+ */
+const SUPPORT_BAND = 0.25;
 const ONE = new THREE.Vector3(1, 1, 1);
 const _placed = new THREE.Matrix4();
 const _at = new THREE.Vector3();
+const _scale = new THREE.Vector3();
 /** `mj_ray` writes the geom it hit here. */
 const hitGeom = new Int32Array(1);
 
@@ -90,11 +100,44 @@ type BodyPose = {
   nowAt: THREE.Vector3;
 };
 
-/** With `retarget: 'position'`, a raw bone fixed to a body: where it sits in the body's frame. */
-type Attachment = { bone: THREE.Object3D; bodyId: number; inBody: THREE.Matrix4 };
+/** A bone fixed to a body: where it sits in the body's frame, from the calibration pose. */
+type Attachment = { name: string; bone: THREE.Object3D; bodyId: number; inBody: THREE.Matrix4 };
+
+/** With `retarget: 'hybrid'`, an arm or leg (normalized bones) and where its end belongs. */
+type Limb = {
+  upper: THREE.Object3D;
+  lower: THREE.Object3D;
+  end: THREE.Object3D;
+  target: Attachment;
+  bend: THREE.Vector3;
+  /** Its two bones' lengths, summed. */
+  length: number;
+  /** This frame's place and world rotation for `end`. */
+  at: THREE.Vector3;
+  turn: THREE.Quaternion;
+};
 
 /** The two colours of an MToon material that its lights multiply. */
 type ToonMaterial = THREE.Material & { isMToonMaterial: true; color: THREE.Color; shadeColorFactor: THREE.Color };
+
+/** How low geom `g` reaches in `data` (MuJoCo z): its shape's, a mesh's bounding box's. */
+export function geomBottom(mujoco: MainModule, model: MjModel, data: MjData, g: number): number {
+  const type = model.geom_type[g];
+  const shapes = mujoco.mjtGeom;
+  // The world z of each of the geom's axes, and its sizes along them.
+  const [zx, zy, zz] = [6, 7, 8].map((k) => data.geom_xmat[g * 9 + k]);
+  const [a, b, c] = [0, 1, 2].map((k) => model.geom_size[g * 3 + k]);
+  const z = data.geom_xpos[g * 3 + 2];
+  if (type === shapes.mjGEOM_SPHERE.value) return z - a;
+  if (type === shapes.mjGEOM_CAPSULE.value) return z - Math.abs(zz) * b - a;
+  if (type === shapes.mjGEOM_CYLINDER.value) return z - Math.abs(zz) * b - a * Math.sqrt(Math.max(0, 1 - zz * zz));
+  if (type === shapes.mjGEOM_ELLIPSOID.value) return z - Math.hypot(zx * a, zy * b, zz * c);
+  if (type === shapes.mjGEOM_BOX.value) return z - Math.abs(zx) * a - Math.abs(zy) * b - Math.abs(zz) * c;
+  if (type === shapes.mjGEOM_PLANE.value || type === shapes.mjGEOM_HFIELD.value) return Infinity;
+  // Centre, then half sizes, in the geom's frame.
+  const [cx, cy, cz, hx, hy, hz] = [0, 1, 2, 3, 4, 5].map((k) => model.geom_aabb[g * 6 + k]);
+  return z + zx * cx + zy * cy + zz * cz - Math.abs(zx) * hx - Math.abs(zy) * hy - Math.abs(zz) * hz;
+}
 
 /** The model's body `name` names: itself, else the one `<entity>/<name>` (as Python's check). */
 function findBody(mjModel: MjModel, name: string): number {
@@ -143,6 +186,8 @@ export class Skin {
   private springsBuilt = false;
   /** With `retarget: 'position'`, every mapped bone, ancestors first; else empty. */
   private attached: Attachment[] = [];
+  /** With `retarget: 'hybrid'`, every limb whose three bones are mapped; else empty. */
+  private limbs: Limb[] = [];
 
   private constructor(
     private readonly vrm: VRM,
@@ -273,16 +318,53 @@ export class Skin {
     const offset = this.config.offset ?? [0, 0, 0];
     this.root.position.set(offset[0], offset[2], -offset[1]);
     this.root.quaternion.copy(this.rig.facing).multiply(frame);
-    this.attached = this.config.retarget === 'position' ? this.attach(mujoco, mjModel) : [];
+    const mode = this.config.retarget ?? 'rotation';
+    // Position drives the raw skeleton; hybrid bends the normalized one before it is copied.
+    const attachments = mode === 'rotation' ? [] : this.attach(mujoco, mjModel, mode === 'hybrid');
+    this.attached = mode === 'position' ? attachments : [];
+    this.limbs = mode === 'hybrid' ? this.limbsOf(attachments) : [];
+    // Fixed bones are set on the raw skeleton, which the normalized one would overwrite.
+    this.vrm.humanoid.autoUpdateHumanBones = mode !== 'position';
     this.lastTime = null;
   }
 
+  /** Each arm and leg whose three bones are mapped, with where `'position'` puts its end. */
+  private limbsOf(attachments: Attachment[]): Limb[] {
+    const humanoid = this.vrm.humanoid;
+    const mapped = new Set(this.rig!.bones.map((bone) => bone.name));
+    return (['left', 'right'] as const).flatMap((side) =>
+      [
+        ['UpperLeg', 'LowerLeg', 'Foot'],
+        ['UpperArm', 'LowerArm', 'Hand'],
+      ].flatMap((parts) => {
+        const names = parts.map((part) => `${side}${part}` as VRMHumanBoneName);
+        const target = attachments.find((attachment) => attachment.name === names[2]);
+        if (!target || !names.every((name) => mapped.has(name))) return [];
+        const [upper, lower, end] = names.map((name) => humanoid.getNormalizedBoneNode(name)!);
+        const [a, b, c] = [upper, lower, end].map((node) => node.getWorldPosition(new THREE.Vector3()));
+        return [
+          {
+            upper,
+            lower,
+            end,
+            target,
+            bend: new THREE.Vector3(1, 0, 0),
+            length: a.distanceTo(b) + b.distanceTo(c),
+            at: new THREE.Vector3(),
+            turn: new THREE.Quaternion(),
+          },
+        ];
+      }),
+    );
+  }
+
   /**
-   * Each mapped bone's place in its body's frame, read with the avatar posed by rotation
-   * at the model's first keyframe (its zero pose without one), standing on z = 0, so
-   * at that pose the two ways agree. From then on the raw bones are driven directly.
+   * Each mapped bone's place in its body's frame, raw or normalized, read with the avatar
+   * posed by rotation at the model's first keyframe (its zero pose without one), its
+   * lowest point moved onto the robot's: a foot lands on the robot's foot even where the
+   * keyframe sinks the robot into the floor or holds it off.
    */
-  private attach(mujoco: MainModule, mjModel: MjModel): Attachment[] {
+  private attach(mujoco: MainModule, mjModel: MjModel, normalized: boolean): Attachment[] {
     const rig = this.rig!;
     const humanoid = this.vrm.humanoid;
     const data = new mujoco.MjData(mjModel);
@@ -302,18 +384,22 @@ export class Skin {
         hipsPosition(rig, root, this.heightRatio, 0, this.hips.position);
       }
       humanoid.update();
-      humanoid.autoUpdateHumanBones = false;
 
       // In the robot's frame: the offset is added back as each bone is placed.
       const offset = this.root.position.clone();
       this.root.position.set(0, 0, 0);
       this.root.updateMatrixWorld(true);
+      const lift = this.robotBottom(mujoco, mjModel, data) - this.lowestVertex();
+      this.root.position.y = Number.isFinite(lift) ? lift : 0;
+      this.root.updateMatrixWorld(true);
       const body = new THREE.Matrix4();
       const attached = rig.bones.flatMap((bone) => {
-        const node = humanoid.getRawBoneNode(bone.name as VRMHumanBoneName);
+        const name = bone.name as VRMHumanBoneName;
+        const node = normalized ? humanoid.getNormalizedBoneNode(name) : humanoid.getRawBoneNode(name);
         if (!node) return [];
         body.compose(position(bone.bodyId), rotation(bone.bodyId), ONE).invert();
-        return [{ bone: node, bodyId: bone.bodyId, inBody: body.clone().multiply(node.matrixWorld) }];
+        const inBody = body.clone().multiply(node.matrixWorld);
+        return [{ name: bone.name, bone: node, bodyId: bone.bodyId, inBody }];
       });
       this.root.position.copy(offset);
       this.root.updateMatrixWorld(true);
@@ -326,6 +412,32 @@ export class Skin {
     } finally {
       data.delete();
     }
+  }
+
+  /** The lowest point of the robot's colliding geoms (MuJoCo z); Infinity without one. */
+  private robotBottom(mujoco: MainModule, mjModel: MjModel, data: MjData): number {
+    let bottom = Infinity;
+    for (let g = 0; g < mjModel.ngeom; g++) {
+      if (mjModel.body_rootid[mjModel.geom_bodyid[g]] !== this.robotRoot) continue;
+      if (!mjModel.geom_contype[g] && !mjModel.geom_conaffinity[g]) continue;
+      bottom = Math.min(bottom, geomBottom(mujoco, mjModel, data, g));
+    }
+    return bottom;
+  }
+
+  /** The lowest point of the avatar's meshes as posed (three.js y); Infinity without one. */
+  private lowestVertex(): number {
+    let lowest = Infinity;
+    const at = new THREE.Vector3();
+    this.vrm.scene.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const count = mesh.geometry.getAttribute('position')?.count ?? 0;
+      for (let i = 0; i < count; i++) {
+        lowest = Math.min(lowest, mesh.getVertexPosition(i, at).applyMatrix4(mesh.matrixWorld).y);
+      }
+    });
+    return lowest;
   }
 
   /** MuJoCo's springs, or null to leave them to three-vrm: asked to, none, or no model. */
@@ -482,6 +594,36 @@ export class Skin {
       const ground = THREE.MathUtils.lerp(this.groundFrom, this.groundTo, alpha);
       hipsPosition(rig, this.rootNow, this.heightRatio, ground, this.hips.position);
     }
+    if (this.limbs.length) this.reach();
+  }
+
+  /**
+   * `retarget: 'hybrid'`: each limb, posed by rotation, bent so its hand or foot lands,
+   * turned, where its body carries it under `'position'`. Its bones keep their lengths;
+   * where the ones it stands on fall short, the whole avatar is lowered until they reach.
+   */
+  private reach(): void {
+    this.root.updateMatrixWorld(true);
+    let lowest = Infinity;
+    for (const limb of this.limbs) {
+      const pose = this.poses.get(limb.target.bodyId)!;
+      _placed.compose(_at.copy(pose.nowAt).add(this.root.position), pose.now, ONE).multiply(limb.target.inBody);
+      _placed.decompose(limb.at, limb.turn, _scale);
+      lowest = Math.min(lowest, limb.at.y);
+    }
+    // Faded out across the band, so a foot lifting off lets the body back up smoothly.
+    let drop = 0;
+    for (const limb of this.limbs) {
+      const share = 1 - (limb.at.y - lowest) / (SUPPORT_BAND * limb.length);
+      if (share > 0) drop = Math.max(drop, share * dropToReach(limb.upper, limb.lower, limb.end, limb.at));
+    }
+    if (drop > 0 && this.hips) {
+      this.hips.getWorldPosition(_at);
+      _at.y -= drop;
+      this.hips.position.copy(this.hips.parent!.worldToLocal(_at));
+      this.hips.updateMatrixWorld(true);
+    }
+    for (const limb of this.limbs) reachLimb(limb.upper, limb.lower, limb.end, limb.at, limb.bend, limb.turn);
   }
 
   /**

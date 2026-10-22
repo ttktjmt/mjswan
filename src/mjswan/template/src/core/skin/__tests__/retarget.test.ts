@@ -3,8 +3,10 @@ import * as THREE from 'three';
 import {
   AVATAR_TO_ROBOT_FACING,
   buildRig,
+  dropToReach,
   hipsPosition,
   modelFrame,
+  reachLimb,
   retarget,
   zeroPoseHeight,
   zeroPoseRotations,
@@ -161,5 +163,78 @@ describe('hips position', () => {
     const container = AVATAR_TO_ROBOT_FACING.clone().multiply(r.frame);
     const back = local.applyQuaternion(container);
     expect(back.distanceTo(root)).toBeCloseTo(0, 12);
+  });
+});
+
+describe('reachLimb', () => {
+  /** A leg hanging from 1 m, its knee a little forward: thigh 0.4 m, shin 0.4 m. */
+  function leg() {
+    const root = new THREE.Group();
+    const upper = new THREE.Object3D();
+    const lower = new THREE.Object3D();
+    const end = new THREE.Object3D();
+    upper.position.set(0, 1, 0);
+    lower.position.set(0.05, -0.4 * Math.cos(Math.asin(0.125)), 0);
+    end.position.set(-0.05, -0.4 * Math.cos(Math.asin(0.125)), 0);
+    end.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.3);
+    root.add(upper);
+    upper.add(lower);
+    lower.add(end);
+    root.updateMatrixWorld(true);
+    return { upper, lower, end };
+  }
+  const at = (o: THREE.Object3D) => o.getWorldPosition(new THREE.Vector3());
+
+  it('lands the end on a target in reach, each bone its length, the end its turn', () => {
+    const { upper, lower, end } = leg();
+    const turn = end.getWorldQuaternion(new THREE.Quaternion());
+    const target = new THREE.Vector3(0.2, 0.35, 0.1);
+    reachLimb(upper, lower, end, target, new THREE.Vector3(0, 0, 1));
+    expect(at(end).distanceTo(target)).toBeCloseTo(0, 6);
+    expect(at(upper).distanceTo(at(lower))).toBeCloseTo(0.4, 6);
+    expect(at(lower).distanceTo(at(end))).toBeCloseTo(0.4, 6);
+    expect(end.getWorldQuaternion(new THREE.Quaternion()).angleTo(turn)).toBeCloseTo(0, 6);
+  });
+
+  it('reaches straight toward a target out of reach', () => {
+    const { upper, lower, end } = leg();
+    reachLimb(upper, lower, end, new THREE.Vector3(0, -2, 0), new THREE.Vector3(0, 0, 1));
+    const reach = at(end).sub(at(upper));
+    expect(reach.length()).toBeCloseTo(0.8, 3);
+    expect(reach.normalize().y).toBeCloseTo(-1, 6);
+  });
+});
+
+describe('dropToReach', () => {
+  function leg() {
+    const root = new THREE.Group();
+    const [upper, lower, end] = [new THREE.Object3D(), new THREE.Object3D(), new THREE.Object3D()];
+    upper.position.set(0, 1, 0);
+    lower.position.set(0.1, -0.3, 0);
+    end.position.set(-0.1, -0.3, 0);
+    root.add(upper);
+    upper.add(lower);
+    lower.add(end);
+    root.updateMatrixWorld(true);
+    return { upper, lower, end, reach: 2 * Math.hypot(0.1, 0.3) };
+  }
+
+  it('is the least drop that brings a target below within reach', () => {
+    const { upper, lower, end, reach } = leg();
+    expect(dropToReach(upper, lower, end, new THREE.Vector3(0.2, 0.5, 0))).toBe(0);
+    // 0.3 m across and 1 m down from the hip.
+    const target = new THREE.Vector3(0.3, 0, 0);
+    const drop = dropToReach(upper, lower, end, target);
+    expect(drop).toBeCloseTo(1 - Math.sqrt(reach * reach - 0.09), 3);
+    upper.position.y -= drop;
+    upper.updateMatrixWorld(true);
+    reachLimb(upper, lower, end, target, new THREE.Vector3(0, 0, 1));
+    expect(end.getWorldPosition(new THREE.Vector3()).distanceTo(target)).toBeCloseTo(0, 5);
+  });
+
+  it('never drops for a target above, nor one too far across for any drop', () => {
+    const { upper, lower, end } = leg();
+    expect(dropToReach(upper, lower, end, new THREE.Vector3(0, 2, 0))).toBe(0);
+    expect(dropToReach(upper, lower, end, new THREE.Vector3(1, 0.5, 0))).toBe(0);
   });
 });

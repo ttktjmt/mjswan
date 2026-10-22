@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { MainModule, MjData, MjModel } from 'mujoco';
-import { Skin, type SkinConfig } from '../skin';
+import { Skin, geomBottom, type SkinConfig } from '../skin';
 
 /** Bone, parent, offset from the parent in VRM 1.0's frame (facing +z, left at +x). */
 const SKELETON: Array<[string, string | null, [number, number, number]]> = [
@@ -70,6 +70,21 @@ function toonFile(): ArrayBuffer {
   return glb(json, new Uint8Array(triangle.buffer));
 }
 
+/** The VRM 1.0 file with a triangle on the left hand, its lowest corner 0.02 m below it. */
+function gloveFile(): ArrayBuffer {
+  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(vrmFile('1'), 20)).trim());
+  const triangle = new Float32Array([0, -0.02, 0, 0.05, 0, 0, 0, 0, 0.05]);
+  json.nodes.push({ name: 'glove', mesh: 0 });
+  json.nodes.find((node: { name: string }) => node.name === 'leftHand').children.push(json.nodes.length - 1);
+  json.buffers = [{ byteLength: triangle.byteLength }];
+  json.bufferViews = [{ buffer: 0, byteLength: triangle.byteLength }];
+  json.accessors = [
+    { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3', min: [0, -0.02, 0], max: [0.05, 0, 0.05] },
+  ];
+  json.meshes = [{ primitives: [{ attributes: { POSITION: 0 } }] }];
+  return glb(json, new Uint8Array(triangle.buffer));
+}
+
 function vrmFile(version: '0' | '1'): ArrayBuffer {
   // VRM 0.x faces -z, so its left side is at -x.
   const mirror = version === '0' ? -1 : 1;
@@ -123,6 +138,15 @@ const robot = {
   body: (b: number) => ({ name: BODY_NAMES[b] }),
 } as unknown as MjModel;
 const mujoco = { mjtJoint: { mjJNT_FREE: { value: 0 } } } as unknown as MainModule;
+const [SPHERE, BOX] = [2, 6];
+const SHAPES = {
+  mjtGeom: Object.fromEntries(
+    ['PLANE', 'HFIELD', 'SPHERE', 'CAPSULE', 'ELLIPSOID', 'CYLINDER', 'BOX', 'MESH'].map((shape, value) => [
+      `mjGEOM_${shape}`,
+      { value },
+    ]),
+  ),
+};
 
 const CONFIG: SkinConfig = {
   bones: {
@@ -316,24 +340,34 @@ describe('Skin', () => {
   });
 
   describe("retarget: 'position'", () => {
-    // The zero pose as MuJoCo's kinematics give it: this robot's bodies are not turned.
+    // The zero pose as MuJoCo's kinematics give it: this robot's bodies and geoms are not turned.
+    type Kinematics = { xpos: Float64Array; xquat: Float64Array; geom_xpos: Float64Array; geom_xmat: Float64Array };
     const kinematics = {
       ...mujoco,
+      ...SHAPES,
       MjData: class {
         xpos: Float64Array;
         xquat: Float64Array;
+        geom_xpos: Float64Array;
+        geom_xmat: Float64Array;
         constructor(model: MjModel) {
           this.xpos = new Float64Array(model.nbody * 3);
           this.xquat = new Float64Array(model.nbody * 4);
+          this.geom_xpos = new Float64Array((model.ngeom ?? 0) * 3);
+          this.geom_xmat = new Float64Array((model.ngeom ?? 0) * 9);
         }
         delete() {}
       },
       mj_resetDataKeyframe: () => {},
-      mj_kinematics: (model: MjModel, data: { xpos: Float64Array; xquat: Float64Array }) => {
+      mj_kinematics: (model: MjModel, data: Kinematics) => {
         for (let b = 0; b < model.nbody; b++) {
           data.xquat[b * 4] = 1;
           const p = model.body_parentid[b];
           for (let k = 0; k < 3 && b > 0; k++) data.xpos[b * 3 + k] = data.xpos[p * 3 + k] + model.body_pos[b * 3 + k];
+        }
+        for (let g = 0; g < (model.ngeom ?? 0); g++) {
+          for (let k = 0; k < 3; k++) data.geom_xpos[g * 3 + k] = data.xpos[model.geom_bodyid[g] * 3 + k];
+          data.geom_xmat.set([1, 0, 0, 0, 1, 0, 0, 0, 1], g * 9);
         }
       },
     } as unknown as MainModule;
@@ -388,6 +422,104 @@ describe('Skin', () => {
       expect(boneAt(skin, 'leftHand').distanceTo(expected)).toBeCloseTo(0, 6);
       expect(boneAt(skin, 'spine').distanceTo(spine)).toBeCloseTo(0, 6);
     });
+
+    it("hybrid puts the hand where 'position' does, the arm keeping its lengths", async () => {
+      // The arm raised a quarter turn forward about the robot's shoulder, which sits
+      // 0.1 m below the avatar's: turned by rotation alone, the hand ends elsewhere.
+      const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+      const raised = () => {
+        const out = zeroPose();
+        const pivot = out[3].position.clone();
+        for (const b of [3, 4, 5]) {
+          out[b].position.sub(pivot).applyQuaternion(turn).add(pivot);
+          out[b].quaternion.copy(turn);
+        }
+        return out;
+      };
+      const hand = async (retarget: SkinConfig['retarget']) => {
+        const skin = await Skin.load(vrmFile('1'), { ...CONFIG, retarget });
+        skin.bind(kinematics, robot);
+        skin.update(zeroPose(), 0);
+        skin.update(raised(), 16);
+        skin.root.updateMatrixWorld(true);
+        return { skin, at: boneAt(skin, 'leftHand') };
+      };
+      const fixed = await hand('position');
+      const turned = await hand('rotation');
+      const both = await hand('hybrid');
+      expect(turned.at.distanceTo(fixed.at)).toBeGreaterThan(0.05);
+      expect(both.at.distanceTo(fixed.at)).toBeCloseTo(0, 5);
+      const turnOf = (skin: Skin) => skin.root.getObjectByName('leftHand')!.getWorldQuaternion(new THREE.Quaternion());
+      expect(turnOf(both.skin).angleTo(turnOf(fixed.skin))).toBeCloseTo(0, 5);
+      expect(boneAt(both.skin, 'leftUpperArm').distanceTo(boneAt(both.skin, 'leftLowerArm'))).toBeCloseTo(0.25, 6);
+      expect(boneAt(both.skin, 'leftLowerArm').distanceTo(both.at)).toBeCloseTo(0.25, 6);
+    });
+
+    it('hybrid lowers the avatar until the hand it stands on reaches, the arm unstretched', async () => {
+      // The hand 0.3 m lower: 0.55 m below the avatar's shoulder and 0.25 m ahead, past
+      // its arm's 0.5 m.
+      const lowered = () => {
+        const out = zeroPose();
+        for (const b of [4, 5]) out[b].position.y -= 0.3;
+        return out;
+      };
+      const posed = async (retarget: SkinConfig['retarget']) => {
+        const skin = await Skin.load(vrmFile('1'), { ...CONFIG, retarget });
+        skin.bind(kinematics, robot);
+        skin.update(zeroPose(), 0);
+        skin.update(lowered(), 16);
+        skin.root.updateMatrixWorld(true);
+        return skin;
+      };
+      const fixed = await posed('position');
+      const both = await posed('hybrid');
+      expect(boneAt(both, 'leftHand').distanceTo(boneAt(fixed, 'leftHand'))).toBeCloseTo(0, 5);
+      expect(boneAt(both, 'leftUpperArm').distanceTo(boneAt(both, 'leftLowerArm'))).toBeCloseTo(0.25, 6);
+      expect(boneAt(both, 'leftLowerArm').distanceTo(boneAt(both, 'leftHand'))).toBeCloseTo(0.25, 6);
+      // No further than it takes: the arm ends straight.
+      expect(boneAt(both, 'hips').y).toBeCloseTo(0.9 - (0.55 - Math.sqrt(0.5 ** 2 - 0.25 ** 2)), 3);
+    });
+
+    it('stands the avatar on the robot it is fixed to, lowest point on lowest point', async () => {
+      // A colliding sphere 0.05 m across on the hand, at 0.95 m; lower down, a sphere
+      // drawn only, on the pelvis, and a box on the robot's neighbour.
+      const model = {
+        ...robot,
+        ngeom: 3,
+        geom_bodyid: Int32Array.from([5, 1, 6]),
+        geom_type: Int32Array.from([SPHERE, SPHERE, BOX]),
+        geom_size: Float64Array.from([0.05, 0, 0, 0.3, 0, 0, 0.1, 0.1, 0.1]),
+        geom_contype: Int32Array.from([1, 0, 1]),
+        geom_conaffinity: Int32Array.from([1, 0, 1]),
+      } as unknown as MjModel;
+      const skin = await Skin.load(gloveFile(), { ...CONFIG, retarget: 'position' });
+      skin.bind(kinematics, model);
+      skin.update(zeroPose(), 0);
+      skin.root.updateMatrixWorld(true);
+      const glove = skin.root.getObjectByName('glove') as THREE.Mesh;
+      const corners = [0, 1, 2].map((i) => glove.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(glove.matrixWorld));
+      expect(Math.min(...corners.map((corner) => corner.y))).toBeCloseTo(0.9, 6);
+    });
+  });
+
+  it('finds how low each shape of geom reaches, as it is turned', () => {
+    const bottom = (type: number, size: number[], turn = new THREE.Matrix4(), aabb = [0, 0, 0, 0, 0, 0]) => {
+      const model = { geom_type: [type], geom_size: size, geom_aabb: aabb } as unknown as MjModel;
+      // MuJoCo's rotation matrices are row-major, three.js's column-major.
+      const xmat = new THREE.Matrix3().setFromMatrix4(turn).transpose().elements;
+      return geomBottom(SHAPES as unknown as MainModule, model, { geom_xpos: [0, 0, 1], geom_xmat: xmat } as unknown as MjData, 0);
+    };
+    const lying = new THREE.Matrix4().makeRotationY(Math.PI / 2);
+    const [plane, , sphere, capsule, ellipsoid, cylinder, box, mesh] = [0, 1, 2, 3, 4, 5, 6, 7];
+    expect(bottom(sphere, [0.1, 0, 0])).toBeCloseTo(0.9, 9);
+    expect(bottom(capsule, [0.05, 0.2, 0])).toBeCloseTo(0.75, 9);
+    expect(bottom(capsule, [0.05, 0.2, 0], lying)).toBeCloseTo(0.95, 9);
+    expect(bottom(cylinder, [0.1, 0.2, 0])).toBeCloseTo(0.8, 9);
+    expect(bottom(cylinder, [0.1, 0.2, 0], lying)).toBeCloseTo(0.9, 9);
+    expect(bottom(ellipsoid, [0.1, 0.2, 0.3], new THREE.Matrix4().makeRotationX(Math.PI / 2))).toBeCloseTo(0.8, 9);
+    expect(bottom(box, [0.1, 0.2, 0.3], new THREE.Matrix4().makeRotationX(Math.PI / 4))).toBeCloseTo(1 - 0.5 * Math.SQRT1_2, 9);
+    expect(bottom(mesh, [0, 0, 0], undefined, [0, 0, -0.1, 0.1, 0.1, 0.05])).toBeCloseTo(0.85, 9);
+    expect(bottom(plane, [0, 0, 0])).toBe(Infinity);
   });
 
   it('skips a bone the file lacks and a body the model lacks', async () => {

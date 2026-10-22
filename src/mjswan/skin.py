@@ -123,14 +123,19 @@ class SkinConfig:
     the robot never touches. ``False`` leaves them to three-vrm's springs, for a device
     that cannot spare the step."""
 
-    retarget: Literal["rotation", "position"] = "rotation"
+    retarget: Literal["rotation", "position", "hybrid"] = "rotation"
     """How the avatar follows the robot. ``"rotation"`` turns each mapped bone the way
     its body has turned since the zero pose: the avatar keeps its own proportions and
     only its hips are placed, their height scaled. ``"position"`` fixes each mapped bone
     to its body, where it sat with the avatar posed by rotation at the model's first
-    keyframe (its zero pose without one), as a robot's own meshes are fixed: every part
-    moves with its body, so the feet stay on the robot's feet, and where the avatar's
-    joints are not the robot's, its mesh stretches or folds across them."""
+    keyframe (its zero pose without one) and moved until its lowest point was the
+    robot's, as a robot's own meshes are fixed: every part moves with its body, so the
+    feet stay on the robot's feet, and where the avatar's joints are not the robot's, its
+    mesh stretches or folds across them. ``"hybrid"`` poses by rotation, then bends each
+    arm and leg whose three bones are mapped (two-bone IK, its bones keeping their
+    lengths) so its hand or foot lands where ``"position"`` would put it, the avatar
+    lowered as far as the lowest of them need to reach: the proportions of the one and
+    the contact of the other."""
 
     name: str = ""
     """Shown in the viewer's Skin menu. Set by :meth:`~mjswan.scene.SceneHandle.add_skin`."""
@@ -162,9 +167,10 @@ class SkinConfig:
             )
         if self.brightness <= 0:
             raise ValueError(f"brightness must be positive, got {self.brightness}.")
-        if self.retarget not in ("rotation", "position"):
+        if self.retarget not in ("rotation", "position", "hybrid"):
             raise ValueError(
-                f"retarget must be 'rotation' or 'position', got {self.retarget!r}."
+                "retarget must be 'rotation', 'position' or 'hybrid', "
+                f"got {self.retarget!r}."
             )
 
     @property

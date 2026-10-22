@@ -122,10 +122,11 @@ class TestToDict:
             SkinConfig(bones=BONES, height_ratio=1.1).to_dict()["height_ratio"] == 1.1
         )
 
-    def test_retarget_only_when_position(self):
+    def test_retarget_only_when_not_rotation(self):
         assert "retarget" not in SkinConfig(bones=BONES).to_dict()
-        entry = SkinConfig(bones=BONES, retarget="position").to_dict()
-        assert entry["retarget"] == "position"
+        for mode in ("position", "hybrid"):
+            entry = SkinConfig(bones=BONES, retarget=mode).to_dict()
+            assert entry["retarget"] == mode
 
     def test_root_height_only_when_set(self):
         assert "root_height" not in SkinConfig(bones=BONES).to_dict()

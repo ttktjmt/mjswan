@@ -1,10 +1,11 @@
 """Spinkick with a VRM avatar
 
 The G1 Spinkick scene from ``main.py`` on its own, with VRM avatars as skins: one is
-drawn in the G1's place, posed from it every frame, the G1 itself undrawn. The viewer's
-Skin menu picks which; cleared, it shows the G1 again. Physics, collisions and the
-policy are the G1's, exactly as in ``main.py``; only the avatar's hair and clothes are
-simulated, by MuJoCo, in a model of their own.
+drawn in the G1's place, posed from it every frame, the G1 itself undrawn; its arms and
+legs are bent so its hands and feet land where the G1's are (``retarget="hybrid"``).
+The viewer's Skin menu picks which; cleared, it shows the G1 again. Physics, collisions
+and the policy are the G1's, exactly as in ``main.py``; only the avatar's hair and
+clothes are simulated, by MuJoCo, in a model of their own.
 
     uv run python examples/demo/spinkick_avatar.py
 
@@ -77,6 +78,7 @@ AVATAR_SAMPLE_A = mjswan.SkinConfig(
     rest_offsets=G1_REST_OFFSETS,
     offset=(0.0, 0.0, 0.0),
     hide_robot=True,
+    retarget="hybrid",
 )
 
 # CC0 (VRM 0.x): Sendagaya Shino, saved beside this script as SendagayaShino.vrm:

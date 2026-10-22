@@ -1,11 +1,11 @@
 """Go1 with a fox or a pug skin
 
 The Go1 velocity tasks from ``main.py``, flat and rough, on their own, with a fox or a
-pug (the Skin menu switches) drawn in the Go1's place, the Go1 itself undrawn. Each part
-of the animal is fixed to the Go1 body it maps to (``retarget="position"``), so its
-paws stay on the Go1's feet and its joints stretch where the two differ; the fox's tail
-swings, simulated by MuJoCo in a model of its own. Physics, collisions and the policy
-are the Go1's, exactly as in ``main.py``.
+pug (the Skin menu switches) drawn in the Go1's place, the Go1 itself undrawn. Each
+part of the animal turns as the Go1 body it maps to does, and each leg is then bent so
+its paw lands where the Go1's foot is (``retarget="hybrid"``); the fox's tail swings,
+simulated by MuJoCo in a model of its own. Physics, collisions and the policy are the
+Go1's, exactly as in ``main.py``.
 
     uv run python examples/demo/go1_avatar.py
 
@@ -122,7 +122,7 @@ FOX = mjswan.SkinConfig(
     hips_offset=(-0.16, 0.0, 0.0),
     root_height=GO1_STANDING_HEIGHT,
     hide_robot=True,
-    retarget="position",
+    retarget="hybrid",
 )
 
 PUG_GLB = Path(__file__).parent / "assets" / "pug.glb"
@@ -167,7 +167,7 @@ PUG = mjswan.SkinConfig(
     # MuJoCo's lights, shared out, leave the beige darker than the source's; this lifts
     # it back, short of clipping.
     brightness=1.25,
-    retarget="position",
+    retarget="hybrid",
 )
 
 

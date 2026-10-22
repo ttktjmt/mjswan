@@ -34,16 +34,20 @@ shortcuts.
   its mid-trunk root, and `root_height` gives the root's height in the pose the avatar
   rests in when that is not the model's zero pose, as a quadruped's standing one.
   `retarget="position"` fixes each bone to its body instead, as the robot's own meshes
-  are, where it sits at the model's first keyframe: the feet stay on the robot's feet,
-  and the mesh stretches or folds where the avatar's joints are not the robot's.
+  are, where it sits at the model's first keyframe with its lowest point on the
+  robot's: the feet stay on the robot's feet, and the mesh stretches or folds where the
+  avatar's joints are not the robot's. `retarget="hybrid"` has both: posed by rotation,
+  each arm and leg is bent (two-bone IK, its bones keeping their lengths) to put its
+  hand or foot where position would, the avatar lowered where those it stands on fall
+  short.
   `mjswan publish` refuses a build with one.
   `examples/demo/spinkick_avatar.py` runs the G1 Spinkick with two, each in the G1's
-  place, and `examples/demo/go1_avatar.py` the Go1 velocity tasks, flat and rough, as a fox, a VRM it
-  builds from the Khronos glTF sample Fox (CC0 mesh, CC BY 4.0 rig), tail spring
-  included, or as a pug from Quaternius's Farm Animals (CC0) in toon materials,
-  picked from the Skin menu, both fixed to the Go1's bodies by position. The pack has no stable URL, so the pug is committed as
-  `examples/demo/assets/pug.glb`, made by `make_pug.py` beside it, which reparents
-  the IK rig's feet so joint angles alone pose it.
+  place, and `examples/demo/go1_avatar.py` the Go1 velocity tasks, flat and rough, as a
+  fox, a VRM it builds from the Khronos glTF sample Fox (CC0 mesh, CC BY 4.0 rig), tail
+  spring included, or as a pug from Quaternius's Farm Animals (CC0) in toon materials,
+  picked from the Skin menu; both use `retarget="hybrid"`. The pack has no stable URL,
+  so the pug is committed as `examples/demo/assets/pug.glb`, made by `make_pug.py`
+  beside it, which reparents the IK rig's feet so joint angles alone pose it.
 - **A task's own action class runs in the browser** (ADR 0009, **document format 6**). An
   mjlab action class mjswan has no class of its own for, such as in-hand rotation's
   `JointPositionDeltaAction` or luwu's `HeldJointPositionAction`, was skipped with a
