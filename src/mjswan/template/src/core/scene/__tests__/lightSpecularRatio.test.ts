@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { MjModel } from 'mujoco';
-import { lightSpecularRatio } from '../lights';
+import { lightBudget, lightSpecularRatio } from '../lights';
 
 interface LightSpec {
   diffuse: [number, number, number];
@@ -68,5 +68,28 @@ describe('lightSpecularRatio', () => {
   it('falls back to 1 for a scene with nothing lit, rather than dividing by zero', () => {
     expect(lightSpecularRatio(modelWithLights([]))).toBe(1);
     expect(lightSpecularRatio(modelWithLights([{ diffuse: [0, 0, 0], specular: [1, 1, 1] }]))).toBe(1);
+  });
+});
+
+describe('lightBudget', () => {
+  it("sums every light's diffuse and ambient with the headlight's, as a toon shader takes them", () => {
+    // The Spinkick scene: a directional and a spot light, MuJoCo's default headlight.
+    const model = {
+      ...modelWithLights(
+        [
+          { diffuse: [0.7, 0.7, 0.7], specular: [0.3, 0.3, 0.3] },
+          { diffuse: [0.7, 0.7, 0.7], specular: [0.3, 0.3, 0.3] },
+          { diffuse: [5, 5, 5], specular: [0, 0, 0], active: false },
+        ],
+        { active: true, diffuse: [0.6, 0.6, 0.6], specular: [0, 0, 0] },
+      ),
+      light_ambient: Float32Array.from([0, 0, 0, 0, 0, 0, 1, 1, 1]),
+    } as unknown as MjModel;
+    (model as unknown as { vis: { headlight: { ambient: number[] } } }).vis.headlight.ambient = [0.3, 0.3, 0.3];
+    expect(lightBudget(model)).toBeCloseTo(2.3);
+  });
+
+  it('is zero for a model with no light', () => {
+    expect(lightBudget(modelWithLights([]))).toBe(0);
   });
 });

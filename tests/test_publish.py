@@ -298,7 +298,7 @@ class TestPlanPublish:
         assert MAX_TOTAL_BYTES == 100 * 1024 * 1024
         assert MAX_FILES == 200
         assert DATA_EXTENSIONS == frozenset(
-            {".json", ".mjz", ".onnx", ".npz", ".ply", ".spz"}
+            {".json", ".mjz", ".onnx", ".npz", ".ply", ".spz", ".vrm", ".glb"}
         )
 
 
@@ -831,3 +831,140 @@ class TestPublishCli:
         assert result.exit_code == 1
         assert "nope, custom-TS" in result.output
         assert "policy.json" in result.output
+
+
+# ── skins ────────────────────────────────────────────────────────────────────
+
+
+class TestSkins:
+    """A skin is uploaded as data once mjswan Cloud would take it: drawable, and for a
+    VRM, licensed for hosting and, where only its author may use it, confirmed."""
+
+    SKIN = "demo/humanoid/assets/a.vrm"
+
+    def _dist(self, tmp_path: Path, **meta) -> Path:
+        import skin_fixture as fx
+
+        dist = _make_dist(tmp_path)
+        fx.write_vrm(dist / self.SKIN, meta={**fx.OPEN_META, **meta})
+        return dist
+
+    def test_a_vrm_and_a_glb_upload_as_data(self, tmp_path: Path):
+        import skin_fixture as fx
+
+        dist = self._dist(tmp_path)
+        fx.write_glb(dist / "demo/humanoid/assets/b.glb", fx.skeleton_gltf())
+        plan = plan_publish(dist)
+        types = {e["path"]: e["contentType"] for e in plan.manifest()}
+        assert (
+            types[self.SKIN]
+            == types["demo/humanoid/assets/b.glb"]
+            == "application/octet-stream"
+        )
+        assert list(plan.vrms) == [self.SKIN] and plan.to_attest == []
+        assert {".vrm", ".glb"} <= DATA_EXTENSIONS
+
+    def test_a_vrm_its_license_forbids_hosting_is_refused(self, tmp_path: Path):
+        dist = self._dist(tmp_path, allowRedistribution=False)
+        with pytest.raises(PublishError, match="forbids redistribution") as exc:
+            plan_publish(dist)
+        assert exc.value.file == self.SKIN
+
+    def test_a_compressed_glb_is_refused_with_the_way_out(self, tmp_path: Path):
+        import skin_fixture as fx
+
+        dist = _make_dist(tmp_path)
+        gltf = {**fx.skeleton_gltf(), "extensionsRequired": ["EXT_meshopt_compression"]}
+        fx.write_glb(dist / "demo/humanoid/assets/b.glb", gltf)
+        with pytest.raises(PublishError, match="Export it again without compression"):
+            plan_publish(dist)
+
+    def test_a_skin_named_as_the_other_format_is_refused(self, tmp_path: Path):
+        import skin_fixture as fx
+
+        plain = _make_dist(tmp_path / "plain")
+        fx.write_glb(plain / self.SKIN, fx.skeleton_gltf())
+        with pytest.raises(PublishError, match="no VRM extension"):
+            plan_publish(plain)
+        vrm = _make_dist(tmp_path / "vrm")
+        fx.write_vrm(vrm / "demo/humanoid/assets/a.glb")
+        with pytest.raises(PublishError, match=r"publish it as \.vrm"):
+            plan_publish(vrm)
+
+    def test_what_mjswan_cloud_does_not_store_is_refused(self, tmp_path, monkeypatch):
+        for case, meta in (
+            ("name", {"name": "x" * 257}),
+            ("authors", {"authors": [f"a{i}" for i in range(33)]}),
+            ("url", {"otherLicenseUrl": "https://example.com/" + "x" * 2048}),
+        ):
+            with pytest.raises(PublishError, match="longer than mjswan Cloud stores"):
+                plan_publish(self._dist(tmp_path / case, **meta))
+        monkeypatch.setattr("mjswan.cloud.publish.GLB_JSON_MAX_BYTES", 64)
+        with pytest.raises(PublishError, match="glTF JSON chunk; mjswan Cloud"):
+            plan_publish(self._dist(tmp_path / "json"))
+
+    def test_a_non_commercial_vrm_warns_and_publishes(self, tmp_path: Path):
+        dist = self._dist(tmp_path, commercialUsage="personalNonProfit")
+        seen: list[str] = []
+        publish_dist(
+            dist, token="tok", transport=FakeTransport(), on_warning=seen.append
+        )
+        assert seen == [
+            f"{self.SKIN}: its VRM license allows no commercial use (Sample by mjswan (https://vrm.dev/licenses/1.0/))."
+        ]
+
+    def test_an_author_only_vrm_goes_only_on_the_publishers_word(self, tmp_path: Path):
+        dist = self._dist(tmp_path, avatarPermission="onlyAuthor")
+        asked = []
+        transport = FakeTransport()
+        publish_dist(
+            dist,
+            token="tok",
+            transport=transport,
+            attest=lambda path, terms: asked.append((path, terms.avatar_use)) or True,
+        )
+        assert asked == [(self.SKIN, "author")]
+        assert transport.posts[-1][1] == {
+            "upload_id": "11111111-1111-1111-1111-111111111111",
+            "attested_skins": [self.SKIN],
+        }
+        for attest in (None, lambda path, terms: False):
+            transport = FakeTransport()
+            with pytest.raises(PublishError, match="did not confirm") as exc:
+                publish_dist(dist, token="tok", transport=transport, attest=attest)
+            assert exc.value.file == self.SKIN and transport.posts == []
+
+    def test_the_cli_asks_and_answers_no_without_a_terminal(
+        self, tmp_path, monkeypatch
+    ):
+        from typer.testing import CliRunner
+
+        from mjswan.cli import app
+        from mjswan.cloud.publish import PublishResult
+        from mjswan.license.vrm import vrm_license
+
+        terms = vrm_license({**self._meta(), "avatarPermission": "onlyAuthor"}, "1")
+        answers = []
+
+        def fake_publish_dist(dist_dir, **kwargs):
+            answers.append(kwargs["attest"](self.SKIN, terms))
+            return PublishResult(id="s1", sim_id="s1", upload_id="u")
+
+        monkeypatch.setattr("mjswan.cloud.publish.publish_dist", fake_publish_dist)
+        dist = str(_make_dist(tmp_path))
+        monkeypatch.setattr("mjswan.cli._interactive", lambda: True)
+        result = CliRunner().invoke(
+            app, ["publish", dist, "--token", "tok"], input="y\n"
+        )
+        assert result.exit_code == 0, result.output
+        assert "Are you its author, or licensed by them?" in result.output
+        assert "only its author use it as an avatar" in result.output
+        monkeypatch.setattr("mjswan.cli._interactive", lambda: False)
+        CliRunner().invoke(app, ["publish", dist, "--token", "tok"])
+        assert answers == [True, False]
+
+    @staticmethod
+    def _meta() -> dict:
+        import skin_fixture as fx
+
+        return dict(fx.OPEN_META)

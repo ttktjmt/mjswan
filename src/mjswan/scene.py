@@ -13,7 +13,7 @@ import re
 import tempfile
 import warnings
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -49,6 +49,7 @@ from .policy import (
     drives_joints,
     onnx_output_width,
 )
+from .skin import ResolvedSkin, SkinConfig, SkinHandle, resolve_skin
 from .splat import SplatConfig, SplatHandle
 from .viewer import ViewerConfig
 
@@ -379,6 +380,10 @@ class SceneConfig:
 
     viewer: ViewerConfig | None = None
     """Optional viewer configuration for this scene."""
+
+    skins: list[ResolvedSkin] = field(default_factory=list)
+    """Skins, resolved against their files and the model when added; the viewer shows one
+    at a time, the first by default."""
 
     events: dict[str, Any] | None = None
     """The scene's event terms (mjswan or mjlab ``EventTermCfg``), adapted.
@@ -1667,6 +1672,44 @@ class SceneHandle:
         self._config.viewer = config
         return self
 
+    def add_skin(self, name: str, config: SkinConfig) -> SkinHandle:
+        """Add a rigged character, posed every frame from the robot's bodies, to the Skin
+        menu.
+
+        A render layer only: physics, collision and the policy are unchanged. The viewer
+        shows one skin at a time, the first added by default. A URL source is downloaded
+        now, and the build bundles the file unmodified as ``assets/<id>.vrm`` or
+        ``assets/<id>.glb``, so a VRM's embedded license metadata travels with it; a
+        ``.glb``'s ``license`` and ``notice`` are written beside the scene as
+        ``LICENSE.skin-<id>`` and ``NOTICE.skin-<id>``. The file, the bone map and
+        ``rest_pose`` are checked against the scene's model here rather than at
+        playback, and the rest pose and hips are measured from it.
+
+        Args:
+            name: Shown in the Skin menu.
+            config: The character's file, bone map, rest pose and placement.
+
+        Returns:
+            SkinHandle for the added skin.
+
+        Raises:
+            FileNotFoundError: The source file does not exist.
+            urllib.error.URLError: The source URL does not download.
+            ValueError: The file is not a self-contained binary glTF, or a bone, node,
+                body, joint or keyframe the config names is not there.
+        """
+        name, skin_id = assign_name(
+            name, {s.config.id for s in self._config.skins}, kind="skin", stacklevel=3
+        )
+        resolved = resolve_skin(config, _get_scene_model(self._config))
+        skin = replace(resolved, config=replace(resolved.config, name=name, id=skin_id))
+        self._config.skins.append(skin)
+        if config.license is not None or config.notice is not None:
+            self.add_attribution(
+                f"skin-{skin_id}", license=config.license, notice=config.notice
+            )
+        return SkinHandle(skin, self)
+
     def set_events(
         self, events: Mapping[str, Any], *, _explicit: bool = True
     ) -> SceneHandle:
@@ -1779,4 +1822,12 @@ class SceneHandle:
         return self
 
 
-__all__ = ["ViewerConfig", "SceneConfig", "SceneHandle", "SplatConfig", "SplatHandle"]
+__all__ = [
+    "ViewerConfig",
+    "SceneConfig",
+    "SceneHandle",
+    "SkinConfig",
+    "SkinHandle",
+    "SplatConfig",
+    "SplatHandle",
+]

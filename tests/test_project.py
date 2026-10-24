@@ -134,6 +134,20 @@ class TestSceneAttributions:
         assert found.license is not None
         assert found.license.split(b"\n")[0] == b"SPDX-License-Identifier: BSD-3-Clause"
 
+    def test_add_scene_mjlab_takes_a_name_in_place_of_the_task_id(
+        self, monkeypatch, minimal_spec
+    ):
+        _install_fake_mjlab(monkeypatch, minimal_spec)
+        scene = (
+            Builder()
+            .add_project(name="P")
+            .add_scene_mjlab("Mjlab-Velocity-Flat-Unitree-G1", name="Humanoid skins")
+        )
+        assert (scene.name, scene._config.id) == ("Humanoid skins", "humanoid_skins")
+        assert scene._config.mjlab_task_id == "Mjlab-Velocity-Flat-Unitree-G1"
+        # The task still names the robot's attribution.
+        assert [a.component for a in scene._config.attributions] == ["unitree_g1"]
+
     def test_add_scene_mjlab_prefers_a_file_beside_an_entity_spec(
         self, monkeypatch, minimal_spec, tmp_path
     ):

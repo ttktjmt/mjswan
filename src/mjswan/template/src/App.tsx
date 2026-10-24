@@ -8,8 +8,20 @@ import { signalReady, signalError } from './core/utils/readySignal';
 import { createEngine } from './engine';
 import type { EnginePlugins, MjswanEngine, MjswanEngineState, SceneInput } from './engine';
 import { parseManifest, sanitizeName, type Catalog, type ProjectCatalog, type ByteSource } from './manifest';
-import { applyUrlState, DEBUG_PARAM, PANEL_PARAM, POLICY_PARAM, PROJECT_PARAM, SCENE_PARAM } from './urlState';
+import {
+  applyUrlState,
+  DEBUG_PARAM,
+  PANEL_PARAM,
+  POLICY_PARAM,
+  PROJECT_PARAM,
+  SCENE_PARAM,
+  SKIN_PARAM,
+  XRAY_PARAM,
+} from './urlState';
 import './App.css';
+
+/** The engine's Debug Viz switch that `?xray=` keeps. */
+const XRAY_SWITCH = 'xray';
 
 function paramFlag(param: string): boolean {
   return new URLSearchParams(window.location.search).get(param) !== '0';
@@ -41,9 +53,9 @@ async function loadCatalog(base: string): Promise<Catalog> {
 }
 
 /**
- * Resolve a `?project=` / `?scene=` / `?policy=` value against the entries' ids. The
- * query is sanitized too, so a hand-typed display name still lands, but nothing matches
- * on the raw name (ADR 0006 §4).
+ * Resolve a `?project=` / `?scene=` / `?policy=` / `?skin=` value against the entries'
+ * ids. The query is sanitized too, so a hand-typed display name still lands, but nothing
+ * matches on the raw name (ADR 0006 §4).
  */
 function pickById<T extends { id: string }>(
   items: T[],
@@ -64,8 +76,10 @@ function AppContent() {
   const [policyName, setPolicyName] = useState<string | null>(null);
   const [motionName, setMotionName] = useState<string | null>(null);
   const [splatName, setSplatName] = useState<string | null>(null);
+  const [skinName, setSkinName] = useState<string | null>(null);
   const [debugVisEnabled, setDebugVisEnabled] = useState(() => paramFlag(DEBUG_PARAM));
   const [panelVisible, setPanelVisible] = useState(() => paramFlag(PANEL_PARAM));
+  const [xray, setXray] = useState(() => new URLSearchParams(window.location.search).get(XRAY_PARAM) === '1');
   const [engineState, setEngineState] = useState<MjswanEngineState | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -103,12 +117,16 @@ function AppContent() {
           ? pickById(scene.policies, params.get(POLICY_PARAM), scene.policies.find((p) => p.default) ?? scene.policies[0])
           : undefined;
         const motion = policy?.motions.find((m) => m.default) ?? policy?.motions[0];
+        // An empty `?skin=` is the menu's None.
+        const skinId = params.get(SKIN_PARAM);
+        const skin = skinId === '' ? undefined : pickById(scene?.skins ?? [], skinId, scene?.skins[0]);
         setCatalog(cat);
         setProjectName(project?.name ?? null);
         setSceneName(scene?.name ?? null);
         setPolicyName(policy?.name ?? null);
         setMotionName(motion?.name ?? null);
         setSplatName(scene?.splats[0]?.name ?? null);
+        setSkinName(skin?.name ?? null);
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : String(err));
@@ -152,6 +170,7 @@ function AppContent() {
         const input = await sceneEntry.buildScene({
           policy: sceneEntry.policies.find((p) => p.name === policyName)?.id ?? null,
           splat: sceneEntry.splats.find((s) => s.name === splatName)?.id ?? null,
+          skin: sceneEntry.skins.find((s) => s.name === skinName)?.id ?? null,
         });
         await engine.loadScene(withPlugins(input));
         if (motionName) await engine.setMotion(motionName);
@@ -193,17 +212,27 @@ function AppContent() {
     // URL values are ids, but the UI state holds display names, so look each one up.
     const proj = catalog.projects.find((p) => p.name === projectName);
     const scene = proj?.scenes.find((s) => s.name === sceneName);
+    const skins = scene?.skins ?? [];
     const search = applyUrlState(window.location.search, {
       // Pin ?project only once more than one exists (single-project builds stay clean).
       project: catalog.projects.length > 1 ? (proj?.id ?? null) : null,
       scene: scene?.id ?? null,
       policy: scene?.policies.find((p) => p.name === policyName)?.id ?? null,
+      skin: skins.length ? (skins.find((s) => s.name === skinName)?.id ?? '') : null,
       panel: panelVisible,
       debug: debugVisEnabled,
+      xray: xray && skins.length > 0,
     });
     const url = `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`;
     window.history.replaceState({}, '', url);
-  }, [catalog, projectName, sceneName, policyName, panelVisible, debugVisEnabled]);
+  }, [catalog, projectName, sceneName, policyName, skinName, panelVisible, debugVisEnabled, xray]);
+
+  // The engine lists the switch only while a skin hides the robot: set it each time it
+  // appears, so `?xray=1` holds from the first skin that has it.
+  const xrayListed = engineState?.debugVis.some((d) => d.id === XRAY_SWITCH) ?? false;
+  useEffect(() => {
+    if (xrayListed) engineRef.current?.debugVis.set(XRAY_SWITCH, xray);
+  }, [xray, xrayListed]);
 
   const loadScene = useCallback(async (scene: ProjectCatalog['scenes'][number]) => {
     const engine = engineRef.current;
@@ -211,14 +240,18 @@ function AppContent() {
     const policy = scene.policies.find((p) => p.default) ?? scene.policies[0];
     const motion = policy?.motions.find((m) => m.default) ?? policy?.motions[0];
     const splat = scene.splats[0] ?? null;
+    const skin = scene.skins[0] ?? null;
     setSceneName(scene.name);
     setPolicyName(policy?.name ?? null);
     setMotionName(motion?.name ?? null);
     setSplatName(splat?.name ?? null);
+    setSkinName(skin?.name ?? null);
     showLoading(`Loading scene "${scene.name}"…`);
     try {
       await engine.loadScene(
-        withPlugins(await scene.buildScene({ policy: policy?.id, splat: splat?.id ?? null })),
+        withPlugins(
+          await scene.buildScene({ policy: policy?.id, splat: splat?.id ?? null, skin: skin?.id ?? null }),
+        ),
       );
       if (motion) await engine.setMotion(motion.name);
     } catch (err) {
@@ -291,6 +324,26 @@ function AppContent() {
     }
   }, [sceneEntry, showLoading, hideLoading]);
 
+  const handleSkinChange = useCallback(async (value: string | null) => {
+    const engine = engineRef.current;
+    const skin = value === null ? null : sceneEntry?.skins.find((s) => s.name === value) ?? null;
+    setSkinName(value);
+    if (!engine || (value !== null && !skin)) return;
+    showLoading(value === null ? 'Removing skin…' : `Loading skin "${value}"…`);
+    try {
+      await engine.setSkin(skin ? await skin.build() : null);
+    } catch (err) {
+      console.error('Failed to load skin:', err);
+    } finally {
+      hideLoading();
+    }
+  }, [sceneEntry, showLoading, hideLoading]);
+
+  const handleDebugVisChange = useCallback((id: string, enabled: boolean) => {
+    if (id === XRAY_SWITCH) setXray(enabled);
+    engineRef.current?.debugVis.set(id, enabled);
+  }, []);
+
   const handleDebugVisEnabledChange = useCallback((enabled: boolean) => {
     setDebugVisEnabled(enabled);
     engineRef.current?.debugVis.setEnabled(enabled);
@@ -350,6 +403,9 @@ function AppContent() {
             motions={options(sceneEntry.policies.find((p) => p.name === policyName)?.motions ?? [])}
             motionValue={motionName}
             onMotionChange={handleMotionChange}
+            skins={options(sceneEntry.skins)}
+            skinValue={skinName}
+            onSkinChange={handleSkinChange}
             commandsEnabled={!!policyName}
             commands={engineState?.commands ? [...engineState.commands] : []}
             commandValues={engineState?.commandValues ?? {}}
@@ -359,7 +415,7 @@ function AppContent() {
             onEventFire={(name) => engineRef.current?.events.fire(name)}
             onEventArmedChange={(name, armed) => engineRef.current?.events.setArmed(name, armed)}
             debugVis={engineState?.debugVis ? [...engineState.debugVis] : []}
-            onDebugVisChange={(id, enabled) => engineRef.current?.debugVis.set(id, enabled)}
+            onDebugVisChange={handleDebugVisChange}
             debugVisEnabled={debugVisEnabled}
             onDebugVisEnabledChange={handleDebugVisEnabledChange}
             viewerGui={catalog.viewerGui}

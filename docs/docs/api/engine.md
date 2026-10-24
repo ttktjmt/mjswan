@@ -71,7 +71,7 @@ coexist; each owns its own MuJoCo module, scene graph, and RNG state.
 
 Verbs are named for their cost: `loadScene` rebuilds the model, and so does `xr.enter` when
 the hand-tracking switch disagrees with it; everything else is live. The verbs that touch
-the model (`loadScene`, `setPolicy`, `setMotion` and that rebuild) run one at a time, in
+the model (`loadScene`, `setPolicy`, `setMotion`, `setSkin` and that rebuild) run one at a time, in
 call order, and `dispose` waits for the one running.
 
 | Member | Signature | Notes |
@@ -80,6 +80,7 @@ call order, and `dispose` waits for the one running.
 | `setPolicy` | `(input: PolicyInput \| null) => Promise<void>` | Live; keeps the model loaded. |
 | `setSplat` | `(input: SplatInput \| null) => Promise<void>` | Live. |
 | `setMotion` | `(name: string \| null) => Promise<boolean>` | Live. Resolves to whether the name was accepted. |
+| `setSkin` | `(input: SkinInput \| null) => Promise<void>` | Live; replaces the skin on show, the model untouched. A file that fails to load leaves the scene without one. |
 | `calibrateSplat` | `(transform: SplatTransform) => void` | Live splat placement, for a calibration UI. |
 | `play` / `pause` / `reset` | `() => void` | Playback. |
 | `camera` | `CameraControls` | `set(partial)`, `get()`, `frame()`, and `setTracking(enabled)`, mjlab's **Track camera** (follow the tracked body). A `CameraView`'s `azimuth` and `elevation` are MuJoCo's: the direction the camera looks. |
@@ -144,6 +145,7 @@ checkbox reads, and whether it is `enabled`:
 | `command:<term>` | The term name capitalized (`Twist`, `Motion`) | The term's `_debug_vis_impl`: a velocity command's arrows, a tracking command's ghost (or body frames in `viz.mode="frames"`), and any drawing a binding's `viz` declares. |
 | `sensor:<name>` | The sensor name | A raycast sensor with `debug_vis`: a sphere at each hit, plus the rays and surface normals when its `viz` asks for them. |
 | `reward:<term>` | The term name | mjlab's `upright` reward: the fitted terrain normal and the body's up axis, when it rates tilt against terrain sensors. |
+| `xray` | `Xray` | The viewer's own switch, listed after the drawings while a skin hides the robot (`hide_robot`): on, the robot is drawn see-through over the skin, to check how the two line up. Off by default. **Enabled** off hides it as it does a drawing, never the skin itself. Its state holds as `setSkin` swaps skins. |
 
 `state.debugVisEnabled` is the folder's **Enabled**. mjlab's **All envs** has no
 counterpart: the browser runs one env. The bundled app draws the folder inside mjlab's
@@ -235,6 +237,7 @@ The engine never fetches. Every asset arrives as `Bytes` — an `ArrayBuffer`, o
       modelFormat?: 'mjz' | 'mjb';         // 'mjz' (default) from add_scene(spec=...), 'mjb' from model=
       policy?: PolicyInput | null;
       splat?: SplatInput | null;
+      skin?: SkinInput | null;             // a skin posed from the robot; one that fails to load is skipped
       viewer?: ViewerConfig;
       terrainData?: TerrainData;           // spawn patches the policies' events may draw from
       controlDt?: number;                  // mjlab's timestep * decimation
@@ -261,6 +264,15 @@ The engine never fetches. Every asset arrives as `Bytes` — an `ArrayBuffer`, o
       data: Bytes;                         // .spz
       collider?: Bytes;                    // optional collision mesh
       transform?: SplatTransform;
+    }
+    ```
+
+=== "SkinInput"
+
+    ```ts
+    interface SkinInput {
+      data: Bytes;                         // .vrm (VRM 0.x or 1.0) or .glb
+      config: SkinConfig;                  // one entry of the manifest's scene `skins`
     }
     ```
 
@@ -307,13 +319,17 @@ await engine.loadScene(await scene.buildScene());          // defaults
 await engine.loadScene(await scene.buildScene({ policy: 'locomotion' }));  // by id
 ```
 
+`buildScene` defaults the policy to the scene's default one; a splat or a skin is loaded
+only when named.
+
 | Type | Shape |
 |---|---|
 | `Catalog` | `{ projects: ProjectCatalog[], pluginsPath?: string }` |
 | `ProjectCatalog` | `{ id, name, default, scenes }` |
-| `SceneEntry` | `{ id, name, camera?, splatSection, policies, splats, buildScene(opts?) }` |
+| `SceneEntry` | `{ id, name, camera?, splatSection, policies, splats, skins, buildScene(opts?) }` |
 | `PolicyEntry` | `{ id, name, default, motions, build() }` |
 | `SplatEntry` | `{ id, name, control, transform, build() }` |
+| `SkinEntry` | `{ id, name, build() }` |
 
 Every entry carries its `id` — `name2id(name)`, the directory it lives in and the value
 the bundled app's `?project=` / `?scene=` / `?policy=` parameters take. `sanitizeName(name)`

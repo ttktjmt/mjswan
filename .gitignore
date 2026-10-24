@@ -77,3 +77,6 @@ docs/site
 
 # Temporal CORS/COOP enable
 src/mjswan/template/public/_headers
+
+# Skins are fetched from the Hugging Face Hub (examples/demo/main.py), never committed
+*.vrm

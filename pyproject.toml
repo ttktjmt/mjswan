@@ -95,10 +95,17 @@ dev = [
     "pre-commit>=3.3.2",
 ]
 
+# What `examples/demo/main.py` imports; the deploy workflow installs this alone.
+demo = [
+    "mjswan[hf,mjlab]",
+    # Registers WBC-Mjlab's `Wbc-*` tasks with mjlab, for the Showcase's Humanoid skins.
+    "wbc-mjlab>=0.0.6",
+]
+
 # What `examples/` needs. `wandb` is for `examples/colab/anymal_c_velocity.ipynb`,
 # which trains and reads back a run.
 examples = [
-    "mjswan[wandb,hf,mjlab]",
+    "mjswan[wandb,demo]",
     "onnxruntime>=1.21.0",
 ]
 

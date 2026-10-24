@@ -50,14 +50,14 @@ project = builder.add_project(name="My Robots", default=True)
 demo = builder.add_project(name="Demo")  # ?project=demo
 ```
 
-Every project, scene, policy and splat has an **id** derived from its name — lowercased,
-runs of anything but `a-z0-9` collapsed to `_`, edges trimmed, so `"Newton's Cradle"`
-becomes `newton_s_cradle`. The id names what the object is written as (a project's or
-scene's directory, `policy/<id>.onnx`, a bundled splat's `assets/<id>.spz`), and it is
-the value `?project=`, `?scene=` and `?policy=` take. Two siblings whose names sanitize
-alike are both kept: the second is renamed with a `_1` suffix on its name and its id (the
-next `_2`, and so on), with a warning, so what the viewer lists always matches the URL.
-A policy's motions are renamed the same way.
+Every project, scene, policy, splat and skin has an **id** derived from its name —
+lowercased, runs of anything but `a-z0-9` collapsed to `_`, edges trimmed, so
+`"Newton's Cradle"` becomes `newton_s_cradle`. The id names what the object is written
+as (a project's or scene's directory, `policy/<id>.onnx`, a bundled splat's
+`assets/<id>.spz`), and it is the value `?project=`, `?scene=`, `?policy=` and `?skin=`
+take. Two siblings whose names sanitize alike are both kept: the second is renamed with
+a `_1` suffix on its name and its id (the next `_2`, and so on), with a warning, so what
+the viewer lists always matches the URL. A policy's motions are renamed the same way.
 
 ## Scene
 

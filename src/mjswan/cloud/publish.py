@@ -1,8 +1,8 @@
 """Publish a built mjswan ``dist/`` to mjswan Cloud (v2).
 
 This module extracts the **data files** from a local build (manifest.json plus
-scene/policy/motion/splat assets and traced MDP graphs; never HTML/JS/WASM) and uploads
-them to mjswan Cloud using the three-step presigned-upload protocol described in
+scene/policy/motion/splat/skin assets and traced MDP graphs; never HTML/JS/WASM) and
+uploads them to mjswan Cloud using the three-step presigned-upload protocol described in
 mjswan-cloud ADR 0001 §6:
 
 1. ``POST {base}/api/simulations/upload-session`` with a file manifest and the
@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from ..document.skin import read_skin_file
 from ..license import (
     LICENSE_CONTENT_TYPE,
     LICENSE_FILE_MAX_BYTES,
@@ -43,6 +44,7 @@ from ..license import (
     is_license_file_path,
     restricted_warning,
 )
+from ..license.vrm import VrmLicense, describe, vrm_license
 from .transport import USER_AGENT
 
 # ── Client-side constraints (mirror the server's; fail fast and locally) ──────
@@ -53,8 +55,15 @@ from .transport import USER_AGENT
 #: ``LICENSE`` / ``NOTICE`` files are admitted by name instead, in the project and
 #: scene directories only (ADR 0007 §1).
 DATA_EXTENSIONS: frozenset[str] = frozenset(
-    {".json", ".mjz", ".onnx", ".npz", ".ply", ".spz"}
+    {".json", ".mjz", ".onnx", ".npz", ".ply", ".spz", ".vrm", ".glb"}
 )
+SKIN_EXTENSIONS: frozenset[str] = frozenset({".vrm", ".glb"})
+
+#: The most of a skin's glTF JSON mjswan Cloud reads, and of a VRM's meta it stores.
+GLB_JSON_MAX_BYTES: int = 8 * 1024 * 1024
+VRM_TEXT_MAX: int = 256
+VRM_URL_MAX: int = 2048
+VRM_AUTHORS_MAX: int = 32
 
 MAX_FILE_BYTES: int = 50 * 1024 * 1024
 MAX_TOTAL_BYTES: int = 100 * 1024 * 1024
@@ -102,6 +111,8 @@ _CONTENT_TYPES: dict[str, str] = {
     ".npz": "application/octet-stream",
     ".ply": "application/octet-stream",
     ".spz": "application/octet-stream",
+    ".vrm": "application/octet-stream",
+    ".glb": "application/octet-stream",
 }
 
 
@@ -209,18 +220,29 @@ class PublishPlan:
     files: list[_DistFile] = field(default_factory=list)
     #: The license files among ``files`` and what each says, in path order.
     licenses: list[LicenseDeclaration] = field(default_factory=list)
+    #: Each VRM among ``files`` -> the terms its ``meta`` states, in path order.
+    vrms: dict[str, VrmLicense] = field(default_factory=dict)
 
     @property
     def total_bytes(self) -> int:
         return sum(f.size for f in self.files)
 
     def license_warnings(self) -> list[str]:
-        """One line per restricted license, for the author to read before the upload."""
+        """One line per restricted license or VRM, for the author to read first."""
         return [
             restricted_warning(d.path, d.spdx)
             for d in self.licenses
             if d.tier == "restricted" and d.spdx
+        ] + [
+            f"{path}: its VRM license allows no commercial use ({describe(terms)})."
+            for path, terms in self.vrms.items()
+            if not terms.commercial
         ]
+
+    @property
+    def to_attest(self) -> list[str]:
+        """The VRMs only their author, or someone they licensed, may use as an avatar."""
+        return [path for path, terms in self.vrms.items() if terms.needs_attestation]
 
     def manifest(self) -> list[dict]:
         return [
@@ -250,8 +272,9 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
 
     Raises :class:`PublishError` on any client-side constraint violation:
     missing/invalid config, custom-TS build, a ``.mjb`` scene, too many/too-large
-    files, a path that escapes the upload root, or a license file whose terms forbid
-    redistribution (ADR 0007 §3).
+    files, a path that escapes the upload root, a license file whose terms forbid
+    redistribution (ADR 0007 §3), or a skin the engine cannot draw or whose VRM license
+    forbids redistribution.
     """
     dist_dir = Path(dist_dir).expanduser().resolve()
     if not dist_dir.is_dir():
@@ -322,10 +345,61 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
                 f"{rel} ({size} bytes)",
                 file=rel,
             )
+        if path.suffix.lower() in SKIN_EXTENSIONS:
+            _check_skin(plan, rel, path)
         plan.files.append(_DistFile(upload_path=rel, source=path, size=size))
 
     _validate_plan(plan)
     return plan
+
+
+def _check_skin(plan: PublishPlan, rel: str, path: Path) -> None:
+    """Refuse a skin mjswan Cloud would: one the engine cannot draw, one named as the
+    other format, or a VRM it may not host or store. A VRM's terms go in the plan."""
+    try:
+        file = read_skin_file(path)
+    except ValueError as exc:
+        raise PublishError(str(exc), file=rel) from None
+    if (path.suffix.lower() == ".vrm") != (file.format == "vrm"):
+        raise PublishError(
+            f"{rel} is a VRM: publish it as .vrm, whose license is read from its meta."
+            if file.format == "vrm"
+            else f"{rel} has no VRM extension: a skin that is not a VRM is a .glb.",
+            file=rel,
+        )
+    if file.json_bytes > GLB_JSON_MAX_BYTES:
+        raise PublishError(
+            f"{rel} has a {file.json_bytes / 2**20:.1f} MB glTF JSON chunk; mjswan Cloud "
+            f"reads at most {GLB_JSON_MAX_BYTES // 2**20} MB.",
+            file=rel,
+        )
+    if file.vrm_version is None:
+        return
+    terms = vrm_license(file.meta, file.vrm_version)
+    if _too_long(terms):
+        raise PublishError(
+            f"{rel} has a VRM meta longer than mjswan Cloud stores (at most "
+            f"{VRM_TEXT_MAX} characters per name, {VRM_AUTHORS_MAX} authors and "
+            f"{VRM_URL_MAX}-character URLs).",
+            file=rel,
+        )
+    if not terms.redistribution:
+        raise PublishError(
+            f"{rel}: its VRM license forbids redistribution ({describe(terms)}), and "
+            "publishing hosts it for anyone to download.",
+            file=rel,
+        )
+    plan.vrms[rel] = terms
+
+
+def _too_long(terms: VrmLicense) -> bool:
+    # A VRM 0.x names its license, a VRM 1.0 links to it.
+    name, url = (terms.license, None) if terms.version == "0" else (None, terms.license)
+    return (
+        len(terms.authors) > VRM_AUTHORS_MAX
+        or any(len(s) > VRM_TEXT_MAX for s in (terms.name, name, *terms.authors) if s)
+        or any(len(s) > VRM_URL_MAX for s in (url, terms.other_license_url) if s)
+    )
 
 
 def _check_safe_path(rel: str) -> None:
@@ -403,6 +477,7 @@ def publish_dist(
     transport: HttpTransport | None = None,
     on_progress: Callable[[str], None] | None = None,
     on_warning: Callable[[str], None] | None = None,
+    attest: Callable[[str, VrmLicense], bool] | None = None,
 ) -> PublishResult:
     """Publish a built ``dist/`` directory, or a ``.swn`` document, to mjswan Cloud.
 
@@ -419,8 +494,13 @@ def publish_dist(
         transport: HTTP transport (injectable for tests).
         on_progress: Optional callback invoked with human-readable status lines,
             among them one per license file the build declares.
-        on_warning: Optional callback for the warning a restricted license earns
-            (ADR 0007 §3); defaults to :func:`warnings.warn`. The publish proceeds.
+        on_warning: Optional callback for the warning a restricted license or a
+            VRM only for non-commercial use earns (ADR 0007 §3); defaults to
+            :func:`warnings.warn`. The publish proceeds.
+        attest: Asked, for each VRM only its author or someone they licensed may use
+            as an avatar, whether the publisher is one of them. The VRM is published
+            only on ``True``, and the page shows that it was on their word. ``None``
+            refuses every such VRM.
 
     Returns:
         :class:`PublishResult` with the published simulation id.
@@ -447,8 +527,22 @@ def publish_dist(
             # the author did not see.
             for declaration in plan.licenses:
                 notify(f"License file: {declaration.describe()}")
+            for path, terms in plan.vrms.items():
+                notify(f"Skin: {path}: {describe(terms)}")
             for message in plan.license_warnings():
                 warn(message)
+            attested = [
+                path
+                for path in plan.to_attest
+                if attest is not None and attest(path, plan.vrms[path])
+            ]
+            for path in plan.to_attest:
+                if path not in attested:
+                    raise PublishError(
+                        f"{path} may be used as an avatar only by its author or someone "
+                        "they licensed, and you did not confirm you are.",
+                        file=path,
+                    )
             resolved_token = resolve_token(token)
 
             resolved_title = title or _default_title(plan.config)
@@ -501,7 +595,10 @@ def publish_dist(
             notify("Committing…")
             commit_resp = transport.post_json(
                 f"{base}/api/simulations/commit",
-                {"upload_id": upload_id},
+                {
+                    "upload_id": upload_id,
+                    **({"attested_skins": attested} if attested else {}),
+                },
                 # Re-resolved, not reused: an upload runs for minutes and can cross
                 # the token's expiry, landing every byte in R2 before the commit 401s.
                 # Near-free, since the resolver only refreshes close to expiry.

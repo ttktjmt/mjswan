@@ -19,7 +19,7 @@ See [CONTEXT.md](CONTEXT.md) for a full codebase map, object model, module descr
 
 ## Layout
 
-- [src/mjswan/](src/mjswan/): package source, with the object model at the root (`Builder`, the `*Handle` / `*Config` pairs, `cli.py`) over one package per layer (`build/`, `compile/`, `mjlab/`, `source/`, `document/`, `cloud/`, `license/`, and the mjlab-mirror `managers/` / `envs/mdp/`). [docs/adr/0008](docs/adr/0008-package-layout.md) gives the rules: imports point downward, mjswan's own names are singular, a file never repeats its package's name.
+- [src/mjswan/](src/mjswan/): package source, with the object model at the root (`Builder`, the `*Handle` / `*Config` pairs, `cli.py`) over one package per layer (`build/`, `compile/`, `mjlab/`, `source/`, `document/`, `cloud/`, `license/`, `rig/`, and the mjlab-mirror `managers/` / `envs/mdp/`). [docs/adr/0008](docs/adr/0008-package-layout.md) gives the rules: imports point downward, mjswan's own names are singular, a file never repeats its package's name.
 - [src/mjswan/template/](src/mjswan/template/): frontend source (Vite + React + three.js + mujoco-wasm).
 - [examples/](examples/): runnable examples, `demo` and `colab`.
   Python only: assets are fetched at run time rather than committed.

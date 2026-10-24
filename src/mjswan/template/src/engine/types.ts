@@ -9,14 +9,21 @@ import type { Bytes } from '../core/utils/bytes';
 import type { SplatTransform } from '../core/scene/splat';
 import type { ModelFormat } from '../core/scene/scene';
 import type { EnginePlugins } from '../core/plugins';
+import type { SkinConfig } from '../core/skin/config';
 
 // Bytes: asset bytes or a lazy loader. EnginePlugins: custom MDP terms, trusted-only.
-export type { Bytes, SplatTransform, ModelFormat, EnginePlugins };
+export type { Bytes, SplatTransform, ModelFormat, EnginePlugins, SkinConfig };
 
 export interface SplatInput {
   data: Bytes;            // .spz
   collider?: Bytes;       // optional collider mesh
   transform?: SplatTransform;
+}
+
+/** A skin: a rigged character posed from the robot's bodies, drawn only, never simulated. */
+export interface SkinInput {
+  data: Bytes;            // .vrm or .glb
+  config: SkinConfig;
 }
 
 export interface MotionInput {
@@ -54,6 +61,8 @@ export interface SceneInput {
   modelFormat?: ModelFormat;
   policy?: PolicyInput | null;
   splat?: SplatInput | null;
+  /** A file that fails to load warns and leaves the scene without it. */
+  skin?: SkinInput | null;
   viewer?: ViewerConfig;
   /**
    * Spawn positions (flat patches) any policy's event terms may draw from. The events
@@ -110,9 +119,12 @@ export interface CommandControls {
   trigger(id: string): void;
 }
 
-/** One of mjlab's Debug Viz switches: a command term's, raycast sensor's or reward term's drawing. */
+/**
+ * One of mjlab's Debug Viz switches: a command term's, raycast sensor's or reward term's
+ * drawing; or the viewer's `xray`, which "Enabled" hides alike.
+ */
 export interface DebugVisDescriptor {
-  /** `command:<term>`, `sensor:<name>` or `reward:<term>`; the id {@link DebugVisControls.set} takes. */
+  /** `command:<term>`, `sensor:<name>`, `reward:<term>` or `xray`; the id {@link DebugVisControls.set} takes. */
   id: string;
   /** As mjlab's checkbox reads: a command term capitalized, a sensor or reward term as named. */
   label: string;
@@ -271,6 +283,7 @@ export interface MjswanEngine {
   loadScene(input: SceneInput): Promise<void>;          // full model rebuild
   setPolicy(input: PolicyInput | null): Promise<void>;  // live, keeps model
   setSplat(input: SplatInput | null): Promise<void>;    // live
+  setSkin(input: SkinInput | null): Promise<void>;      // live; replaces the skin on show
   setMotion(name: string | null): Promise<boolean>;     // live; returns whether accepted
   /** Live-update the current splat's placement (dev calibration; no reload). */
   calibrateSplat(transform: SplatTransform): void;

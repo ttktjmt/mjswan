@@ -1,6 +1,7 @@
 /**
  * mjlab's Debug Viz folder: "Enabled" over one switch per drawing (command terms, then
- * raycast sensors, then reward terms). A drawing shows only while both are on.
+ * raycast sensors, then reward terms). A drawing shows only while both are on. The
+ * viewer's own switches follow, under "Enabled" alike.
  */
 
 import type * as THREE from 'three';
@@ -14,11 +15,21 @@ type MjModel = import('mujoco').MjModel;
 type MjData = import('mujoco').MjData;
 
 export interface DebugVizEntry {
-  /** `command:<term>`, `sensor:<name>` or `reward:<term>`. */
+  /** `command:<term>`, `sensor:<name>`, `reward:<term>`, or a viewer switch's id. */
   id: string;
   /** As mjlab's checkbox reads: a command term capitalized, others as named. */
   label: string;
   enabled: boolean;
+}
+
+/**
+ * A switch the viewer adds for something of its own. `apply` gets whether it shows, its
+ * own switch and "Enabled" together, whenever either changes.
+ */
+export interface ViewerSwitch {
+  label: string;
+  enabled: boolean;
+  apply(visible: boolean): void;
 }
 
 /** Python's `str.capitalize`, which mjlab labels a command term's checkbox with. */
@@ -31,6 +42,7 @@ export class DebugViz {
   private shown = true;
   private readonly drawings = new Map<string, { label: string; drawing: Drawing }>();
   private readonly casters: RaycastSensor[] = [];
+  private readonly switches = new Map<string, ViewerSwitch>();
 
   constructor(
     private readonly commands: CommandManager,
@@ -62,6 +74,16 @@ export class DebugViz {
     }
   }
 
+  /** List `id` after the drawings until `removeSwitch`; a policy load keeps it. */
+  addSwitch(id: string, entry: ViewerSwitch): void {
+    this.switches.set(id, entry);
+    entry.apply(this.shown && entry.enabled);
+  }
+
+  removeSwitch(id: string): void {
+    this.switches.delete(id);
+  }
+
   clear(): void {
     for (const { drawing } of this.drawings.values()) drawing.dispose();
     this.drawings.clear();
@@ -80,10 +102,21 @@ export class DebugViz {
       label,
       enabled: drawing.enabled,
     }));
-    return [...commands, ...others];
+    const switches = [...this.switches].map(([id, entry]) => ({
+      id,
+      label: entry.label,
+      enabled: entry.enabled,
+    }));
+    return [...commands, ...others, ...switches];
   }
 
   set(id: string, enabled: boolean): void {
+    const viewerSwitch = this.switches.get(id);
+    if (viewerSwitch) {
+      viewerSwitch.enabled = enabled;
+      viewerSwitch.apply(this.shown && enabled);
+      return;
+    }
     if (id.startsWith('command:')) {
       this.commands.setDebugVisEnabled(id.slice('command:'.length), enabled);
     } else {
@@ -101,6 +134,7 @@ export class DebugViz {
 
   setShown(shown: boolean): void {
     this.shown = shown;
+    for (const entry of this.switches.values()) entry.apply(shown && entry.enabled);
     this.update();
   }
 

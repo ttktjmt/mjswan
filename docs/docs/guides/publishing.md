@@ -24,6 +24,7 @@ simulation with its own pinned copy of the engine, loaded from a CDN.
 | `policy/<policy-id>.onnx` | `_headers`, `coi-serviceworker.js` |
 | traced graphs (`mdp/<mdp-id>/{obs,term,command,event}/`) | |
 | `assets/<motion-id>.npz`, `assets/<splat-id>.spz`, `.ply` colliders | |
+| `assets/<skin-id>.vrm`, `assets/<skin-id>.glb` | |
 | `<project-id>/LICENSE`, `NOTICE` and each scene's `LICENSE.<component>`, `NOTICE.<component>` (64 KB each at most) | the root `LICENSE`, the engine's own |
 
 What travels is exactly the [simulation document](../getting-started/core-concepts.md#output-structure),
@@ -46,6 +47,29 @@ is refused locally, naming the file; the platform refuses the same file at commi
 text is carried and shown without comment. See
 [Licenses](../getting-started/core-concepts.md#licenses) for how the files get into the
 build.
+
+### Skins
+
+A skin is uploaded as it was bundled, and checked the way Cloud checks it at commit:
+
+- A file the engine cannot draw is refused locally: anything but one whole binary glTF
+  with everything embedded, or one compressed with Draco, meshopt or KTX2/Basis. Export
+  it again as glTF Binary, without compression.
+- So is one Cloud does not take as it is: a `.vrm` with no VRM extension or a `.glb` with
+  one, a glTF JSON chunk over 8 MB, or a VRM meta longer than Cloud stores (256
+  characters a name, 32 authors, 2048 characters a URL).
+- A VRM's license is read from the file itself. One that forbids redistribution is
+  refused: publishing hosts it for anyone to download.
+- A VRM only its author, or someone they licensed, may use as an avatar is sent only on
+  your word. `mjswan publish` names the file and its license and asks whether you are
+  its author or licensed by them; answer no, or run without a terminal, and the publish
+  stops before any upload. The page then shows that the uploader confirmed they are.
+- A VRM for non-commercial use only earns a warning, and its page says so.
+
+A `.glb` carries its license as any other component does: `SkinConfig.license` and
+`notice` become `LICENSE.skin-<id>` and `NOTICE.skin-<id>` beside the scene, checked like
+the files above. From Python, `publish_dist(..., attest=...)` is asked the same question,
+once per such VRM, with the file and its terms.
 
 !!! warning "Custom-TS builds are rejected"
     A build whose `manifest.json` carries `uses_custom_js: true` — one using a

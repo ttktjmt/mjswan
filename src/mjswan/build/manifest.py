@@ -33,6 +33,7 @@ from .mdp import (
     serialize_observation_group,
     serialize_terminations,
 )
+from .skin import skin_entry
 
 if TYPE_CHECKING:
     from ..mdp import MdpConfig
@@ -350,6 +351,9 @@ def scene_entry(
         **({"terrain_data": scene.terrain_data} if scene.terrain_data else {}),
         **({"splat_section": True} if scene.splat_section and not scene.splats else {}),
         **({"splats": [splat_entry(s) for s in scene.splats]} if scene.splats else {}),
+        **(
+            {"skins": [skin_entry(skin) for skin in scene.skins]} if scene.skins else {}
+        ),
         "mdps": mdps,
         "policies": policies,
     }

@@ -1,5 +1,5 @@
 """The ``.swn`` simulation document (ADR 0006): what the manifest says, how the tree is
-named, and the container that packages it as one file.
+named, the container that packages it as one file, and the skin files it may carry.
 
 Torch- and mjlab-free, so ``app``, ``cli`` and ``cloud`` can read what ``build`` writes
 without them (ADR 0008 §1).
@@ -23,8 +23,10 @@ from .manifest import (
     MANIFEST_NAME,
     RUNTIME_INPUT_SLOTS,
 )
+from .skin import COMPRESSION_EXTENSIONS, SkinFile, read_skin_file
 
 __all__ = [
+    "COMPRESSION_EXTENSIONS",
     "DEFAULT_IN_KEYS",
     "DEFAULT_OUT_KEYS",
     "DOCUMENT_FORMAT",
@@ -32,12 +34,14 @@ __all__ = [
     "MANIFEST_NAME",
     "RUNTIME_INPUT_SLOTS",
     "DocumentError",
+    "SkinFile",
     "as_directory",
     "assign_id",
     "document_files",
     "is_document",
     "name2id",
     "read_manifest",
+    "read_skin_file",
     "unique_id",
     "unpack_document",
     "write_document",

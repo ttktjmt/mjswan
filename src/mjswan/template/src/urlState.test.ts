@@ -6,8 +6,10 @@ const SELECTED: UrlState = {
   project: 'demo_two',
   scene: 'humanoid',
   policy: 'walk',
+  skin: null,
   panel: true,
   debug: true,
+  xray: false,
 };
 
 describe('applyUrlState', () => {
@@ -32,6 +34,20 @@ describe('applyUrlState', () => {
     expect(applyUrlState(search, SELECTED)).toBe(
       'manifest=%2Fother%2Fmanifest.json&utm_source=paper&project=demo_two&scene=humanoid&policy=walk',
     );
+  });
+
+  it("writes the skin's id, and an empty value for None", () => {
+    expect(applyUrlState('', { ...SELECTED, skin: 'fox' })).toBe('project=demo_two&scene=humanoid&policy=walk&skin=fox');
+    expect(applyUrlState('?skin=fox', { ...SELECTED, skin: '' })).toBe(
+      'skin=&project=demo_two&scene=humanoid&policy=walk',
+    );
+    // A scene with no skins.
+    expect(applyUrlState('?skin=fox', SELECTED)).toBe('project=demo_two&scene=humanoid&policy=walk');
+  });
+
+  it('pins xray only when it is on', () => {
+    expect(applyUrlState('', { ...SELECTED, xray: true })).toBe('project=demo_two&scene=humanoid&policy=walk&xray=1');
+    expect(applyUrlState('?xray=1', SELECTED)).toBe('project=demo_two&scene=humanoid&policy=walk');
   });
 
   it('pins the chrome flags only when they are off', () => {

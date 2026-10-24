@@ -6,7 +6,13 @@
  * switch verbs, and folds the runtime's command events into one immutable state
  * snapshot for `subscribe`. No React, no catalog, no config.json, no fetch.
  */
-import { mjswanRuntime, type ResolvedPolicy, type ResolvedScene, type ResolvedSplat } from '../core/engine/runtime';
+import {
+  mjswanRuntime,
+  type ResolvedPolicy,
+  type ResolvedScene,
+  type ResolvedSkin,
+  type ResolvedSplat,
+} from '../core/engine/runtime';
 import { type Bytes, resolveBytes } from '../core/utils/bytes';
 import type { CommandDefinition, CommandEventListener } from '../core/command';
 import type { PolicyConfig } from '../core/policy/types';
@@ -25,6 +31,7 @@ import type {
   MjswanEngineState,
   PolicyInput,
   SceneInput,
+  SkinInput,
   SplatInput,
   SplatTransform,
   XrControls,
@@ -77,6 +84,10 @@ async function resolveSplat(input: SplatInput): Promise<ResolvedSplat> {
     collider: input.collider ? await resolveBytes(input.collider) : null,
     transform: input.transform,
   };
+}
+
+async function resolveSkin(input: SkinInput): Promise<ResolvedSkin> {
+  return { data: await resolveBytes(input.data), config: input.config };
 }
 
 function asError(err: unknown): Error {
@@ -247,6 +258,7 @@ class Engine implements MjswanEngine {
         modelFormat: input.modelFormat,
         policy: input.policy ? await resolvePolicy(input.policy) : null,
         splat: input.splat ? await resolveSplat(input.splat) : null,
+        skin: input.skin ? await resolveSkin(input.skin) : null,
         viewer: input.viewer ?? null,
         terrainData: input.terrainData ?? null,
         controlDt: input.controlDt ?? null,
@@ -307,6 +319,13 @@ class Engine implements MjswanEngine {
 
   async setSplat(input: SplatInput | null): Promise<void> {
     await this.runtime.setSplat(input ? await resolveSplat(input) : null);
+  }
+
+  async setSkin(input: SkinInput | null): Promise<void> {
+    const skin = input ? await resolveSkin(input) : null;
+    // Binds to the model, so it waits its turn; the snapshot lists its Debug Viz switch.
+    await this.exclusive(() => this.runtime.setSkin(skin), undefined);
+    this.refresh();
   }
 
   setMotion(name: string | null): Promise<boolean> {

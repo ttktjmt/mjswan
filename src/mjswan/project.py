@@ -289,6 +289,7 @@ class ProjectHandle:
         self,
         task_id: str,
         *,
+        name: str | None = None,
         play: bool | None = None,
         env_cfg: Any | None = None,
         events: Mapping[str, Any] | None = None,
@@ -300,6 +301,8 @@ class ProjectHandle:
 
         Args:
             task_id: mjlab task identifier (e.g. ``"go2_flat"``).
+            name: Display name, whose id is the ``?scene=`` value. Defaults to the task
+                id.
             play: Which of the task's two registered configs to load, as mjlab's
                 ``load_env_cfg(task_id, play=...)`` does.
 
@@ -354,7 +357,7 @@ class ProjectHandle:
         scene = Scene(env_cfg.scene, device="cpu")
         scene.spec.assets.update(_collect_mjlab_scene_assets(env_cfg.scene))
         apply_mjlab_sim_options(scene.spec, getattr(env_cfg, "sim", None))
-        handle = self.add_scene(spec=scene.spec, name=task_id)
+        handle = self.add_scene(spec=scene.spec, name=task_id if name is None else name)
         # Kept so policies on this scene can default their term sets off the same config
         # the scene (and its tracing env) was built from.
         handle._config.mjlab_env_cfg = env_cfg

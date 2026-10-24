@@ -7,20 +7,26 @@ Two projects:
 - **mjlab Tasks**: mjlab's own tasks, taken as they are. Every scene is
   ``add_scene_mjlab`` plus trained checkpoints; nothing is hand-written.
 - **Showcase**: what mjswan adds on top of the same engine, namely a Gaussian Splat
-  background, a model mjlab has no task for, and muscle actuators.
+  background, a model mjlab has no task for, muscle actuators, and skins: characters
+  drawn over a humanoid and a quadruped.
 
 No asset is stored in this repository. Models come from mjlab or the Hugging Face Hub,
-policies from the Hub. The Hub repository is public, so a build needs no credentials.
+policies and skins from the Hub, and WBC-Mjlab's policy and clips from its deploy
+repository on GitHub at a pinned commit. Both are public, so a build needs no
+credentials.
 """
 
+import math
 import os
 import re
 import types
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import mujoco
 import onnx
+import yaml
 from mjlab.envs.mdp import observations as obs_fns
 from mjlab.envs.mdp import terminations as term_fns
 from mjlab.managers.scene_entity_config import SceneEntityCfg
@@ -32,7 +38,7 @@ from mjswan.envs.mdp.actions import MuscleActivationActionCfg
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjswan.managers.termination_manager import TerminationTermCfg
 from mjswan.mjlab.env import build_single_entity_trace_env
-from mjswan.source import hf
+from mjswan.source import hf, url
 
 #: Every asset this demo does not get from mjlab. Public, so the build is anonymous.
 HF_REPO = "ttktjmt/mjswan"
@@ -125,23 +131,35 @@ def _checkpoints_for(task_id: str, repo_onnx: list[str]) -> list[str]:
     return [name for _, name in steps]
 
 
-def _add_mjlab_tasks(builder: mjswan.Builder) -> None:
+def _add_mjlab_tasks(builder: mjswan.Builder, repo_onnx: list[str]) -> None:
     """mjlab's tasks, as mjlab gives them, driven by the mirrored checkpoints."""
     project = builder.add_project(name="mjlab Tasks")
-    repo_onnx = hf.list_repo_onnx(HF_REPO)
 
     for task_id in MJLAB_TASKS:
-        env_cfg = load_env_cfg(task_id, play=True)
-        scene = project.add_scene_mjlab(task_id, env_cfg=env_cfg)
-        # Only the files are named here: the MDP and the action order come from
-        # `env_cfg`, the rest pose from each `.onnx`'s mjlab metadata, else from the
-        # model's keyframe (cartpole's exports carry none).
-        scene.add_policy_hf(HF_REPO, filename=_checkpoints_for(task_id, repo_onnx))
+        _add_mjlab_task(project, task_id, _checkpoints_for(task_id, repo_onnx))
 
-    _add_tracking_scene(project, repo_onnx)
+    _add_tracking_scene(project, _checkpoints_for(TRACKING_TASK, repo_onnx))
 
 
-def _add_tracking_scene(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> None:
+def _add_mjlab_task(
+    project: mjswan.ProjectHandle,
+    task_id: str,
+    checkpoints: list[str],
+    name: str | None = None,
+) -> mjswan.SceneHandle:
+    """One of mjlab's tasks, as mjlab gives it, driven by ``checkpoints``."""
+    env_cfg = load_env_cfg(task_id, play=True)
+    scene = project.add_scene_mjlab(task_id, name=name, env_cfg=env_cfg)
+    # Only the files are named here: the MDP and the action order come from
+    # `env_cfg`, the rest pose from each `.onnx`'s mjlab metadata, else from the
+    # model's keyframe (cartpole's exports carry none).
+    scene.add_policy_hf(HF_REPO, filename=checkpoints)
+    return scene
+
+
+def _add_tracking_scene(
+    project: mjswan.ProjectHandle, checkpoints: list[str]
+) -> mjswan.SceneHandle:
     """G1 Spinkick: the one task whose policy needs a reference motion beside it."""
     env_cfg = load_env_cfg(TRACKING_TASK, play=True)
     motion_term = env_cfg.commands["motion"]
@@ -152,7 +170,7 @@ def _add_tracking_scene(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> 
     # reference pose the clip already carries, named so the table lines up.
     policies = scene.add_policy_hf(
         HF_REPO,
-        filename=_checkpoints_for(TRACKING_TASK, repo_onnx),
+        filename=checkpoints,
         in_keys=["actor", "time_step"],
         out_keys=[
             "action",
@@ -176,6 +194,7 @@ def _add_tracking_scene(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> 
             body_names=list(motion_term.body_names),
             default=True,
         )
+    return scene
 
 
 # Project B: Showcase
@@ -383,10 +402,283 @@ def _add_myofinger(project: mjswan.ProjectHandle) -> None:
     )
 
 
-def _add_showcase(builder: mjswan.Builder) -> None:
+# Skins (ADR 0010): a character drawn over the robot and posed from its bodies, while
+# physics, collision and the policy stay the robot's. Each file sits under `skins/` in
+# HF_REPO with its license, and the repository's README says where it came from. The
+# build bundles each byte for byte, so a VRM keeps the license its meta states.
+# AvatarSample_A to C are not CC0: pixiv's terms let anyone use and redistribute them as
+# distributed, but never relabelled as CC0, sold, behind a paywall, with an editor for
+# their looks, or shown as if pixiv or VRoid endorse mjswan.
+
+#: The G1 body each VRM humanoid bone follows. The waist's yaw and roll go to spine and
+#: its pitch to chest; the G1 has no neck, so neck and head follow the torso.
+G1_BONES = {
+    "hips": "pelvis",
+    "spine": "waist_roll_link",
+    "chest": "torso_link",
+    "neck": "torso_link",
+    "head": "torso_link",
+    **{
+        f"{side}{bone}": f"{side.lower()}_{body}"
+        for side in ("left", "right")
+        for bone, body in (
+            ("UpperLeg", "hip_yaw_link"),
+            ("LowerLeg", "knee_link"),
+            ("Foot", "ankle_roll_link"),
+            ("UpperArm", "shoulder_yaw_link"),
+            ("LowerArm", "elbow_link"),
+            ("Hand", "wrist_yaw_link"),
+        )
+    },
+}
+
+#: The G1 holding its arms out straight, as every VRM rests: at its zero pose it hangs its
+#: upper arms and bends its elbows square.
+G1_T_POSE = {
+    "left_shoulder_roll_joint": math.pi / 2,
+    "right_shoulder_roll_joint": -math.pi / 2,
+    "left_elbow_joint": math.pi / 2,
+    "right_elbow_joint": math.pi / 2,
+}
+
+#: Every VRM rests in a T-pose, so one map and one rest pose fit them all.
+G1_VRM = mjswan.SkinConfig(bones=G1_BONES, rest_pose=G1_T_POSE, retarget="rotation")
+
+#: The humanoid's skins, in the Skin menu's order; the first is shown on load.
+G1_SKINS = {
+    "VRM1 Constraint Twist Sample": "skins/pixiv/VRM1_Constraint_Twist_Sample.vrm",
+    "AvatarSample_A": "skins/pixiv/AvatarSample_A.vrm",
+    "AvatarSample_B": "skins/pixiv/AvatarSample_B.vrm",
+    "AvatarSample_C": "skins/pixiv/AvatarSample_C.vrm",
+    "Crimsom": "skins/100avatars/100Avatars_001_Crimsom.vrm",
+    "Cool Banana": "skins/100avatars/100Avatars_024_CoolBanana.vrm",
+}
+
+# 100Avatars dedicates each VRM to CC0, in its meta and release notes; the CC BY 4.0
+# file at its repository's root came with the 2020 release, before the VRMs. The credit
+# is a courtesy.
+HUNDRED_AVATARS_NOTICE = (
+    "Crimsom and Cool Banana: from 100Avatars by Polygonal Mind (CC0 1.0), "
+    "https://github.com/PolygonalMind/100Avatars\n"
+)
+
+GO1_TASK = "Mjlab-Velocity-Rough-Unitree-Go1"
+
+#: The Go1 body each bone follows: front legs for arms, hind legs for legs. The Go1 has
+#: no neck, so the animal's spine, neck and head ride its trunk.
+GO1_BONES = {
+    **{bone: "trunk" for bone in ("hips", "spine", "chest", "neck", "head")},
+    **{
+        f"{side}{bone}": f"{leg}_{body}"
+        for side, front, rear in (("left", "FL", "RL"), ("right", "FR", "RR"))
+        for bone, leg, body in (
+            ("UpperArm", front, "thigh"),
+            ("LowerArm", front, "calf"),
+            ("Hand", front, "calf"),
+            ("UpperLeg", rear, "thigh"),
+            ("LowerLeg", rear, "calf"),
+            ("Foot", rear, "calf"),
+            ("Toes", rear, "calf"),
+        )
+    },
+}
+
+#: VRM humanoid bone -> the Pug's bone. Its hips bone is mid-body, as the Go1's trunk
+#: origin is; it has no toes.
+PUG_HUMANOID = {
+    "hips": "Body",
+    "spine": "Shoulders",
+    "neck": "Neck",
+    "head": "Head",
+    "leftUpperArm": "FrontUpLeg.L",
+    "leftLowerArm": "FrontLowLeg.L",
+    "leftHand": "FrontFoot.L",
+    "rightUpperArm": "FrontUpLeg.R",
+    "rightLowerArm": "FrontLowLeg.R",
+    "rightHand": "FrontFoot.R",
+    "leftUpperLeg": "BackUpLeg.L",
+    "leftLowerLeg": "BackLowLeg.L",
+    "leftFoot": "BackFoot.L",
+    "rightUpperLeg": "BackUpLeg.R",
+    "rightLowerLeg": "BackLowLeg.R",
+    "rightFoot": "BackFoot.R",
+}
+
+#: Quaternius's flat colours as toon shading: the shaded side 60% of the lit one, the two
+#: blending softly, as the sources' do.
+QUATERNIUS_TOON = mjswan.ToonShading(shade=0.6, toony=0.5)
+
+#: The Pug of Quaternius's Farm Animals.
+PUG = mjswan.SkinConfig(
+    bones={bone: GO1_BONES[bone] for bone in PUG_HUMANOID},
+    humanoid=PUG_HUMANOID,
+    rest_pose="init_state",
+    material=QUATERNIUS_TOON,
+    license="CC0-1.0",
+    notice=(
+        "Pug: from Farm Animals Animated by Quaternius (CC0 1.0), "
+        "https://quaternius.itch.io/lowpoly-animated-animals\n"
+        "Made forward-kinematic and scaled by make_pug.py, beside it in "
+        "https://huggingface.co/ttktjmt/mjswan/tree/main/skins/quaternius\n"
+    ),
+)
+
+#: VRM humanoid bone -> the node of one of Quaternius's animals on Poly Pizza: the front
+#: legs as arms, the four bones of a hind leg as upper and lower leg, foot and toes.
+POLY_PIZZA_HUMANOID = {
+    "hips": "Back",
+    "spine": "Torso",
+    "chest": "Torso2",
+    "neck": "Neck1",
+    "head": "Head",
+    **{
+        f"{side}{bone}": f"{node}.{s}"
+        for side, s in (("left", "L"), ("right", "R"))
+        for bone, node in (
+            ("UpperArm", "FrontUpperLeg"),
+            ("LowerArm", "FrontLowerLeg"),
+            ("Hand", "IKFrontLeg"),
+            ("UpperLeg", "BackLeg"),
+            ("LowerLeg", "BackUpperLeg"),
+            ("Foot", "BackLowerLeg"),
+            ("Toes", "IKBackLeg"),
+        )
+    },
+}
+
+#: Its feet hang from IK controls at the root, so from joint angles alone they would
+#: stay behind; hung from the legs they end, the legs carry them.
+POLY_PIZZA_FEET = {
+    f"IK{end}Leg.{s}": f"{end}LowerLeg.{s}" for end in ("Front", "Back") for s in "LR"
+}
+
+POLY_PIZZA = mjswan.SkinConfig(
+    bones={bone: GO1_BONES[bone] for bone in POLY_PIZZA_HUMANOID},
+    humanoid=POLY_PIZZA_HUMANOID,
+    reparent=POLY_PIZZA_FEET,
+    rest_pose="init_state",
+    material=QUATERNIUS_TOON,
+    license="CC0-1.0",
+)
+
+#: Each scaled so its shoulders and hips sit 0.376 m apart, as the Go1's front and rear
+#: hips do.
+SHIBA_INU = replace(
+    POLY_PIZZA,
+    scale=0.236,
+    notice="Shiba Inu by Quaternius (CC0 1.0), https://poly.pizza/m/y4wdQpg767\n",
+)
+QUATERNIUS_FOX = replace(
+    POLY_PIZZA,
+    scale=0.2425,
+    springs=[
+        mjswan.SpringChain(
+            root="Tail1",
+            stiffness=1.5,
+            drag=0.3,
+            gravity=0.1,
+            hit_radius=0.03,
+            # The pelvis and the hind thighs, which the tail must not swing through.
+            colliders=(
+                mjswan.SpringCollider("Back", radius=0.06),
+                *(mjswan.SpringCollider(f"BackLeg.{s}", radius=0.035) for s in "LR"),
+            ),
+        )
+    ],
+    notice="Fox by Quaternius (CC0 1.0), https://poly.pizza/m/Bc97C66HKi\n",
+)
+
+#: The Go1's skins, in the Skin menu's order: rigged glTF quadrupeds used as they are,
+#: their front legs named as arms, resting as the Go1 stands in its keyframe.
+GO1_SKINS = {
+    "Shiba Inu": ("skins/quaternius/shiba_inu.glb", SHIBA_INU),
+    "Fox": ("skins/quaternius/fox.glb", QUATERNIUS_FOX),
+    "Pug": ("skins/quaternius/pug.glb", PUG),
+}
+
+
+def _skin_file(path: str) -> str:
+    """A skin's file, fetched from HF_REPO and cached like every Hub asset here."""
+    return str(hf.fetch_file(HF_REPO, path))
+
+
+#: WBC-Mjlab's G1 (https://github.com/wbc-mjlab/wbc-mjlab): one whole-body tracking
+#: policy over a library of clips, as mjswan_playground's `wbc` task runs it. The
+#: `wbc-mjlab` package registers the task; the policy and clips are its deploy repo's.
+WBC_TASK = "Wbc-G1"
+WBC_DEPLOY = (
+    "https://raw.githubusercontent.com/wbc-mjlab/wbc-g1-deploy/"
+    "6dabf86fddc2b7b429b09e74999732fcde3441f9"
+)
+
+
+def _wbc_file(path: str) -> Path:
+    """A file of wbc-g1-deploy at the pinned commit."""
+    return url.fetch_file(f"{WBC_DEPLOY}/{path}")
+
+
+def _add_humanoid_skins(project: mjswan.ProjectHandle) -> None:
+    """WBC-Mjlab's G1 under VRM avatars, tracking any of its clips."""
+    contract = yaml.safe_load(
+        _wbc_file("config/policy/wbc/params/config.yaml").read_text()
+    )
+    env_cfg = load_env_cfg(WBC_TASK, play=True)
+    # Training-only events the deploy runtime does not apply either.
+    for training_only in ("assistive_wrench", "pull_robot"):
+        env_cfg.events.pop(training_only, None)
+    # The browser runs the PD alone, so UnitreeActuator's friction terms become the
+    # joints' own frictionloss and damping, which the exported scene carries.
+    for actuator in env_cfg.scene.entities["robot"].articulation.actuators:
+        actuator.frictionloss, actuator.viscous_damping = actuator.fs, actuator.fd
+        actuator.fs = actuator.fd = 0.0
+    scene = project.add_scene_mjlab(WBC_TASK, name="Humanoid skins", env_cfg=env_cfg)
+
+    policy = scene.add_policy(
+        name="WBC Tracking",
+        policy=onnx.load(str(_wbc_file("config/policy/wbc/params/policy.onnx"))),
+        policy_joint_names=[f"robot/{joint}" for joint in contract["joint_names"]],
+        default_joint_pos=[float(v) for v in contract["default_joint_pos"]],
+    )
+    manifest = yaml.safe_load(_wbc_file("config/clips/manifest.yaml").read_text())
+    # The manifest's default first: the viewer opens on it.
+    clips = sorted(
+        manifest["clips"], key=lambda clip: clip["name"] != manifest["default"]
+    )
+    for clip in clips:
+        policy.add_motion(
+            name=clip["name"],
+            source=str(_wbc_file(f"config/clips/{clip['file']}")),
+            fps=50.0,
+            anchor_body_name=contract["tracking"]["anchor_body_name"],
+            body_names=env_cfg.commands["motion"].body_names,
+            dataset_joint_names=list(contract["joint_names"]),
+            default=clip is clips[0],
+        )
+    scene.add_attribution(
+        "wbc-g1-deploy", license=_wbc_file("LICENSE"), notice=_wbc_file("NOTICE")
+    )
+
+    for name, path in G1_SKINS.items():
+        scene.add_skin(name, replace(G1_VRM, source=_skin_file(path)))
+    scene.add_attribution(
+        "100avatars", license="CC0-1.0", notice=HUNDRED_AVATARS_NOTICE
+    )
+
+
+def _add_quadruped_skins(project: mjswan.ProjectHandle, repo_onnx: list[str]) -> None:
+    """The Go1 on rough terrain under three animals, on its final checkpoint alone."""
+    checkpoints = _checkpoints_for(GO1_TASK, repo_onnx)[-1:]
+    scene = _add_mjlab_task(project, GO1_TASK, checkpoints, name="Quadruped skins")
+    for name, (path, config) in GO1_SKINS.items():
+        scene.add_skin(name, replace(config, source=_skin_file(path)))
+
+
+def _add_showcase(builder: mjswan.Builder, repo_onnx: list[str]) -> None:
     project = builder.add_project(name="Showcase")
     _add_g1_on_street(project)
     _add_myofinger(project)
+    _add_humanoid_skins(project)
+    _add_quadruped_skins(project, repo_onnx)
 
 
 def setup_builder() -> mjswan.Builder:
@@ -397,8 +689,9 @@ def setup_builder() -> mjswan.Builder:
         license="Apache-2.0",
         copyright="mjswan Developers",
     )
-    _add_mjlab_tasks(builder)
-    _add_showcase(builder)
+    repo_onnx = hf.list_repo_onnx(HF_REPO)
+    _add_mjlab_tasks(builder, repo_onnx)
+    _add_showcase(builder, repo_onnx)
     return builder
 
 

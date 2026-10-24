@@ -1,4 +1,5 @@
-"""What lands in a scene's ``assets/``: the clips its policies carry, and its splats."""
+"""What lands in a scene's ``assets/``: the clips its policies carry, its splats, and
+its skins."""
 
 from __future__ import annotations
 
@@ -106,9 +107,17 @@ def write_scene_splats(scene: SceneConfig, scene_dir: Path) -> None:
             )
 
 
+def write_scene_skins(scene: SceneConfig, scene_assets_dir: Path) -> None:
+    """Copy each skin's file under ``assets/`` unmodified, so a VRM's license metadata
+    ships as authored."""
+    for skin in scene.skins:
+        shutil.copyfile(skin.file.path, scene_assets_dir.parent / skin.path)
+
+
 __all__ = [
     "motion_key",
     "point_env_cfg_at_bundled_motion",
     "write_scene_motions",
+    "write_scene_skins",
     "write_scene_splats",
 ]

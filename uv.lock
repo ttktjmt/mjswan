@@ -1688,6 +1688,12 @@ check = [
     { name = "ruff" },
     { name = "ty" },
 ]
+demo = [
+    { name = "huggingface-hub" },
+    { name = "mjlab" },
+    { name = "torch" },
+    { name = "wbc-mjlab" },
+]
 dev = [
     { name = "huggingface-hub" },
     { name = "mjlab" },
@@ -1706,6 +1712,7 @@ examples = [
     { name = "onnxruntime", version = "1.27.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "torch" },
     { name = "wandb" },
+    { name = "wbc-mjlab" },
 ]
 hf = [
     { name = "huggingface-hub" },
@@ -1725,9 +1732,11 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "huggingface-hub", marker = "extra == 'demo'", specifier = ">=0.26.0" },
     { name = "huggingface-hub", marker = "extra == 'dev'", specifier = ">=0.26.0" },
     { name = "huggingface-hub", marker = "extra == 'examples'", specifier = ">=0.26.0" },
     { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=0.26.0" },
+    { name = "mjlab", marker = "extra == 'demo'", specifier = "==1.6.0" },
     { name = "mjlab", marker = "extra == 'dev'", specifier = "==1.6.0" },
     { name = "mjlab", marker = "extra == 'examples'", specifier = "==1.6.0" },
     { name = "mjlab", marker = "extra == 'mjlab'", specifier = "==1.6.0" },
@@ -1742,6 +1751,7 @@ requires-dist = [
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'check'", specifier = "==0.16.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.0" },
+    { name = "torch", marker = "extra == 'demo'", specifier = ">=2.9.1" },
     { name = "torch", marker = "extra == 'dev'", specifier = ">=2.9.1" },
     { name = "torch", marker = "extra == 'examples'", specifier = ">=2.9.1" },
     { name = "torch", marker = "extra == 'mjlab'", specifier = ">=2.9.1" },
@@ -1751,8 +1761,10 @@ requires-dist = [
     { name = "wandb", marker = "extra == 'dev'", specifier = ">=0.23.1" },
     { name = "wandb", marker = "extra == 'examples'", specifier = ">=0.23.1" },
     { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.23.1" },
+    { name = "wbc-mjlab", marker = "extra == 'demo'", specifier = ">=0.0.6" },
+    { name = "wbc-mjlab", marker = "extra == 'examples'", specifier = ">=0.0.6" },
 ]
-provides-extras = ["check", "dev", "examples", "hf", "mjlab", "wandb"]
+provides-extras = ["check", "demo", "dev", "examples", "hf", "mjlab", "wandb"]
 
 [package.metadata.requires-dev]
 test = [{ name = "pytest", specifier = ">=9.0.2" }]
@@ -3973,6 +3985,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a8/ba/36023c3161c45f1c509c20c501b17980705fdd3b6c20b7ee9267f50f44a2/warp_lang-1.15.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:95c169f28bd7d6c78ac4ad62e2df1e61a096033748f757157fa4551aed80d010", size = 166711381, upload-time = "2026-07-07T22:26:56.524Z" },
     { url = "https://files.pythonhosted.org/packages/04/24/2c06013209ad4edb1f9e52692d43738b4945fceaa6acc30f34e2d25fc087/warp_lang-1.15.0-py3-none-manylinux_2_34_aarch64.whl", hash = "sha256:3c0711b39ad98ff924d29654b028ec4eaa02330e207ae3efc72445e9cde05b34", size = 171756145, upload-time = "2026-07-07T22:28:07.427Z" },
     { url = "https://files.pythonhosted.org/packages/c5/00/4de2563f88c882e6621349654cee770ce5ae86c8113b63c09bd8aa3e5274/warp_lang-1.15.0-py3-none-win_amd64.whl", hash = "sha256:06ef42c3ce522749268056653ea253645eb4a96ca164af74ae5113f0d55a6970", size = 149948459, upload-time = "2026-07-07T22:28:32.767Z" },
+]
+
+[[package]]
+name = "wbc-mjlab"
+version = "0.0.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mjlab" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a0/c4/b281a60c7646003919bf7250d89502fb86015f1ae30775f8ea622253421c/wbc_mjlab-0.0.6.tar.gz", hash = "sha256:c6034ce2cddf51d55a15414053d1e1bf7d416e7d4da01bb9e14b725c9278ea46", size = 15302198, upload-time = "2026-09-13T07:39:35.884Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/90/8a/ead75edf03934f26b52938950671eef8abca15aa47675f1d53dd78fd24df/wbc_mjlab-0.0.6-py3-none-any.whl", hash = "sha256:21ba49f4c06c62c227655a69b18ae4b62aab2d71e0cc9aafd4325e34bebd1ae0", size = 15340146, upload-time = "2026-09-13T07:39:33.667Z" },
 ]
 
 [[package]]

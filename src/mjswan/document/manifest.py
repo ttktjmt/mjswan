@@ -33,7 +33,10 @@ MANIFEST_NAME = "manifest.json"
 #: ``interpolate``, ``hold_s`` or ``delay``, or be ``joint_position_relative``, and an
 #: input slot may read an action term's state (``{"action_term": ...}``). An older engine
 #: would apply the raw action through the native formula, without any of them.
-DOCUMENT_FORMAT = 6
+#:
+#: 7: a scene may carry ``skins``, rigged characters drawn over the robot (``.vrm`` or
+#: ``.glb`` under ``assets/``). An older engine would show the bare robot.
+DOCUMENT_FORMAT = 7
 
 #: Input slots the runtime fills itself rather than from an observation group: the
 #: recurrent carry (``is_init``, ``adapt_hx``) and the step counter (``time_step``).

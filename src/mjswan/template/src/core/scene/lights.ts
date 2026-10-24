@@ -54,6 +54,25 @@ export function lightSpecularRatio(mjModel: MjModel): number {
   return diffuse > 0 ? specular / diffuse : 1;
 }
 
+/**
+ * The light a surface facing every light at once receives, in MuJoCo's diffuse units
+ * (1 shows a material's own colour): each active light's and the headlight's peak
+ * diffuse, plus their ambient.
+ */
+export function lightBudget(mjModel: MjModel): number {
+  const peak = (channels: ArrayLike<number> | undefined, l: number): number =>
+    channels ? Math.max(channels[l * 3], channels[l * 3 + 1], channels[l * 3 + 2]) : 0;
+  let total = 0;
+  for (let l = 0; l < (mjModel.nlight ?? 0); l++) {
+    if (mjModel.light_active?.[l]) total += peak(mjModel.light_diffuse, l) + peak(mjModel.light_ambient, l);
+  }
+  const headlight = headlightSpec(mjModel);
+  if (headlight?.active) {
+    total += Math.max(...(headlight.diffuse ?? [0, 0, 0])) + Math.max(...(headlight.ambient ?? [0, 0, 0]));
+  }
+  return total;
+}
+
 export function createLights({
   mujoco,
   mjModel,

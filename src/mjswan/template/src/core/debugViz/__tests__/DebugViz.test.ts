@@ -129,6 +129,44 @@ describe('DebugViz', () => {
   });
 });
 
+describe('viewer switches', () => {
+  function withXray() {
+    const viz = new DebugViz(commandsStub().commands, () => ({ mjModel: model, mjData: data }));
+    const shown: boolean[] = [];
+    viz.addSwitch('xray', { label: 'Xray', enabled: true, apply: (visible) => shown.push(visible) });
+    return { viz, shown };
+  }
+
+  it('lists a switch after the drawings, shows it on adding, and sets it', () => {
+    const { viz, shown } = withXray();
+    viz.load(CONFIG, mujoco, new THREE.Group());
+    const last = () => viz.entries()[viz.entries().length - 1];
+    expect(last()).toEqual({ id: 'xray', label: 'Xray', enabled: true });
+    viz.set('xray', false);
+    expect(shown).toEqual([true, false]);
+    expect(last().enabled).toBe(false);
+  });
+
+  it('hides under "Enabled" like a drawing, keeping its own switch', () => {
+    const { viz, shown } = withXray();
+    viz.setShown(false);
+    viz.set('xray', false);
+    viz.set('xray', true);
+    expect(shown).toEqual([true, false, false, false]);
+    viz.setShown(true);
+    expect(shown[shown.length - 1]).toBe(true);
+    expect(viz.entries().find((entry) => entry.id === 'xray')?.enabled).toBe(true);
+  });
+
+  it('outlives a policy load until removed', () => {
+    const { viz } = withXray();
+    viz.load(undefined, mujoco, new THREE.Group());
+    expect(viz.entries().map((entry) => entry.id)).toEqual(['command:base_velocity', 'xray']);
+    viz.removeSwitch('xray');
+    expect(viz.entries().map((entry) => entry.id)).toEqual(['command:base_velocity']);
+  });
+});
+
 describe('capitalize', () => {
   it("is Python's str.capitalize", () => {
     expect(capitalize('twist')).toBe('Twist');

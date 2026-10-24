@@ -44,6 +44,7 @@ from .motion import MotionConfig, MotionHandle
 from .policy import PolicyConfig, PolicyHandle
 from .project import ProjectConfig, ProjectHandle
 from .scene import SceneConfig, SceneHandle
+from .skin import SkinConfig, SkinHandle, SpringChain, SpringCollider, ToonShading
 from .splat import SplatConfig, SplatHandle
 from .viewer import ViewerConfig
 
@@ -55,12 +56,17 @@ __all__ = [
     "ProjectHandle",
     "SceneHandle",
     "SplatHandle",
+    "SkinHandle",
     "PolicyHandle",
     "MotionHandle",
     # Configs
     "ProjectConfig",
     "SceneConfig",
     "ViewerConfig",
+    "SkinConfig",
+    "SpringChain",
+    "SpringCollider",
+    "ToonShading",
     "SplatConfig",
     "PolicyConfig",
     "MdpConfig",

@@ -176,6 +176,7 @@ def publish_cmd(
             api_base=api_base,
             on_progress=lambda msg: console.print(f"[dim]{msg}[/dim]"),
             on_warning=lambda msg: console.print(f"[yellow]Warning:[/yellow] {msg}"),
+            attest=_confirm_avatar_use,
         )
     except PublishError as exc:
         location = f" [dim]({exc.file})[/dim]" if exc.file else ""
@@ -184,6 +185,24 @@ def publish_cmd(
 
     url = simulation_url(result.id)
     console.print(f"[green]Published![/green] [bold][link={url}]{url}[/link][/bold]")
+
+
+def _confirm_avatar_use(path: str, terms) -> bool:
+    """Ask whether the publisher may use *path* as an avatar; without a terminal, no."""
+    from mjswan.license.vrm import describe
+
+    who = "its author" if terms.avatar_use == "author" else "people its author licensed"
+    console.print(
+        f"[bold]{escape(path)}[/bold]: {escape(describe(terms))}. Its license lets only "
+        f"{who} use it as an avatar, and mjswan Cloud will show that you said you may."
+    )
+    if not _interactive():
+        return False
+    return typer.confirm("Are you its author, or licensed by them?", default=False)
+
+
+def _interactive() -> bool:
+    return sys.stdin.isatty()
 
 
 # ── login / logout / whoami ────────────────────────────────────
@@ -485,6 +504,29 @@ def _describe_licenses(node, root: Path, directory: Path) -> None:
         node.add(f"{label}{what}  [dim]{escape(declaration.path)}[/dim]")
 
 
+def _describe_skin(node, scene_dir: Path, skin: dict) -> None:
+    """One line for a skin, with a VRM's license."""
+    from mjswan.document import read_skin_file
+    from mjswan.license.vrm import describe, vrm_license
+
+    path = scene_dir / skin.get("path", "")
+    size = path.stat().st_size if path.is_file() else 0
+    detail = ""
+    if skin.get("format") == "vrm" and size:
+        try:
+            file = read_skin_file(path)
+        except ValueError as exc:
+            detail = f"  [red]{escape(str(exc))}[/red]"
+        else:
+            if file.vrm_version is not None:
+                terms = vrm_license(file.meta, file.vrm_version)
+                detail = f"  [blue]{escape(describe(terms))}[/blue]"
+    node.add(
+        f"Skin: [yellow]{escape(skin.get('name', ''))}[/yellow]  "
+        f"[dim]{escape(skin.get('path', ''))} ({_fmt_size(size)})[/dim]{detail}"
+    )
+
+
 def _describe_projects(tree, root: Path, manifest: dict) -> int:
     """Add one node per project/scene/MDP/policy under ``tree``; return the asset bytes.
 
@@ -508,6 +550,8 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
                 f"({_fmt_size(scene_size)})[/dim]"
             )
             _describe_licenses(s_node, root, scene_dir)
+            for skin in scene.get("skins", []):
+                _describe_skin(s_node, scene_dir, skin)
             for mdp in scene.get("mdps", []):
                 graphs = list((scene_dir / "mdp" / mdp["id"]).rglob("*.onnx"))
                 s_node.add(
@@ -524,6 +568,162 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
                     f"[dim]mdp={escape(str(policy.get('mdp')))}{size_str}[/dim]"
                 )
     return total_bytes
+
+
+# ── skin ──────────────────────────────────────────────────────
+
+skin_app = typer.Typer(
+    name="skin",
+    help="Skins: rigged characters drawn over a robot.",
+    no_args_is_help=True,
+)
+app.add_typer(skin_app)
+
+
+@skin_app.command("map")
+def skin_map_cmd(
+    file: Annotated[Path, typer.Argument(help="The skin: a .vrm or a .glb.")],
+    *,
+    robot: Annotated[
+        Optional[str],
+        typer.Option(help="The robot: an MJCF .xml, a .mjb, or an mjlab task id."),
+    ] = None,
+    output: Annotated[
+        Optional[Path],
+        typer.Option("--output", "-o", help="Write a SkinConfig draft here."),
+    ] = None,
+) -> None:
+    """Draft a skin's maps: which node is which bone, and which robot body each follows.
+
+    The guesses are for you to check, line by line, before you use them.
+    """
+    from rich.table import Table
+
+    from mjswan.document import read_skin_file
+    from mjswan.rig import guess as g
+
+    try:
+        skin = read_skin_file(file.expanduser())
+    except (OSError, ValueError) as exc:
+        console.print(f"[red]Error:[/red] {escape(str(exc))}")
+        raise typer.Exit(1)
+    model = _load_robot(robot) if robot else None
+
+    guess = None if skin.format == "vrm" else g.guess_humanoid(skin)
+    nodes = g.in_vrm_order(skin.human_bones if guess is None else guess.humanoid)
+    bones = g.guess_bones(model, nodes) if model is not None else {}
+    shown = {b: n for b, n in nodes.items() if b in bones} if bones else nodes
+    kind = "VRM " + (skin.vrm_version or "") if guess is None else f"glTF, {guess.kind}"
+    facing = "" if guess is None else f", facing {guess.facing}"
+    size = f"{len(skin.joints)} joints" if skin.joints else f"{len(skin.names)} nodes"
+    console.print(f"[bold]{escape(skin.path.name)}[/bold]: {kind}, {size}{facing}")
+
+    scale = None
+    if guess is not None and model is not None:
+        found = g.guess_scale(skin, guess, model, bones)
+        if found:
+            scale = found[0]
+            console.print(f"  scale={scale:.2g}   [dim]{escape(found[1])}[/dim]")
+
+    table = Table(box=None, pad_edge=False)
+    for column in ("bone", "node", "body", "how"):
+        table.add_column(column, style="dim" if column == "how" else None)
+    for bone, node in shown.items():
+        how = guess.why.get(bone, "") if guess is not None else ""
+        table.add_row(bone, escape(skin.names[node]), escape(bones.get(bone, "")), how)
+    if shown:
+        console.print(table)
+    if len(shown) < len(nodes):
+        console.print(
+            f"  [dim]{len(nodes) - len(shown)} more bones, no body to follow[/dim]"
+        )
+    for n in guess.springs if guess is not None else []:
+        console.print(
+            f"  springs?  {escape(skin.names[n])}  [dim]a chain no bone takes[/dim]"
+        )
+    for limb in guess.limbs if guess is not None else []:
+        named = ", ".join(skin.names[n] for n in limb)
+        near = ", ".join(g.close_bodies(model, skin.names[limb[0]])) if model else ""
+        console.print(f"  limb?  {escape(named)}  [dim]{escape(near)}[/dim]")
+
+    rest_pose = _rest_pose(model, guess, bones) if model is not None else None
+    if output:
+        draft = g.draft_source(
+            " ".join(
+                ["mjswan skin map", file.name, *(["--robot", robot] if robot else [])]
+            ),
+            source=str(file),
+            guess=guess,
+            names=skin.names,
+            bones=bones or {bone: "" for bone in nodes},
+            scale=scale,
+            rest_pose=rest_pose,
+        )
+        output.write_text(draft)
+        console.print(
+            f"Wrote {escape(str(output))}: a SkinConfig draft to check and paste."
+        )
+
+
+def _load_robot(robot: str):
+    """The robot's compiled model, from a file or an mjlab task."""
+    import mujoco
+
+    path = Path(robot).expanduser()
+    try:
+        if path.suffix == ".mjb":
+            return mujoco.MjModel.from_binary_path(str(path))
+        if path.suffix == ".xml":
+            return mujoco.MjModel.from_xml_path(str(path))
+        from mjlab.scene import Scene
+        from mjlab.tasks.registry import load_env_cfg
+
+        from mjswan.mjlab import ensure_mjlab_extensions
+    except ImportError:
+        console.print(
+            f"[red]Error:[/red] {escape(robot)} is not a .xml or .mjb, and an mjlab "
+            "task needs mjlab: pip install 'mjswan[mjlab]'."
+        )
+        raise typer.Exit(1)
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {escape(str(exc))}")
+        raise typer.Exit(1)
+    ensure_mjlab_extensions()
+    try:
+        env_cfg = load_env_cfg(robot, play=True)
+    except Exception as exc:
+        console.print(
+            f"[red]Error:[/red] {escape(robot)} is not an mjlab task: {escape(str(exc))}"
+        )
+        raise typer.Exit(1)
+    env_cfg.scene.num_envs = 1
+    return Scene(env_cfg.scene, device="cpu").spec.compile()
+
+
+def _rest_pose(model, guess, bones: dict[str, str]):
+    """The rest pose to draft, printed with its source; None, with the joints that set
+    it, when it is not known."""
+    from mjswan.rig import guess as g
+
+    known = g.known_rest_pose(model)
+    if known:
+        console.print(
+            f"  rest_pose  [dim]holds the arms out straight, checked for {known[0]}[/dim]"
+        )
+        return known[1]
+    keys = [model.key(k).name for k in range(model.nkey)]
+    if guess is not None and guess.kind == "quadruped" and keys and keys[0]:
+        console.print(
+            f'  rest_pose  "{escape(keys[0])}"  [dim]the robot\'s keyframe; it stands there[/dim]'
+        )
+        return keys[0]
+    console.print(
+        "  rest_pose  [dim]not guessed: set the joints that hold the pose the skin rests "
+        f"in. Keyframes: {escape(', '.join(keys) or 'none')}.[/dim]"
+    )
+    for name, axis in g.arm_joints(model, bones):
+        console.print(f"    {escape(name)}  [dim]axis {axis}[/dim]")
+    return None
 
 
 # ── version ───────────────────────────────────────────────────
