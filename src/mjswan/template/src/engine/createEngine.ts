@@ -188,6 +188,8 @@ class Engine implements MjswanEngine {
     this.preview = {
       show: (input) => this.runtime.showPreview(input),
       hide: () => this.runtime.hidePreview(),
+      hit: (clientX, clientY) => !this.disposed && this.runtime.previewHit(clientX, clientY),
+      onChange: (listener) => this.runtime.onPreviewChange(listener),
     };
   }
 

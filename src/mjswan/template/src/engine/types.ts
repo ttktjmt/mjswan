@@ -11,13 +11,13 @@ import type { ModelFormat } from '../core/scene/scene';
 import type { EnginePlugins } from '../core/plugins';
 import type { SkinConfig } from '../core/skin/config';
 import type { PrimitiveType } from '../core/scene/primitive';
-import type { PreviewInput } from '../core/scene/preview';
-import type { PickHit } from '../core/interaction/pick';
+import type { HandleKind, PreviewGeom, PreviewInput } from '../core/scene/preview';
+import type { GeomType, PickHit } from '../core/interaction/pick';
 
 // Bytes: asset bytes or a lazy loader. EnginePlugins: custom MDP terms, trusted-only.
 export type { Bytes, SplatTransform, ModelFormat, EnginePlugins, SkinConfig };
-// What a host previews and where it would go (ADR 0011).
-export type { PrimitiveType, PreviewInput, PickHit };
+// What a host previews, where it would go, and what it edits (ADRs 0011 and 0012).
+export type { PrimitiveType, GeomType, PreviewInput, PreviewGeom, HandleKind, PickHit };
 
 export interface SplatInput {
   data: Bytes;            // .spz
@@ -231,13 +231,21 @@ export interface HandTrackingDescriptor {
 
 /**
  * One primitive geom drawn over the scene and never simulated: what a host shows where a
- * geom would go before it adds one (ADR 0011). It is built as the model's geoms are, casts
- * a shadow, and survives a scene load; neither the pointer modes nor `pick` hit it.
+ * geom would go before it adds one (ADR 0011), and while it edits one (ADR 0012). It is
+ * built as the model's geoms are, casts a shadow, and survives a scene load; neither the
+ * pointer modes nor `pick` hit it.
  */
 export interface PreviewControls {
   /** Draw it, or move and reshape the one on show. Live: the model is never touched. */
   show(input: PreviewInput): void;
   hide(): void;
+  /** Whether the preview or one of its handles is under a point of the canvas, in client CSS pixels. */
+  hit(clientX: number, clientY: number): boolean;
+  /**
+   * Called as the pointer drags a handle, with the preview as it now is, and once more with
+   * `done` when it lets go. Returns the unsubscribe.
+   */
+  onChange(listener: (preview: PreviewGeom, done: boolean) => void): () => void;
 }
 
 export interface XrControls {

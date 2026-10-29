@@ -14,6 +14,15 @@ shortcuts.
 
 ### Added
 
+- **Handles on the preview, and a pick that names the geom** (ADR 0012). `preview.show`
+  takes `handles: 'size'`, arrows along the geom's own axes that resize it as they are
+  dragged (the opposite face stays, and the bottom where a radius sets the height), or
+  `handles: 'turn'`, rings that turn it (Shift snaps to 15 degrees), both drawn a fixed
+  size on screen. A press on a handle is the handle's; any other still orbits the camera.
+  `preview.onChange(listener)` reports each change and the release, `preview.hit(x, y)`
+  says whether the preview is under a point, and `replaces: geom` hides a geom of the model
+  while the preview stands in for it. `PickHit` now carries the geom's `name`, `type`,
+  `size`, `rgba` as drawn, and its `pos` and `quat` now.
 - **`engine.pick` and `engine.preview`, for a host that places geoms by pointing** (ADR
   0011). `pick(clientX, clientY)` casts MuJoCo's own ray from the camera through a point of
   the canvas and returns the surface it meets (point and normal in MuJoCo axes, the geom

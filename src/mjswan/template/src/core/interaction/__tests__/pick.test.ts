@@ -13,13 +13,18 @@ let model: MjModel;
 let data: MjData;
 let picker: SurfacePicker;
 
-// An infinite floor, a crate on it, and a slab over the crate in group 3, which the scene
-// does not draw: the ray must pass through it.
-const XML = `<mujoco><worldbody>
-  <geom name="floor" type="plane" size="0 0 0.1"/>
-  <geom name="slab" type="box" size="0.5 0.5 0.05" pos="0 0 2" group="3"/>
-  <body name="crate" pos="0 0 0.5"><geom name="crate" type="box" size="0.2 0.2 0.2"/></body>
-</worldbody></mujoco>`;
+// An infinite floor in a material, a crate on it turned a quarter about z, and a slab over
+// the crate in group 3, which the scene does not draw: the ray must pass through it.
+const XML = `<mujoco>
+  <asset><material name="tile" rgba="0.2 0.3 0.4 1"/></asset>
+  <worldbody>
+    <geom name="floor" type="plane" size="0 0 0.1" material="tile" rgba="0.9 0.9 0.9 1"/>
+    <geom name="slab" type="box" size="0.5 0.5 0.05" pos="0 0 2" group="3"/>
+    <body name="crate" pos="0 0 0.5" euler="0 0 90">
+      <geom name="crate" type="box" size="0.2 0.2 0.2" rgba="0.8 0.4 0.3 1"/>
+    </body>
+  </worldbody>
+</mujoco>`;
 
 const RECT = { left: 10, top: 20, width: 100, height: 100 };
 const CENTRE = [RECT.left + 50, RECT.top + 50] as const;
@@ -68,6 +73,21 @@ describe('SurfacePicker', () => {
     expect(hit!.point[0]).toBeLessThan(-1);
     expect(hit!.point[1]).toBeGreaterThan(1);
     expect(round(hit!.normal)).toEqual([0, 0, 1]);
+  });
+
+  it('says what it hit: its name, type, size, colour and where it is now', () => {
+    const hit = picker.pick(model, data, camera(5), RECT, ...CENTRE)!;
+    expect(hit.name).toBe('crate');
+    expect(hit.type).toBe('box');
+    expect(round(hit.size)).toEqual([0.2, 0.2, 0.2]);
+    expect(round(hit.rgba)).toEqual([0.8, 0.4, 0.3, 1]);
+    expect(round(hit.pos)).toEqual([0, 0, 0.5]);
+    expect(round(hit.quat)).toEqual(round([Math.SQRT1_2, 0, 0, Math.SQRT1_2]));
+
+    // The scene draws a geom in its material's colour.
+    const floor = picker.pick(model, data, camera(5), RECT, RECT.left + 10, RECT.top + 10)!;
+    expect(floor.type).toBe('plane');
+    expect(round(floor.rgba)).toEqual([0.2, 0.3, 0.4, 1]);
   });
 
   it('answers null over empty sky, and for a canvas with no size', () => {

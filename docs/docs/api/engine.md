@@ -89,8 +89,8 @@ call order, and `dispose` waits for the one running.
 | `events` | `EventControls` | `fire(name)` for a `manual` term, `setArmed(name, armed)` for an `interval` one. |
 | `interaction` | `InteractionControls` | `setMode(id)`, `getMode()`, `setParam(mode, name, value)`, `getParams(mode)`, `cancel()`. See [Pointer interaction](#pointer-interaction). |
 | `xr` | `XrControls` | `enter(id)`, `exit()`, `setHandTracking(enabled)`. See [WebXR](#webxr). |
-| `pick` | `(clientX, clientY) => PickHit \| null` | The surface under a point of the canvas. See [Placing a geom](#placing-a-geom). |
-| `preview` | `PreviewControls` | `show(input)`, `hide()`: a geom drawn and never simulated. See [Placing a geom](#placing-a-geom). |
+| `pick` | `(clientX, clientY) => PickHit \| null` | The surface under a point of the canvas, and the geom it belongs to. See [Placing a geom](#placing-a-geom). |
+| `preview` | `PreviewControls` | `show(input)`, `hide()`: a geom drawn and never simulated; `hit(clientX, clientY)` and `onChange(listener)` for its handles. See [Placing a geom](#placing-a-geom) and [Editing a geom](#editing-a-geom). |
 | `getState` | `() => MjswanEngineState` | Current snapshot. |
 | `subscribe` | `(listener) => () => void` | Returns an unsubscribe function. |
 | `captureThumbnail` | `(opts?: { maxDim?, quality? }) => Promise<Blob>` | JPEG of the current frame. |
@@ -242,6 +242,12 @@ interface PickHit {
   normal: [number, number, number];  // the surface's, turned to face the camera
   geom: number;
   body: number;
+  name: string;                      // '' for an unnamed geom
+  type: GeomType;                    // a primitive's, or 'hfield', 'mesh', 'sdf'
+  size: [number, number, number];
+  rgba: [number, number, number, number];  // as drawn: its material's when it has one
+  pos: [number, number, number];     // where the geom is now
+  quat: [number, number, number, number];  // (w, x, y, z)
 }
 ```
 
@@ -260,9 +266,40 @@ model's geoms are; calling it again moves and reshapes the one on show, and
 | `pos` | `[x, y, z]` | World position, MuJoCo axes. |
 | `quat` | `[w, x, y, z]` | Optional; the identity. |
 | `rgba` | `[r, g, b, a]` | Optional, 0 to 1 each; MuJoCo's geom grey. |
+| `handles` | `'size' \| 'turn'` | Optional; none. See [Editing a geom](#editing-a-geom). |
+| `replaces` | `number` | Optional: a geom of the model it stands in for. See [Editing a geom](#editing-a-geom). |
 
 An engine before this release has neither member, so a host checks `'pick' in engine` and
 keeps a fallback.
+
+### Editing a geom
+
+The preview can carry handles that the pointer drags, so a host resizes and turns a geom
+before anything is written to the model
+([ADR 0012](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0012-preview-handles.md)).
+
+- `handles: 'size'`: an arrow per spatial `size` entry, along the geom's own axes (x red,
+  y green, z blue). Dragging one moves the face under it with the pointer; the opposite face
+  stays, and so does the bottom where a radius sets the height too (a sphere, a capsule).
+- `handles: 'turn'`: a ring about each of the geom's own axes. Sweeping the pointer round
+  the centre turns it about that axis; Shift snaps to 15 degrees.
+
+A press on a handle belongs to it until released; any other press orbits the camera or goes
+to the pointer mode, as before. Handles keep their size on screen and draw over the scene.
+
+```ts
+const stop = engine.preview.onChange((geom, done) => {
+  // geom: { type, size, pos, quat, rgba }, as the drag has left it; `done` on release
+});
+engine.preview.hit(event.clientX, event.clientY);  // is the preview, or a handle, there?
+```
+
+`replaces: geom` hides the model's own drawing of that geom while the preview shows, so a
+host can preview a geom `pick` found with new values. Showing without it, or `hide()`,
+brings it back; a scene load ends it, since ids belong to the model.
+
+An engine before this release has no `hit` or `onChange`, and ignores `handles` and
+`replaces`.
 
 ### Inputs
 

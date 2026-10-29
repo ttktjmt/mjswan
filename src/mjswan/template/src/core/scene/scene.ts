@@ -446,6 +446,7 @@ export async function loadSceneFromURL(
       backMat.depthWrite = false;
       const backMesh = new THREE.Mesh(geometry, backMat);
       backMesh.userData.isGroundPlane = true;
+      backMesh.userData.geomId = g;
       backMesh.position.copy(mesh.position);
       backMesh.quaternion.copy(mesh.quaternion);
       backMesh.raycast = () => {};
