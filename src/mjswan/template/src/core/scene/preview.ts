@@ -1,6 +1,6 @@
 /**
  * A geom drawn over the scene and never simulated: what a host shows where a geom would
- * go before it adds one (ADR 0011), and how it edits one (ADR 0012). Parented to the
+ * go before it adds one, and how it edits one (ADR 0011). Parented to the
  * three.js scene, as the mode gizmos are, so a scene load keeps it, `frameCamera` never
  * frames it, and the pointer's raycast skips it.
  */

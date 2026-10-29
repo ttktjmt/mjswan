@@ -324,7 +324,7 @@ export class mjswanRuntime {
   /** A late async XR support check must not report after teardown. */
   private disposed = false;
   private readonly passthrough: Passthrough;
-  /** What a host shows before it adds a geom, and where it would go (ADRs 0011 and 0012). */
+  /** What a host shows before it adds a geom, and where it would go (ADR 0011). */
   private readonly preview: GeomPreview;
   private readonly picker: SurfacePicker;
   private readonly handMocap: HandMocap;

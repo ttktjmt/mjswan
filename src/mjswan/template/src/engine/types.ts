@@ -16,7 +16,7 @@ import type { GeomType, PickHit } from '../core/interaction/pick';
 
 // Bytes: asset bytes or a lazy loader. EnginePlugins: custom MDP terms, trusted-only.
 export type { Bytes, SplatTransform, ModelFormat, EnginePlugins, SkinConfig };
-// What a host previews, where it would go, and what it edits (ADRs 0011 and 0012).
+// What a host previews, where it would go, and what it edits (ADR 0011).
 export type { PrimitiveType, GeomType, PreviewInput, PreviewGeom, HandleKind, PickHit };
 
 export interface SplatInput {
@@ -231,7 +231,7 @@ export interface HandTrackingDescriptor {
 
 /**
  * One primitive geom drawn over the scene and never simulated: what a host shows where a
- * geom would go before it adds one (ADR 0011), and while it edits one (ADR 0012). It is
+ * geom would go before it adds one, and while it edits one (ADR 0011). It is
  * built as the model's geoms are, casts a shadow, and survives a scene load; neither the
  * pointer modes nor `pick` hit it.
  */

@@ -276,7 +276,7 @@ keeps a fallback.
 
 The preview can carry handles that the pointer drags, so a host resizes and turns a geom
 before anything is written to the model
-([ADR 0012](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0012-preview-handles.md)).
+([ADR 0011](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0011-pick-and-preview.md)).
 
 - `handles: 'size'`: an arrow per spatial `size` entry, along the geom's own axes (x red,
   y green, z blue). Dragging one moves the face under it with the pointer; the opposite face

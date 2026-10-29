@@ -29,7 +29,7 @@ export interface PickHit {
   normal: [number, number, number];
   geom: number;
   body: number;
-  /** The geom hit (ADR 0012): its name, '' when it has none. */
+  /** The geom hit, from 0.12.5: its name, '' when it has none. */
   name: string;
   type: GeomType;
   /** MuJoCo's `size`, three numbers whatever the type. */

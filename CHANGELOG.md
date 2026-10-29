@@ -14,7 +14,7 @@ shortcuts.
 
 ### Added
 
-- **Handles on the preview, and a pick that names the geom** (ADR 0012). `preview.show`
+- **Handles on the preview, and a pick that names the geom** (ADR 0011). `preview.show`
   takes `handles: 'size'`, arrows along the geom's own axes that resize it as they are
   dragged (the opposite face stays, and the bottom where a radius sets the height), or
   `handles: 'turn'`, rings that turn it (Shift snaps to 15 degrees), both drawn a fixed
