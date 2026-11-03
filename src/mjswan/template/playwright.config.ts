@@ -1,8 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 // Runtime-tier E2E: drives the React-free engine harness in a real browser.
-// Headless Chromium renders WebGL via SwiftShader (software GL), so no GPU is
-// required in CI. Unit tests (pure logic) live under vitest; run: npm run test:e2e.
+// It drives the installed Google Chrome, not a build Playwright downloads. Headless
+// Chrome renders WebGL via SwiftShader (software GL), so no GPU is required in CI. Unit tests (pure logic) live under vitest; run: npm run test:e2e.
 const PORT = 5178;
 
 export default defineConfig({
@@ -23,13 +23,10 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        channel: 'chrome',
         launchOptions: {
-          // Escape hatch for a sandbox whose pre-installed Chromium does not match the build
-          // this Playwright version wants to download (e.g. a CI container that ships one at
-          // a fixed path). Unset locally — Playwright resolves its own browser.
-          ...(process.env.PW_CHROMIUM_PATH
-            ? { executablePath: process.env.PW_CHROMIUM_PATH }
-            : {}),
+          // Playwright turns Chrome's own sandbox off unless asked.
+          chromiumSandbox: true,
           args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
         },
       },
