@@ -1,12 +1,9 @@
 /**
  * Browser glue for the pointer-interaction E2E: loads a scene and puts the engine on
- * `window` for Playwright. A push lasts one control step, so a sampler latches the effects
- * rather than the test reading them at a guessed moment.
+ * `window` for Playwright. A push lasts one control step, so the probe latches the effects
+ * after every step rather than the test reading them at a guessed moment.
  */
 import { createEngine } from '../engine';
-
-/** Fast enough to catch a one-control-step shove (20 ms at the default rate). */
-const SAMPLE_MS = 4;
 
 export interface InteractionProbe {
   /** Largest force any body has been under since the last `reset`: pull and push. */
@@ -40,13 +37,18 @@ async function main(): Promise<void> {
       runtime: {
         mjModel: { nbody: number; neq: number } | null;
         mjData: { xfrc_applied: ArrayLike<number>; eq_active: ArrayLike<number> } | null;
+        executeSimulationSteps(): void;
       };
     }
   ).runtime;
 
   let peakForce = 0;
   let welded = false;
-  setInterval(() => {
+  // After each step, not on a timer: a loop behind schedule runs steps back to back between
+  // yields, and a timer there misses the one step a push lasts.
+  const step = runtime.executeSimulationSteps.bind(runtime);
+  runtime.executeSimulationSteps = () => {
+    step();
     const { mjData, mjModel } = runtime;
     // Absent while a scene or the XR hands rebuild the model.
     if (!mjData || !mjModel) return;
@@ -58,7 +60,7 @@ async function main(): Promise<void> {
     for (let eq = 0; eq < mjModel.neq; eq++) {
       if (mjData.eq_active[eq]) welded = true;
     }
-  }, SAMPLE_MS);
+  };
 
   window.__probe = {
     reset: () => {
