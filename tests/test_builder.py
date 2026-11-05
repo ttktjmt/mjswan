@@ -12,6 +12,8 @@ Run all tests (CI):               pytest
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import warnings
 from pathlib import Path
 from types import SimpleNamespace
@@ -318,6 +320,23 @@ class TestClientBuilderCustomTerms:
 
         monkeypatch.setattr(obs_fns, "_custom_registry", {"base_lin_vel": base_lin_vel})
         assert "observations" not in ClientBuilder._collect_custom_terms()
+
+
+class TestNodeenv:
+    def test_runs_in_the_template_dir(self, tmp_path, monkeypatch):
+        """Not the user's cwd, whose nodeenv.py and setup.cfg it would read."""
+        calls = []
+        monkeypatch.setattr(
+            subprocess, "check_call", lambda cmd, **kw: calls.append((cmd, kw))
+        )
+        monkeypatch.setitem(sys.modules, "nodeenv", None)  # also take the pip fallback
+        monkeypatch.chdir(tmp_path)
+        cb = ClientBuilder(tmp_path / "template")
+
+        cb.create_env()
+
+        assert [cmd[2] for cmd, _ in calls] == ["pip", "nodeenv"]
+        assert all(kw["cwd"] == cb.project_dir for _, kw in calls)
 
 
 class TestFrontendBuildCache:

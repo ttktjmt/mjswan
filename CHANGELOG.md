@@ -1296,3 +1296,21 @@ shortcuts.
 - **Pillow 13.0.0, filelock 4.2.4 and virtualenv 21.14.12 in `uv.lock`**, for the
   Dependabot advisories against Pillow < 13.0.0, filelock 3.20.4 to 4.2.0 and virtualenv
   < 21.14.10.
+- **`export_checkpoint` reads a checkpoint with torch's restricted unpickler first.** It
+  and the `mjlab-to-mjswan` skill's `export_policy.py` loaded each `.pt` with
+  `weights_only=False`, as the runner's own load does, so a checkpoint from someone else's
+  W&B run, converted by `add_policy_wandb` (`only_latest=False`, the default) or
+  `from_mjlab(run_path=...)`, could run code on the machine that builds. Both now read it
+  with `weights_only=True` before the runner loads it, and refuse a checkpoint that names
+  a global outside torch's allowlist. rsl_rl and mjlab checkpoints export as before.
+- **The first engine build runs nodeenv in the template directory.** `python -m nodeenv`
+  and its pip fallback ran in the working directory, so a `nodeenv.py` there ran in their
+  place and a `setup.cfg` or `tox.ini` there could redirect the Node.js download, when
+  mjswan first ran inside a folder someone else supplied. They now run where the npm and
+  esbuild steps already did.
+- **The eslint pre-commit hook runs the template's locked eslint.** `npx eslint` ran from
+  the repository root, where the template's lockfile and `.npmrc` (`ignore-scripts` and the
+  three-day release-age cutoff) do not apply, so a commit touching template JS/TS
+  installed and ran whatever eslint the registry served last, install scripts included.
+  The hook now runs `src/mjswan/template/node_modules/.bin/eslint` and fails until
+  `npm ci` has run in the template.

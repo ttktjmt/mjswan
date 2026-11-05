@@ -278,7 +278,7 @@ The primary CLI is `mjswan` (Typer-based, defined in `cli.py:app`). Subcommands:
 | `ruff` | Linting and formatting (pinned exactly, not floored — see pyproject comment) |
 | `pyright` / `ty` | Type checking (`make type` runs both over `src/mjswan`; `examples/` and `typings/` are out of scope, the latter a search path for ty) |
 | `pytest` | Tests (`make test`) |
-| `pre-commit` | Hooks: trailing-whitespace, end-of-file-fixer, ruff, ruff-format, npmrc secret scan, pytest (not slow), eslint |
+| `pre-commit` | Hooks: trailing-whitespace, end-of-file-fixer, ruff, ruff-format, npmrc secret scan, pytest (not slow), eslint (the template's locked one, so `npm ci` in `src/mjswan/template` first) |
 | `zensical` | Docs site builder (MkDocs-based) — `make docs-build` / `make docs-serve` |
 
 Key Makefile targets: `sync`, `format`, `type`, `check`, `test`, `test-all`, `docs-build`, `docs-serve`.

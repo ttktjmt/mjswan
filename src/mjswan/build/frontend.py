@@ -101,6 +101,7 @@ class ClientBuilder:
             subprocess.check_call(
                 [sys.executable, "-m", "pip", "install", "nodeenv>=1.9.0"],
                 stdout=subprocess.PIPE if not os.getenv("VERBOSE_BUILD") else None,
+                cwd=self.project_dir,
             )
 
     def create_env(self, clean: bool = False) -> None:
@@ -142,7 +143,9 @@ class ClientBuilder:
             ]
             if os.getenv("VERBOSE_BUILD"):
                 cmd.append("--verbose")
-            subprocess.check_call(cmd)
+            # `python -m` imports from the working directory, and nodeenv reads its
+            # setup.cfg and tox.ini: run in the template, not wherever the user is.
+            subprocess.check_call(cmd, cwd=self.project_dir)
         except Exception as e:
             raise RuntimeError(f"Failed to create Node.js environment: {e}")
 
