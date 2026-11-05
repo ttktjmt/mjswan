@@ -232,3 +232,69 @@ class TestActuatedJointNames:
         )
 
         assert passive.actuated_joint_names() is None
+
+
+class TestContainment:
+    """MuJoCo reads nothing from outside the downloaded repository."""
+
+    @pytest.fixture
+    def private(self, tmp_path):
+        d = tmp_path / "private"
+        d.mkdir()
+        (d / "link.stl").write_bytes(TETRAHEDRON_STL)
+        (d / "inc.xml").write_text(
+            '<mujoco><asset><mesh name="p" file="link.stl"/></asset></mujoco>'
+        )
+        return d
+
+    @pytest.mark.parametrize(
+        "element",
+        [
+            '<asset><mesh name="x" file="{ref}/link.stl"/></asset>',
+            '<include file="{ref}/inc.xml"/>',
+            '<include xmlns="urn:x" file="{ref}/inc.xml"/>',
+            '<asset><model name="m" file="{ref}/inc.xml"/></asset>',
+            '<worldbody><flexcomp name="f" type="mesh" dim="2" file="{ref}/link.stl"/>'
+            "</worldbody>",
+            '<compiler meshdir="{ref}"/>',
+        ],
+    )
+    @pytest.mark.parametrize("escape", ["relative", "absolute"])
+    @pytest.mark.usefixtures("fake_hub")
+    def test_refuses_a_file_outside_the_repository(
+        self, project, tmp_path, private, element, escape
+    ):
+        ref = "../../../private" if escape == "relative" else private.as_posix()
+        scene = tmp_path / "repo/scenes/unitree_g1/scene.xml"
+        scene.write_text(
+            SCENE_XML.replace("<asset>", element.format(ref=ref) + "<asset>", 1)
+        )
+
+        with pytest.raises(ValueError, match="outside the repository"):
+            project.add_scene_hf("org/assets", "scenes/unitree_g1/scene.xml")
+
+    def test_an_include_inside_the_repository_builds(self, project, fake_hub, tmp_path):
+        model = tmp_path / "repo/scenes/unitree_g1"
+        asset = '<asset><mesh name="link" file="meshes/link.stl"/></asset>'
+        (model / "assets.xml").write_text(f"<mujoco>{asset}</mujoco>")
+        (model / "scene.xml").write_text(
+            SCENE_XML.replace(asset, '<include file="assets.xml"/>')
+        )
+
+        scene = project.add_scene_hf("org/assets", "scenes/unitree_g1/scene.xml")
+
+        assert scene._config.spec.compile().nmesh == 1
+
+    def test_a_shared_meshdir_inside_the_repository_builds(
+        self, project, fake_hub, tmp_path
+    ):
+        shared = tmp_path / "repo/shared/meshes"
+        shared.mkdir(parents=True)
+        (shared / "link.stl").write_bytes(TETRAHEDRON_STL)
+        (tmp_path / "repo/scenes/unitree_g1/scene.xml").write_text(
+            SCENE_XML.replace("<asset>", '<compiler meshdir="../../shared"/><asset>', 1)
+        )
+
+        scene = project.add_scene_hf("org/assets", "scenes/unitree_g1/scene.xml")
+
+        assert scene._config.spec.compile().nmesh == 1

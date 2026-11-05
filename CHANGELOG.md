@@ -1326,3 +1326,11 @@ shortcuts.
   `..` packed the files around the build directory, and a symbolic link packed what it
   named. It now refuses an id `name2id` could not have written and any symbolic link,
   before the `.swn` is created.
+- **`add_scene_hf` reads nothing from outside the downloaded repository.** A Hub MJCF's
+  asset paths, its `meshdir`, `texturedir` and `assetdir`, and the `<include>`, `<model>`
+  and `<flexcomp>` files MuJoCo opens while parsing were taken as written, so an absolute
+  or `../` path in someone else's repository put a file from the developer's disk into
+  the published `scene.mjz`, and a license-named file beside it into the scene directory.
+  The MJCF and every file it includes are now checked against the snapshot root before
+  MuJoCo reads them, tags by local name since MuJoCo ignores XML namespaces, and a path
+  outside it raises `ValueError`. Paths elsewhere in the same repository still work.
