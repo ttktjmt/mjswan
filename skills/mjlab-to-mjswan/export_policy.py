@@ -60,7 +60,7 @@ def main() -> None:
             onnx_name = f"{checkpoint.stem}.onnx"
             align_obs_normalizer(
                 context.runner,
-                torch.load(checkpoint, map_location="cpu", weights_only=False),
+                torch.load(checkpoint, map_location="cpu", weights_only=True),
             )
             context.runner.load(
                 str(checkpoint),

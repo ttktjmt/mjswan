@@ -221,9 +221,10 @@ def export_checkpoint(context: PtOnnxExportContext, pt_path: Path) -> onnx.Model
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         onnx_filename = f"{pt_path.stem}.onnx"
+        # Must precede runner.load, which unpickles a third-party file unrestricted.
         align_obs_normalizer(
             context.runner,
-            torch.load(str(pt_path), map_location="cpu", weights_only=False),
+            torch.load(str(pt_path), map_location="cpu", weights_only=True),
         )
         context.runner.load(
             str(pt_path),
