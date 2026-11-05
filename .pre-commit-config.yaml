@@ -40,12 +40,13 @@ repos:
   # You can disable this block if you don't edit JS/TS files.
   - repo: local
     hooks:
+      # The template's locked eslint, never a registry install: run `npm ci` there first.
       - id: eslint
         name: eslint
         entry: >
-          npx eslint
+          src/mjswan/template/node_modules/.bin/eslint
           --config src/mjswan/template/eslint.config.cjs
           --fix
-        language: node
+        language: system
         files: ^src/mjswan/template/.*\.(js|jsx|ts|tsx)$
         exclude: ^src/mjswan/template/src/mujoco/.*\.d\.ts$
