@@ -17,6 +17,50 @@ if TYPE_CHECKING:
 _HASHED_ASSET = re.compile(r"/assets/[^/]+-[\w-]{8}\.\w+")
 
 
+def _serving_handler(app_dir: Path) -> type:
+    """The request handler ``launch`` serves ``app_dir`` with."""
+    import http.server
+    import os
+    from http import HTTPStatus
+
+    directory = str(app_dir)
+    root = os.path.realpath(directory)
+
+    class CrossOriginIsolatedHandler(http.server.SimpleHTTPRequestHandler):
+        """HTTP handler with Cross-Origin Isolation headers for SharedArrayBuffer."""
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=directory, **kwargs)
+
+        def send_head(self):
+            # translate_path drops `..`, but open() would still follow a link out.
+            path = os.path.realpath(self.translate_path(self.path))
+            if path != root and not path.startswith(root + os.sep):
+                self.send_error(HTTPStatus.NOT_FOUND, "File not found")
+                return None
+            return super().send_head()
+
+        def list_directory(self, path):
+            self.send_error(HTTPStatus.NOT_FOUND, "File not found")
+
+        def send_response(self, code, message=None):
+            super().send_response(code, message)
+            # Builds reuse unhashed URLs, and Last-Modified can go backwards.
+            # A 404 is not kept either: another build may have the file.
+            if code == 200 and _HASHED_ASSET.fullmatch(self.path):
+                self.send_header("Cache-Control", "max-age=31536000, immutable")
+            else:
+                self.send_header("Cache-Control", "no-store")
+
+        def end_headers(self):
+            # Required for SharedArrayBuffer (used by MuJoCo WASM threading)
+            self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+            self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+            super().end_headers()
+
+    return CrossOriginIsolatedHandler
+
+
 def _detect_colab() -> bool:
     try:
         import google.colab  # noqa: F401
@@ -160,34 +204,10 @@ class MjswanApp:
         if not self._app_dir.exists():
             raise RuntimeError(f"Application directory {self._app_dir} does not exist.")
 
-        import http.server
         import socket
         import socketserver
 
-        directory = str(self._app_dir)
-
-        class CrossOriginIsolatedHandler(http.server.SimpleHTTPRequestHandler):
-            """HTTP handler with Cross-Origin Isolation headers for SharedArrayBuffer."""
-
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, directory=directory, **kwargs)
-
-            def send_response(self, code, message=None):
-                super().send_response(code, message)
-                # Builds reuse unhashed URLs, and Last-Modified can go backwards.
-                # A 404 is not kept either: another build may have the file.
-                if code == 200 and _HASHED_ASSET.fullmatch(self.path):
-                    self.send_header("Cache-Control", "max-age=31536000, immutable")
-                else:
-                    self.send_header("Cache-Control", "no-store")
-
-            def end_headers(self):
-                # Required for SharedArrayBuffer (used by MuJoCo WASM threading)
-                self.send_header("Cross-Origin-Opener-Policy", "same-origin")
-                self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
-                super().end_headers()
-
-        handler = CrossOriginIsolatedHandler
+        handler = _serving_handler(self._app_dir)
 
         def _find_available_port(
             bind_host: str, start_port: int, max_tries: int = 1000

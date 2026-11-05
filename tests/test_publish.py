@@ -209,6 +209,15 @@ class TestHttpTransportUserAgent:
 
 
 class TestPlanPublish:
+    def test_refuses_a_symlink(self, tmp_path: Path):
+        dist = _make_dist(tmp_path)
+        outside = tmp_path / "outside.txt"
+        outside.write_text("not part of the build")
+        (dist / "demo" / "humanoid" / "assets" / "leak.npz").symlink_to(outside)
+
+        with pytest.raises(PublishError, match="Symbolic links"):
+            plan_publish(dist)
+
     def test_collects_only_data_files(self, tmp_path: Path):
         plan = plan_publish(_make_dist(tmp_path))
         paths = {f.upload_path for f in plan.files}
