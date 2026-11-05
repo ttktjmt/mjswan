@@ -18,6 +18,7 @@ from mjswan.app import MjswanApp
 from mjswan.builder import Builder
 from mjswan.cloud.publish import HttpResponse, plan_publish, publish_dist
 from mjswan.document import (
+    DocumentError,
     document_files,
     is_document,
     read_manifest,
@@ -67,6 +68,31 @@ class TestDocumentFiles:
     def test_a_tree_without_a_manifest_is_refused(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="manifest.json"):
             document_files(tmp_path)
+
+    @pytest.mark.parametrize("project_id", ["..", "../notes", ""])
+    def test_a_project_id_no_build_writes_is_refused(self, built, tmp_path, project_id):
+        manifest = read_manifest(built)
+        manifest["projects"][0]["id"] = project_id
+        (built / "manifest.json").write_text(json.dumps(manifest))
+        target = tmp_path / "out.swn"
+
+        with pytest.raises(DocumentError, match="not one a build writes"):
+            write_document(built, target)
+        assert not target.exists()
+
+    @pytest.mark.parametrize(
+        "rel", ["manifest.json", "demo", "demo/humanoid/policy/walk.onnx"]
+    )
+    def test_a_symlink_in_the_build_is_refused(self, built, tmp_path, rel):
+        path = built / rel
+        moved = tmp_path / f"outside-{path.name}"
+        path.rename(moved)
+        path.symlink_to(moved, target_is_directory=moved.is_dir())
+        target = tmp_path / "out.swn"
+
+        with pytest.raises(DocumentError, match="is a symlink"):
+            write_document(built, target)
+        assert not target.exists()
 
 
 class TestWriteAndUnpack:

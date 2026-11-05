@@ -1314,3 +1314,15 @@ shortcuts.
   installed and ran whatever eslint the registry served last, install scripts included.
   The hook now runs `src/mjswan/template/node_modules/.bin/eslint` and fails until
   `npm ci` has run in the template.
+- **`mjswan serve` answers only for files inside the app directory.** A symbolic link in
+  a served directory someone else supplied was followed, so any local client of the
+  server could read the file or folder it named, and every directory without an
+  `index.html` was listed. A path that resolves outside the directory, and a directory
+  listing, now get 404; links within the directory still work.
+- **`mjswan publish` refuses a symbolic link in the build** before anything is uploaded.
+  It followed one, so a link in a dist someone else handed over uploaded the file it
+  named to mjswan Cloud.
+- **`save_document()` packs only the build's own files.** A manifest project id such as
+  `..` packed the files around the build directory, and a symbolic link packed what it
+  named. It now refuses an id `name2id` could not have written and any symbolic link,
+  before the `.swn` is created.

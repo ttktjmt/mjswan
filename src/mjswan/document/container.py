@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import tempfile
 import zipfile
 from collections.abc import Iterator
@@ -22,6 +23,9 @@ DOCUMENT_SUFFIX = ".swn"
 #: Already-compressed containers: deflating them again costs time for nothing.
 _STORED_SUFFIXES = frozenset({".mjz", ".npz", ".spz"})
 
+#: Every project id a build writes comes from ``name2id``.
+_BUILT_ID = re.compile(r"[a-z0-9_]+")
+
 
 class DocumentError(ValueError):
     """A ``.swn`` that cannot be read as a simulation document."""
@@ -29,6 +33,12 @@ class DocumentError(ValueError):
 
 def _not_a_document(source: Path, why: str) -> DocumentError:
     return DocumentError(f"{source} is not a simulation document: {why}.")
+
+
+def _symlinked(path: Path) -> DocumentError:
+    return DocumentError(
+        f"{path} is a symlink; a document holds only the build's own files."
+    )
 
 
 def is_document(path: str | Path) -> bool:
@@ -61,21 +71,30 @@ def document_files(dist_dir: str | Path) -> list[Path]:
     SPA's own ``assets/`` can never be mistaken for one.
     """
     dist_dir = Path(dist_dir)
-    if not (dist_dir / MANIFEST_NAME).is_file():
+    manifest_path = dist_dir / MANIFEST_NAME
+    if manifest_path.is_symlink():
+        raise _symlinked(manifest_path)
+    if not manifest_path.is_file():
         raise FileNotFoundError(
             f"No {MANIFEST_NAME} in {dist_dir}; pass the directory builder.build() wrote."
         )
     manifest = read_manifest(dist_dir)
     files = [Path(MANIFEST_NAME)]
     for project in manifest.get("projects", []):
-        project_dir = dist_dir / project["id"]
+        project_id = str(project["id"])
+        if not _BUILT_ID.fullmatch(project_id):
+            raise DocumentError(f"Project id {project_id!r} is not one a build writes.")
+        project_dir = dist_dir / project_id
+        if project_dir.is_symlink():
+            raise _symlinked(project_dir)
         if not project_dir.is_dir():
             continue
-        files.extend(
-            sorted(
-                p.relative_to(dist_dir) for p in project_dir.rglob("*") if p.is_file()
-            )
-        )
+        # rglob yields a symlinked directory but does not descend into it.
+        for p in sorted(project_dir.rglob("*")):
+            if p.is_symlink():
+                raise _symlinked(p)
+            if p.is_file():
+                files.append(p.relative_to(dist_dir))
     return files
 
 
@@ -92,9 +111,11 @@ def write_document(dist_dir: str | Path, target: str | Path | None = None) -> Pa
     target = Path(target)
     if target.suffix.lower() != DOCUMENT_SUFFIX:
         target = target.with_suffix(DOCUMENT_SUFFIX)
+    # Listed before the archive exists, so a refusal leaves no partial .swn behind.
+    files = document_files(dist_dir)
     target.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(target, "w") as zf:
-        for rel in document_files(dist_dir):
+        for rel in files:
             compress = (
                 zipfile.ZIP_STORED
                 if rel.suffix.lower() in _STORED_SUFFIXES

@@ -316,6 +316,9 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
         if path.parent == dist_dir / "assets":
             continue  # the SPA's own directory: bundle metadata, not the document
         rel = path.relative_to(dist_dir).as_posix()
+        # A build writes regular files only; a link would upload whatever it names.
+        if path.is_symlink():
+            raise PublishError(f"Symbolic links are not published: {rel}", file=rel)
         # The root LICENSE and NOTICE are the engine's, not the work's, and are not admitted.
         if is_license_file_path(rel):
             _check_safe_path(rel)
