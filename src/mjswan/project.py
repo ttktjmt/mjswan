@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 import mujoco
@@ -242,7 +242,7 @@ class ProjectHandle:
             token: Hub token for a gated or private repository.
             allow_patterns: What to download, overriding "everything beside the XML".
                 Needed when the model reaches outside its own directory (a ``meshdir``
-                pointing at a shared folder), since the XML is not parsed to find out.
+                pointing at a shared folder), since the download does not read the XML.
             metadata: Optional metadata dictionary for the scene.
             control_dt: Seconds per control step. See :meth:`add_scene`.
             events: Default events for every policy's MDP on this scene.
@@ -252,7 +252,8 @@ class ProjectHandle:
 
         Raises:
             ImportError: If ``huggingface_hub`` is not installed.
-            ValueError: If ``path`` does not name an XML file.
+            ValueError: If ``path`` does not name an XML file, or the MJCF or a file it
+                includes names a file outside the repository.
 
         Example:
             ```python
@@ -276,7 +277,13 @@ class ProjectHandle:
             token=token,
             allow_patterns=allow_patterns,
         )
-        spec = mujoco.MjSpec.from_file(str(local_dir / PurePosixPath(path).name))
+        xml_path = local_dir / PurePosixPath(path).name
+        # The snapshot root, not the XML's directory: allow_patterns may fetch shared
+        # folders elsewhere in the repository.
+        depth = len(PurePosixPath(path).parent.parts)
+        repo_root = local_dir.parents[depth - 1] if depth else local_dir
+        _refuse_files_outside(repo_root, xml_path, f"{repo_id}/{path}")
+        spec = mujoco.MjSpec.from_file(str(xml_path))
         return self.add_scene(
             name=name or scene_name_for(repo_id, path),
             spec=spec,
@@ -407,6 +414,72 @@ def _collect_mjlab_scene_assets(scene_cfg: Any) -> dict[str, bytes]:
     for spec in entity_specs(scene_cfg):
         assets.update(collect_spec_assets(spec))
     return assets
+
+
+def _refuse_files_outside(root: Path, xml_path: Path, label: str) -> None:
+    """Refuse an MJCF that names a file outside ``root``, before MuJoCo opens any.
+
+    MuJoCo reads <include>, <model> and <flexcomp> files while it parses, and the build
+    packs every asset into scene.mjz. Lexical, not realpath: the Hub cache links every
+    snapshot file into blobs/. Tags go by local name, since TinyXML2 ignores namespaces.
+    """
+    import xml.etree.ElementTree as ET
+
+    top = os.path.normpath(os.path.abspath(root))
+
+    def inside(*parts: str) -> str:
+        full = os.path.normpath(os.path.join(*(p.replace("\\", "/") for p in parts)))
+        try:
+            ok = os.path.commonpath([top, full]) == top
+        except ValueError:  # another drive
+            ok = False
+        if not ok:
+            raise ValueError(f"{label} names {parts[-1]!r}, outside the repository.")
+        return full
+
+    def local(name: str) -> str:
+        return name.rpartition("}")[2]
+
+    seen: set[str] = set()
+
+    def model(path: str) -> None:
+        # Includes share the model's directory and its <compiler> dirs; a <model> file
+        # is a model of its own.
+        base, elements, pending = os.path.dirname(path), [], [path]
+        while pending:
+            current = pending.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            try:
+                tree = ET.parse(current)
+            except ET.ParseError as exc:
+                raise ValueError(f"{label}: cannot read {current}: {exc}") from exc
+            for elem in tree.iter():
+                elements.append(elem)
+                if local(elem.tag) == "include" and (ref := elem.get("file")):
+                    for at in (base, os.path.dirname(current)):
+                        if os.path.isfile(full := inside(at, ref)):
+                            pending.append(full)
+        dirs = {""}
+        for elem in elements:
+            if local(elem.tag) == "compiler":
+                for key in ("meshdir", "texturedir", "assetdir"):
+                    if value := elem.get(key):
+                        inside(base, value)
+                        dirs.add(value)
+        for elem in elements:
+            tag = local(elem.tag)
+            if tag in ("include", "compiler"):
+                continue
+            for key, value in elem.attrib.items():
+                if local(key).startswith("file"):
+                    for d in dirs:
+                        full = inside(base, d, value)
+                        if tag == "model" and os.path.isfile(full):
+                            model(full)
+
+    model(os.path.abspath(xml_path))
 
 
 __all__ = ["ProjectConfig", "ProjectHandle"]
