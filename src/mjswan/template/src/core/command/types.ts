@@ -100,6 +100,8 @@ export interface CommandTermContext {
   onnxSessions?: OnnxSessionCache;
   /** Reads a command's declared dynamic runtime input slots. */
   readOnnxSlot?: SlotReader;
+  /** The host's `ArchiveLimits.maxInflatedBytes`, which bounds a motion's `.npz` too. */
+  maxInflatedBytes?: number;
 }
 
 export interface CommandTerm {

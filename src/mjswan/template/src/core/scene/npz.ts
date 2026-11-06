@@ -6,12 +6,13 @@ export type NpzEntry = {
 
 export type NpzData = Record<string, NpzEntry>;
 
-async function inflateRaw(compressed: Uint8Array): Promise<Uint8Array> {
+async function inflateRaw(compressed: Uint8Array, maxBytes = Infinity): Promise<Uint8Array> {
   const ds = new DecompressionStream('deflate-raw');
   const writer = ds.writable.getWriter();
   const reader = ds.readable.getReader();
-  writer.write(compressed as Uint8Array<ArrayBuffer>);
-  writer.close();
+  // These reject only when the read below is cancelled, which throws its own error.
+  writer.write(compressed as Uint8Array<ArrayBuffer>).catch(() => {});
+  writer.close().catch(() => {});
   const chunks: Uint8Array[] = [];
   let totalLen = 0;
   for (;;) {
@@ -19,6 +20,10 @@ async function inflateRaw(compressed: Uint8Array): Promise<Uint8Array> {
     if (done) break;
     chunks.push(value);
     totalLen += value.byteLength;
+    if (totalLen > maxBytes) {
+      await reader.cancel();
+      throw new RangeError(`npz: an entry inflates past the ${maxBytes} bytes this host allows`);
+    }
   }
   const result = new Uint8Array(totalLen);
   let offset = 0;
@@ -173,6 +178,11 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
     throw new Error(`Unsupported numpy dtype: ${descr}`);
   }
 
+  // The numeric branches size the data from the bytes, so the header could claim anything.
+  const expected = shape.reduce((a, b) => a * b, 1);
+  if (!shape.every((d) => Number.isSafeInteger(d) && d >= 0) || float32Data.length !== expected) {
+    throw new Error(`npz: shape (${shape}) expects ${expected} values, the data holds ${float32Data.length}`);
+  }
   return { shape, data: float32Data };
 }
 
@@ -223,9 +233,13 @@ function swapEndianBI64(
   return out;
 }
 
-/** Parse an NPZ archive (raw bytes) into Float32Arrays for each contained .npy. */
-export async function loadNpz(arrayBuffer: ArrayBuffer): Promise<NpzData> {
+/**
+ * Parse an NPZ archive (raw bytes) into Float32Arrays for each contained .npy, inflating
+ * no more than `maxInflatedBytes` across its entries.
+ */
+export async function loadNpz(arrayBuffer: ArrayBuffer, maxInflatedBytes = Infinity): Promise<NpzData> {
   const bytes = new Uint8Array(arrayBuffer);
+  let inflated = 0;
 
   const result: NpzData = {};
   let offset = 0;
@@ -297,7 +311,8 @@ export async function loadNpz(arrayBuffer: ArrayBuffer): Promise<NpzData> {
     if (compressionMethod === 0) {
       npyBytes = rawEntry;
     } else if (compressionMethod === 8) {
-      npyBytes = await inflateRaw(rawEntry);
+      npyBytes = await inflateRaw(rawEntry, maxInflatedBytes - inflated);
+      inflated += npyBytes.byteLength;
     } else {
       console.warn(`[NPZ] Unsupported compression method ${compressionMethod} for ${fileName}`);
       continue;

@@ -468,3 +468,20 @@ describe('TrackingCommand rate', () => {
     await expect(term.setSelectedMotion('walk')).rejects.toThrow(/fps/);
   });
 });
+
+describe('TrackingCommand clip shape', () => {
+  it('refuses an array whose frames hold nothing', async () => {
+    const context = { mujoco: {}, mjModel: null, mjData: null, scene: new THREE.Scene() } as unknown as CommandTermContext;
+    const walk = {
+      name: 'walk',
+      data: await clip(4, { empty: npy([400_000, 0], []) }),
+      fps: 10,
+      anchor_body_name: 'pelvis',
+      body_names: ['pelvis'],
+      frame_fields: ['empty'],
+    };
+    const config = { name: 'TrackingCommand', motions: [walk] } as unknown as CommandConfigEntry;
+    const term = new TrackingCommand('motion', config, context);
+    await expect(term.setSelectedMotion('walk')).rejects.toThrow(/does not match/);
+  });
+});

@@ -14,6 +14,7 @@
 
 import { CommandDelay, resolveDelays, type DelayConfigEntry, type DelayRng } from './commandDelay';
 import { compileNamePattern } from '../policy/namePattern';
+import { BufferBudget } from '../policy/bufferBudget';
 
 type MjModel = import('mujoco').MjModel;
 type MjData = import('mujoco').MjData;
@@ -144,14 +145,16 @@ export function substepOptions(
   targetNames: readonly string[],
   termKey: string,
   rng: DelayRng,
+  budget: BufferBudget = new BufferBudget(),
 ): Pick<ResolvedActionTerm, 'rampFrom' | 'holdS' | 'holding' | 'delays'> {
   return {
     rampFrom: entry.interpolate === true ? new Float32Array(targetNames.length) : null,
     holdS: typeof entry.hold_s === 'number' ? entry.hold_s : null,
     holding: false,
-    delays: resolveDelays(entry.delay, targetNames, termKey).map(
-      (spec) => new CommandDelay(spec, rng),
-    ),
+    delays: resolveDelays(entry.delay, targetNames, termKey).map((spec) => {
+      budget.reserve(spec.maxLag + 1, spec.indices.length, `action "${termKey}" delay`);
+      return new CommandDelay(spec, rng);
+    }),
   };
 }
 

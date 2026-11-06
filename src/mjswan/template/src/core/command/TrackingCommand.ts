@@ -49,14 +49,19 @@ function normalizeQuat(quat: ArrayLike<number>): Float32Array {
 function splitFrames(entry: NpzEntry): Float32Array[] {
   const totalFrames = entry.shape[0] ?? 0;
   const width = entry.shape.length <= 1 ? 1 : entry.shape.slice(1).reduce((acc, v) => acc * v, 1);
+  // Frames come from the values the clip carries, never from its header alone.
+  if (
+    !Number.isSafeInteger(totalFrames) ||
+    !Number.isSafeInteger(width) ||
+    totalFrames < 0 ||
+    width < 1 ||
+    totalFrames * width !== entry.data.length
+  ) {
+    throw new Error(`Motion array shape (${entry.shape}) does not match its ${entry.data.length} values`);
+  }
   const frames: Float32Array[] = [];
   for (let i = 0; i < totalFrames; i++) {
-    const out = new Float32Array(width);
-    const start = i * width;
-    for (let j = 0; j < width; j++) {
-      out[j] = entry.data[start + j] ?? 0.0;
-    }
-    frames.push(out);
+    frames.push(entry.data.slice(i * width, (i + 1) * width));
   }
   return frames;
 }
@@ -671,7 +676,7 @@ export class TrackingCommand implements CommandTerm {
       throw new Error(`Motion '${config.name}' has fps ${config.fps}; expected a positive rate up to ${MAX_MOTION_FPS}.`);
     }
     this.sampleHz = config.fps;
-    const npz = await loadNpz(await resolveBytes(config.data));
+    const npz = await loadNpz(await resolveBytes(config.data), this.context.maxInflatedBytes);
     const empty: Float32Array[] = [];
     const frameFields = new Map<string, Float32Array[]>();
     for (const name of config.frame_fields ?? []) {
