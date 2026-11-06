@@ -244,6 +244,8 @@ reset events and two terminations:
 dist/
 ├── manifest.json                        # the one descriptor: format, version, projects → scenes → mdps / policies
 └── mjlab_tasks/                         # <project-id>
+    ├── licenses/
+    │   └── LICENSE.unitree_g1           # the robot's license (ADR 0007), once a project
     └── mjlab_velocity_flat_unitree_g1/  # <scene-id>
         ├── scene.mjz                    # the MuJoCo model
         ├── mdp/mdp_0/                   # the run's MDP, traced once for all eleven checkpoints
@@ -253,10 +255,9 @@ dist/
         │   └── event/
         │       ├── reset_base.onnx
         │       └── reset_robot_joints.onnx
-        ├── policy/
-        │   ├── model_1000.onnx          # the trained network, one per checkpoint
-        │   └── …
-        └── LICENSE.unitree_g1           # the robot's license (ADR 0007)
+        └── policy/
+            ├── model_1000.onnx          # the trained network, one per checkpoint
+            └── …
 ```
 
 The manifest's scene entry lists the MDPs and the policies; each policy entry names its

@@ -25,20 +25,29 @@ simulation with its own pinned copy of the engine, loaded from a CDN.
 | traced graphs (`mdp/<mdp-id>/{obs,term,command,event}/`) | |
 | `assets/<motion-id>.npz`, `assets/<splat-id>.spz`, `.ply` colliders | |
 | `assets/<skin-id>.vrm`, `assets/<skin-id>.glb` | |
-| `<project-id>/LICENSE`, `NOTICE` and each scene's `LICENSE.<component>`, `NOTICE.<component>` (64 KB each at most) | the root `LICENSE` and `THIRD_PARTY_LICENSES.md`, the engine's own |
+| `<project-id>/LICENSE`, `NOTICE` and `<project-id>/licenses/` (64 KB each at most) | the root `LICENSE` and `THIRD_PARTY_LICENSES.md`, the engine's own |
 
 What travels is exactly the [simulation document](../getting-started/core-concepts.md#output-structure),
 so a `.swn` written by `app.save_document()` publishes the same file set as the directory
 it came from: `mjswan publish sim.swn`.
 
-Limits: see "Service limits" in the [mjswan Cloud Terms](https://mjswan.com/terms).
+Limits: see "Service limits" in the [mjswan Cloud Terms](https://mjswan.com/terms). They
+count what the build holds, each scene's `.mjz` unpacked, and a file two scenes share once.
+
+Cloud keeps every file once, under the SHA-256 of its bytes, so `publish` sends only what
+Cloud does not hold yet: publishing a build again, or one that shares meshes, policies or
+clips with any simulation on Cloud, sends only what is new. A scene's `.mjz` travels as its
+files, and a policy as pieces cut at its larger weight tensors, so a retrained policy sends
+only the layers that changed. Cloud checks every piece's SHA-256 before it publishes
+anything (`Checking n of m piece(s)…`), and a piece that changed or was damaged on the way
+stops the whole upload.
 
 Cloud takes `.mjz` scenes only, so `mjswan publish` refuses a build with a scene added
 as `add_scene(model=...)` (a `.mjb`). Add it with `spec=` to publish it.
 
 Before the first byte moves, `publish` prints every license file it will carry with the
 license it identifies, `demo/LICENSE (Apache-2.0)` or
-`demo/go2/LICENSE.unitree_go2 (BSD-3-Clause)`, so nothing travels unseen. A file under a
+`demo/licenses/LICENSE.unitree_go2 (BSD-3-Clause)`, so nothing travels unseen. A file under a
 *restricted* license (Creative Commons NC / SA / ND, the GPL family) earns a warning naming
 the clause; the publish goes ahead, and the responsibility is yours. A file whose terms
 forbid redistribution (the Max Planck research license behind SMPL and AMASS, Universal
@@ -67,8 +76,8 @@ A skin is uploaded as it was bundled, and checked the way Cloud checks it at com
 - A VRM for non-commercial use only earns a warning, and its page says so.
 
 A `.glb` carries its license as any other component does: `SkinConfig.license` and
-`notice` become `LICENSE.skin-<id>` and `NOTICE.skin-<id>` beside the scene, checked like
-the files above. From Python, `publish_dist(..., attest=...)` is asked the same question,
+`notice` become `LICENSE.skin-<id>` and `NOTICE.skin-<id>` in the project's `licenses/`,
+checked like the files above. From Python, `publish_dist(..., attest=...)` is asked the same question,
 once per such VRM, with the file and its terms.
 
 !!! warning "Custom-TS builds are rejected"

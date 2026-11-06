@@ -226,7 +226,7 @@ def add_scene_hf(
 ) -> SceneHandle
 ```
 
-Add a scene whose MJCF and assets come from a Hugging Face Hub repository. MuJoCo resolves meshes and textures relative to the XML, so its whole directory is downloaded (for an XML at the root, the whole repository) and the spec is compiled where it lands. It is then added as by [`add_scene`](#projecthandleadd_scene) with `spec=`, license detection included: a `LICENSE` beside the model or its meshes is copied into the scene directory as `LICENSE.<component>`, named after its directory, or after the repository at the root. Needs the `hf` extra.
+Add a scene whose MJCF and assets come from a Hugging Face Hub repository. MuJoCo resolves meshes and textures relative to the XML, so its whole directory is downloaded (for an XML at the root, the whole repository) and the spec is compiled where it lands. It is then added as by [`add_scene`](#projecthandleadd_scene) with `spec=`, license detection included: a `LICENSE` beside the model or its meshes is copied into the project's `licenses/` as `LICENSE.<component>`, named after its directory, or after the repository at the root. Needs the `hf` extra.
 
 **Parameters**
 
@@ -527,7 +527,7 @@ def add_skin(name: str, config: SkinConfig) -> SkinHandle
 
 Add a rigged character (a `.vrm`, or a `.glb`), posed every frame from the robot's bodies, to the scene's **Skin** menu (ADR 0010). The scene's physics, collision and policy are unchanged: the skin's spring bones (hair, a tail) swing by three-vrm, or with `mujoco_springs` in a MuJoCo model of their own, and the scene's model sees neither. A scene may carry several skins; the viewer shows one at a time, the first added by default, and the menu can clear it. `name` is shown in the menu; its id, `name2id(name)`, is unique within the scene (a clash is suffixed, with a warning) and is the `?skin=` value that opens the scene on it.
 
-The skin is resolved here, so a mistake surfaces at once: a URL `source` is downloaded, the file is checked, every bone is found in it and every body in the scene's model, and its rest offsets, root height and hips placement are measured against the robot at `rest_pose`. A missing file raises `FileNotFoundError`, a URL that does not download `urllib.error.URLError`, and anything that does not fit `ValueError`: a `.gltf` (export it as glTF Binary), a file pointing outside itself, a compressed one (Draco, meshopt, KTX2/Basis: export it again without compression), a bone, node, body, joint or keyframe that is not there. The build copies the file unmodified to `assets/<skin-id>.vrm` or `.glb`, so a VRM's embedded license ships as its author wrote it; a `.glb`'s `license` and `notice` are written beside the scene as `LICENSE.skin-<skin-id>` and `NOTICE.skin-<skin-id>`. With `hide_robot`, Debug Viz lists an **Xray** switch that draws the robot see-through over the skin, and `?xray=1` opens with it on; Debug Viz's **Enabled** hides it, never the skin. See [`SkinConfig`](#skinconfig).
+The skin is resolved here, so a mistake surfaces at once: a URL `source` is downloaded, the file is checked, every bone is found in it and every body in the scene's model, and its rest offsets, root height and hips placement are measured against the robot at `rest_pose`. A missing file raises `FileNotFoundError`, a URL that does not download `urllib.error.URLError`, and anything that does not fit `ValueError`: a `.gltf` (export it as glTF Binary), a file pointing outside itself, a compressed one (Draco, meshopt, KTX2/Basis: export it again without compression), a bone, node, body, joint or keyframe that is not there. The build copies the file unmodified to `assets/<skin-id>.vrm` or `.glb`, so a VRM's embedded license ships as its author wrote it; a `.glb`'s `license` and `notice` are written to the project's `licenses/` as `LICENSE.skin-<skin-id>` and `NOTICE.skin-<skin-id>`. With `hide_robot`, Debug Viz lists an **Xray** switch that draws the robot see-through over the skin, and `?xray=1` opens with it on; Debug Viz's **Enabled** hides it, never the skin. See [`SkinConfig`](#skinconfig).
 
 **Returns:** `SkinHandle`
 
@@ -561,8 +561,9 @@ def add_attribution(
 
 Declare a third-party component this scene contains
 ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)).
-Written to the scene directory as `LICENSE.<component>` and `NOTICE.<component>`, and shown
-on mjswan Cloud beside the work's own license. `add_scene(spec=...)` detects these for a
+Written to the project's `licenses/` as `LICENSE.<component>` and `NOTICE.<component>`, once
+however many scenes carry the same text (another text under the same name becomes `-2`,
+`-3`, …), and shown on mjswan Cloud beside the work's own license. `add_scene(spec=...)` detects these for a
 model with a `LICENSE` beside it or its meshes on disk; `add_scene_mjlab` falls back to a
 known-assets table by task id. Motion clips and policy weights have no file to detect and
 are only ever declared here. A component already declared, by detection or an earlier
@@ -1427,7 +1428,10 @@ dist/
 └── <project-id>/            ← name2id(project name), e.g. my_robots/
     ├── LICENSE                ← the work's license, when declared (Builder / add_project / set_license)
     ├── NOTICE                 ← the work's notice, when declared (set_notice)
-    └── <scene-id>/          ← name2id(scene name)
+    ├── licenses/
+    │   ├── LICENSE.<component>    ← a third-party component's license (detected or add_attribution), once a text
+    │   └── NOTICE.<component>     ← its notice
+    └── <scene-id>/          ← name2id(scene name); never `licenses`
         ├── scene.mjz              ← or scene.mjb (depending on add_scene argument)
         ├── mdp/<mdp-id>/          ← one per MdpConfig: its name, its policy's id, or mdp_0, mdp_1, …
         │   ├── obs/<group>.onnx       ← traced observation group, usually one fused graph (actor.onnx)
@@ -1435,12 +1439,10 @@ dist/
         │   ├── command/<name>.onnx
         │   └── event/<name>.onnx      ← the MDP's events
         ├── policy/<policy-id>.onnx    ← the trained network, one per policy
-        ├── assets/
-        │   ├── <motion-id>.npz        ← one per distinct clip, shared by the scene's policies
-        │   ├── <splat-id>.spz         ← only when source= is used
-        │   └── <skin-id>.vrm | .glb   ← only with add_skin, copied unmodified
-        ├── LICENSE.<component>        ← a third-party component's license (detected or add_attribution)
-        └── NOTICE.<component>         ← its notice
+        └── assets/
+            ├── <motion-id>.npz        ← one per distinct clip, shared by the scene's policies
+            ├── <splat-id>.spz         ← only when source= is used
+            └── <skin-id>.vrm | .glb   ← only with add_skin, copied unmodified
 ```
 
 Copy `dist/` to any static host (GitHub Pages, Netlify, S3, …) and it works without a server.
