@@ -7,9 +7,13 @@ requests or browser windows are made.
 
 from __future__ import annotations
 
+import http.client
 import json
 import stat
+import threading
 import time
+import urllib.parse
+from http.server import HTTPServer
 
 import pytest
 
@@ -495,3 +499,26 @@ class TestWhoamiCli:
         result = self._runner().invoke(app, ["whoami"])
         assert result.exit_code == 1
         assert "verify session" in result.output
+
+
+class TestCallbackPage:
+    def test_shows_the_error_as_text(self):
+        """The query string is anyone's to write while the login waits."""
+        server = HTTPServer(("127.0.0.1", 0), auth._CallbackHandler)
+        server.result = auth._CallbackResult()  # type: ignore[attr-defined]
+        thread = threading.Thread(target=server.handle_request)
+        thread.start()
+        conn = http.client.HTTPConnection(
+            "127.0.0.1", server.server_address[1], timeout=5
+        )
+        try:
+            query = urllib.parse.urlencode({"error": "<b>x</b>"})
+            conn.request("GET", f"{auth.CALLBACK_PATH}?{query}")
+            body = conn.getresponse().read().decode()
+        finally:
+            conn.close()
+            thread.join(5)
+            server.server_close()
+
+        assert "&lt;b&gt;x&lt;/b&gt;" in body
+        assert "<b>x</b>" not in body
