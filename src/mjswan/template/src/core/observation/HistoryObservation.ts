@@ -11,6 +11,7 @@
  */
 
 import { ObservationBase, type ObservationConfig } from './ObservationBase';
+import { MAX_FRAMES } from '../policy/bufferBudget';
 import type { PolicyState } from '../policy/types';
 import type { PolicyRunner } from '../policy/PolicyRunner';
 
@@ -30,10 +31,17 @@ export function writeInterleavedFrame(
 export function historyOffsets(entry: ObservationConfig): number[] | null {
   const sparse = (entry as { history_offsets?: unknown }).history_offsets;
   if (Array.isArray(sparse)) {
+    if (sparse.length > MAX_FRAMES) {
+      throw new Error(`Observation "${entry.name}" declares ${sparse.length} history offsets; the limit is ${MAX_FRAMES}.`);
+    }
     const offsets = sparse.map((value) => Math.max(0, Math.trunc(Number(value) || 0)));
     return offsets.length > 0 ? offsets : null;
   }
   const length = Math.trunc(Number((entry as { history_length?: unknown }).history_length) || 0);
+  // Checked before the Array.from below, which the declared length would size.
+  if (length > MAX_FRAMES) {
+    throw new Error(`Observation "${entry.name}" declares history_length ${length}; the limit is ${MAX_FRAMES}.`);
+  }
   if (length <= 1) return null;
   // Oldest frame first, as mjlab's `CircularBuffer.buffer` flattens it.
   return Array.from({ length }, (_, i) => length - 1 - i);

@@ -75,6 +75,7 @@ import { nextDeadline } from './stepDeadline';
 import { yieldToBrowser } from './yieldToBrowser';
 import { TerminationManager } from '../termination/TerminationManager';
 import * as ort from 'onnxruntime-web/wasm';
+import { BufferBudget } from '../policy/bufferBudget';
 import { PolicyRunner } from '../policy/PolicyRunner';
 import { OnnxModule } from '../policy/OnnxModule';
 import { PolicyStateBuilder } from '../policy/PolicyStateBuilder';
@@ -1490,7 +1491,8 @@ export class mjswanRuntime {
       this.clipActions = readClipActions(config.clip_actions);
       const structured = collectStructuredSensors(config);
       this.raycastSensors = structured.raycast;
-      this.contactSensors = new ContactSensorSet(structured.contact);
+      const budget = new BufferBudget();
+      this.contactSensors = new ContactSensorSet(structured.contact, budget);
       this.debugVizSet.load(config.debug_vis, this.mujoco, this.mujocoRoot ?? this.scene);
       // Metadata comes from policy.json, bytes from the app; merge them by name.
       if (Array.isArray(config.motions)) {
@@ -1525,6 +1527,7 @@ export class mjswanRuntime {
           rng: this.termRng,
           onnxSessions: this.policyGraphs,
           readOnnxSlot: this.readOnnxSlot,
+          maxInflatedBytes: this.archive?.maxInflatedBytes,
         });
         const motionTerm = this.commandManager.getTerm('motion');
         if (isMotionCommandTerm(motionTerm)) {
@@ -1555,6 +1558,7 @@ export class mjswanRuntime {
         motions: policy.motions,
         onnxSessions: this.policyGraphs,
         readOnnxSlot: this.readOnnxSlot,
+        budget,
       });
 
       await runner.init({
@@ -1579,7 +1583,7 @@ export class mjswanRuntime {
       // The rest of the first reset, in mjlab's order: observations, actions, then commands.
       const state = this.policyStateBuilder.build();
       this.policyRunner.reset(state);
-      const actions = this.buildActionManager(config, runner, this.policyStateBuilder);
+      const actions = this.buildActionManager(config, runner, this.policyStateBuilder, budget);
       await actions?.reset();
       // Before the commands' reset, which can read an action term.
       this.actionManager = actions;
@@ -1634,7 +1638,8 @@ export class mjswanRuntime {
   private buildActionManager(
     config: PolicyConfig,
     runner: PolicyRunner,
-    stateBuilder: PolicyStateBuilder
+    stateBuilder: PolicyStateBuilder,
+    budget: BufferBudget,
   ): ActionManager | null {
     const jointNames = runner.getPolicyJointNames();
     const targetActuator = this.targetActuatorTest();
@@ -1718,7 +1723,7 @@ export class mjswanRuntime {
         clipHi,
         processed: new Float32Array(n),
         active: false,
-        ...substepOptions(actionTerm, subsetJointNames, termKey, this.termRng),
+        ...substepOptions(actionTerm, subsetJointNames, termKey, this.termRng, budget),
       };
     };
 

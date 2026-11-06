@@ -20,6 +20,7 @@ import {
 } from '../observation/OnnxObservation';
 import type { OnnxSessionCache, SlotReader } from '../onnx/session';
 import { type Bytes, resolveBytes } from '../utils/bytes';
+import { BufferBudget } from './bufferBudget';
 import { PolicyModule } from './PolicyModule';
 import type {
   ObservationConfigEntry,
@@ -61,11 +62,14 @@ export type PolicyRunnerOptions = {
   /** The loaded graphs and slot reader traced observations need; absent if none. */
   onnxSessions?: OnnxSessionCache;
   readOnnxSlot?: SlotReader;
+  /** Shared with the same policy load's delay and contact rings. */
+  budget?: BufferBudget;
 };
 
 export class PolicyRunner {
   private config: PolicyConfig;
   private options: PolicyRunnerOptions;
+  private budget = new BufferBudget();
   private policyModule: PolicyModule | null;
   private obsGroups: Record<string, ObservationBase[]>;
   private obsLayouts: Record<string, { name: string; size: number }[]>;
@@ -293,6 +297,7 @@ export class PolicyRunner {
   }
 
   private buildObservationGroups(): void {
+    this.budget = this.options.budget ?? new BufferBudget();
     const registry = this.options.observations ?? {};
     const obsConfig = this.config.observations ?? {};
     this.obsGroups = {};
@@ -325,7 +330,9 @@ export class PolicyRunner {
         isOnnxObservationConfig(entry) || isNativeObservationConfig(entry)
           ? historyOffsets(entry)
           : null;
-      return offsets ? new HistoryObservation(this, entry, base, offsets) : base;
+      if (!offsets) return base;
+      this.budget.reserve(Math.max(...offsets) + 1, base.size, `observation "${entry.name}" history`);
+      return new HistoryObservation(this, entry, base, offsets);
     };
 
     for (const [key, value] of Object.entries(obsConfig)) {
@@ -417,6 +424,7 @@ export class PolicyRunner {
         }));
     const baseSize = this.obsLayouts[key].reduce((sum, entry) => sum + entry.size, 0);
     if (history && history.steps > 1) {
+      this.budget.reserve(history.steps, baseSize, `observation group "${key}" history`);
       this.historyConfig[key] = history;
       this.historyBuffers[key] = new Float32Array(baseSize * history.steps);
       this.obsSizes[key] = baseSize * history.steps;

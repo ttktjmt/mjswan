@@ -7,6 +7,8 @@
  * mjlab's `scene.update(dt=physics_dt)` does — hence `advance()` from the step loop.
  */
 
+import { BufferBudget } from '../policy/bufferBudget';
+
 type MjModel = import('mujoco').MjModel;
 type MjData = import('mujoco').MjData;
 
@@ -127,8 +129,17 @@ class ContactSensorReader {
 export class ContactSensorSet {
   private readonly readers = new Map<string, ContactSensorReader>();
 
-  constructor(descriptors: Record<string, ContactSensorDescriptor> = {}) {
+  constructor(descriptors: Record<string, ContactSensorDescriptor> = {}, budget = new BufferBudget()) {
     for (const [name, descriptor] of Object.entries(descriptors)) {
+      // advance() keeps n * h frames of dim per history field and rolls them every substep.
+      if (descriptor.history_length > 0) {
+        for (const field of descriptor.history_fields ?? []) {
+          const spec = descriptor.fields[field];
+          if (!spec) continue;
+          const n = (spec.sensors?.length ?? 0) * descriptor.num_slots;
+          budget.reserve(n * descriptor.history_length, spec.dim, `contact sensor "${name}" ${field} history`);
+        }
+      }
       this.readers.set(name, new ContactSensorReader(descriptor));
     }
   }

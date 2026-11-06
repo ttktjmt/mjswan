@@ -1303,6 +1303,15 @@ shortcuts.
   `from_mjlab(run_path=...)`, could run code on the machine that builds. Both now read it
   with `weights_only=True` before the runner loads it, and refuse a checkpoint that names
   a global outside torch's allowlist. rsl_rl and mjlab checkpoints export as before.
+- **A document's declared sizes no longer decide how much the viewer allocates.** A
+  motion `.npz` array was split into as many frames as its header claimed, whatever data
+  it held, and its DEFLATE entries inflated without a limit; observation histories,
+  group histories, command delays and contact histories were each allocated at the
+  length the manifest declared. A few hundred bytes could exhaust the tab's heap. A
+  numeric array's header must now match its data, a frame must hold at least one value,
+  a motion inflates no more than the host's `ArchiveLimits.maxInflatedBytes`, and every
+  ring a policy load allocates draws on one budget (10000 frames per ring, about 64 MB
+  in all).
 - **The first engine build runs nodeenv in the template directory.** `python -m nodeenv`
   and its pip fallback ran in the working directory, so a `nodeenv.py` there ran in their
   place and a `setup.cfg` or `tox.ini` there could redirect the Node.js download, when
