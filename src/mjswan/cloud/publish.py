@@ -633,7 +633,9 @@ def publish_dist(
                         resolve_token(token),
                     )
                     _raise_for_status(verify_resp, "verify")
-                    remaining = _parse_json(verify_resp, "verify")["remaining"]
+                    remaining = _remaining(
+                        _parse_json(verify_resp, "verify"), remaining
+                    )
 
             def commit_upload() -> HttpResponse:
                 notify("Committing…")
@@ -676,6 +678,7 @@ def _send(
 ) -> None:
     """``PUT`` each piece or text upload-session asked for, a few at a time."""
     for upload in uploads:
+        _check_upload(upload)
         if upload["sha256"] not in pieces:
             raise PublishError(f"Server requested an unknown piece: {upload['sha256']}")
         _check_presigned_url(upload["url"], upload["sha256"])
@@ -695,6 +698,35 @@ def _send(
 
     with ThreadPoolExecutor(UPLOAD_CONCURRENCY) as pool:
         list(pool.map(put, uploads))
+
+
+_UPLOAD_KEYS = ("sha256", "url", "contentType", "cacheControl")
+
+
+def _check_upload(upload: object) -> None:
+    """Refuse a presigned ``PUT`` that lacks what sending it takes."""
+    missing = [
+        key
+        for key in _UPLOAD_KEYS
+        if not isinstance(upload, dict) or not isinstance(upload.get(key), str)
+    ]
+    if missing:
+        raise PublishError(
+            f"mjswan Cloud asked for an upload without {', '.join(missing)}. "
+            "Update mjswan; if it is current, report this."
+        )
+
+
+def _remaining(payload: dict, before: int) -> int:
+    """What verify says is left. Each call moves at least one piece, so a count that
+    does not fall would loop forever."""
+    left = payload.get("remaining")
+    if type(left) is not int or not 0 <= left < before:
+        raise PublishError(
+            f"verify answered remaining={left!r} with {before} piece(s) left to "
+            "check. Publish again; if it persists, report this."
+        )
+    return left
 
 
 def _released(resp: HttpResponse) -> list[dict] | None:

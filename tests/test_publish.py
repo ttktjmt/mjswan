@@ -663,6 +663,51 @@ class TestPublishDist:
             "Checking 4 of 5 piece(s)…",
         ]
 
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            lambda left: {"remaining": left},
+            lambda left: {},
+            lambda left: {"remaining": str(left - 1)},
+            lambda left: {"remaining": -1},
+        ],
+        ids=["stuck", "missing", "a-string", "negative"],
+    )
+    def test_a_verify_count_that_does_not_fall_stops_the_publish(
+        self, tmp_path: Path, answer
+    ):
+        class StuckTransport(FakeTransport):
+            def post_json(self, url, body, token):
+                if url.endswith("/verify"):
+                    self.posts.append((url, body, token))
+                    payload = json.dumps(answer(self._pending)).encode()
+                    return HttpResponse(200, payload)
+                return super().post_json(url, body, token)
+
+        transport = StuckTransport()
+        with pytest.raises(PublishError, match="verify answered"):
+            publish_dist(_make_dist(tmp_path), token="tok", transport=transport)
+        steps = [url.rsplit("/", 1)[-1] for url, _, _ in transport.posts]
+        assert steps == ["upload-session", "verify"]
+
+    @pytest.mark.parametrize("key", ["sha256", "url", "contentType", "cacheControl"])
+    def test_an_upload_without_a_field_is_refused_before_any_put(
+        self, tmp_path: Path, key: str
+    ):
+        class PartialTransport(FakeTransport):
+            def post_json(self, url, body, token):
+                resp = super().post_json(url, body, token)
+                if url.endswith("/upload-session"):
+                    payload = resp.json()
+                    del payload["uploads"][-1][key]
+                    return HttpResponse(200, json.dumps(payload).encode())
+                return resp
+
+        transport = PartialTransport()
+        with pytest.raises(PublishError, match=f"without {key}"):
+            publish_dist(_make_dist(tmp_path), token="tok", transport=transport)
+        assert transport.puts == []
+
     def test_only_what_the_platform_lacks_is_sent(self, tmp_path: Path):
         from mjswan.cloud.blob import sha256
 
