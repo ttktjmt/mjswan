@@ -802,7 +802,7 @@ class TestBuild:
         assert entry["material"] == {"toon": {"shade": 0.5, "toony": 0.5, "shift": 0.0}}
         assert entry["hide_robot"] is False and entry["mujoco_springs"] is True
 
-    def test_a_glb_carries_its_license_beside_it(
+    def test_a_glb_carries_its_license_in_the_projects_licenses(
         self, tmp_path, robot, glb, build_manifest
     ):
         builder = Builder()
@@ -819,9 +819,9 @@ class TestBuild:
         )
         out = tmp_path / "out"
         build_manifest(builder, out)
-        assert "CC0" in (out / "p" / "s" / "LICENSE.skin-doll").read_text()
+        assert "CC0" in (out / "p" / "licenses" / "LICENSE.skin-doll").read_text()
         assert (
-            out / "p" / "s" / "NOTICE.skin-doll"
+            out / "p" / "licenses" / "NOTICE.skin-doll"
         ).read_text().strip() == "Doll by mjswan."
 
     def test_every_skin_is_credited_with_its_own_terms(
@@ -849,9 +849,9 @@ class TestBuild:
         assert credits["skin-doll"] == {
             "component": "skin-doll",
             "skin": "doll",
-            "license": "LICENSE.skin-doll",
+            "license": "../licenses/LICENSE.skin-doll",
             "spdx": "CC0-1.0",
-            "notice": "NOTICE.skin-doll",
+            "notice": "../licenses/NOTICE.skin-doll",
         }
         assert credits["skin-sample"] == {
             "component": "skin-sample",

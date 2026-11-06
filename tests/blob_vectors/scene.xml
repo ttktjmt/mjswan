@@ -1,0 +1,8 @@
+<mujoco model="pendulum">
+  <worldbody>
+    <body name="pole" pos="0 0 1">
+      <joint name="hinge" type="hinge" axis="0 1 0"/>
+      <geom type="capsule" fromto="0 0 0 0 0 -0.5" size="0.02"/>
+    </body>
+  </worldbody>
+</mujoco>

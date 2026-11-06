@@ -19,7 +19,7 @@ from .spdx import Tier, display_name, generate_license_text, identify_license
 class Attribution:
     """One third-party component of a scene and the files that travel with it.
 
-    Written by the build as ``<project>/<scene>/LICENSE.<component>`` and
+    Written by the build as ``<project>/licenses/LICENSE.<component>`` and
     ``NOTICE.<component>``; either may be absent, not both.
     """
 
@@ -36,7 +36,7 @@ class Attribution:
         return identify_license(self.license.decode("utf-8", "replace")).spdx
 
     def files(self) -> dict[str, bytes]:
-        """What the scene directory gets, by basename."""
+        """Its files' texts, by basename before any ``-n`` the build numbers them with."""
         out: dict[str, bytes] = {}
         if self.license is not None:
             out[f"LICENSE.{self.component}"] = self.license

@@ -144,6 +144,7 @@ include = ["src/mjswan"]
 exclude = ["typings", "**/.dep", "**/node_modules", "**/dist", "./src/mjswan/template/.nodeenv"]
 
 [tool.ruff]
+extend-exclude = ["tests/blob_vectors"]
 lint.select = [
     "E",  # pycodestyle errors.
     "F",  # Pyflakes rules.

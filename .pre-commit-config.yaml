@@ -1,3 +1,6 @@
+# A copy of mjswan Cloud's cutter test files: hashed byte for byte, so no hook touches them.
+exclude: '^tests/blob_vectors/'
+
 default_language_version:
   python: python3
 

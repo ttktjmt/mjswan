@@ -369,8 +369,8 @@ class SceneConfig:
     """Additional metadata for the scene."""
 
     attributions: list[Attribution] = field(default_factory=list, repr=False)
-    """The third-party components this scene contains, each written to the scene
-    directory as ``LICENSE.<component>`` / ``NOTICE.<component>`` (ADR 0007 §2)."""
+    """The third-party components this scene contains, each written to the project's
+    ``licenses/`` as ``LICENSE.<component>`` / ``NOTICE.<component>`` (ADR 0007 §2)."""
 
     splats: list[SplatConfig] = field(default_factory=list)
     """Gaussian Splat backgrounds available for this scene."""
@@ -1681,8 +1681,8 @@ class SceneHandle:
         shows one skin at a time, the first added by default. A URL source is downloaded
         now, and the build bundles the file unmodified as ``assets/<id>.vrm`` or
         ``assets/<id>.glb``, so a VRM's embedded license metadata travels with it; a
-        ``.glb``'s ``license`` and ``notice`` are written beside the scene as
-        ``LICENSE.skin-<id>`` and ``NOTICE.skin-<id>``. The file, the bone map and
+        ``.glb``'s ``license`` and ``notice`` are written to the project's ``licenses/``
+        as ``LICENSE.skin-<id>`` and ``NOTICE.skin-<id>``. The file, the bone map and
         ``rest_pose`` are checked against the scene's model here rather than at
         playback, and the rest pose and hips are measured from it.
 
@@ -1762,8 +1762,9 @@ class SceneHandle:
     ) -> SceneHandle:
         """Declare a third-party component this scene contains (ADR 0007 §2).
 
-        Written to the scene directory as ``LICENSE.<component>`` and
-        ``NOTICE.<component>``, and shown on mjswan Cloud beside the work's own license.
+        Written to the project's ``licenses/`` as ``LICENSE.<component>`` and
+        ``NOTICE.<component>``, once however many scenes carry the same text, and shown
+        on mjswan Cloud beside the work's own license.
         Motion clips and policy weights are only ever declared this way: there is no
         file on disk to detect them from. A component already declared, by detection or
         an earlier call, is replaced.

@@ -1,6 +1,7 @@
 """What ``Builder.build()`` does: write the engine and the expanded document as one app.
 
-Output structure (ADR 0006 §2, license files ADR 0007 §1)::
+Output structure (ADR 0006 §2; license files ADR 0007 §1, gathered in ``licenses/`` by
+mjswan-cloud ADR 0017 §2.7)::
 
     dist/
     ├── index.html, logo.svg, robots.txt
@@ -9,12 +10,13 @@ Output structure (ADR 0006 §2, license files ADR 0007 §1)::
     ├── manifest.json      (the one descriptor; every key snake_case)
     └── <project-id>/
         ├── LICENSE, NOTICE            (the work's, when declared)
+        ├── licenses/
+        │   └── LICENSE.<component>, NOTICE.<component>  (third-party, once per text)
         └── <scene-id>/
             ├── scene.mjz | scene.mjb
             ├── mdp/<mdp-id>/{obs,term,command,event}/<name>.onnx
             ├── policy/<policy-id>.onnx
-            ├── assets/    (<motion>.npz, <splat>.spz, <skin>.vrm | .glb)
-            └── LICENSE.<component>, NOTICE.<component>  (third-party)
+            └── assets/    (<motion>.npz, <splat>.spz, <skin>.vrm | .glb)
 """
 
 from __future__ import annotations
@@ -39,6 +41,7 @@ from ..envs.mdp.actions.actions import (
     MuscleActivationActionCfg,
     validate_muscle_actuators,
 )
+from ..license import LICENSES_DIR
 from ..mjlab.env import mdp_episode_length
 from .asset import (
     point_env_cfg_at_bundled_motion,
@@ -46,6 +49,7 @@ from .asset import (
     write_scene_skins,
     write_scene_splats,
 )
+from .credit import license_names
 from .frontend import TEMPLATE_DIR, ClientBuilder, install_spa, uses_custom_js
 from .manifest import load_sidecar, mdp_entry, policy_entry, scene_entry, write_manifest
 from .mjz import collect_spec_assets, to_zip_deflated
@@ -147,14 +151,19 @@ def write_app(
                     if data is not None
                 },
             )
+            licenses = license_names(project)
+            if licenses:
+                (project_dir / LICENSES_DIR).mkdir()
+                _write_license_files(
+                    project_dir / LICENSES_DIR,
+                    {name: text for (_, text), name in licenses.items()},
+                )
             steps = _SceneSteps(progress)
             for scene in project.scenes:
                 progress.update(task, scene=scene.name)
                 scene_dir = project_dir / scene.id
                 scene_dir.mkdir(parents=True, exist_ok=True)
                 scene_path = scene_dir / scene.scene_filename
-                for attribution in scene.attributions:
-                    _write_license_files(scene_dir, attribution.files())
 
                 # First: the conversion is what creates this scene's policies (and
                 # hands over its export env as the trace env).
@@ -245,7 +254,7 @@ def write_app(
                     )
 
                 scene_entries[(project.id, scene.id)] = scene_entry(
-                    scene, mdp_entries, policy_entries
+                    scene, mdp_entries, policy_entries, licenses
                 )
                 progress.advance(task)
             steps.close()

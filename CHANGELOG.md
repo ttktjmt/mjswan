@@ -408,6 +408,27 @@ shortcuts.
 
 ### Changed
 
+- **`mjswan publish` sends only what mjswan Cloud does not hold yet.** Cloud keeps every
+  file once, under the SHA-256 of its bytes (mjswan-cloud ADR 0017), so `publish` now sends
+  a file map: each scene's `.mjz` as its entries, each `.onnx` cut before every tensor of
+  32 KiB or more and before its metadata, any piece over 16 MiB cut by its content, and
+  each license file as the hash of its text. It `PUT`s only the pieces Cloud asks for, waits
+  while Cloud checks each one's SHA-256 (`Checking n of m piece(s)…`), and commits, sending
+  again a piece another simulation's takedown released meanwhile. Publishing a build again,
+  or one that shares meshes, clips or unchanged policy layers with anything on Cloud, sends
+  only what is new; a retrained policy sends the layers that changed. The caps follow
+  Cloud's: 50 MB a file or `.mjz` entry, 128 MB a build with its scenes unpacked and a
+  shared piece counted once, 1,000 pieces. The cutter (`mjswan.cloud.blob`) is held to
+  Cloud's own test files, copied into `tests/blob_vectors`. Earlier releases send whole
+  files, which Cloud stops taking once its stored simulations have moved.
+
+- **A project's third-party license files sit together in `<project-id>/licenses/`,**
+  each text once, however many scenes carry it. A text under a name another text already
+  has is numbered `-2`, `-3`, … in scene order, and a scene's `credits` point at
+  `../licenses/…`. The scene id `licenses` is kept free: a scene named "Licenses" becomes
+  `licenses_1`. The viewer resolves `..` in a document's paths, so its Credits tab reads
+  both layouts. mjswan Cloud stores a text once across every simulation that carries it.
+
 - **A camera-like raycast casts each frame's rays in one call.** A raycast sensor whose
   rays all leave one point per frame, as mjlab's `PinholeCameraPatternCfg` does, is cast
   with one `mj_multiRay` per frame instead of one `mj_ray` per ray: a call through the

@@ -322,9 +322,11 @@ There are two kinds. `manifest.json` lists both (a project's `work`, a scene's
   `CC-BY-4.0`, `CC0-1.0`) writes the standard text with an `SPDX-License-Identifier`
   tag on its first line; a path copies your own file verbatim.
 
-- **Third-party components**: `<project-id>/<scene-id>/LICENSE.<component>` and
-  `NOTICE.<component>`, one per robot model, motion clip or other asset the scene
-  contains. `add_scene(spec=...)` detects them: any `LICENSE*` / `COPYING*` / `NOTICE*`
+- **Third-party components**: `<project-id>/licenses/LICENSE.<component>` and
+  `NOTICE.<component>`, one per robot model, motion clip or other asset the project's
+  scenes contain, written once however many scenes carry the same text. When two scenes
+  carry different texts under one name, the first scene's keeps it and the others become
+  `-2`, `-3`, … (`NOTICE.walk_policy-2`). `add_scene(spec=...)` detects them: any `LICENSE*` / `COPYING*` / `NOTICE*`
   beside the model file or the directories its meshes resolve to (up to two parents) is
   copied verbatim and named after that directory, so a menagerie model yields
   `LICENSE.unitree_go2`. A model mjswan knows but finds no file for (`add_scene_mjlab`
@@ -369,7 +371,10 @@ dist/
 └── <project-id>/            ← name2id(project name), e.g. my_robots/
     ├── LICENSE                ← the work's license, when declared (see Licenses)
     ├── NOTICE                 ← the work's notice, when declared
-    └── <scene-id>/          ← name2id(scene name)
+    ├── licenses/
+    │   ├── LICENSE.<component>    ← a third-party component the scenes contain, once a text
+    │   └── NOTICE.<component>     ← its notice, if it has one
+    └── <scene-id>/          ← name2id(scene name); never `licenses`
         ├── scene.mjz              ← or scene.mjb
         ├── mdp/<mdp-id>/          ← one per MdpConfig: mdp_0, mdp_1, … or its name
         │   ├── obs/<group>.onnx       ← traced observation group (usually one fused graph)
@@ -377,11 +382,9 @@ dist/
         │   ├── command/<name>.onnx
         │   └── event/<name>.onnx      ← the MDP's events
         ├── policy/<policy-id>.onnx    ← the trained network, one per policy
-        ├── assets/
-        │   ├── <motion-id>.npz        ← one per distinct clip, shared by the scene's policies
-        │   └── <splat-id>.spz         ← only when source= is used
-        ├── LICENSE.<component>        ← one third-party component this scene contains
-        └── NOTICE.<component>         ← its notice, if it has one
+        └── assets/
+            ├── <motion-id>.npz        ← one per distinct clip, shared by the scene's policies
+            └── <splat-id>.spz         ← only when source= is used
 ```
 
 The result is a fully static site: copy `dist/` to any static host (GitHub Pages, Netlify, S3, …) and it works without a server.

@@ -1,33 +1,71 @@
 """A scene's ``credits`` and a project's ``work``: the license files written beside them
 (ADR 0007), named in the manifest because a static host lists no directory. The texts
-stay in the files."""
+stay in the files.
+
+A project's third-party texts sit together in ``<project>/licenses/``, each written once
+(mjswan-cloud ADR 0017 §2.7), so a component every scene carries is one file."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ..license import copyright_line, identify_license, restriction_label
+from ..license import LICENSES_DIR, copyright_line, identify_license, restriction_label
 from ..license.vrm import vrm_license
 
 if TYPE_CHECKING:
     from ..project import ProjectConfig
     from ..scene import SceneConfig
 
+#: ``(LICENSE.<component> or NOTICE.<component>, text)`` -> the file's name in
+#: ``licenses/``.
+LicenseNames = dict[tuple[str, bytes], str]
 
-def _license_fields(name: str, data: bytes) -> dict[str, str]:
+
+def license_names(project: ProjectConfig) -> LicenseNames:
+    """The name each third-party text is written under: its component's, once per text.
+    When two texts share a name, the first in scene order keeps it and the others take
+    ``-2``, ``-3``, … in scene order, passing over a name another component has."""
+    variants: dict[str, list[bytes]] = {}
+    for scene in project.scenes:
+        for attribution in scene.attributions:
+            for name, text in attribution.files().items():
+                texts = variants.setdefault(name, [])
+                if text not in texts:
+                    texts.append(text)
+    taken = set(variants)
+    names: LicenseNames = {}
+    for name, texts in variants.items():
+        names[(name, texts[0])] = name
+        n = 2
+        for text in texts[1:]:
+            while (numbered := _numbered(name, n)) in taken:
+                n += 1
+            taken.add(numbered)
+            names[(name, text)] = numbered
+    return names
+
+
+def _numbered(name: str, n: int) -> str:
+    """``name`` with ``-n``, its component shortened to stay within 64 characters."""
+    kind, component = name.split(".", 1)
+    suffix = f"-{n}"
+    return f"{kind}.{component[: 64 - len(suffix)]}{suffix}"
+
+
+def _license_fields(path: str, data: bytes) -> dict[str, str]:
     text = data.decode("utf-8", "replace")
     spdx = identify_license(text).spdx
     restriction = restriction_label(spdx)
     holder = copyright_line(text)
     return {
-        "license": name,
+        "license": path,
         "spdx": spdx,
         **({"restriction": restriction} if restriction else {}),
         **({"copyright": holder} if holder else {}),
     }
 
 
-def scene_credits(scene: SceneConfig) -> list[dict[str, Any]]:
+def scene_credits(scene: SceneConfig, names: LicenseNames) -> list[dict[str, Any]]:
     """One entry per third-party component, paths relative to the scene directory. A
     ``skin-<id>`` component belongs to that skin; a VRM skin adds a summary of its
     ``meta``."""
@@ -38,10 +76,16 @@ def scene_credits(scene: SceneConfig) -> list[dict[str, Any]]:
         entry: dict[str, Any] = {"component": component}
         if component in skins:
             entry["skin"] = skins[component].config.id
+        files = {
+            name: f"../{LICENSES_DIR}/{names[(name, text)]}"
+            for name, text in attribution.files().items()
+        }
         if attribution.license is not None:
-            entry.update(_license_fields(f"LICENSE.{component}", attribution.license))
+            entry.update(
+                _license_fields(files[f"LICENSE.{component}"], attribution.license)
+            )
         if attribution.notice is not None:
-            entry["notice"] = f"NOTICE.{component}"
+            entry["notice"] = files[f"NOTICE.{component}"]
         entries[component] = entry
     for component, skin in skins.items():
         if skin.file.vrm_version is None:
@@ -77,4 +121,9 @@ def work_entry(project: ProjectConfig) -> dict[str, Any] | None:
     }
 
 
-__all__ = ["scene_credits", "work_entry"]
+__all__ = [
+    "LicenseNames",
+    "license_names",
+    "scene_credits",
+    "work_entry",
+]

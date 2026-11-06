@@ -20,6 +20,7 @@ from .attribution import (
 from .path import (
     LICENSE_CONTENT_TYPE,
     LICENSE_FILE_MAX_BYTES,
+    LICENSES_DIR,
     LicenseLocation,
     component_id,
     has_license_basename,
@@ -50,6 +51,7 @@ __all__ = [
     "CUSTOM",
     "GENERATABLE_LICENSES",
     "KNOWN_ASSETS",
+    "LICENSES_DIR",
     "LICENSE_CONTENT_TYPE",
     "LICENSE_FILE_MAX_BYTES",
     "Attribution",

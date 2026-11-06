@@ -20,7 +20,6 @@ from mjswan.license import (
     BLOCKED,
     CUSTOM,
     GENERATABLE_LICENSES,
-    LICENSE_CONTENT_TYPE,
     LICENSE_FILE_MAX_BYTES,
     Attribution,
     blocked_refusal,
@@ -484,7 +483,7 @@ class TestBuildOutput:
         with pytest.raises(ValueError, match="neither an SPDX identifier nor a file"):
             Builder().add_project(name="x", license="not a thing")
 
-    def test_attributions_are_written_beside_the_scene(
+    def test_attributions_are_written_to_the_projects_licenses(
         self, tmp_path, minimal_model, build_manifest
     ):
         builder = Builder()
@@ -493,13 +492,73 @@ class TestBuildOutput:
         scene.add_attribution("clip", notice="Retargeted by us.")
         build_manifest(builder, tmp_path / "dist")
 
-        scene_dir = tmp_path / "dist" / "demo" / "humanoid"
-        lafan = (scene_dir / "LICENSE.lafan1").read_text()
+        licenses = tmp_path / "dist" / "demo" / "licenses"
+        lafan = (licenses / "LICENSE.lafan1").read_text()
         assert lafan.split("\n")[0] == "SPDX-License-Identifier: CC-BY-4.0"
         assert "Copyright (c)" in lafan and "Ubisoft" in lafan
-        assert not (scene_dir / "NOTICE.lafan1").exists()
-        assert (scene_dir / "NOTICE.clip").read_bytes() == b"Retargeted by us.\n"
-        assert not (scene_dir / "LICENSE.clip").exists()
+        assert not (licenses / "NOTICE.lafan1").exists()
+        assert (licenses / "NOTICE.clip").read_bytes() == b"Retargeted by us.\n"
+        assert not (licenses / "LICENSE.clip").exists()
+        scene_dir = tmp_path / "dist" / "demo" / "humanoid"
+        assert not any(
+            p.name.startswith(("LICENSE", "NOTICE")) for p in scene_dir.iterdir()
+        )
+
+    def test_a_text_is_written_once_and_a_name_two_texts_share_is_numbered(
+        self, tmp_path, minimal_model, build_manifest
+    ):
+        builder = Builder()
+        project = builder.add_project(name="Demo")
+        texts = ["Go2-PIE.", "Student.", "Go2-PIE.", "Teacher."]
+        for i, text in enumerate(texts):
+            scene = project.add_scene(name=f"S{i}", model=minimal_model)
+            scene.add_attribution("g1", license="BSD-3-Clause", copyright="Unitree")
+            scene.add_attribution("policy", notice=text)
+        # A component whose own name is the next number keeps it; the text moves on.
+        project.add_scene(name="S4", model=minimal_model).add_attribution(
+            "policy-3", notice="Other."
+        )
+        manifest = build_manifest(builder, tmp_path / "dist")
+
+        licenses = tmp_path / "dist" / "demo" / "licenses"
+        assert sorted(p.name for p in licenses.iterdir()) == [
+            "LICENSE.g1",
+            "NOTICE.policy",
+            "NOTICE.policy-2",
+            "NOTICE.policy-3",
+            "NOTICE.policy-4",
+        ]
+        assert (licenses / "NOTICE.policy-2").read_bytes() == b"Student.\n"
+        assert (licenses / "NOTICE.policy-3").read_bytes() == b"Other.\n"
+        assert (licenses / "NOTICE.policy-4").read_bytes() == b"Teacher.\n"
+        credits = [s["credits"] for s in manifest["projects"][0]["scenes"]]
+        assert [c[0]["license"] for c in credits[:4]] == ["../licenses/LICENSE.g1"] * 4
+        assert [c[1]["notice"] for c in credits[:4]] == [
+            "../licenses/NOTICE.policy",
+            "../licenses/NOTICE.policy-2",
+            "../licenses/NOTICE.policy",
+            "../licenses/NOTICE.policy-4",
+        ]
+        assert {c[1]["component"] for c in credits[:4]} == {"policy"}
+
+    def test_a_numbered_name_stays_within_64_characters(self, minimal_model):
+        from mjswan.build.credit import license_names
+
+        builder = Builder()
+        project = builder.add_project(name="Demo")
+        long = "c" * 64
+        for text in ("a", "b"):
+            project.add_scene(name=text, model=minimal_model).add_attribution(
+                long, notice=text
+            )
+        names = license_names(project._config)
+        assert names[(f"NOTICE.{long}", b"b\n")] == f"NOTICE.{'c' * 62}-2"
+
+    def test_no_scene_takes_the_licenses_directory(self, minimal_model):
+        project = Builder().add_project(name="Demo")
+        with pytest.warns(RuntimeWarning, match="'licenses_1'"):
+            scene = project.add_scene(name="Licenses", model=minimal_model)
+        assert scene._config.id == "licenses_1"
 
     def test_add_attribution_replaces_and_clear_removes(self, minimal_model):
         _, scene = _project_with_scene(Builder(), minimal_model)
@@ -529,8 +588,8 @@ class TestBuildOutput:
         )
         manifest = build_manifest(builder, tmp_path / "dist")
 
-        scene_dir = tmp_path / "dist" / "demo" / "s"
-        assert (scene_dir / "LICENSE.unitree_go2").read_bytes() == bsd
+        licenses = tmp_path / "dist" / "demo" / "licenses"
+        assert (licenses / "LICENSE.unitree_go2").read_bytes() == bsd
         project = manifest["projects"][0]
         assert project["work"] == {
             "license": "LICENSE",
@@ -540,7 +599,7 @@ class TestBuildOutput:
         assert project["scenes"][0]["credits"] == [
             {
                 "component": "unitree_go2",
-                "license": "LICENSE.unitree_go2",
+                "license": "../licenses/LICENSE.unitree_go2",
                 "spdx": "BSD-3-Clause",
                 "copyright": "Copyright (c) 2024 Unitree.",
             }
@@ -563,15 +622,16 @@ class TestBuildOutput:
         credits = project_entry["scenes"][0]["credits"]
         assert credits[0]["spdx"] == "CC-BY-NC-ND-4.0"
         assert credits[0]["restriction"] == "Non-commercial"
-        assert credits[1] == {"component": "clip", "notice": "NOTICE.clip"}
-        scene_dir = tmp_path / "dist" / "demo" / "humanoid"
+        assert credits[1] == {"component": "clip", "notice": "../licenses/NOTICE.clip"}
+        licenses = tmp_path / "dist" / "demo" / "licenses"
         listed = {e[k] for e in credits for k in ("license", "notice") if k in e}
-        on_disk = {
-            p.name
-            for p in scene_dir.iterdir()
-            if p.name.startswith(("LICENSE", "NOTICE"))
+        on_disk = {f"../licenses/{p.name}" for p in licenses.iterdir()}
+        assert listed == on_disk
+        assert {p.rsplit("/", 1)[-1] for p in on_disk} == {
+            "LICENSE.lafan1",
+            "NOTICE.lafan1",
+            "NOTICE.clip",
         }
-        assert listed == on_disk == {"LICENSE.lafan1", "NOTICE.lafan1", "NOTICE.clip"}
 
     def test_no_credit_keys_without_license_files(
         self, tmp_path, minimal_model, build_manifest
@@ -598,26 +658,25 @@ class TestBuildOutput:
         )  # what the SPA copy puts there
 
         files = {p.as_posix() for p in document_files(out)}
-        assert {"demo/LICENSE", "demo/humanoid/LICENSE.go2"} <= files
+        assert {"demo/LICENSE", "demo/licenses/LICENSE.go2"} <= files
         assert "LICENSE" not in files
 
         unpacked = unpack_document(write_document(out), tmp_path / "unpacked")
         assert (unpacked / "demo" / "LICENSE").read_bytes() == (
             out / "demo" / "LICENSE"
         ).read_bytes()
-        assert (unpacked / "demo" / "humanoid" / "LICENSE.go2").read_bytes() == (
-            out / "demo" / "humanoid" / "LICENSE.go2"
+        assert (unpacked / "demo" / "licenses" / "LICENSE.go2").read_bytes() == (
+            out / "demo" / "licenses" / "LICENSE.go2"
         ).read_bytes()
 
         plan = plan_publish(out)
-        paths = {f.upload_path for f in plan.files}
-        assert {"demo/LICENSE", "demo/humanoid/LICENSE.go2"} <= paths
-        assert "LICENSE" not in paths
-        by_path = {e["path"]: e for e in plan.manifest()}
-        assert by_path["demo/LICENSE"]["contentType"] == LICENSE_CONTENT_TYPE
+        assert set(plan.file_map["licenses"]) == {
+            "demo/LICENSE",
+            "demo/licenses/LICENSE.go2",
+        }
         assert [d.describe() for d in plan.licenses] == [
             "demo/LICENSE (Apache-2.0)",
-            "demo/humanoid/LICENSE.go2 (BSD-3-Clause)",
+            "demo/licenses/LICENSE.go2 (BSD-3-Clause)",
         ]
 
 

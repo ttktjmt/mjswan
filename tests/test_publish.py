@@ -7,6 +7,7 @@ The HTTP transport is faked, so no real requests are made.
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from mjswan.cloud.publish import (
     DATA_EXTENSIONS,
     MAX_FILE_BYTES,
     MAX_FILES,
+    MAX_PIECES,
     MAX_TOTAL_BYTES,
     HttpResponse,
     HttpTransport,
@@ -39,8 +41,19 @@ def _isolate_credentials(tmp_path, monkeypatch):
 # ── Fakes ──────────────────────────────────────────────────────────────────
 
 
+def _hashes(file_map: dict) -> list[str]:
+    """Every piece and text the map names, once each, the texts first."""
+    out = dict.fromkeys(file_map["licenses"].values())
+    for file in file_map["files"].values():
+        for e in file.get("entries", [file]):
+            for sha, _ in e.get("chunks", [[e["sha256"], e["size"]]]):
+                out[sha] = None
+    return list(out)
+
+
 class FakeTransport(HttpTransport):
-    """Records calls; echoes presigned PUT URLs derived from the manifest."""
+    """Records calls; asks for every piece the file map names but those ``held``, and
+    answers verify by counting them down."""
 
     def __init__(
         self,
@@ -53,10 +66,13 @@ class FakeTransport(HttpTransport):
         commit_body: dict | None = None,
         put_status: int = 200,
         session_error: dict | None = None,
+        held: frozenset[str] = frozenset(),
+        released: list[str] | None = None,
     ) -> None:
         self.posts: list[tuple[str, dict, str]] = []
         self.puts: list[tuple[str, int, str]] = []
         self.put_headers: list[tuple[str, str, str | None]] = []
+        self.put_bodies: dict[str, bytes] = {}
         self._sim_id = sim_id
         self._upload_id = upload_id
         self._commit_id = commit_id
@@ -65,6 +81,18 @@ class FakeTransport(HttpTransport):
         self._commit_body = commit_body
         self._put_status = put_status
         self._session_error = session_error
+        self._held = held
+        self._released = released
+        self._pending = 0
+
+    def _presigned(self, sha: str) -> dict:
+        # Shaped like the real `PresignedPiece`: the exact header values the server signed.
+        return {
+            "sha256": sha,
+            "url": f"https://r2.example.com/uploads/{self._upload_id}/{sha}",
+            "contentType": "application/octet-stream",
+            "cacheControl": "no-store",
+        }
 
     def post_json(self, url: str, body: dict, token: str) -> HttpResponse:
         self.posts.append((url, body, token))
@@ -73,21 +101,12 @@ class FakeTransport(HttpTransport):
                 return HttpResponse(
                     self._session_status, json.dumps(self._session_error).encode()
                 )
-            # Shaped like the real `PresignedUpload`: the exact header values the
-            # server signed, with `.mjz` octet-stream (the client's advisory says zip).
             uploads = [
-                {
-                    "path": entry["path"],
-                    "url": f"https://r2.example.com/{entry['path']}",
-                    "contentType": (
-                        "application/json"
-                        if entry["path"].endswith(".json")
-                        else "application/octet-stream"
-                    ),
-                    "cacheControl": "public, max-age=31536000, immutable",
-                }
-                for entry in body["manifest"]
+                self._presigned(sha)
+                for sha in _hashes(body["files"])
+                if sha not in self._held
             ]
+            self._pending = len(uploads)
             payload = {
                 "upload_id": self._upload_id,
                 "sim_id": self._sim_id,
@@ -95,7 +114,18 @@ class FakeTransport(HttpTransport):
                 "expires_in": 900,
             }
             return HttpResponse(self._session_status, json.dumps(payload).encode())
+        if url.endswith("/verify"):
+            self._pending = max(0, self._pending - body["limit"])
+            return HttpResponse(200, json.dumps({"remaining": self._pending}).encode())
         if url.endswith("/commit"):
+            if self._pending:
+                return HttpResponse(409, b'{"code": "not_verified"}')
+            if self._released:
+                uploads = [self._presigned(sha) for sha in self._released]
+                self._released = None
+                self._pending = len(uploads)
+                payload = {"code": "files_released", "uploads": uploads}
+                return HttpResponse(409, json.dumps(payload).encode())
             body_out = (
                 self._commit_body
                 if self._commit_body is not None
@@ -113,6 +143,7 @@ class FakeTransport(HttpTransport):
     ) -> HttpResponse:
         self.puts.append((url, len(data), content_type))
         self.put_headers.append((url, content_type, cache_control))
+        self.put_bodies[url.rsplit("/", 1)[-1]] = bytes(data)
         return HttpResponse(self._put_status, b"")
 
 
@@ -157,7 +188,9 @@ def _make_dist(
     (dist / "manifest.json").write_text(json.dumps(config))
 
     # Data files (should be uploaded).
-    (scene_dir / scene).write_bytes(b"MJZ" * 10)
+    with zipfile.ZipFile(scene_dir / scene, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("scene.xml", "<mujoco/>")
+        archive.writestr("assets/box.stl", b"STL" * 10)
     (scene_dir / "policy" / "walk.onnx").write_bytes(b"ONNX" * 10)
     (scene_dir / "mdp" / "mdp_0" / "obs" / "actor.onnx").write_bytes(b"GRAPH" * 2)
     (scene_dir / "assets" / "walk_run.npz").write_bytes(b"NPZ" * 10)
@@ -245,16 +278,39 @@ class TestPlanPublish:
         paths = {f.upload_path for f in plan.files}
         assert not any(p.endswith((".html", ".js", ".css", ".wasm")) for p in paths)
 
-    def test_manifest_has_content_types_and_sizes(self, tmp_path: Path):
+    def test_the_file_map_lists_every_file_but_the_descriptor(self, tmp_path: Path):
+        from mjswan.cloud.blob import sha256
+
         plan = plan_publish(_make_dist(tmp_path))
-        manifest = {entry["path"]: entry for entry in plan.manifest()}
-        assert manifest["manifest.json"]["contentType"] == "application/json"
-        assert manifest["demo/humanoid/scene.mjz"]["contentType"] == "application/zip"
-        assert (
-            manifest["demo/humanoid/policy/walk.onnx"]["contentType"]
-            == "application/octet-stream"
-        )
-        assert manifest["demo/humanoid/scene.mjz"]["size"] == 30
+        files = plan.file_map["files"]
+        assert plan.file_map["format"] == 1 and plan.file_map["licenses"] == {}
+        assert set(files) == {
+            "demo/humanoid/scene.mjz",
+            "demo/humanoid/policy/walk.onnx",
+            "demo/humanoid/mdp/mdp_0/obs/actor.onnx",
+            "demo/humanoid/assets/walk_run.npz",
+        }
+        assert files["demo/humanoid/policy/walk.onnx"] == {
+            "sha256": sha256(b"ONNX" * 10),
+            "size": 40,
+        }
+        # An archive is its entries in their order, inflated; the platform zips them again.
+        assert files["demo/humanoid/scene.mjz"] == {
+            "entries": [
+                {"name": "scene.xml", "sha256": sha256(b"<mujoco/>"), "size": 9},
+                {"name": "assets/box.stl", "sha256": sha256(b"STL" * 10), "size": 30},
+            ]
+        }
+        assert plan.pieces[sha256(b"<mujoco/>")] == b"<mujoco/>"
+
+    def test_a_cut_file_sends_its_pieces(self, tmp_path: Path):
+        dist = _make_dist(tmp_path)
+        policy = (Path(__file__).parent / "blob_vectors" / "policy.onnx").read_bytes()
+        (dist / "demo/humanoid/policy/walk.onnx").write_bytes(policy)
+        plan = plan_publish(dist)
+        chunks = plan.file_map["files"]["demo/humanoid/policy/walk.onnx"]["chunks"]
+        assert len(chunks) == 6
+        assert b"".join(plan.pieces[sha] for sha, _ in chunks) == policy
 
     def test_rejects_custom_js(self, tmp_path: Path):
         with pytest.raises(PublishError) as exc:
@@ -299,12 +355,45 @@ class TestPlanPublish:
     def test_rejects_total_size(self, tmp_path: Path, monkeypatch):
         dist = _make_dist(tmp_path)
         monkeypatch.setattr("mjswan.cloud.publish.MAX_TOTAL_BYTES", 10)
-        with pytest.raises(PublishError, match="Total upload size"):
+        with pytest.raises(PublishError, match="scenes unpacked, which exceeds"):
             plan_publish(dist)
+
+    def test_a_piece_two_files_share_counts_once(self, tmp_path: Path, monkeypatch):
+        dist = _make_dist(tmp_path)
+        (dist / "demo/humanoid/assets/again.npz").write_bytes(b"NPZ" * 10)
+        # scene.xml 9 + box.stl 30 + walk.onnx 40 + actor.onnx 10 + walk_run.npz 30
+        monkeypatch.setattr("mjswan.cloud.publish.MAX_TOTAL_BYTES", 119)
+        plan_publish(dist)
+        monkeypatch.setattr("mjswan.cloud.publish.MAX_PIECES", 4)
+        with pytest.raises(PublishError, match="5 pieces"):
+            plan_publish(dist)
+
+    def test_an_archive_is_held_to_the_cap_entry_by_entry(
+        self, tmp_path: Path, monkeypatch
+    ):
+        dist = _make_dist(tmp_path)
+        monkeypatch.setattr("mjswan.cloud.publish.MAX_FILE_BYTES", 400)
+        with zipfile.ZipFile(dist / "demo/humanoid/scene.mjz", "w") as archive:
+            archive.writestr("scene.xml", b"x" * 300)
+            archive.writestr("a.stl", b"y" * 300)
+        plan_publish(dist)  # the archive is larger, its entries are not
+        with zipfile.ZipFile(dist / "demo/humanoid/scene.mjz", "a") as archive:
+            archive.writestr("big.stl", b"x" * 401, zipfile.ZIP_DEFLATED)
+        with pytest.raises(PublishError) as exc:
+            plan_publish(dist)
+        assert exc.value.file == "demo/humanoid/scene.mjz/big.stl"
+
+    def test_a_damaged_archive_is_refused(self, tmp_path: Path):
+        dist = _make_dist(tmp_path)
+        (dist / "demo/humanoid/scene.mjz").write_bytes(b"MJZ" * 10)
+        with pytest.raises(PublishError, match="not a readable zip archive") as exc:
+            plan_publish(dist)
+        assert exc.value.file == "demo/humanoid/scene.mjz"
 
     def test_default_caps_are_spec_values(self):
         assert MAX_FILE_BYTES == 50 * 1024 * 1024
-        assert MAX_TOTAL_BYTES == 100 * 1024 * 1024
+        assert MAX_TOTAL_BYTES == 128 * 1024 * 1024
+        assert MAX_PIECES == 1000
         assert MAX_FILES == 200
         assert DATA_EXTENSIONS == frozenset(
             {".json", ".mjz", ".onnx", ".npz", ".ply", ".spz", ".vrm", ".glb"}
@@ -350,12 +439,14 @@ class TestLicenseFiles:
         } <= paths
         assert "LICENSE" not in paths
         assert "demo/humanoid/mdp/LICENSE" not in paths
-        manifest = {e["path"]: e for e in plan.manifest()}
-        assert manifest["demo/LICENSE"]["contentType"] == "text/plain; charset=utf-8"
-        assert (
-            manifest["demo/humanoid/NOTICE"]["contentType"]
-            == "text/plain; charset=utf-8"
-        )
+        # Listed by their texts' hashes, never as pieces.
+        assert set(plan.file_map["licenses"]) == {
+            "demo/LICENSE",
+            "demo/NOTICE",
+            "demo/humanoid/LICENSE.unitree_go2",
+            "demo/humanoid/NOTICE",
+        }
+        assert not any("LICENSE" in p or "NOTICE" in p for p in plan.file_map["files"])
         assert [d.describe() for d in plan.licenses] == [
             "demo/LICENSE (Apache-2.0)",
             "demo/NOTICE",
@@ -376,7 +467,8 @@ class TestLicenseFiles:
             dist, token="tok", transport=transport, on_progress=messages.append
         )
         assert messages[0] == "License file: demo/LICENSE (MIT)"
-        assert any(u.endswith("demo/LICENSE") for u, _, _ in transport.puts)
+        text = (dist / "demo/LICENSE").read_bytes()
+        assert text in transport.put_bodies.values()
 
     def test_a_restricted_license_warns_and_still_publishes(self, tmp_path):
         dist = _with_licenses(
@@ -543,16 +635,104 @@ class TestPublishDist:
         assert result.id == "abc1234"
         assert result.upload_id == "11111111-1111-1111-1111-111111111111"
 
-        # One upload-session, then commit.
-        urls = [url for url, _, _ in transport.posts]
-        assert urls[0].endswith("/api/simulations/upload-session")
-        assert urls[-1].endswith("/api/simulations/commit")
+        # upload-session, verify until nothing remains, then commit.
+        steps = [url.rsplit("/", 1)[-1] for url, _, _ in transport.posts]
+        assert steps == ["upload-session", "verify", "commit"]
 
-        # All five data files were PUT, none of the app-shell files.
+        # Every piece of the four data files, and nothing of the descriptor or the shell.
+        bodies = transport.put_bodies.values()
         assert len(transport.puts) == 5
-        put_urls = {url for url, _, _ in transport.puts}
-        assert "https://r2.example.com/manifest.json" in put_urls
-        assert all(".html" not in u and ".css" not in u for u in put_urls)
+        assert b"ONNX" * 10 in bodies and b"<mujoco/>" in bodies
+        assert not any(b"projects" in b or b"doctype" in b for b in bodies)
+
+    def test_verify_is_called_until_nothing_remains(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr("mjswan.cloud.publish.VERIFY_STEP", 2)
+        transport = FakeTransport()
+        messages: list[str] = []
+        publish_dist(
+            _make_dist(tmp_path),
+            token="tok",
+            transport=transport,
+            on_progress=messages.append,
+        )
+        verifies = [b for u, b, _ in transport.posts if u.endswith("/verify")]
+        assert verifies == [{"upload_id": transport._upload_id, "limit": 2}] * 3
+        assert [m for m in messages if m.startswith("Checking")] == [
+            "Checking 0 of 5 piece(s)…",
+            "Checking 2 of 5 piece(s)…",
+            "Checking 4 of 5 piece(s)…",
+        ]
+
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            lambda left: {"remaining": left},
+            lambda left: {},
+            lambda left: {"remaining": str(left - 1)},
+            lambda left: {"remaining": -1},
+        ],
+        ids=["stuck", "missing", "a-string", "negative"],
+    )
+    def test_a_verify_count_that_does_not_fall_stops_the_publish(
+        self, tmp_path: Path, answer
+    ):
+        class StuckTransport(FakeTransport):
+            def post_json(self, url, body, token):
+                if url.endswith("/verify"):
+                    self.posts.append((url, body, token))
+                    payload = json.dumps(answer(self._pending)).encode()
+                    return HttpResponse(200, payload)
+                return super().post_json(url, body, token)
+
+        transport = StuckTransport()
+        with pytest.raises(PublishError, match="verify answered"):
+            publish_dist(_make_dist(tmp_path), token="tok", transport=transport)
+        steps = [url.rsplit("/", 1)[-1] for url, _, _ in transport.posts]
+        assert steps == ["upload-session", "verify"]
+
+    @pytest.mark.parametrize("key", ["sha256", "url", "contentType", "cacheControl"])
+    def test_an_upload_without_a_field_is_refused_before_any_put(
+        self, tmp_path: Path, key: str
+    ):
+        class PartialTransport(FakeTransport):
+            def post_json(self, url, body, token):
+                resp = super().post_json(url, body, token)
+                if url.endswith("/upload-session"):
+                    payload = resp.json()
+                    del payload["uploads"][-1][key]
+                    return HttpResponse(200, json.dumps(payload).encode())
+                return resp
+
+        transport = PartialTransport()
+        with pytest.raises(PublishError, match=f"without {key}"):
+            publish_dist(_make_dist(tmp_path), token="tok", transport=transport)
+        assert transport.puts == []
+
+    def test_only_what_the_platform_lacks_is_sent(self, tmp_path: Path):
+        from mjswan.cloud.blob import sha256
+
+        held = frozenset(sha256(b) for b in (b"<mujoco/>", b"STL" * 10, b"NPZ" * 10))
+        transport = FakeTransport(held=held)
+        publish_dist(_make_dist(tmp_path), token="tok", transport=transport)
+        assert sorted(transport.put_bodies.values()) == [b"GRAPH" * 2, b"ONNX" * 10]
+
+        everything = FakeTransport(
+            held=held | {sha256(b"GRAPH" * 2), sha256(b"ONNX" * 10)}
+        )
+        publish_dist(_make_dist(tmp_path / "again"), token="tok", transport=everything)
+        steps = [url.rsplit("/", 1)[-1] for url, _, _ in everything.posts]
+        assert everything.puts == [] and steps == ["upload-session", "commit"]
+
+    def test_a_piece_a_takedown_released_goes_again(self, tmp_path: Path):
+        from mjswan.cloud.blob import sha256
+
+        released = sha256(b"NPZ" * 10)
+        transport = FakeTransport(held=frozenset({released}), released=[released])
+        result = publish_dist(_make_dist(tmp_path), token="tok", transport=transport)
+        assert result.id == "abc1234"
+        steps = [url.rsplit("/", 1)[-1] for url, _, _ in transport.posts]
+        assert steps == ["upload-session", "verify", "commit", "verify", "commit"]
+        assert transport.put_bodies[released] == b"NPZ" * 10
 
     def test_put_sends_the_headers_the_server_signed(self, tmp_path: Path):
         """Both are in `SignedHeaders`, so a value this side invents is a 403."""
@@ -560,26 +740,16 @@ class TestPublishDist:
         transport = FakeTransport()
         publish_dist(dist, title="My Sim", token="tok", transport=transport)
 
-        by_url = {url: (ct, cc) for url, ct, cc in transport.put_headers}
-        assert by_url  # the loop ran at all
-        for url, (content_type, cache_control) in by_url.items():
-            assert cache_control == "public, max-age=31536000, immutable", url
-            expected = (
-                "application/json"
-                if url.endswith(".json")
-                else "application/octet-stream"
-            )
-            assert content_type == expected, url
-
-        # `_content_type_for` calls a `.mjz` application/zip; the server does not.
-        mjz = [v for u, v in by_url.items() if u.endswith(".mjz")]
-        assert mjz and all(ct == "application/octet-stream" for ct, _ in mjz)
+        assert transport.put_headers  # the loop ran at all
+        assert {(ct, cc) for _, ct, cc in transport.put_headers} == {
+            ("application/octet-stream", "no-store")
+        }
 
     def test_commit_re_resolves_the_token(self, tmp_path: Path, monkeypatch):
         """A long upload can outlive the token, and the commit is what pays."""
         dist = _make_dist(tmp_path)
         transport = FakeTransport()
-        tokens = iter(["token-at-upload", "token-at-commit"])
+        tokens = iter(["token-at-upload", "token-at-verify", "token-at-commit"])
         monkeypatch.setattr(
             "mjswan.cloud.publish.resolve_token", lambda _t: next(tokens)
         )
@@ -587,8 +757,11 @@ class TestPublishDist:
         publish_dist(dist, title="T", token="ignored", transport=transport)
 
         used = {url.rsplit("/", 1)[-1]: tok for url, _, tok in transport.posts}
-        assert used["upload-session"] == "token-at-upload"
-        assert used["commit"] == "token-at-commit"
+        assert used == {
+            "upload-session": "token-at-upload",
+            "verify": "token-at-verify",
+            "commit": "token-at-commit",
+        }
 
     def test_authorization_header_and_body(self, tmp_path: Path):
         dist = _make_dist(tmp_path)
@@ -607,7 +780,7 @@ class TestPublishDist:
         assert body["description"] == "D"
         assert body["tags"] == ["a", "b"]
         assert body["config"]["version"] == "0.7.0"
-        assert isinstance(body["manifest"], list)
+        assert body["files"]["format"] == 1 and "manifest" not in body
 
     def test_default_title_from_first_project(self, tmp_path: Path):
         dist = _make_dist(tmp_path)
@@ -678,14 +851,11 @@ class TestPublishDist:
                 resp = super().post_json(url, body, token)
                 if url.endswith("/upload-session"):
                     payload = resp.json()
-                    payload["uploads"] = [
-                        {
-                            "path": e["path"],
-                            "url": "https://undefined.r2.cloudflarestorage.com/"
-                            f"{e['path']}?X-Amz-Credential=undefined",
-                        }
-                        for e in body["manifest"]
-                    ]
+                    for upload in payload["uploads"]:
+                        upload["url"] = (
+                            "https://undefined.r2.cloudflarestorage.com/"
+                            f"{upload['sha256']}?X-Amz-Credential=undefined"
+                        )
                     return HttpResponse(200, json.dumps(payload).encode())
                 return resp
 
@@ -864,12 +1034,7 @@ class TestSkins:
         dist = self._dist(tmp_path)
         fx.write_glb(dist / "demo/humanoid/assets/b.glb", fx.skeleton_gltf())
         plan = plan_publish(dist)
-        types = {e["path"]: e["contentType"] for e in plan.manifest()}
-        assert (
-            types[self.SKIN]
-            == types["demo/humanoid/assets/b.glb"]
-            == "application/octet-stream"
-        )
+        assert {self.SKIN, "demo/humanoid/assets/b.glb"} <= set(plan.file_map["files"])
         assert list(plan.vrms) == [self.SKIN] and plan.to_attest == []
         assert {".vrm", ".glb"} <= DATA_EXTENSIONS
 

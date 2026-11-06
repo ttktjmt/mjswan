@@ -543,6 +543,8 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
 
     Names, ids and paths are escaped: rich would parse a ``[...]`` in them as markup.
     """
+    from mjswan.license import LICENSES_DIR
+
     total_bytes = 0
     for project in manifest.get("projects", []):
         project_id = _inert(f"[{project['id']}]")
@@ -550,6 +552,7 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
             f"[cyan]{_inert(project['name'])}[/cyan]  [dim]{project_id}[/dim]"
         )
         _describe_licenses(p_node, root, root / project["id"])
+        _describe_licenses(p_node, root, root / project["id"] / LICENSES_DIR)
         for scene in project.get("scenes", []):
             scene_dir = root / project["id"] / scene["id"]
             scene_path = scene_dir / scene.get("scene", "")

@@ -4,9 +4,15 @@ Files sit under a project directory, never at the build root, whose ``LICENSE`` 
 ``NOTICE`` are the engine's:
 
 - ``<project-id>/LICENSE`` and ``NOTICE``: the work's;
-- ``<project-id>/<scene-id>/LICENSE.<component>`` / ``NOTICE.<component>``: one
-  third-party component the scene contains (a bare scene-level ``LICENSE`` is labelled
-  with the scene id).
+- ``<project-id>/licenses/LICENSE.<component>`` / ``NOTICE.<component>``: one
+  third-party component the project's scenes contain, as mjswan writes them
+  (mjswan-cloud ADR 0017 §2.7);
+- ``<project-id>/<scene-id>/LICENSE.<component>`` / ``NOTICE.<component>``: the same, as
+  builds before it wrote them (a bare scene-level ``LICENSE`` is labelled with the scene
+  id).
+
+The rule is one: ``licenses/`` reads as a scene directory, which is why no scene may
+take its id.
 """
 
 from __future__ import annotations
@@ -19,6 +25,10 @@ from typing import Literal
 LICENSE_FILE_MAX_BYTES: int = 64 * 1024
 
 LICENSE_CONTENT_TYPE: str = "text/plain; charset=utf-8"
+
+#: A project's directory of third-party license and notice files, and so a scene id no
+#: scene may take.
+LICENSES_DIR: str = "licenses"
 
 _BASENAME = re.compile(r"^(LICENSE|NOTICE)(?:\.([A-Za-z0-9_-]{1,64}))?$")
 _COMPONENT = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -96,6 +106,7 @@ def component_id(name: str) -> str:
 
 
 __all__ = [
+    "LICENSES_DIR",
     "LICENSE_CONTENT_TYPE",
     "LICENSE_FILE_MAX_BYTES",
     "Kind",
