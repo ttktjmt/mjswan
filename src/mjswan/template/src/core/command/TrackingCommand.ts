@@ -301,7 +301,7 @@ export class TrackingCommand implements CommandTerm {
     }
     const shouldLoop = this.selectedMotion?.loop !== false;
     this.frameAccumulator += dt * this.sampleHz;
-    // Arithmetic, not a frame at a time: a step costs the same whatever the rate.
+    // O(1) whatever the rate: fps comes from the document.
     const steps = Math.floor(this.frameAccumulator);
     let motionLooped = false;
     if (steps > 0) {

@@ -1,4 +1,4 @@
-/** Physics substeps per control step. Real tasks use tens; one step past this cannot keep pace. */
+/** Most physics substeps per control step. Real tasks use tens. */
 export const MAX_DECIMATION = 1000;
 
 /**
