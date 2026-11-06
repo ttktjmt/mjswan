@@ -1,14 +1,17 @@
-"""Publish a built mjswan ``dist/`` to mjswan Cloud (v2).
+"""Publish a built mjswan ``dist/`` to mjswan Cloud.
 
 This module extracts the **data files** from a local build (manifest.json plus
-scene/policy/motion/splat/skin assets and traced MDP graphs; never HTML/JS/WASM) and
-uploads them to mjswan Cloud using the three-step presigned-upload protocol described in
-mjswan-cloud ADR 0001 §6:
+scene/policy/motion/splat/skin assets, traced MDP graphs and license files; never
+HTML/JS/WASM) and publishes them as mjswan Cloud stores them: each file once, by the
+SHA-256 of its bytes, cut into pieces where :mod:`.blob` says (mjswan-cloud ADR 0017):
 
-1. ``POST {base}/api/simulations/upload-session`` with a file manifest and the
-   parsed ``manifest.json`` → presigned ``PUT`` URLs.
-2. ``PUT`` each file's bytes to its presigned URL.
-3. ``POST {base}/api/simulations/commit`` with the ``upload_id`` → the sim id.
+1. ``POST {base}/api/simulations/upload-session`` with the parsed ``manifest.json`` and
+   the file map → a presigned ``PUT`` for each piece or license text the platform does
+   not hold yet.
+2. ``PUT`` each of those.
+3. ``POST {base}/api/simulations/verify`` until nothing remains: the platform checks
+   every piece's SHA-256 as it moves it into place.
+4. ``POST {base}/api/simulations/commit`` with the ``upload_id`` → the sim id.
 
 The platform renders only **declarative** builds (no author-supplied code), so
 ``publish`` refuses any build whose ``manifest.json`` reports
@@ -16,11 +19,6 @@ The platform renders only **declarative** builds (no author-supplied code), so
 server-side rejection and the broken render it would otherwise produce. See
 mjswan ADR 0003 for the declarative/custom-TS split and the ``uses_custom_js``
 marker.
-
-The upload root layout mirrors the build's ``dist/`` tree minus everything but
-data files, with ``manifest.json`` at the upload root, where the
-engine's ``mount(element, configUrl)`` can resolve every other asset relative to
-``configUrl``'s directory.
 """
 
 from __future__ import annotations
@@ -30,13 +28,15 @@ import os
 import urllib.error
 import urllib.request
 import warnings
+import zipfile
+import zlib
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 from ..document.skin import read_skin_file
 from ..license import (
-    LICENSE_CONTENT_TYPE,
     LICENSE_FILE_MAX_BYTES,
     LicenseDeclaration,
     blocked_refusal,
@@ -45,6 +45,7 @@ from ..license import (
     restricted_warning,
 )
 from ..license.vrm import VrmLicense, describe, vrm_license
+from .blob import cut, sha256
 from .transport import USER_AGENT
 
 # ── Client-side constraints (mirror the server's; fail fast and locally) ──────
@@ -52,8 +53,8 @@ from .transport import USER_AGENT
 #: File extensions uploaded as simulation *data*. Everything else in ``dist/``
 #: (``.html`` / ``.js`` / ``.css`` / ``.wasm`` / fonts / images) is the engine
 #: shell and is never sent — the platform loads a pinned engine from its CDN.
-#: ``LICENSE`` / ``NOTICE`` files are admitted by name instead, in the project and
-#: scene directories only (ADR 0007 §1).
+#: ``LICENSE`` / ``NOTICE`` files are admitted by name instead, in the project
+#: directory and the directory below it only (ADR 0007 §1).
 DATA_EXTENSIONS: frozenset[str] = frozenset(
     {".json", ".mjz", ".onnx", ".npz", ".ply", ".spz", ".vrm", ".glb"}
 )
@@ -65,9 +66,17 @@ VRM_TEXT_MAX: int = 256
 VRM_URL_MAX: int = 2048
 VRM_AUTHORS_MAX: int = 32
 
+#: Caps on what a build holds, not on what it packs to: a ``.mjz`` entry counts
+#: inflated, and a piece two files share counts once (mjswan-cloud ADR 0017 §2.5).
 MAX_FILE_BYTES: int = 50 * 1024 * 1024
-MAX_TOTAL_BYTES: int = 100 * 1024 * 1024
+MAX_TOTAL_BYTES: int = 128 * 1024 * 1024
 MAX_FILES: int = 200
+MAX_PIECES: int = 1000
+
+#: Pieces the platform checks a call: about five seconds each, so the count moves.
+VERIFY_STEP: int = 50
+#: ``PUT``s in flight at once.
+UPLOAD_CONCURRENCY: int = 6
 
 DEFAULT_API_BASE: str = "https://api.mjswan.com"
 DEFAULT_WEB_BASE: str = "https://mjswan.com"
@@ -102,24 +111,6 @@ def resolve_web_base(web_base: str | None = None) -> str:
 def simulation_url(sim_id: str, web_base: str | None = None) -> str:
     """The web app page URL for a published simulation."""
     return f"{resolve_web_base(web_base)}/s/{sim_id}"
-
-
-_CONTENT_TYPES: dict[str, str] = {
-    ".json": "application/json",
-    ".mjz": "application/zip",
-    ".onnx": "application/octet-stream",
-    ".npz": "application/octet-stream",
-    ".ply": "application/octet-stream",
-    ".spz": "application/octet-stream",
-    ".vrm": "application/octet-stream",
-    ".glb": "application/octet-stream",
-}
-
-
-def _content_type_for(path: str) -> str:
-    if is_license_file_path(path):
-        return LICENSE_CONTENT_TYPE
-    return _CONTENT_TYPES.get(Path(path).suffix.lower(), "application/octet-stream")
 
 
 class PublishError(Exception):
@@ -222,10 +213,14 @@ class PublishPlan:
     licenses: list[LicenseDeclaration] = field(default_factory=list)
     #: Each VRM among ``files`` -> the terms its ``meta`` states, in path order.
     vrms: dict[str, VrmLicense] = field(default_factory=dict)
-
-    @property
-    def total_bytes(self) -> int:
-        return sum(f.size for f in self.files)
+    #: The file map upload-session takes, and the platform keeps as ``files.json``: every
+    #: file but the descriptor as its pieces, a ``.mjz`` entry by entry, and each license
+    #: file as the hash of its text (mjswan-cloud ADR 0017 §2.2).
+    file_map: dict = field(
+        default_factory=lambda: {"format": 1, "files": {}, "licenses": {}}
+    )
+    #: Each piece's and text's bytes, by hash.
+    pieces: dict[str, bytes] = field(default_factory=dict)
 
     def license_warnings(self) -> list[str]:
         """One line per restricted license or VRM, for the author to read first."""
@@ -244,16 +239,6 @@ class PublishPlan:
         """The VRMs only their author, or someone they licensed, may use as an avatar."""
         return [path for path, terms in self.vrms.items() if terms.needs_attestation]
 
-    def manifest(self) -> list[dict]:
-        return [
-            {
-                "path": f.upload_path,
-                "contentType": _content_type_for(f.upload_path),
-                "size": f.size,
-            }
-            for f in self.files
-        ]
-
 
 def _find_config(dist_dir: Path) -> Path:
     """Locate the build's ``manifest.json``, the one descriptor at the document root."""
@@ -268,7 +253,8 @@ def _find_config(dist_dir: Path) -> Path:
 
 
 def plan_publish(dist_dir: Path) -> PublishPlan:
-    """Validate ``dist_dir`` and build the upload plan without any network I/O.
+    """Validate ``dist_dir`` and build the upload plan, every file read, cut and hashed,
+    without any network I/O.
 
     Raises :class:`PublishError` on any client-side constraint violation:
     missing/invalid config, custom-TS build, a ``.mjb`` scene, too many/too-large
@@ -342,17 +328,15 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
             continue
         _check_safe_path(rel)
         size = path.stat().st_size
-        if size > MAX_FILE_BYTES:
-            raise PublishError(
-                f"File exceeds {MAX_FILE_BYTES // (1024 * 1024)}MB limit: "
-                f"{rel} ({size} bytes)",
-                file=rel,
-            )
+        # A `.mjz` is held to the cap entry by entry, as the map lists it.
+        if path.suffix.lower() != ".mjz":
+            _check_size(rel, size)
         if path.suffix.lower() in SKIN_EXTENSIONS:
             _check_skin(plan, rel, path)
         plan.files.append(_DistFile(upload_path=rel, source=path, size=size))
 
     _validate_plan(plan)
+    _map_files(plan)
     return plan
 
 
@@ -419,10 +403,74 @@ def _validate_plan(plan: PublishPlan) -> None:
             f"Too many files: {len(plan.files)} (max {MAX_FILES}). "
             "Reduce the number of scenes/policies/motions in this build."
         )
-    if plan.total_bytes > MAX_TOTAL_BYTES:
+
+
+def _map_files(plan: PublishPlan) -> None:
+    """Fill ``plan.file_map`` and ``plan.pieces``, and hold the build to the caps the
+    platform counts on them."""
+    sizes: dict[str, int] = {}
+
+    def mapped(label: str, name: str, data: bytes) -> dict:
+        _check_size(label, len(data))
+        entry = cut(name, data)
+        at = 0
+        for sha, size in entry.get("chunks", [[entry["sha256"], entry["size"]]]):
+            plan.pieces[sha] = data[at : at + size]
+            sizes[sha] = size
+            at += size
+        return entry
+
+    for f in plan.files:
+        path = f.upload_path
+        if path == "manifest.json":
+            continue  # upload-session takes it as `config`
+        if is_license_file_path(path):
+            text = f.source.read_bytes()
+            plan.file_map["licenses"][path] = digest = sha256(text)
+            plan.pieces[digest] = text
+        elif path.lower().endswith(".mjz"):
+            plan.file_map["files"][path] = {"entries": _entries(path, f.source, mapped)}
+        else:
+            plan.file_map["files"][path] = mapped(path, path, f.source.read_bytes())
+
+    if len(sizes) > MAX_PIECES:
         raise PublishError(
-            f"Total upload size {plan.total_bytes} bytes exceeds the "
+            f"This build is {len(sizes)} pieces, and mjswan Cloud takes at most "
+            f"{MAX_PIECES}. Reduce the number of scenes/policies/motions in it."
+        )
+    total = sum(sizes.values())
+    if total > MAX_TOTAL_BYTES:
+        raise PublishError(
+            f"This build holds {total} bytes, scenes unpacked, which exceeds the "
             f"{MAX_TOTAL_BYTES // (1024 * 1024)}MB limit."
+        )
+
+
+def _entries(path: str, source: Path, mapped: Callable[[str, str, bytes], dict]):
+    """A scene archive's entries in its order, each mapped; the platform zips them again."""
+    try:
+        with zipfile.ZipFile(source) as archive:
+            out = []
+            for info in archive.infolist():
+                label = f"{path}/{info.filename}"
+                _check_size(label, info.file_size)  # before inflating it
+                data = archive.read(info)
+                out.append(
+                    {"name": info.filename, **mapped(label, info.filename, data)}
+                )
+            return out
+    except (zipfile.BadZipFile, zlib.error) as exc:
+        raise PublishError(
+            f"{path} is not a readable zip archive ({exc}). Build it again.", file=path
+        ) from None
+
+
+def _check_size(label: str, size: int) -> None:
+    if size > MAX_FILE_BYTES:
+        raise PublishError(
+            f"File exceeds {MAX_FILE_BYTES // (1024 * 1024)}MB limit: {label} "
+            f"({size} bytes)",
+            file=label,
         )
 
 
@@ -552,8 +600,8 @@ def publish_dist(
 
             body: dict = {
                 "title": resolved_title,
-                "manifest": plan.manifest(),
                 "config": plan.config,
+                "files": plan.file_map,
             }
             if description is not None:
                 body["description"] = description
@@ -570,43 +618,42 @@ def publish_dist(
             upload_id = session.get("upload_id")
             if not upload_id:
                 raise PublishError("upload-session response missing upload_id.")
-            uploads = {u["path"]: u for u in session.get("uploads", [])}
 
-            by_path = {f.upload_path: f for f in plan.files}
-            for path, upload in uploads.items():
-                f = by_path.get(path)
-                if f is None:
-                    raise PublishError(
-                        f"Server requested upload for unknown file: {path}", file=path
+            def send(uploads: list[dict]) -> None:
+                _send(transport, uploads, plan.pieces, notify)
+                # Re-resolved, not reused, here and at commit: an upload runs for
+                # minutes and can cross the token's expiry. Near-free, since the
+                # resolver only refreshes close to expiry.
+                remaining = total = len(uploads)
+                while remaining:
+                    notify(f"Checking {total - remaining} of {total} piece(s)…")
+                    verify_resp = transport.post_json(
+                        f"{base}/api/simulations/verify",
+                        {"upload_id": upload_id, "limit": VERIFY_STEP},
+                        resolve_token(token),
                     )
-                url = upload["url"]
-                _check_presigned_url(url, path)
-                notify(f"Uploading {path} ({f.size} bytes)…")
-                # The server's signed values, not this side's: `_content_type_for`
-                # is only the advisory sent with the manifest and disagrees for `.mjz`.
-                put_resp = transport.put_bytes(
-                    url,
-                    f.source.read_bytes(),
-                    upload.get("contentType") or _content_type_for(path),
-                    upload.get("cacheControl"),
+                    _raise_for_status(verify_resp, "verify")
+                    remaining = _parse_json(verify_resp, "verify")["remaining"]
+
+            def commit_upload() -> HttpResponse:
+                notify("Committing…")
+                return transport.post_json(
+                    f"{base}/api/simulations/commit",
+                    {
+                        "upload_id": upload_id,
+                        **({"attested_skins": attested} if attested else {}),
+                    },
+                    resolve_token(token),
                 )
-                if put_resp.status not in (200, 201, 204):
-                    raise PublishError(
-                        f"Upload failed for {path}: HTTP {put_resp.status}", file=path
-                    )
 
-            notify("Committing…")
-            commit_resp = transport.post_json(
-                f"{base}/api/simulations/commit",
-                {
-                    "upload_id": upload_id,
-                    **({"attested_skins": attested} if attested else {}),
-                },
-                # Re-resolved, not reused: an upload runs for minutes and can cross
-                # the token's expiry, landing every byte in R2 before the commit 401s.
-                # Near-free, since the resolver only refreshes close to expiry.
-                resolve_token(token),
-            )
+            send(session.get("uploads", []))
+            commit_resp = commit_upload()
+            # A piece another simulation's takedown released since upload-session goes
+            # again, once (mjswan-cloud ADR 0017 §2.3).
+            released = _released(commit_resp)
+            if released is not None:
+                send(released)
+                commit_resp = commit_upload()
             _raise_for_status(commit_resp, "commit")
             commit = _parse_json(commit_resp, "commit")
             sim_id = commit.get("id")
@@ -619,6 +666,48 @@ def publish_dist(
     except DocumentError as exc:
         # Only `unpack_document` raises this; the upload itself speaks PublishError.
         raise PublishError(str(exc), file=Path(dist_dir).name) from exc
+
+
+def _send(
+    transport: HttpTransport,
+    uploads: list[dict],
+    pieces: dict[str, bytes],
+    notify: Callable[[str], None],
+) -> None:
+    """``PUT`` each piece or text upload-session asked for, a few at a time."""
+    for upload in uploads:
+        if upload["sha256"] not in pieces:
+            raise PublishError(f"Server requested an unknown piece: {upload['sha256']}")
+        _check_presigned_url(upload["url"], upload["sha256"])
+    size = sum(len(pieces[u["sha256"]]) for u in uploads)
+    notify(f"Uploading {len(uploads)} piece(s), {size} bytes…")
+
+    def put(upload: dict) -> None:
+        # Both headers are the server's signed values, sent as they came.
+        resp = transport.put_bytes(
+            upload["url"],
+            pieces[upload["sha256"]],
+            upload["contentType"],
+            upload["cacheControl"],
+        )
+        if resp.status not in (200, 201, 204):
+            raise PublishError(f"Upload failed: HTTP {resp.status}")
+
+    with ThreadPoolExecutor(UPLOAD_CONCURRENCY) as pool:
+        list(pool.map(put, uploads))
+
+
+def _released(resp: HttpResponse) -> list[dict] | None:
+    """The pieces to send again, when commit answers that a takedown released them."""
+    if resp.status != 409:
+        return None
+    try:
+        payload = resp.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if payload.get("code") != "files_released":
+        return None
+    return payload.get("uploads") or None
 
 
 def _check_presigned_url(url: str, path: str) -> None:
@@ -691,6 +780,7 @@ __all__ = [
     "DEFAULT_WEB_BASE",
     "MAX_FILES",
     "MAX_FILE_BYTES",
+    "MAX_PIECES",
     "MAX_TOTAL_BYTES",
     "TOKEN_ENV_VAR",
     "WEB_BASE_ENV_VAR",

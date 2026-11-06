@@ -156,20 +156,16 @@ class TestAppSaveDocument:
 
 
 class _Transport:
-    """Hands out one presigned URL per requested file and records every PUT."""
+    """Asks for nothing (the platform holds every piece) and records the file map."""
 
     def __init__(self):
         self.puts: list[str] = []
+        self.file_map: dict | None = None
 
     def post_json(self, url, body, token):
         if url.endswith("/upload-session"):
-            uploads = [
-                {"path": f["path"], "url": f"https://r2.example.com/{f['path']}"}
-                for f in body["manifest"]
-            ]
-            return HttpResponse(
-                200, json.dumps({"upload_id": "u1", "uploads": uploads}).encode()
-            )
+            self.file_map = body["files"]
+            return HttpResponse(200, b'{"upload_id": "u1", "uploads": []}')
         return HttpResponse(200, json.dumps({"id": "sim_1"}).encode())
 
     def put_bytes(self, url, data, content_type, cache_control=None):
@@ -184,13 +180,13 @@ class TestPublishingADocument:
         # From a spec: Cloud takes no .mjb scene.
         built = _build(tmp_path, minimal_onnx, monkeypatch, spec=minimal_spec)
         monkeypatch.setenv("MJSWAN_TOKEN", "t")
-        as_directory = {f.upload_path for f in plan_publish(built).files}
+        as_directory = plan_publish(built).file_map
         path = write_document(built)
         transport = _Transport()
         result = publish_dist(path, transport=transport, api_base="https://api.test")
         assert result.id == "sim_1"
-        assert set(transport.puts) == as_directory
-        assert "manifest.json" in as_directory
+        assert transport.file_map == as_directory
+        assert as_directory["files"]
 
     def test_a_bad_document_is_a_publish_error(self, tmp_path, monkeypatch):
         from mjswan.cloud.publish import PublishError
