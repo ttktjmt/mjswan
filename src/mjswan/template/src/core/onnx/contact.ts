@@ -131,14 +131,12 @@ export class ContactSensorSet {
 
   constructor(descriptors: Record<string, ContactSensorDescriptor> = {}, budget = new BufferBudget()) {
     for (const [name, descriptor] of Object.entries(descriptors)) {
-      // advance() keeps n * h frames of dim per history field and rolls them every substep.
-      if (descriptor.history_length > 0) {
-        for (const field of descriptor.history_fields ?? []) {
-          const spec = descriptor.fields[field];
-          if (!spec) continue;
-          const n = (spec.sensors?.length ?? 0) * descriptor.num_slots;
-          budget.reserve(n * descriptor.history_length, spec.dim, `contact sensor "${name}" ${field} history`);
-        }
+      const h = descriptor.history_length > 0 ? descriptor.history_length : 0;
+      for (const [field, spec] of Object.entries(descriptor.fields ?? {})) {
+        // current() reads n frames of dim; advance() keeps h more per history field.
+        const n = (spec.sensors?.length ?? 0) * descriptor.num_slots;
+        const kept = descriptor.history_fields?.includes(field) ? h : 0;
+        budget.reserve(n * (1 + kept), spec.dim, `contact sensor "${name}" ${field}`);
       }
       this.readers.set(name, new ContactSensorReader(descriptor));
     }

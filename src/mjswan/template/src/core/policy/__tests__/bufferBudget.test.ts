@@ -55,4 +55,16 @@ describe('a declared count past the limit', () => {
     };
     expect(() => new ContactSensorSet({ feet: descriptor })).toThrow(/buffer limit/);
   });
+
+  // With no history, every read still allocates num_slots frames per sensor.
+  it('stops a contact reading', () => {
+    const descriptor = {
+      kind: 'contact' as const,
+      num_slots: 100_000_000,
+      history_length: 0,
+      history_fields: [],
+      fields: { force: { sensors: ['foot_force'], dim: 3 } },
+    };
+    expect(() => new ContactSensorSet({ feet: descriptor })).toThrow(/buffer limit/);
+  });
 });
