@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -19,6 +20,14 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 console = Console()
+
+
+def _inert(value: object) -> str:
+    """Untrusted text, safe to print: no control characters, Rich markup escaped."""
+    text = "".join(
+        ch for ch in str(value) if ch == "\n" or unicodedata.category(ch) != "Cc"
+    )
+    return escape(text)
 
 
 def _run_module(module_path: str) -> None:
@@ -104,7 +113,7 @@ def serve_cmd(
     try:
         app_to_serve = MjswanApp.from_document(source)
     except DocumentError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
+        console.print(f"[red]Error:[/red] {_inert(exc)}")
         raise typer.Exit(1) from exc
 
     app_to_serve.launch(host=host, port=port, open_browser=not no_open, height=height)
@@ -174,13 +183,15 @@ def publish_cmd(
             tags=list(tag) if tag else None,
             token=token,
             api_base=api_base,
-            on_progress=lambda msg: console.print(f"[dim]{msg}[/dim]"),
-            on_warning=lambda msg: console.print(f"[yellow]Warning:[/yellow] {msg}"),
+            on_progress=lambda msg: console.print(f"[dim]{_inert(msg)}[/dim]"),
+            on_warning=lambda msg: console.print(
+                f"[yellow]Warning:[/yellow] {_inert(msg)}"
+            ),
             attest=_confirm_avatar_use,
         )
     except PublishError as exc:
-        location = f" [dim]({exc.file})[/dim]" if exc.file else ""
-        console.print(f"[red]Publish failed:[/red] {exc}{location}")
+        location = f" [dim]({_inert(exc.file)})[/dim]" if exc.file else ""
+        console.print(f"[red]Publish failed:[/red] {_inert(exc)}{location}")
         raise typer.Exit(1)
 
     url = simulation_url(result.id)
@@ -193,7 +204,7 @@ def _confirm_avatar_use(path: str, terms) -> bool:
 
     who = "its author" if terms.avatar_use == "author" else "people its author licensed"
     console.print(
-        f"[bold]{escape(path)}[/bold]: {escape(describe(terms))}. Its license lets only "
+        f"[bold]{_inert(path)}[/bold]: {_inert(describe(terms))}. Its license lets only "
         f"{who} use it as an avatar, and mjswan Cloud will show that you said you may."
     )
     if not _interactive():
@@ -219,13 +230,13 @@ def _do_login(*, open_browser: bool) -> bool:
     try:
         creds = login(
             open_browser=open_browser,
-            on_progress=lambda msg: console.print(f"[dim]{msg}[/dim]"),
+            on_progress=lambda msg: console.print(f"[dim]{_inert(msg)}[/dim]"),
         )
     except AuthError as exc:
-        console.print(f"[red]Login failed:[/red] {exc}")
+        console.print(f"[red]Login failed:[/red] {_inert(exc)}")
         return False
 
-    who = f" as [bold]{creds.username}[/bold]" if creds.username else ""
+    who = f" as [bold]{_inert(creds.username)}[/bold]" if creds.username else ""
     console.print(f"[green]Logged in to mjswan Cloud{who}.[/green]")
     return True
 
@@ -253,15 +264,15 @@ def whoami_cmd() -> None:
         identity = fetch_identity()
     except AuthError as exc:
         # Session exists locally but is no longer valid server-side.
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{_inert(exc)}[/red]")
         raise typer.Exit(1)
 
     if identity is None:
         console.print("[dim]Not logged in. Run [bold]mjswan login[/bold].[/dim]")
         raise typer.Exit(1)
 
-    name = identity.username or identity.user_id
-    detail = f" [dim]({identity.email})[/dim]" if identity.email else ""
+    name = _inert(identity.username or identity.user_id)
+    detail = f" [dim]({_inert(identity.email)})[/dim]" if identity.email else ""
     console.print(f"Logged in as [bold]{name}[/bold]{detail}")
 
 
@@ -477,12 +488,12 @@ def info_cmd(
             version = manifest.get("version", "unknown")
             fmt = manifest.get("format", "?")
             tree = Tree(
-                f"[bold]mjswan {kind}[/bold]: {escape(str(dist_dir))}  "
-                f"[dim]v{version}, format {fmt}[/dim]"
+                f"[bold]mjswan {kind}[/bold]: {_inert(str(dist_dir))}  "
+                f"[dim]v{_inert(version)}, format {_inert(fmt)}[/dim]"
             )
             total_bytes = _describe_projects(tree, root, manifest)
     except DocumentError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
+        console.print(f"[red]Error:[/red] {_inert(exc)}")
         raise typer.Exit(1)
 
     tree.add(f"[dim]Total scene+policy assets: {_fmt_size(total_bytes)}[/dim]")
@@ -500,8 +511,8 @@ def _describe_licenses(node, root: Path, directory: Path) -> None:
         if declaration is None:
             continue
         label = "License" if declaration.location.kind == "LICENSE" else "Notice"
-        what = f": [blue]{escape(declaration.spdx)}[/blue]" if declaration.spdx else ""
-        node.add(f"{label}{what}  [dim]{escape(declaration.path)}[/dim]")
+        what = f": [blue]{_inert(declaration.spdx)}[/blue]" if declaration.spdx else ""
+        node.add(f"{label}{what}  [dim]{_inert(declaration.path)}[/dim]")
 
 
 def _describe_skin(node, scene_dir: Path, skin: dict) -> None:
@@ -516,14 +527,14 @@ def _describe_skin(node, scene_dir: Path, skin: dict) -> None:
         try:
             file = read_skin_file(path)
         except ValueError as exc:
-            detail = f"  [red]{escape(str(exc))}[/red]"
+            detail = f"  [red]{_inert(str(exc))}[/red]"
         else:
             if file.vrm_version is not None:
                 terms = vrm_license(file.meta, file.vrm_version)
-                detail = f"  [blue]{escape(describe(terms))}[/blue]"
+                detail = f"  [blue]{_inert(describe(terms))}[/blue]"
     node.add(
-        f"Skin: [yellow]{escape(skin.get('name', ''))}[/yellow]  "
-        f"[dim]{escape(skin.get('path', ''))} ({_fmt_size(size)})[/dim]{detail}"
+        f"Skin: [yellow]{_inert(skin.get('name', ''))}[/yellow]  "
+        f"[dim]{_inert(skin.get('path', ''))} ({_fmt_size(size)})[/dim]{detail}"
     )
 
 
@@ -534,9 +545,9 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
     """
     total_bytes = 0
     for project in manifest.get("projects", []):
-        project_id = escape(f"[{project['id']}]")
+        project_id = _inert(f"[{project['id']}]")
         p_node = tree.add(
-            f"[cyan]{escape(project['name'])}[/cyan]  [dim]{project_id}[/dim]"
+            f"[cyan]{_inert(project['name'])}[/cyan]  [dim]{project_id}[/dim]"
         )
         _describe_licenses(p_node, root, root / project["id"])
         for scene in project.get("scenes", []):
@@ -545,8 +556,8 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
             scene_size = scene_path.stat().st_size if scene_path.exists() else 0
             total_bytes += scene_size
             s_node = p_node.add(
-                f"[green]{escape(scene['name'])}[/green]  "
-                f"[dim]{escape(scene['id'] + '/' + scene.get('scene', ''))}  "
+                f"[green]{_inert(scene['name'])}[/green]  "
+                f"[dim]{_inert(scene['id'] + '/' + scene.get('scene', ''))}  "
                 f"({_fmt_size(scene_size)})[/dim]"
             )
             _describe_licenses(s_node, root, scene_dir)
@@ -555,7 +566,7 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
             for mdp in scene.get("mdps", []):
                 graphs = list((scene_dir / "mdp" / mdp["id"]).rglob("*.onnx"))
                 s_node.add(
-                    f"MDP: [magenta]{escape(mdp['id'])}[/magenta]  "
+                    f"MDP: [magenta]{_inert(mdp['id'])}[/magenta]  "
                     f"[dim]{len(graphs)} graph(s)[/dim]"
                 )
             for policy in scene.get("policies", []):
@@ -564,8 +575,8 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
                 total_bytes += policy_size
                 size_str = f"  ({_fmt_size(policy_size)})" if policy_size else ""
                 s_node.add(
-                    f"Policy: [yellow]{escape(policy['name'])}[/yellow]  "
-                    f"[dim]mdp={escape(str(policy.get('mdp')))}{size_str}[/dim]"
+                    f"Policy: [yellow]{_inert(policy['name'])}[/yellow]  "
+                    f"[dim]mdp={_inert(str(policy.get('mdp')))}{size_str}[/dim]"
                 )
     return total_bytes
 
@@ -605,7 +616,7 @@ def skin_map_cmd(
     try:
         skin = read_skin_file(file.expanduser())
     except (OSError, ValueError) as exc:
-        console.print(f"[red]Error:[/red] {escape(str(exc))}")
+        console.print(f"[red]Error:[/red] {_inert(str(exc))}")
         raise typer.Exit(1)
     model = _load_robot(robot) if robot else None
 
@@ -616,21 +627,21 @@ def skin_map_cmd(
     kind = "VRM " + (skin.vrm_version or "") if guess is None else f"glTF, {guess.kind}"
     facing = "" if guess is None else f", facing {guess.facing}"
     size = f"{len(skin.joints)} joints" if skin.joints else f"{len(skin.names)} nodes"
-    console.print(f"[bold]{escape(skin.path.name)}[/bold]: {kind}, {size}{facing}")
+    console.print(f"[bold]{_inert(skin.path.name)}[/bold]: {kind}, {size}{facing}")
 
     scale = None
     if guess is not None and model is not None:
         found = g.guess_scale(skin, guess, model, bones)
         if found:
             scale = found[0]
-            console.print(f"  scale={scale:.2g}   [dim]{escape(found[1])}[/dim]")
+            console.print(f"  scale={scale:.2g}   [dim]{_inert(found[1])}[/dim]")
 
     table = Table(box=None, pad_edge=False)
     for column in ("bone", "node", "body", "how"):
         table.add_column(column, style="dim" if column == "how" else None)
     for bone, node in shown.items():
         how = guess.why.get(bone, "") if guess is not None else ""
-        table.add_row(bone, escape(skin.names[node]), escape(bones.get(bone, "")), how)
+        table.add_row(bone, _inert(skin.names[node]), _inert(bones.get(bone, "")), how)
     if shown:
         console.print(table)
     if len(shown) < len(nodes):
@@ -639,12 +650,12 @@ def skin_map_cmd(
         )
     for n in guess.springs if guess is not None else []:
         console.print(
-            f"  springs?  {escape(skin.names[n])}  [dim]a chain no bone takes[/dim]"
+            f"  springs?  {_inert(skin.names[n])}  [dim]a chain no bone takes[/dim]"
         )
     for limb in guess.limbs if guess is not None else []:
         named = ", ".join(skin.names[n] for n in limb)
         near = ", ".join(g.close_bodies(model, skin.names[limb[0]])) if model else ""
-        console.print(f"  limb?  {escape(named)}  [dim]{escape(near)}[/dim]")
+        console.print(f"  limb?  {_inert(named)}  [dim]{_inert(near)}[/dim]")
 
     rest_pose = _rest_pose(model, guess, bones) if model is not None else None
     if output:
@@ -661,7 +672,7 @@ def skin_map_cmd(
         )
         output.write_text(draft)
         console.print(
-            f"Wrote {escape(str(output))}: a SkinConfig draft to check and paste."
+            f"Wrote {_inert(str(output))}: a SkinConfig draft to check and paste."
         )
 
 
@@ -681,19 +692,19 @@ def _load_robot(robot: str):
         from mjswan.mjlab import ensure_mjlab_extensions
     except ImportError:
         console.print(
-            f"[red]Error:[/red] {escape(robot)} is not a .xml or .mjb, and an mjlab "
+            f"[red]Error:[/red] {_inert(robot)} is not a .xml or .mjb, and an mjlab "
             "task needs mjlab: pip install 'mjswan[mjlab]'."
         )
         raise typer.Exit(1)
     except ValueError as exc:
-        console.print(f"[red]Error:[/red] {escape(str(exc))}")
+        console.print(f"[red]Error:[/red] {_inert(str(exc))}")
         raise typer.Exit(1)
     ensure_mjlab_extensions()
     try:
         env_cfg = load_env_cfg(robot, play=True)
     except Exception as exc:
         console.print(
-            f"[red]Error:[/red] {escape(robot)} is not an mjlab task: {escape(str(exc))}"
+            f"[red]Error:[/red] {_inert(robot)} is not an mjlab task: {_inert(str(exc))}"
         )
         raise typer.Exit(1)
     env_cfg.scene.num_envs = 1
@@ -714,15 +725,15 @@ def _rest_pose(model, guess, bones: dict[str, str]):
     keys = [model.key(k).name for k in range(model.nkey)]
     if guess is not None and guess.kind == "quadruped" and keys and keys[0]:
         console.print(
-            f'  rest_pose  "{escape(keys[0])}"  [dim]the robot\'s keyframe; it stands there[/dim]'
+            f'  rest_pose  "{_inert(keys[0])}"  [dim]the robot\'s keyframe; it stands there[/dim]'
         )
         return keys[0]
     console.print(
         "  rest_pose  [dim]not guessed: set the joints that hold the pose the skin rests "
-        f"in. Keyframes: {escape(', '.join(keys) or 'none')}.[/dim]"
+        f"in. Keyframes: {_inert(', '.join(keys) or 'none')}.[/dim]"
     )
     for name, axis in g.arm_joints(model, bones):
-        console.print(f"    {escape(name)}  [dim]axis {axis}[/dim]")
+        console.print(f"    {_inert(name)}  [dim]axis {axis}[/dim]")
     return None
 
 

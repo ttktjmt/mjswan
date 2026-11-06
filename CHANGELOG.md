@@ -1307,6 +1307,16 @@ shortcuts.
 - **Pillow 13.0.0, filelock 4.2.4 and virtualenv 21.14.12 in `uv.lock`**, for the
   Dependabot advisories against Pillow < 13.0.0, filelock 3.20.4 to 4.2.0 and virtualenv
   < 21.14.10.
+- **The CLI prints a document's text as text.** `mjswan info`, `serve`, `publish` and
+  `login` interpolated manifest values, archive entry names, error messages and server
+  replies into Rich markup, some unescaped and none stripped of control characters, so a
+  `.swn` someone else made could print a link that reads as one URL and opens another,
+  or set the terminal's title. Every such value now loses its control characters and has
+  its markup escaped.
+- **`mjswan skin map -o` writes the skin file's name as a string.** The draft's docstring
+  held the command line verbatim between triple quotes, so a file whose name closed them
+  put code into the draft, which ran when the draft was. The docstring is now a quoted
+  literal like every other string in it.
 - **`export_checkpoint` reads a checkpoint with torch's restricted unpickler first.** It
   and the `mjlab-to-mjswan` skill's `export_policy.py` loaded each `.pt` with
   `weights_only=False`, as the runner's own load does, so a checkpoint from someone else's

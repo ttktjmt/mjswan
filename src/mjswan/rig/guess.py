@@ -523,9 +523,13 @@ def draft_source(
     def table(entries: Mapping[str, object], indent: str = "        ") -> str:
         return "".join(f"{indent}{_py(k)}: {_py(v)},\n" for k, v in entries.items())
 
+    # Through _py: the command holds the skin file's name.
+    doc = (
+        f"A skin drafted by `{command}`.\n\nEvery map here is a guess: check each line "
+        "against the file and the robot."
+    )
     lines = [
-        f'"""A skin drafted by `{command}`.\n\nEvery map here is a guess: check each line '
-        'against the file and the robot."""\n',
+        f"{_py(doc)}\n",
         "import mjswan\n",
         "SKIN = mjswan.SkinConfig(",
         f"    source={_py(source)},",

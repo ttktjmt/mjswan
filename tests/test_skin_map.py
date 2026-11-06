@@ -6,6 +6,7 @@ Layer: L1 (no Node build, no network).
 
 from __future__ import annotations
 
+import ast
 import math
 import runpy
 from pathlib import Path
@@ -204,6 +205,32 @@ class TestDraft:
         assert [chain["joints"] for chain in skin.springs] == [
             [file.node(n) for n in ("Tail1", "Tail2", "Tail3")]
         ]
+
+    def test_the_command_stays_inside_the_docstring(self, tmp_path, fox_glb, capsys):
+        """The command carries the skin file's name, which whoever made it chose."""
+        robot = mujoco.MjModel.from_xml_string(fx.QUADRUPED_XML)
+        file = read_skin_file(fox_glb)
+        guess = guess_humanoid(file)
+        command = (
+            'mjswan skin map """ if print("ran") is None else """.glb --robot C:\\x'
+        )
+        source = draft_source(
+            command,
+            source=str(fox_glb),
+            guess=guess,
+            names=file.names,
+            bones=guess_bones(robot, guess.humanoid),
+            scale=1.0,
+            rest_pose="stand",
+        )
+        path = tmp_path / "draft.py"
+        path.write_text(source)
+
+        doc = ast.parse(source).body[0]
+        assert isinstance(doc, ast.Expr) and isinstance(doc.value, ast.Constant)
+        assert doc.value.value.startswith(f"A skin drafted by `{command}`.")
+        runpy.run_path(str(path))
+        assert capsys.readouterr().out == ""
 
     def test_the_cli_prints_the_maps_and_writes_the_draft(
         self, tmp_path, fox_glb, quadruped_xml
