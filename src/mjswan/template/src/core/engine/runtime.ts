@@ -70,6 +70,7 @@ import {
   type OnnxActionProcessConfig,
 } from '../action/OnnxActionProcess';
 import { applyResetTerms } from './resetChain';
+import { decimationFor } from './decimation';
 import { nextDeadline } from './stepDeadline';
 import { yieldToBrowser } from './yieldToBrowser';
 import { TerminationManager } from '../termination/TerminationManager';
@@ -740,12 +741,10 @@ export class mjswanRuntime {
         }
       }
 
-      this.timestep = this.mjModel.opt.timestep || 0.001;
+      const timestep = this.mjModel.opt.timestep;
+      this.timestep = Number.isFinite(timestep) && timestep > 0 ? timestep : 0.001;
       // Never inferred: a wrong control rate runs the policy off-speed silently.
-      this.decimation = Math.max(
-        1,
-        Math.round((this.controlDt ?? DEFAULT_VIEWER_CONTROL_DT) / this.timestep),
-      );
+      this.decimation = decimationFor(this.controlDt ?? DEFAULT_VIEWER_CONTROL_DT, this.timestep);
 
       this.lastSimState.bodies.clear();
       this.updateCachedState();

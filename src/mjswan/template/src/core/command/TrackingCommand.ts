@@ -61,6 +61,8 @@ function splitFrames(entry: NpzEntry): Float32Array[] {
   return frames;
 }
 
+/** A motion's sample rate above this is refused: no capture runs this fast. */
+const MAX_MOTION_FPS = 10_000;
 /** mjlab's default `viz.ghost_color`. */
 const DEFAULT_GHOST_COLOR: readonly number[] = [0.5, 0.7, 0.5, 0.5];
 /** `DebugVisualizer.add_ghost_mesh`'s default `alpha`, which `MotionCommand` leaves as is. */
@@ -299,19 +301,21 @@ export class TrackingCommand implements CommandTerm {
     }
     const shouldLoop = this.selectedMotion?.loop !== false;
     this.frameAccumulator += dt * this.sampleHz;
+    // Arithmetic, not a frame at a time: a step costs the same whatever the rate.
+    const steps = Math.floor(this.frameAccumulator);
     let motionLooped = false;
-    while (this.frameAccumulator >= 1.0) {
-      this.refIdx += 1;
-      if (this.refIdx >= this.refLen) {
-        if (!shouldLoop) {
-          this.refIdx = this.refLen - 1;
-          this.frameAccumulator = 0.0;
-          break;
-        }
-        this.refIdx = 0;
+    if (steps > 0) {
+      this.frameAccumulator -= steps;
+      const next = this.refIdx + steps;
+      if (next < this.refLen) {
+        this.refIdx = next;
+      } else if (!shouldLoop) {
+        this.refIdx = this.refLen - 1;
+        this.frameAccumulator = 0.0;
+      } else {
+        this.refIdx = next % this.refLen;
         motionLooped = true;
       }
-      this.frameAccumulator -= 1.0;
     }
     if (motionLooped && this.context.requestReset) {
       this.looped = true;
@@ -663,6 +667,9 @@ export class TrackingCommand implements CommandTerm {
   }
 
   private async loadMotion(config: TrackingMotionConfig): Promise<LoadedTrackingMotion> {
+    if (!(Number.isFinite(config.fps) && config.fps > 0 && config.fps <= MAX_MOTION_FPS)) {
+      throw new Error(`Motion '${config.name}' has fps ${config.fps}; expected a positive rate up to ${MAX_MOTION_FPS}.`);
+    }
     this.sampleHz = config.fps;
     const npz = await loadNpz(await resolveBytes(config.data));
     const empty: Float32Array[] = [];

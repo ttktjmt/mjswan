@@ -13,6 +13,7 @@
  */
 
 import { CommandDelay, resolveDelays, type DelayConfigEntry, type DelayRng } from './commandDelay';
+import { compileNamePattern } from '../policy/namePattern';
 
 type MjModel = import('mujoco').MjModel;
 type MjData = import('mujoco').MjData;
@@ -361,9 +362,9 @@ export function resolveActionClip(
       continue;
     }
     let matched = 0;
-    const re = new RegExp(`^(?:${pattern})$`);
+    const matches = compileNamePattern(pattern);
     for (let i = 0; i < Math.min(length, targetNames.length); i++) {
-      if (!re.test(targetNames[i])) continue;
+      if (!matches(targetNames[i])) continue;
       clipLo[i] = bounds[0];
       clipHi[i] = bounds[1];
       matched++;

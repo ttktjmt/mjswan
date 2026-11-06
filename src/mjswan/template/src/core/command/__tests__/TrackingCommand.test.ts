@@ -420,3 +420,51 @@ describe('TrackingCommand reference state', () => {
     close(Float32Array.from(mjData.qvel), [0.5, 0, 0, 0, -1, 0]);
   });
 });
+
+describe('TrackingCommand rate', () => {
+  async function tracker(motion: Record<string, unknown>) {
+    const requestReset = vi.fn();
+    const context = {
+      mujoco: {},
+      mjModel: null,
+      mjData: null,
+      scene: new THREE.Scene(),
+      requestReset,
+    } as unknown as CommandTermContext;
+    const walk = {
+      name: 'walk',
+      data: await clip(4),
+      fps: 10,
+      anchor_body_name: 'pelvis',
+      body_names: ['pelvis'],
+      frame_fields: ['latent'],
+      ...motion,
+    };
+    const config = { name: 'TrackingCommand', motions: [walk] } as unknown as CommandConfigEntry;
+    const term = new TrackingCommand('motion', config, context);
+    return { term, requestReset, frame: () => term.getStateField('latent')![0] / 10 };
+  }
+
+  it('advances several frames in one step, wrapping as one frame at a time did', async () => {
+    const { term, requestReset, frame } = await tracker({ fps: 30 });
+    await term.setSelectedMotion('walk');
+    expect(frame()).toBe(1);
+    term.update(0.1); // Three frames: past the last of four, so back to the first.
+    expect(frame()).toBe(0);
+    expect(requestReset).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds the last frame of a clip that does not loop', async () => {
+    const { term, requestReset, frame } = await tracker({ fps: 100, loop: false });
+    await term.setSelectedMotion('walk');
+    term.update(0.1);
+    expect(frame()).toBe(3);
+    expect(requestReset).not.toHaveBeenCalled();
+  });
+
+  // Infinity is what JSON's 1e309 parses to; 1e18 is past where adding 1 changes nothing.
+  it.each([Infinity, 1e18, 0, -10, Number.NaN])('refuses fps %s', async (fps) => {
+    const { term } = await tracker({ fps });
+    await expect(term.setSelectedMotion('walk')).rejects.toThrow(/fps/);
+  });
+});
