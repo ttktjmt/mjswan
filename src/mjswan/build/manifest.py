@@ -24,7 +24,7 @@ from ..mjlab.env import mdp_commands, policy_actions
 from ..mjlab.gui import record_scene_gui
 from ..viewer import ViewerConfig
 from .asset import motion_key
-from .credit import scene_credits, work_entry
+from .credit import LicenseNames, scene_credits, work_entry
 from .frontend import uses_custom_js
 from .mdp import (
     command_widths,
@@ -379,9 +379,13 @@ def _input_slots(policy: PolicyConfig, obs_keys: list[str]) -> list[str]:
 
 
 def scene_entry(
-    scene: SceneConfig, mdps: list[dict[str, Any]], policies: list[dict[str, Any]]
+    scene: SceneConfig,
+    mdps: list[dict[str, Any]],
+    policies: list[dict[str, Any]],
+    licenses: LicenseNames,
 ) -> dict[str, Any]:
-    """A scene's manifest entry; its paths resolve against the scene directory."""
+    """A scene's manifest entry; its paths resolve against the scene directory.
+    ``licenses`` names the project's license files (:func:`.credit.license_names`)."""
     return {
         "id": scene.id,
         "name": scene.name,
@@ -394,7 +398,7 @@ def scene_entry(
         **(
             {"skins": [skin_entry(skin) for skin in scene.skins]} if scene.skins else {}
         ),
-        **({"credits": credits} if (credits := scene_credits(scene)) else {}),
+        **({"credits": credits} if (credits := scene_credits(scene, licenses)) else {}),
         "mdps": mdps,
         "policies": policies,
     }

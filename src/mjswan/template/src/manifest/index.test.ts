@@ -124,7 +124,7 @@ describe('parseManifest', () => {
             {
               ...project.scenes[0],
               credits: [
-                { component: 'unitree_g1', license: 'LICENSE.unitree_g1', spdx: 'BSD-3-Clause' },
+                { component: 'unitree_g1', license: '../licenses/LICENSE.unitree_g1', spdx: 'BSD-3-Clause' },
                 { component: 'skin-fox', skin: 'fox', license: 'LICENSE.skin-fox', notice: 'NOTICE.skin-fox' },
                 {
                   component: 'skin-sample_a',
@@ -153,6 +153,8 @@ describe('parseManifest', () => {
       otherLicenseUrl: 'https://example.com',
     });
     expect(await scene.credits[1].notice?.()).toBe('bytes:demo/humanoid/NOTICE.skin-fox');
+    // The project's licenses/, as mjswan writes them now; a scene's own, as it did before.
+    expect(await scene.credits[0].license?.()).toBe('bytes:demo/licenses/LICENSE.unitree_g1');
     expect(await catalog.projects[0].work?.license?.()).toBe('bytes:demo/LICENSE');
     expect(catalog.projects[0].work?.copyright).toBe('Copyright (c) Demo');
   });

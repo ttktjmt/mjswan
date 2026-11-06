@@ -301,8 +301,14 @@ function checkFormat(parsed: Manifest): void {
   }
 }
 
+/** `rel` against `dir`, its `..` resolved: a scene's credits name the project's `../licenses/…`. */
 function inScene(dir: string, rel: string): string {
-  return `${dir}${rel}`.replace(/\/+/g, '/');
+  const parts: string[] = [];
+  for (const part of `${dir}${rel}`.split('/')) {
+    if (part === '..') parts.pop();
+    else if (part && part !== '.') parts.push(part);
+  }
+  return parts.join('/');
 }
 
 function toLicenseEntry(dir: string, entry: ManifestLicense, source: ByteSource): LicenseEntry {

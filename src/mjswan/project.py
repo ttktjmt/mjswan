@@ -17,6 +17,7 @@ import mujoco
 from .build.mjz import collect_spec_assets
 from .document.ids import assign_name, name2id
 from .license import (
+    LICENSES_DIR,
     detect_attributions,
     known_attribution,
     resolve_license,
@@ -155,8 +156,8 @@ class ProjectHandle:
             SceneHandle for adding policies and further configuration.
 
         For a ``spec`` loaded from disk, ``LICENSE*`` / ``NOTICE*`` files beside the
-        model or its meshes and textures are copied verbatim into the scene directory as
-        ``LICENSE.<component>`` (ADR 0007 §2); a model in the known-assets table gets a
+        model or its meshes and textures are copied verbatim into the project's
+        ``licenses/`` as ``LICENSE.<component>`` (ADR 0007 §2); a model in the known-assets table gets a
         generated file when none is found. Adjust with
         :meth:`~mjswan.scene.SceneHandle.add_attribution` and
         :meth:`~mjswan.scene.SceneHandle.clear_attributions`.
@@ -185,7 +186,10 @@ class ProjectHandle:
             metadata = {}
 
         name, ident = assign_name(
-            name, {s.id for s in self._config.scenes}, kind="scene", stacklevel=4
+            name,
+            {s.id for s in self._config.scenes} | {LICENSES_DIR},
+            kind="scene",
+            stacklevel=4,
         )
         scene_config = SceneConfig(
             name=name,
@@ -229,7 +233,7 @@ class ProjectHandle:
         textures relative to it (for an XML at the root, the whole repository), and the
         spec is compiled in place. It is then added as by :meth:`add_scene` with
         ``spec=``, license detection included: a ``LICENSE`` beside the model is copied
-        into the scene directory (ADR 0007 §2).
+        into the project's ``licenses/`` (ADR 0007 §2).
 
         Args:
             repo_id: Hub repository, ``"<owner>/<name>"``.
