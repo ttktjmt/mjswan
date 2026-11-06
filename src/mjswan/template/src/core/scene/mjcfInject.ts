@@ -38,5 +38,6 @@ export function readMjcfFile(mujoco: MainModule, path: string): string {
  * and sites.
  */
 export function isEntityPrefixed(xml: string): boolean {
-  return /\bname\s*=\s*"[^"]*\/[^"]*"/.test(xml);
+  // `[^"/]*` leaves one split point, so an unclosed value scans in linear time.
+  return /\bname\s*=\s*"[^"/]*\/[^"]*"/.test(xml);
 }

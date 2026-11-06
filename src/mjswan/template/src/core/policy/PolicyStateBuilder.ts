@@ -1,4 +1,5 @@
 import type { MainModule, MjData, MjModel } from 'mujoco';
+import { compileNamePattern } from './namePattern';
 import type { PolicyState } from './types';
 
 export class PolicyStateBuilder {
@@ -97,9 +98,8 @@ export class PolicyStateBuilder {
       return null;
     }
 
-    const regexps = patterns.map((p) => new RegExp(`^(?:${p})$`));
-    const matchesAny = (name: string): boolean =>
-      regexps.some((re) => re.test(name));
+    const matchers = patterns.map(compileNamePattern);
+    const matchesAny = (name: string): boolean => matchers.some((m) => m(name));
 
     const ctrlAdr: number[] = [];
     const qposAdr: number[] = [];
@@ -134,7 +134,7 @@ export class PolicyStateBuilder {
     actionIndices: number[];
     jointNames: string[];
   } | null {
-    const regexps = patterns.map((p) => new RegExp(`^(?:${p})$`));
+    const matchers = patterns.map(compileNamePattern);
     const jointTransmission = this.mujoco.mjtTrn?.mjTRN_JOINT?.value;
     const actuated = new Set<number>();
     for (let i = 0; i < this.mjModel.nu; i++) {
@@ -143,7 +143,7 @@ export class PolicyStateBuilder {
       }
     }
     const jointNames = this.getJointNames(this.mjModel).filter(
-      (name, joint) => actuated.has(joint) && regexps.some((re) => re.test(name))
+      (name, joint) => actuated.has(joint) && matchers.some((m) => m(name))
     );
     if (jointNames.length === 0) {
       return null;
@@ -171,9 +171,8 @@ export class PolicyStateBuilder {
     actionIndices: number[];
   } | null {
     const actuatorNames = this.getActuatorNames(this.mjModel);
-    const regexps = patterns.map((p) => new RegExp(`^(?:${p})$`));
-    const matchesAny = (name: string): boolean =>
-      regexps.some((re) => re.test(name));
+    const matchers = patterns.map(compileNamePattern);
+    const matchesAny = (name: string): boolean => matchers.some((m) => m(name));
 
     const ctrlAdr: number[] = [];
     const actionIndices: number[] = [];

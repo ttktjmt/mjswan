@@ -1360,3 +1360,13 @@ shortcuts.
   The MJCF and every file it includes are now checked against the snapshot root before
   MuJoCo reads them, tags by local name since MuJoCo ignores XML namespaces, and a path
   outside it raises `ValueError`. Paths elsewhere in the same repository still work.
+- **A document can no longer hold the viewer's tab with one number or pattern.** Four
+  values a document controls set work that ran on the page's thread with no bound: an
+  action term's `actuator_names` or `clip` pattern, matched by V8's backtracking `RegExp`
+  (exponential in the name's length); a motion's `fps`, advanced one frame at a time
+  (endless at `1e309`, which JSON reads as Infinity); `control_dt` over the MJCF
+  timestep, run as that many physics substeps per control step; and a scene's `name`
+  values, scanned by a regex that went quadratic on an unclosed one. Name patterns now
+  run on a linear-time matcher that refuses lookaround and backreferences; a motion's
+  `fps` must be a finite rate up to 10000 and advances in one step; a scene needing over
+  1000 substeps per control step is refused at load; and the name scan is linear.
