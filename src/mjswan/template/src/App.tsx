@@ -11,7 +11,9 @@ import { parseManifest, sanitizeName, type Catalog, type ProjectCatalog, type By
 import {
   applyUrlState,
   DEBUG_PARAM,
+  MANIFEST_PARAM,
   PANEL_PARAM,
+  pluginModuleUrl,
   POLICY_PARAM,
   PROJECT_PARAM,
   SCENE_PARAM,
@@ -41,7 +43,7 @@ function makeByteSource(base: string): ByteSource {
 
 async function loadCatalog(base: string): Promise<Catalog> {
   const params = new URLSearchParams(window.location.search);
-  const override = params.get('manifest');
+  const override = params.get(MANIFEST_PARAM);
   const manifestUrl = override
     ? new URL(override, window.location.href).toString()
     : `${base}manifest.json`.replace(/([^:])\/{2,}/g, '$1/');
@@ -106,8 +108,8 @@ function AppContent() {
       .then(async (cat) => {
         // Trusted-only: load the author plugin ESM before the first scene so the
         // engine has the custom terms at registration time (ADR 0004 §10).
-        if (cat.pluginsPath) {
-          const url = `${base}${cat.pluginsPath}`.replace(/([^:])\/{2,}/g, '$1/');
+        const url = pluginModuleUrl(base, cat.pluginsPath, window.location.search, window.location.href);
+        if (url) {
           pluginsRef.current = (await import(/* @vite-ignore */ url)) as EnginePlugins;
         }
         const params = new URLSearchParams(window.location.search);
