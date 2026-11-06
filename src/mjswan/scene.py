@@ -1044,7 +1044,8 @@ class SceneHandle:
                             motion_name, motion_bytes = source.wandb.fetch_motion_npz(
                                 run_paths[0]
                             )
-                            staged = Path(staging_dir) / f"{motion_name}.npz"
+                            # Not the artifact's name, which may hold a separator.
+                            staged = Path(staging_dir) / "motion.npz"
                             staged.write_bytes(motion_bytes)
                             motion_file_for_env = str(staged)
                         for rp in run_paths:

@@ -11,11 +11,19 @@ import contextlib
 import re
 import tempfile
 from collections.abc import Iterator
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 from urllib.parse import urlparse
 
 import onnx
+
+
+def _stays_in_root(name: str) -> bool:
+    """Whether a run file's name lands inside the download root on any OS."""
+    return not any(
+        p.anchor or ".." in p.parts
+        for p in (PurePosixPath(name), PureWindowsPath(name))
+    )
 
 
 def _wandb() -> Any:
@@ -105,12 +113,19 @@ def fetch_onnx(run_path: str) -> tuple[str, onnx.ModelProto]:
         raise ValueError(f"No .onnx files found in W&B run: {run_path}")
 
     latest = max(onnx_files, key=lambda f: f.updated_at)
+    # The run's owner names the file, and wandb joins the name onto the root as is.
+    if not _stays_in_root(latest.name):
+        raise ValueError(
+            f"W&B run {run_path} names its ONNX file {latest.name!r}, a path outside "
+            "the download directory."
+        )
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         latest.download(root=tmp_dir, replace=True)
         local_path = Path(tmp_dir) / latest.name
         name = local_path.stem
-        model = onnx.load(str(local_path))
+        # Only the .onnx is downloaded, so external data could only name other files.
+        model = onnx.load(str(local_path), load_external_data=False)
 
     return name, model
 

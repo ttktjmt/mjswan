@@ -1293,6 +1293,17 @@ shortcuts.
   where they used to fetch the CPU wheel outside the lock.
 - **Every GitHub Action is pinned to a commit SHA**, with its release tag in a comment: a
   moved tag no longer changes what a workflow runs.
+- **The login callback page shows an OAuth error as text.** While `mjswan login` waited,
+  its page on 127.0.0.1 put the `error` query value into HTML unescaped, so a page that
+  sent the browser there first could have its own markup rendered on that origin.
+- **`add_policy_wandb(only_latest=True)` refuses a run file named outside the download
+  directory.** `fetch_onnx` downloaded the run's newest `.onnx` under the name its owner
+  gave it, which wandb joins onto the download root as is, so an absolute or `../` name,
+  if the service returned one, would write over a file on the developer's disk, and
+  `onnx.load` would read external data from files beside it into the policy. Such a name
+  now raises `ValueError` before anything is downloaded, and the model is loaded without
+  external data. A tracking task's motion is staged as `motion.npz`, not under its
+  artifact's name.
 - **Pillow 13.0.0, filelock 4.2.4 and virtualenv 21.14.12 in `uv.lock`**, for the
   Dependabot advisories against Pillow < 13.0.0, filelock 3.20.4 to 4.2.0 and virtualenv
   < 21.14.10.

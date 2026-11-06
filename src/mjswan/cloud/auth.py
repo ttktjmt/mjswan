@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import html
 import json
 import os
 import secrets
@@ -409,7 +410,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         message = (
             "Login successful — you can close this tab and return to the terminal."
             if ok
-            else f"Login failed: {result.error or 'no authorization code returned'}."
+            else f"Login failed: {html.escape(result.error or 'no authorization code returned')}."
         )
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
