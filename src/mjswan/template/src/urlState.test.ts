@@ -74,7 +74,7 @@ describe('pluginModuleUrl', () => {
     expect(pluginModuleUrl('/app/', 'assets/plugins.js', search, page)).toBeNull();
   });
 
-  // Joined as strings, base '/' and a leading slash made a scheme-relative URL.
+  // Joined as strings, base '/' and a leading slash would form a scheme-relative URL.
   it('keeps a leading slash on the page origin', () => {
     expect(pluginModuleUrl('/', '/other.test/p.js', '', page)).toBe('https://example.org/other.test/p.js');
   });
