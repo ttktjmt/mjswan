@@ -62,7 +62,7 @@ export type PolicyRunnerOptions = {
   /** The loaded graphs and slot reader traced observations need; absent if none. */
   onnxSessions?: OnnxSessionCache;
   readOnnxSlot?: SlotReader;
-  /** Shared with the same policy load's delay and contact rings. */
+  /** Shared with the same policy load's delay and contact buffers. */
   budget?: BufferBudget;
 };
 

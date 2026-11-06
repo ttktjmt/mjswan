@@ -1,7 +1,4 @@
-/**
- * One budget per policy load bounds every ring a document sizes: observation histories,
- * group histories, command delays and contact histories.
- */
+/** One budget per policy load bounds every buffer a document sizes. */
 import { describe, expect, it } from 'vitest';
 import { substepOptions } from '../../action/applyAction';
 import { ContactSensorSet } from '../../onnx/contact';
@@ -22,7 +19,6 @@ describe('BufferBudget', () => {
     expect(() => new BufferBudget().reserve(MAX_FRAMES + 1, 1, 'ring')).toThrow(/buffer limit/);
   });
 
-  // Counts under the per-ring limit still multiply and add up.
   it('refuses rings that add up past the total, empty frames included', () => {
     const budget = new BufferBudget();
     budget.reserve(MAX_FRAMES, MAX_BUFFERED / MAX_FRAMES - 64, 'one');

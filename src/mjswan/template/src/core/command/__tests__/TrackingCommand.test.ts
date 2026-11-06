@@ -470,7 +470,6 @@ describe('TrackingCommand rate', () => {
 });
 
 describe('TrackingCommand clip shape', () => {
-  // A header alone, holding no values, used to allocate as many frames as it named.
   it('refuses an array whose frames hold nothing', async () => {
     const context = { mujoco: {}, mjModel: null, mjData: null, scene: new THREE.Scene() } as unknown as CommandTermContext;
     const walk = {
