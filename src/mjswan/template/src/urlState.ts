@@ -7,6 +7,7 @@ export const SKIN_PARAM = 'skin';
 export const PANEL_PARAM = 'panel';
 export const DEBUG_PARAM = 'debug';
 export const XRAY_PARAM = 'xray';
+export const MANIFEST_PARAM = 'manifest';
 
 export interface UrlState {
   /** Id of the active entry, or null to leave the parameter off. */
@@ -36,4 +37,20 @@ export function applyUrlState(search: string, state: UrlState): string {
   set(DEBUG_PARAM, state.debug ? null : '0');
   set(XRAY_PARAM, state.xray ? '1' : null);
   return params.toString();
+}
+
+/**
+ * Where the build's plugins module loads from, or null when it must not load. A manifest
+ * named by `?manifest=` belongs to whoever wrote the link, so its plugins never run, and
+ * the module must stay on the page's origin: a build only writes `assets/plugins.js`.
+ */
+export function pluginModuleUrl(
+  base: string,
+  pluginsPath: string | undefined,
+  search: string,
+  page: string,
+): string | null {
+  if (!pluginsPath || new URLSearchParams(search).has(MANIFEST_PARAM)) return null;
+  const url = new URL(pluginsPath, new URL(base, page));
+  return url.origin === new URL(page).origin ? url.href : null;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyUrlState, type UrlState } from './urlState';
+import { applyUrlState, pluginModuleUrl, type UrlState } from './urlState';
 
 // The URL carries ids, not display names (ADR 0006 §4).
 const SELECTED: UrlState = {
@@ -58,4 +58,31 @@ describe('applyUrlState', () => {
       'project=demo_two&scene=humanoid&policy=walk',
     );
   });
+});
+
+describe('pluginModuleUrl', () => {
+  const page = 'https://example.org/app/?scene=a';
+
+  it("loads the build's own module", () => {
+    expect(pluginModuleUrl('/app/', 'assets/plugins.js', '?scene=a', page)).toBe(
+      'https://example.org/app/assets/plugins.js',
+    );
+  });
+
+  it('loads nothing a ?manifest= link names', () => {
+    const search = '?manifest=https%3A%2F%2Fother.test%2Fmanifest.json';
+    expect(pluginModuleUrl('/app/', 'assets/plugins.js', search, page)).toBeNull();
+  });
+
+  // Joined as strings, base '/' and a leading slash made a scheme-relative URL.
+  it('keeps a leading slash on the page origin', () => {
+    expect(pluginModuleUrl('/', '/other.test/p.js', '', page)).toBe('https://example.org/other.test/p.js');
+  });
+
+  it.each(['//other.test/p.js', '/\\other.test/p.js', 'https://other.test/p.js'])(
+    'refuses a module on another origin (%s)',
+    (path) => {
+      expect(pluginModuleUrl('/', path, '', page)).toBeNull();
+    },
+  );
 });

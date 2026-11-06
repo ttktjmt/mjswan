@@ -1291,6 +1291,11 @@ shortcuts.
   keeps any release younger than that out of the lock, as the template's `.npmrc` already
   does for npm. The test jobs now install the locked torch, the CUDA build on Linux,
   where they used to fetch the CPU wheel outside the lock.
+- **A `?manifest=` link no longer loads a plugins module.** The SPA imported whatever
+  `plugins` the manifest named, joined onto the base as a string, so on a site hosted at
+  its root a link carrying `?manifest=` with `"plugins": "/other.site/p.js"` imported a
+  module from another origin. A manifest from `?manifest=` now loads no plugins, and the
+  build's own module is resolved as a URL and loaded only from the page's origin.
 - **Every GitHub Action is pinned to a commit SHA**, with its release tag in a comment: a
   moved tag no longer changes what a workflow runs.
 - **Pillow 13.0.0, filelock 4.2.4 and virtualenv 21.14.12 in `uv.lock`**, for the
