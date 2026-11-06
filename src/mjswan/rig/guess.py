@@ -523,7 +523,7 @@ def draft_source(
     def table(entries: Mapping[str, object], indent: str = "        ") -> str:
         return "".join(f"{indent}{_py(k)}: {_py(v)},\n" for k, v in entries.items())
 
-    # Through _py like every other string here: the command holds the file's name.
+    # Through _py: the command holds the skin file's name.
     doc = (
         f"A skin drafted by `{command}`.\n\nEvery map here is a guess: check each line "
         "against the file and the robot."

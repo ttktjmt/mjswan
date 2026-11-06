@@ -23,11 +23,7 @@ console = Console()
 
 
 def _inert(value: object) -> str:
-    """Text from a document, an archive or a server, made safe to print.
-
-    Control characters go, ESC among them, so a value cannot drive the terminal, and Rich
-    markup is escaped, so it cannot become a link or style.
-    """
+    """Untrusted text, safe to print: no control characters, Rich markup escaped."""
     text = "".join(
         ch for ch in str(value) if ch == "\n" or unicodedata.category(ch) != "Cc"
     )
