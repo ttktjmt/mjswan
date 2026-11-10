@@ -1,7 +1,6 @@
 /**
- * What a skin may make three-vrm do, refused at load so the scene runs without the skin
- * (applySkin's catch) rather than paying for it every frame. A skin file is often a third
- * party's avatar the build bundles as it is, and its manifest entry can come from a link.
+ * Limits on what a skin (often a third party's avatar) makes three-vrm do. A skin past one
+ * is refused at load, and applySkin runs the scene without it.
  */
 import type * as THREE from 'three';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -78,11 +77,10 @@ const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const field = (v: unknown, key: string): unknown => (typeof v === 'object' && v !== null ? (v as Record<string, unknown>)[key] : undefined);
 
 /**
- * The work three-vrm 3.5.5's spring import and step will do, counted on the loaded nodes
- * before it runs. VRM 1.0 makes a joint per spring joint after the first; VRM 0.x one per
- * object under each listed root, including the colliders it attaches first, which the
- * glTF node tree does not show (nor a multi-primitive mesh's child meshes). Stops once
- * past a budget.
+ * The work three-vrm 3.5.5's spring import and step will do, counted on the loaded nodes:
+ * VRM 1.0 makes a joint per spring joint after the first, VRM 0.x one per object under each
+ * listed root, including attached colliders and a multi-primitive mesh's child meshes, which
+ * the glTF JSON does not show. Stops once past a budget.
  */
 export function springWork(json: unknown, nodes: THREE.Object3D[]): SpringWork {
   const placed = new Map<THREE.Object3D, Placed>();

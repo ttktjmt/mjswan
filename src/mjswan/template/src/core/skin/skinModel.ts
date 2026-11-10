@@ -94,14 +94,14 @@ function fromVrm(gltf: GLTF): SkinModel {
   checkConstraints(vrm);
   VRMUtils.removeUnnecessaryVertices(gltf.scene);
   VRMUtils.combineSkeletons(gltf.scene);
-  // mjswan sets no expression weight, and each update costs binds x primitives.
+  // Settled once: mjswan sets no expression weight, and each update costs binds x primitives.
   vrm.expressionManager?.update();
   return {
     scene: vrm.scene,
     rig: humanoidRig(vrm.humanoid),
     springBoneManager: vrm.springBoneManager ?? null,
     frame: modelFrame(vrm.meta?.metaVersion),
-    // `vrm.update` but for its springs, which the skin runs itself, and its expressions.
+    // `vrm.update` but for its springs, which the skin runs itself, and its expressions, settled above.
     update(dt) {
       vrm.humanoid.update();
       vrm.lookAt?.update(dt);
