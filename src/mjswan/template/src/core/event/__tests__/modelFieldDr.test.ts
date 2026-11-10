@@ -87,6 +87,16 @@ beforeEach(() => {
 });
 
 describe('applyModelFieldDr', () => {
+  it('refuses an integer field and leaves it unchanged', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const before = Array.from(mjModel.body_jntadr as ArrayLike<number>);
+    const cfg = config({ field: 'body_jntadr', entity_type: 'body', entity_names: ['robot/foot'], axis_ranges: { '0': [1e9, 1e9] } });
+
+    expect(apply(cfg, new SeededRng(1))).toBe(false);
+    expect(Array.from(mjModel.body_jntadr as ArrayLike<number>)).toEqual(before);
+    warn.mockRestore();
+  });
+
   it('writes the named geom and leaves every other one alone', () => {
     const before = friction('floor');
     expect(apply(config(), new SeededRng(1))).toBe(true);

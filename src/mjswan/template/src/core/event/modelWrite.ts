@@ -7,6 +7,7 @@ import {
   modelField,
   modelRowWidth,
   modelRows,
+  writableModelField,
   type ModelElements,
 } from '../onnx/slotReader/model';
 import type { WriteTarget, WriteValues } from './entityWrite';
@@ -79,7 +80,7 @@ export function applyModelWrite(
   values: WriteValues,
   defaults?: ModelFieldDefaults | null,
 ): boolean {
-  const live = modelField(mjModel, target.field);
+  const live = writableModelField(mjModel, target.field);
   const written = values[target.outputs[0]];
   const rows = live ? modelRows(mjModel, target) : null;
   const width = live ? modelRowWidth(mjModel, live, target.element) : null;

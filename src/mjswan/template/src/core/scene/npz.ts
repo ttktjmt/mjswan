@@ -53,6 +53,10 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
       buffer[8] | (buffer[9] << 8) | (buffer[10] << 16) | (buffer[11] << 24);
     headerStart = 12;
   }
+  // The header regexes are quadratic in its length.
+  if (!(headerLen >= 0 && headerLen <= MAX_HEADER_LEN) || headerStart + headerLen > buffer.length) {
+    throw new Error(`npz: a ${headerLen}-byte .npy header (at most ${MAX_HEADER_LEN})`);
+  }
 
   const headerBytes = buffer.slice(headerStart, headerStart + headerLen);
   const header = new TextDecoder().decode(headerBytes);
@@ -76,6 +80,10 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
   const shape = shapeParts.map((s) => parseInt(s, 10));
+  // Before any branch: an Infinity dimension would match an Infinity count from a zero width.
+  if (!shape.every((d) => Number.isSafeInteger(d) && d >= 0)) {
+    throw new Error(`npz: shape (${shapeMatch[1]}) is not a list of sizes`);
+  }
 
   const dataOffset = headerStart + headerLen;
   const rawData = buffer.slice(dataOffset);
@@ -126,6 +134,7 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
     const strMatch = descr.match(/^S(\d+)$/);
     if (strMatch) {
       const width = parseInt(strMatch[1], 10);
+      if (!(width >= 1)) throw new Error(`npz: byte-string width ${strMatch[1]}`);
       const count = rawData.length / width;
       const expectedCount = shape.reduce((a, b) => a * b, 1);
       if (count !== expectedCount) {
@@ -147,6 +156,7 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
     const unicodeMatch = dtype.match(/^U(\d+)$/);
     if (unicodeMatch) {
       const width = parseInt(unicodeMatch[1], 10);
+      if (!(width >= 1)) throw new Error(`npz: unicode width ${unicodeMatch[1]}`);
       const bytesPerItem = width * 4;
       const count = rawData.length / bytesPerItem;
       const expectedCount = shape.reduce((a, b) => a * b, 1);
@@ -180,11 +190,14 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
 
   // The numeric branches size the data from the bytes, so the header could claim anything.
   const expected = shape.reduce((a, b) => a * b, 1);
-  if (!shape.every((d) => Number.isSafeInteger(d) && d >= 0) || float32Data.length !== expected) {
+  if (float32Data.length !== expected) {
     throw new Error(`npz: shape (${shape}) expects ${expected} values, the data holds ${float32Data.length}`);
   }
   return { shape, data: float32Data };
 }
+
+/** numpy's `_MAX_HEADER_SIZE`. */
+const MAX_HEADER_LEN = 10_000;
 
 const PICKLED_OBJECT_DTYPE_MESSAGE =
   'npz: pickled python objects (|O dtype) cannot be loaded in the browser';

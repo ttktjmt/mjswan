@@ -1403,3 +1403,14 @@ shortcuts.
   run on a linear-time matcher that refuses lookaround and backreferences; a motion's
   `fps` must be a finite rate up to 10000 and advances in one step; a scene needing over
   1000 substeps per control step is refused at load; and the name scan is linear.
+- **The document bounds above cover the inputs that got around them.** A name pattern
+  repeating an empty group (`(){9007199254740993}`) compiled forever, since the size limit
+  counted only instructions; a motion `.npy` string array of width 0 with a shape past
+  1e308 looped forever, and a long header made its shape regex quadratic; a contact
+  sensor with a negative `num_slots` or `dim` raised the buffer budget instead of drawing
+  on it; and a term's `rand_dim`, input slot sizes, observation `size` and raycast rays
+  were never charged to it. The compiler now counts every node, a `.npy` header is at most
+  10000 bytes and its shape is checked before any dtype, the budget takes only
+  non-negative integers and charges those feeds before any graph runs (rays per read,
+  65536 a step in all), and a document event writes only mjModel's float parameters:
+  writing an index array such as `jnt_qposadr` moved MuJoCo's memory accesses.

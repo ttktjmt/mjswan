@@ -80,6 +80,19 @@ beforeEach(() => {
   mujoco.mj_forward(mjModel, mjData);
 });
 
+describe('applyModelWrite on an index array', () => {
+  // MuJoCo uses jnt_qposadr as a memory offset: a document could move the qpos store.
+  it('refuses an integer field and leaves it unchanged', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const before = Array.from(mjModel.jnt_qposadr as ArrayLike<number>);
+    const target = writeTarget({ field: 'jnt_qposadr', element: 'joint', names: ['wrist'], cells: [[0, 0]], outputs: ['o'] });
+
+    expect(applyModelWrite(mjModel, target, { o: new Float32Array([1e9]) })).toBe(false);
+    expect(Array.from(mjModel.jnt_qposadr as ArrayLike<number>)).toEqual(before);
+    warn.mockRestore();
+  });
+});
+
 describe('readModelSlot', () => {
   it('serves the named rows in slot order, finding a prefixed name by its bare one', () => {
     const slot = {
