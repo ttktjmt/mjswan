@@ -1373,8 +1373,9 @@ shortcuts.
 - **`mjswan serve` answers only for files inside the app directory.** A symbolic link in
   a served directory someone else supplied was followed, so any local client of the
   server could read the file or folder it named, and every directory without an
-  `index.html` was listed. A path that resolves outside the directory, and a directory
-  listing, now get 404; links within the directory still work.
+  `index.html` was listed. A path that resolves outside the directory (including the
+  `index.html` served for a directory URL), and a directory listing, now get 404; links
+  within the directory still work.
 - **`mjswan publish` refuses a symbolic link in the build** before anything is uploaded.
   It followed one, so a link in a dist someone else handed over uploaded the file it
   named to mjswan Cloud.
@@ -1389,7 +1390,9 @@ shortcuts.
   the published `scene.mjz`, and a license-named file beside it into the scene directory.
   The MJCF and every file it includes are now checked against the snapshot root before
   MuJoCo reads them, tags by local name since MuJoCo ignores XML namespaces, and a path
-  outside it raises `ValueError`. Paths elsewhere in the same repository still work.
+  outside it raises `ValueError`. Paths elsewhere in the same repository still work. An
+  MJCF with a `<!DOCTYPE>` raises too: MuJoCo ends one at its first `>`, so what the check
+  reads as an entity value is markup MuJoCo compiles.
 - **A document can no longer hold the viewer's tab with one number or pattern.** Four
   values a document controls set work that ran on the page's thread with no bound: an
   action term's `actuator_names` or `clip` pattern, matched by V8's backtracking `RegExp`

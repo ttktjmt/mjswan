@@ -33,11 +33,16 @@ def _serving_handler(app_dir: Path) -> type:
             super().__init__(*args, directory=directory, **kwargs)
 
         def send_head(self):
-            # translate_path drops `..`, but open() would still follow a link out.
-            path = os.path.realpath(self.translate_path(self.path))
-            if path != root and not path.startswith(root + os.sep):
-                self.send_error(HTTPStatus.NOT_FOUND, "File not found")
-                return None
+            # translate_path drops `..` but open() follows links, also for the index page
+            # the stdlib picks for a directory (both names: index_pages is 3.12+).
+            path = self.translate_path(self.path)
+            paths = [path]
+            if os.path.isdir(path):
+                paths += [os.path.join(path, n) for n in ("index.html", "index.htm")]
+            for p in map(os.path.realpath, paths):
+                if p != root and not p.startswith(root + os.sep):
+                    self.send_error(HTTPStatus.NOT_FOUND, "File not found")
+                    return None
             return super().send_head()
 
         def list_directory(self, path):

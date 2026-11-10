@@ -23,6 +23,11 @@ def port(tmp_path: Path):
     (outside / "secret.txt").write_text("not part of the build")
     (app / "leak.txt").symlink_to(outside / "secret.txt")
     (app / "fs").symlink_to(outside, target_is_directory=True)
+    (app / "inner").mkdir()
+    (app / "inner" / "index.html").write_text("<!doctype html>")
+    for name, index in (("sub", "index.html"), ("htm", "index.htm")):
+        (app / name).mkdir()
+        (app / name / index).symlink_to(outside / "secret.txt")
 
     server = http.server.HTTPServer(("127.0.0.1", 0), _serving_handler(app))
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -40,11 +45,13 @@ def _status(port: int, path: str) -> int:
         conn.close()
 
 
-@pytest.mark.parametrize("path", ["/", "/index.html", "/again.html"])
+@pytest.mark.parametrize("path", ["/", "/index.html", "/again.html", "/inner/"])
 def test_serves_the_app_and_links_within_it(port, path):
     assert _status(port, path) == 200
 
 
-@pytest.mark.parametrize("path", ["/leak.txt", "/fs/", "/fs/secret.txt", "/empty/"])
+@pytest.mark.parametrize(
+    "path", ["/leak.txt", "/fs/", "/fs/secret.txt", "/empty/", "/sub/", "/htm/"]
+)
 def test_refuses_links_out_and_directory_listings(port, path):
     assert _status(port, path) == 404

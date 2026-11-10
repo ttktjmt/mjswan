@@ -273,6 +273,29 @@ class TestContainment:
         with pytest.raises(ValueError, match="outside the repository"):
             project.add_scene_hf("org/assets", "scenes/unitree_g1/scene.xml")
 
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "<asset><mesh name='p' file='../../../private/link.stl'/></asset>",
+            "<include file='../../../private/inc.xml'/>",
+        ],
+        ids=["mesh", "include"],
+    )
+    @pytest.mark.usefixtures("fake_hub", "private")
+    def test_a_doctype_cannot_hide_a_file_outside_the_repository(
+        self, project, tmp_path, body
+    ):
+        # MuJoCo reads the model inside the entity value; expat sees only "benign".
+        scene = tmp_path / "repo/scenes/unitree_g1/scene.xml"
+        scene.write_text(
+            f"<!DOCTYPE mujoco [<!ENTITY x \"> <mujoco model='hidden'>{body}"
+            "<worldbody><geom type='mesh' mesh='p'/></worldbody></mujoco> <!-- \">]>"
+            '<!-- --><mujoco model="benign"/>'
+        )
+
+        with pytest.raises(ValueError, match="DOCTYPE"):
+            project.add_scene_hf("org/assets", "scenes/unitree_g1/scene.xml")
+
     def test_an_include_inside_the_repository_builds(self, project, fake_hub, tmp_path):
         model = tmp_path / "repo/scenes/unitree_g1"
         asset = '<asset><mesh name="link" file="meshes/link.stl"/></asset>'

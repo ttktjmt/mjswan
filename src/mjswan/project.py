@@ -444,6 +444,12 @@ def _refuse_files_outside(root: Path, xml_path: Path, label: str) -> None:
     def local(name: str) -> str:
         return name.rpartition("}")[2]
 
+    class NoDoctype(ET.TreeBuilder):
+        # TinyXML2 ends <!DOCTYPE at its first '>', so markup in the internal subset
+        # is a model to MuJoCo and an entity value to expat.
+        def doctype(self, name, pubid, system):
+            raise ValueError(f"{label}: MuJoCo does not read a DOCTYPE as XML does.")
+
     seen: set[str] = set()
 
     def model(path: str) -> None:
@@ -456,7 +462,7 @@ def _refuse_files_outside(root: Path, xml_path: Path, label: str) -> None:
                 continue
             seen.add(current)
             try:
-                tree = ET.parse(current)
+                tree = ET.parse(current, parser=ET.XMLParser(target=NoDoctype()))
             except ET.ParseError as exc:
                 raise ValueError(f"{label}: cannot read {current}: {exc}") from exc
             for elem in tree.iter():
