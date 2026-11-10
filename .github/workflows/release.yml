@@ -86,8 +86,7 @@ jobs:
             git push
           fi
 
-      # The publish jobs build this commit by SHA. An existing tag must already name it:
-      # anything else would publish a commit this job never checked.
+      # The publish jobs check out this commit by SHA, so an existing tag must already name it.
       - name: Create and push tag
         id: tag
         run: |
