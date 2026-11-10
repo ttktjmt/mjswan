@@ -29,22 +29,21 @@ def _serving_handler(app_dir: Path) -> type:
     class CrossOriginIsolatedHandler(http.server.SimpleHTTPRequestHandler):
         """HTTP handler with Cross-Origin Isolation headers for SharedArrayBuffer."""
 
-        # A build writes only index.html; the stdlib would also try index.htm.
-        index_pages = ("index.html",)
-
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=directory, **kwargs)
 
         def send_head(self):
             # translate_path drops `..`, but open() would still follow a link out,
-            # including the index page the stdlib serves for a directory.
+            # including the index page the stdlib picks for a directory (hardcoded
+            # before Python 3.12's index_pages).
             path = self.translate_path(self.path)
+            paths = [path]
             if os.path.isdir(path):
-                path = os.path.join(path, self.index_pages[0])
-            path = os.path.realpath(path)
-            if path != root and not path.startswith(root + os.sep):
-                self.send_error(HTTPStatus.NOT_FOUND, "File not found")
-                return None
+                paths += [os.path.join(path, n) for n in ("index.html", "index.htm")]
+            for p in map(os.path.realpath, paths):
+                if p != root and not p.startswith(root + os.sep):
+                    self.send_error(HTTPStatus.NOT_FOUND, "File not found")
+                    return None
             return super().send_head()
 
         def list_directory(self, path):
