@@ -1389,7 +1389,9 @@ shortcuts.
   the published `scene.mjz`, and a license-named file beside it into the scene directory.
   The MJCF and every file it includes are now checked against the snapshot root before
   MuJoCo reads them, tags by local name since MuJoCo ignores XML namespaces, and a path
-  outside it raises `ValueError`. Paths elsewhere in the same repository still work.
+  outside it raises `ValueError`. Paths elsewhere in the same repository still work. An
+  MJCF with a `<!DOCTYPE>` raises too: MuJoCo ends one at its first `>`, so what the check
+  reads as an entity value is markup MuJoCo compiles.
 - **A document can no longer hold the viewer's tab with one number or pattern.** Four
   values a document controls set work that ran on the page's thread with no bound: an
   action term's `actuator_names` or `clip` pattern, matched by V8's backtracking `RegExp`
