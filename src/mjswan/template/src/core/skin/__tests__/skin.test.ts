@@ -3,12 +3,13 @@
  * mirrored the way each version faces, and the same skeleton as plain .glb files, scaled,
  * turned or nested otherwise. Driven by the same robot pose, all must pose alike.
  */
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { MToonMaterial } from '@pixiv/three-vrm';
+import { MToonMaterial, VRMExpressionManager } from '@pixiv/three-vrm';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 import { Skin, geomBottom, type SkinConfig } from '../skin';
-import { asPainted } from '../skinModel';
+import { checkSpringChains } from '../budget';
+import { asPainted, loadSkinModel } from '../skinModel';
 
 /** Bone, parent, offset from the parent in VRM 1.0's frame (facing +z, left at +x). */
 const SKELETON: Array<[string, string | null, [number, number, number]]> = [
@@ -121,7 +122,12 @@ function gltfFile(
   };
 }
 
-function vrmFile(version: '0' | '1'): ArrayBuffer {
+type VrmJson = {
+  nodes: Array<{ name: string; translation: number[]; children: number[] }>;
+  extensions: Record<string, Record<string, unknown>>;
+};
+
+function vrmFile(version: '0' | '1', extend?: (json: VrmJson) => void): ArrayBuffer {
   // VRM 0.x faces -z, so its left side is at -x.
   const mirror = version === '0' ? -1 : 1;
   const index = new Map(SKELETON.map(([name], i) => [name, i]));
@@ -154,7 +160,9 @@ function vrmFile(version: '0' | '1'): ArrayBuffer {
             },
           },
         };
-  return glb({ asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [0] }], nodes, ...vrm });
+  const json = { asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [0] }], nodes, ...vrm };
+  extend?.(json as unknown as VrmJson);
+  return glb(json);
 }
 
 /**
@@ -694,5 +702,82 @@ describe('a model rebuilt under the skin', () => {
     data.delete();
     model.delete();
     skin.dispose();
+  });
+});
+
+/** `n` nodes hanging in a chain under `head`, their indices top first. */
+function chain(json: VrmJson, n: number, step: [number, number, number] = [0, 0.01, 0]): number[] {
+  const head = json.nodes.findIndex((node) => node.name === 'head');
+  const added = Array.from({ length: n }, (_, i) => json.nodes.length + i);
+  added.forEach((index, i) => {
+    json.nodes.push({ name: `c${i}`, translation: step, children: i + 1 < n ? [index + 1] : [] });
+  });
+  json.nodes[head].children.push(added[0]);
+  return added;
+}
+
+describe('a skin past its budget', () => {
+  const vrm = { format: 'vrm' } as SkinConfig;
+
+  it('refuses VRM 0.x spring roots nested down a chain', async () => {
+    const data = vrmFile('0', (json) => {
+      const bones = chain(json, 160);
+      json.extensions.VRM.secondaryAnimation = { boneGroups: [{ bones, colliderGroups: [] }], colliderGroups: [] };
+    });
+    const start = performance.now();
+    await expect(loadSkinModel(data, vrm)).rejects.toThrow(/springs exceed/);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
+  it('refuses one collider group listed over and over', async () => {
+    const data = vrmFile('0', (json) => {
+      const bones = chain(json, 100);
+      const colliders = Array.from({ length: 100 }, () => ({ offset: { x: 0, y: 0, z: 0 }, radius: 0.01 }));
+      json.extensions.VRM.secondaryAnimation = {
+        boneGroups: [{ bones: [bones[0]], colliderGroups: Array(500).fill(0) }],
+        colliderGroups: [{ node: 0, colliders }],
+      };
+    });
+    await expect(loadSkinModel(data, vrm)).rejects.toThrow(/collider tests/);
+  });
+
+  it('refuses a node constraint on a deep chain, and loads shallow ones', async () => {
+    const constrained = (depth: number) =>
+      vrmFile('1', (json) => {
+        const tip = chain(json, depth)[depth - 1];
+        json.nodes.push({ name: 'leaf', translation: [0, 0, 0], children: [] });
+        const leaf = json.nodes.length - 1;
+        json.nodes[0].children.push(leaf);
+        Object.assign(json.nodes[leaf], {
+          extensions: { VRMC_node_constraint: { specVersion: '1.0', constraint: { aim: { source: tip, aimAxis: 'PositiveY' } } } },
+        });
+        (json as unknown as { extensionsUsed: string[] }).extensionsUsed.push('VRMC_node_constraint');
+      });
+    await expect(loadSkinModel(constrained(300), vrm)).rejects.toThrow(/constraint/);
+    await expect(loadSkinModel(constrained(10), vrm)).resolves.toBeDefined();
+  });
+
+  it('settles expressions at load, not on every update', async () => {
+    const data = vrmFile('1', (json) => {
+      json.extensions.VRMC_vrm.expressions = { preset: { happy: {} } };
+    });
+    const update = vi.spyOn(VRMExpressionManager.prototype, 'update');
+    const model = await loadSkinModel(data, vrm);
+    update.mockClear();
+    model.update(1 / 120);
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
+  });
+
+  it('refuses manifest springs past the joint or collider test budget', () => {
+    const springs = (joints: number, colliders: number) => [
+      {
+        joints: Array(joints).fill(0),
+        colliders: Array.from({ length: colliders }, () => ({ node: 0, radius: 0.01, offset: [0, 0, 0] })),
+      },
+    ] as unknown as Parameters<typeof checkSpringChains>[0];
+    expect(() => checkSpringChains(springs(301, 300))).toThrow(/collider tests/);
+    expect(() => checkSpringChains(springs(5000, 0))).toThrow(/joints/);
+    expect(() => checkSpringChains(springs(4, 3))).not.toThrow();
   });
 });
