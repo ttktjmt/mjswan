@@ -75,7 +75,7 @@ import { nextDeadline } from './stepDeadline';
 import { yieldToBrowser } from './yieldToBrowser';
 import { TerminationManager } from '../termination/TerminationManager';
 import * as ort from 'onnxruntime-web/wasm';
-import { BufferBudget } from '../policy/bufferBudget';
+import { BufferBudget, reserveTermFeeds } from '../policy/bufferBudget';
 import { PolicyRunner } from '../policy/PolicyRunner';
 import { OnnxModule } from '../policy/OnnxModule';
 import { PolicyStateBuilder } from '../policy/PolicyStateBuilder';
@@ -1467,6 +1467,9 @@ export class mjswanRuntime {
 
     try {
       const config = policy.config;
+      // Before any graph runs: a startup event and a command reset run theirs during the load.
+      const budget = new BufferBudget();
+      reserveTermFeeds(config, budget);
       if (!kept) await this.policyGraphs.load(policy.graphs ?? []);
       if (config.events && config.events.length > 0) {
         this.eventManager = new EventManager(
@@ -1491,7 +1494,6 @@ export class mjswanRuntime {
       this.clipActions = readClipActions(config.clip_actions);
       const structured = collectStructuredSensors(config);
       this.raycastSensors = structured.raycast;
-      const budget = new BufferBudget();
       this.contactSensors = new ContactSensorSet(structured.contact, budget);
       this.debugVizSet.load(config.debug_vis, this.mujoco, this.mujocoRoot ?? this.scene);
       // Metadata comes from policy.json, bytes from the app; merge them by name.
