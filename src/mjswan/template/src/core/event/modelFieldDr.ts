@@ -9,6 +9,7 @@
  * an `mj_setConst` afterwards.
  */
 
+import { writableModelField } from '../onnx/slotReader/model';
 import type { SeededRng } from '../rng';
 import type { ModelFieldDefaults } from './modelWrite';
 
@@ -112,11 +113,9 @@ export function applyModelFieldDr(
   rng: SeededRng,
   defaults: ModelFieldDefaults,
 ): boolean {
-  const field = (mjModel as unknown as Record<string, ArrayLike<number> | undefined>)[
-    config.field
-  ];
+  const field = writableModelField(mjModel, config.field);
   if (!field) {
-    console.warn(`[modelFieldDr] "${config.name}": no mjModel.${config.field} to write.`);
+    console.warn(`[modelFieldDr] "${config.name}": mjModel.${config.field} is not a writable parameter.`);
     return false;
   }
   // `abs` overwrites, so its base is irrelevant; `add`/`scale` need the compiled value.

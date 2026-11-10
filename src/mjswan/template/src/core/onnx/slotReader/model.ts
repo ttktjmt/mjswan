@@ -52,6 +52,15 @@ export function modelField(mjModel: MjModel, field: string): ArrayLike<number> |
 }
 
 /**
+ * `mjModel.<field>` when an event may write it: a float parameter. The integer arrays are
+ * ids and addresses MuJoCo indexes memory with, and only its compiler may set them.
+ */
+export function writableModelField(mjModel: MjModel, field: string): Float64Array | Float32Array | undefined {
+  const value = (mjModel as unknown as Record<string, unknown>)[field];
+  return value instanceof Float64Array || value instanceof Float32Array ? value : undefined;
+}
+
+/**
  * Where `name` is in `names`: exactly, else by its unprefixed name, since a plain scene's
  * trace env namespaces its elements `robot/…` while the browser's model does not.
  */
