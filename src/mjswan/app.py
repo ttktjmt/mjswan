@@ -33,9 +33,8 @@ def _serving_handler(app_dir: Path) -> type:
             super().__init__(*args, directory=directory, **kwargs)
 
         def send_head(self):
-            # translate_path drops `..`, but open() would still follow a link out,
-            # including the index page the stdlib picks for a directory (hardcoded
-            # before Python 3.12's index_pages).
+            # translate_path drops `..` but open() follows links, also for the index page
+            # the stdlib picks for a directory (both names: index_pages is 3.12+).
             path = self.translate_path(self.path)
             paths = [path]
             if os.path.isdir(path):
