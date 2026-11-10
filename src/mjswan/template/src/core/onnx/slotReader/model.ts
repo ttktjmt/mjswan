@@ -51,10 +51,7 @@ export function modelField(mjModel: MjModel, field: string): ArrayLike<number> |
   return value as ArrayLike<number>;
 }
 
-/**
- * `mjModel.<field>` when an event may write it: a float parameter. The integer arrays are
- * ids and addresses MuJoCo indexes memory with, and only its compiler may set them.
- */
+/** `mjModel.<field>` if it is a float parameter: integer arrays are ids MuJoCo indexes memory with. */
 export function writableModelField(mjModel: MjModel, field: string): Float64Array | Float32Array | undefined {
   const value = (mjModel as unknown as Record<string, unknown>)[field];
   return value instanceof Float64Array || value instanceof Float32Array ? value : undefined;

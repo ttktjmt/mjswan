@@ -53,7 +53,7 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
       buffer[8] | (buffer[9] << 8) | (buffer[10] << 16) | (buffer[11] << 24);
     headerStart = 12;
   }
-  // The header regexes are quadratic in its length; numpy's own reader stops at this size.
+  // The header regexes are quadratic in its length.
   if (!(headerLen >= 0 && headerLen <= MAX_HEADER_LEN) || headerStart + headerLen > buffer.length) {
     throw new Error(`npz: a ${headerLen}-byte .npy header (at most ${MAX_HEADER_LEN})`);
   }
