@@ -16,6 +16,7 @@ import {
   VRMUtils,
   type VRM,
 } from '@pixiv/three-vrm';
+import { BoundedSpringBones, checkConstraints, checkSpringChains } from './budget';
 import { modelFrame } from './retarget';
 import { NodeRig, humanoidRig, type SkinRig } from './rig';
 import type { SkinConfig, SpringChainConfig, ToonConfig } from './config';
@@ -38,7 +39,9 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 export async function loadSkinModel(data: ArrayBuffer, config: SkinConfig): Promise<SkinModel> {
   const loader = new GLTFLoader();
-  if (config.format === 'vrm') loader.register((parser) => new VRMLoaderPlugin(parser));
+  if (config.format === 'vrm') {
+    loader.register((parser) => new VRMLoaderPlugin(parser, { springBonePlugin: new BoundedSpringBones(parser) }));
+  }
   const gltf = await loader.parseAsync(data, '');
   asPainted(gltf.scene);
   return config.format === 'vrm' ? fromVrm(gltf) : fromGltf(gltf, config);
@@ -88,18 +91,20 @@ export function asPainted(scene: THREE.Object3D): void {
 function fromVrm(gltf: GLTF): SkinModel {
   const vrm = gltf.userData.vrm as VRM | undefined;
   if (!vrm) throw new Error('not a VRM file (no VRM or VRMC_vrm extension)');
+  checkConstraints(vrm);
   VRMUtils.removeUnnecessaryVertices(gltf.scene);
   VRMUtils.combineSkeletons(gltf.scene);
+  // Settled once: mjswan sets no expression weight, and each update costs binds x primitives.
+  vrm.expressionManager?.update();
   return {
     scene: vrm.scene,
     rig: humanoidRig(vrm.humanoid),
     springBoneManager: vrm.springBoneManager ?? null,
     frame: modelFrame(vrm.meta?.metaVersion),
-    // `vrm.update` but for its springs, which the skin runs itself.
+    // `vrm.update` but for its springs, which the skin runs itself, and its expressions, settled above.
     update(dt) {
       vrm.humanoid.update();
       vrm.lookAt?.update(dt);
-      vrm.expressionManager?.update();
       vrm.nodeConstraintManager?.update();
       for (const material of vrm.materials ?? []) (material as { update?(dt: number): void }).update?.(dt);
     },
@@ -144,6 +149,7 @@ async function springs(
   chains: SpringChainConfig[],
   node: (index: number) => Promise<THREE.Object3D>,
 ): Promise<VRMSpringBoneManager> {
+  checkSpringChains(chains);
   const manager = new VRMSpringBoneManager();
   const v = (xyz: [number, number, number], units: number) => new THREE.Vector3(...xyz).multiplyScalar(units);
   for (const chain of chains) {

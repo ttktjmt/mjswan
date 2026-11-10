@@ -1414,3 +1414,11 @@ shortcuts.
   non-negative integers and charges those feeds before any graph runs (rays per read,
   65536 a step in all), and a document event writes only mjModel's float parameters:
   writing an index array such as `jnt_qposadr` moved MuJoCo's memory accesses.
+- **A skin can no longer make three-vrm hold the viewer's tab.** three-vrm did work the
+  skin file (often a third party's avatar) controls with no bound: every expression bind
+  over every primitive of its node, and a full ancestor walk per node constraint, on each
+  update; and as many spring joints as nested VRM 0.x roots, mesh primitives and colliders
+  made, each tested against every collider group listed. A manifest's `springs` had no
+  limit either. Expressions are now settled once at load (mjswan sets none), and a skin
+  past fixed limits on constraints, spring joints, collider tests or spring depth is not
+  loaded; the scene runs without it.
