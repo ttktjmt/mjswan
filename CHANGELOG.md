@@ -1373,8 +1373,9 @@ shortcuts.
 - **`mjswan serve` answers only for files inside the app directory.** A symbolic link in
   a served directory someone else supplied was followed, so any local client of the
   server could read the file or folder it named, and every directory without an
-  `index.html` was listed. A path that resolves outside the directory, and a directory
-  listing, now get 404; links within the directory still work.
+  `index.html` was listed. A path that resolves outside the directory (including the
+  `index.html` served for a directory URL), and a directory listing, now get 404; links
+  within the directory still work.
 - **`mjswan publish` refuses a symbolic link in the build** before anything is uploaded.
   It followed one, so a link in a dist someone else handed over uploaded the file it
   named to mjswan Cloud.
