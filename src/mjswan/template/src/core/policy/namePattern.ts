@@ -3,6 +3,8 @@
  * whatever the pattern, where V8's backtracking RegExp can take exponential time.
  */
 const MAX_PROGRAM = 2000;
+/** A repeated empty group emits no instruction, so only this ends its loop. */
+const MAX_EMITS = 4 * MAX_PROGRAM;
 
 type Test = (c: string) => boolean;
 type Node =
@@ -80,7 +82,9 @@ function toProgram(root: Node): Ins[] {
     prog.push(ins);
     return ins;
   };
+  let emits = 0;
   const emit = (n: Node): void => {
+    if (++emits > MAX_EMITS) throw new Error('name pattern too large');
     if (n.k === 'char') push({ op: 'char', test: n.test });
     else if (n.k === 'assert') push({ op: 'assert', at: n.at });
     else if (n.k === 'cat') n.parts.forEach(emit);

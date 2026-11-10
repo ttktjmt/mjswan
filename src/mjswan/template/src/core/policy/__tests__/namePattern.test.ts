@@ -26,6 +26,15 @@ describe('compileNamePattern', () => {
     expect(performance.now() - start).toBeLessThan(100);
   });
 
+  it('refuses repeats of a group that compiles to nothing', () => {
+    const start = performance.now();
+    for (const p of ['(){100000000}', '(?:){100000000}', '((){10000}){10000}', `(){${'9'.repeat(400)}}`]) {
+      expect(() => compileNamePattern(p)).toThrow('name pattern too large');
+    }
+    expect(performance.now() - start).toBeLessThan(100);
+    expect(compileNamePattern('(){3}a')('a')).toBe(true);
+  });
+
   it('refuses lookaround and backreferences', () => {
     expect(() => compileNamePattern('(?=a)')).toThrow();
     expect(() => compileNamePattern('(a)\\1')).toThrow();
