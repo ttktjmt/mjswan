@@ -1422,3 +1422,8 @@ shortcuts.
   limit either. Expressions are now settled once at load (mjswan sets none), and a skin
   past fixed limits on constraints, spring joints, collider tests or spring depth is not
   loaded; the scene runs without it.
+- **A release publishes the commit its release job tagged.** The PyPI and npm jobs
+  resolved `v<version>` again, so a tag made beforehand or moved mid-run, or a branch of
+  that name, chose what was published. They now check out the tagged commit by SHA; the
+  release job stops if the tag already names another commit, and no GitHub Release is
+  made if the tag moved meanwhile.

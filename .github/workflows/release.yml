@@ -16,6 +16,7 @@ jobs:
     outputs:
       is_prerelease: ${{ steps.type.outputs.is_prerelease }}
       npm_tag: ${{ steps.type.outputs.npm_tag }}
+      sha: ${{ steps.tag.outputs.sha }}
 
     steps:
       # Checks out the dispatched ref: main for a stable release; the feature
@@ -85,20 +86,30 @@ jobs:
             git push
           fi
 
+      # The publish jobs check out this commit by SHA, so an existing tag must already name it.
       - name: Create and push tag
+        id: tag
         run: |
-          if git ls-remote --tags origin "refs/tags/v${{ inputs.version }}" | grep -q .; then
-            echo "Tag v${{ inputs.version }} already exists, skipping"
+          tag="v${{ inputs.version }}"
+          head=$(git rev-parse HEAD)
+          if git ls-remote --tags origin "refs/tags/$tag" | grep -q .; then
+            git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag"
+            if [ "$(git rev-parse "$tag^{commit}")" != "$head" ]; then
+              echo "::error::Tag $tag names another commit than $head. Delete the tag or release a new version."
+              exit 1
+            fi
+            echo "Tag $tag already names $head"
           else
-            git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
-            git push origin "v${{ inputs.version }}"
+            git tag -a "$tag" -m "Release $tag"
+            git push origin "$tag"
           fi
+          echo "sha=$head" >> "$GITHUB_OUTPUT"
 
   publish-pypi:
     needs: release
     uses: ./.github/workflows/publish-pypi.yml
     with:
-      ref: v${{ inputs.version }}
+      ref: ${{ needs.release.outputs.sha }}
       version: ${{ inputs.version }}
     permissions:
       id-token: write
@@ -108,7 +119,7 @@ jobs:
     needs: release
     uses: ./.github/workflows/publish-npm.yml
     with:
-      ref: v${{ inputs.version }}
+      ref: ${{ needs.release.outputs.sha }}
       version: ${{ inputs.version }}
       tag: ${{ needs.release.outputs.npm_tag }}
     permissions:
@@ -125,6 +136,18 @@ jobs:
       contents: write
 
     steps:
+      - name: Check the tag still names the published commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          read -r type sha < <(gh api "repos/${GH_REPO}/git/ref/tags/v${{ inputs.version }}" --jq '.object.type + " " + .object.sha')
+          if [ "$type" = tag ]; then sha=$(gh api "repos/${GH_REPO}/git/tags/${sha}" --jq .object.sha); fi
+          if [ "$sha" != "${{ needs.release.outputs.sha }}" ]; then
+            echo "::error::Tag v${{ inputs.version }} was moved to $sha after publishing ${{ needs.release.outputs.sha }}"
+            exit 1
+          fi
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
