@@ -1,4 +1,4 @@
-"""The eslint pre-commit hook runs the template's locked eslint, not a registry install."""
+"""Every pre-commit hook runs a locked tool, never one a hook repo installs from a registry."""
 
 from __future__ import annotations
 
@@ -17,3 +17,13 @@ def test_eslint_hook_runs_the_template_eslint_by_path():
 
     assert eslint["language"] == "system"
     assert eslint["entry"].split()[0] == "src/mjswan/template/node_modules/.bin/eslint"
+
+
+def test_every_hook_runs_a_locked_local_tool():
+    repos = yaml.safe_load(CONFIG.read_text())["repos"]
+
+    assert {repo["repo"] for repo in repos} == {"local"}
+    assert {h["language"] for repo in repos for h in repo["hooks"]} <= {
+        "system",
+        "pygrep",
+    }

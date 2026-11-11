@@ -1,30 +1,39 @@
 # A copy of mjswan Cloud's cutter test files: hashed byte for byte, so no hook touches them.
 exclude: '^tests/blob_vectors/'
 
-default_language_version:
-  python: python3
-
+# Every hook runs a tool uv.lock or the template's package-lock.json pins: a remote hook
+# repo would pip-install its own requirements, unlocked. Run `make sync` first.
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.2.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Match the `ruff==` pin in pyproject's check extra, or the hook and CI can disagree.
-    rev: v0.16.0
-    hooks:
-      # Run the linter.
-      - id: ruff
-        args: [--fix]
-        exclude: '^typings/'
-      # Run the formatter.
-      - id: ruff-format
-        exclude: '^typings/'
-
   - repo: local
     hooks:
+      - id: trailing-whitespace
+        name: trim trailing whitespace
+        entry: .venv/bin/trailing-whitespace-fixer
+        language: system
+        types: [text]
+
+      - id: end-of-file-fixer
+        name: fix end of files
+        entry: .venv/bin/end-of-file-fixer
+        language: system
+        types: [text]
+
+      - id: ruff
+        name: ruff
+        entry: .venv/bin/ruff check --fix --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+        exclude: '^typings/'
+
+      - id: ruff-format
+        name: ruff format
+        entry: .venv/bin/ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+        exclude: '^typings/'
+
       # .npmrc is committed, so a credential landing in it is a public leak.
       # Tokens belong in ~/.npmrc (where `npm login` puts them) or CI secrets.
       - id: npmrc-no-secrets

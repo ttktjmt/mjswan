@@ -92,6 +92,8 @@ dev = [
     "mjswan[check,wandb,hf,mjlab]",
     "pytest>=9.0.2",
     "pre-commit>=3.3.2",
+    # The whitespace hooks run from .venv, so uv.lock pins them.
+    "pre-commit-hooks==3.2.0",
 ]
 
 # What `examples/demo/main.py` imports; the deploy workflow installs this alone.
