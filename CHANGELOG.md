@@ -1377,6 +1377,10 @@ shortcuts.
   installed and ran whatever eslint the registry served last, install scripts included.
   The hook now runs `src/mjswan/template/node_modules/.bin/eslint` and fails until
   `npm ci` has run in the template.
+- **The Python pre-commit hooks run the tools `uv.lock` pins.** The whitespace and ruff
+  hooks came from remote hook repositories, which pre-commit installed with pip from
+  unpinned requirements, outside the lock and its three-day cutoff. They now run from
+  `.venv` like `pytest-fast`, so run `make sync` before the first commit.
 - **`mjswan serve` answers only for files inside the app directory.** A symbolic link in
   a served directory someone else supplied was followed, so any local client of the
   server could read the file or folder it named, and every directory without an
