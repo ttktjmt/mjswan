@@ -911,6 +911,12 @@ shortcuts.
 
 ### Fixed
 
+- **Attached models that each ship a file of the same name keep their own in a `.mjz`.** An
+  absolute asset path went into the archive under its basename, so two YCB objects in one
+  scene, each with a `textured.obj`, packed one mesh for both. A basename now stands alone
+  only while no other file shares it; otherwise each takes the shortest tail of its path
+  that tells them apart (`024_bowl/google_64k/meshes/textured.obj`).
+
 - **A tracking policy observes the reference frame mjlab gives it after a reset.** mjlab's
   `MotionCommand` writes a reset's start frame into the simulation, then steps one frame
   past it in the compute that follows every reset, so the first observation reads frame
