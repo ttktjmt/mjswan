@@ -26,16 +26,19 @@ shortcuts.
   mujoco_warp's ray tracer, so shading differs; `depth`, `segmentation` and orthographic
   cameras are refused at build time.
 
-- **`mjswan demo playground`: MuJoCo Playground 1.0.1's tabletop scenes.** The nine
+- **`mjswan demo playground`: MuJoCo Playground 1.0.1 in the browser.** It opens on
+  the SO-101 bringing a cube to a target that moves, driven by a policy trained on
+  Playground's `SO101PickCube` with its own environment and PPO settings, the task stated
+  as an mjlab one whose lift-cube terms compute Playground's observations. Then the nine
   pick-and-place tasks of its agentic suite (`tasks/agentic/tabletop_v0`), each in front
   of the SO-101 and the I2RT YAM, as eighteen scenes with no policy: the arms hold their
   home pose and the objects can be grabbed. Playground needs MuJoCo 4, so
   `examples/demo/playground.py` restates its scene recipe against Menagerie and aloha_sim
   files fetched at pinned commits.
-  `examples/train/so101_pick_cube.py`, with a Colab and a molab notebook, trains
-  Playground's `SO101PickCube` on one free GPU with its own environment and PPO settings,
-  resuming from the newest checkpoint, and exports the ONNX policy with the observation
-  layout and a reference rollout a port is checked against.
+  `examples/train/so101_pick_cube.py`, with a Colab and a molab notebook, is how that
+  policy was trained: on one free GPU, resuming from the newest checkpoint on disk or on
+  the Hugging Face Hub, then exported as one ONNX file with the observation layout and a
+  reference rollout a port is checked against.
 
 - **`createEngine(element, { archive })`, for a host that renders `.mjz` archives it did not
   build.** `archive: { maxEntries, maxInflatedBytes, extensions }` refuses an archive before

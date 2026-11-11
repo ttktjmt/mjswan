@@ -371,6 +371,7 @@ def export(args: argparse.Namespace) -> None:
     import dataclasses
 
     import numpy as np
+    import onnx
     import onnxruntime
     import torch
     import warp as wp
@@ -401,6 +402,10 @@ def export(args: argparse.Namespace) -> None:
         map_location=device,
     )
     runner.export_policy_to_onnx(str(export_dir), "policy.onnx")
+    # torch writes the weights to a file of their own; a host loads one file.
+    onnx_path = export_dir / "policy.onnx"
+    onnx.save(onnx.load(str(onnx_path)), str(onnx_path))
+    (export_dir / "policy.onnx.data").unlink(missing_ok=True)
     policy = runner.get_inference_policy(device)
     print(f"Exported {checkpoint.name} to {export_dir / 'policy.onnx'}.")
 

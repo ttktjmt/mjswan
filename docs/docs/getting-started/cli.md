@@ -103,7 +103,7 @@ runs, and `playground` caches its GitHub files under `~/.cache/mjswan/playground
 | `main` | `examples/demo/main.py`, the demo deployed to GitHub Pages | `mjswan[demo]` (`hf`, `mjlab` and `wbc-mjlab`) |
 | `simple` | `examples/demo/simple.py`, one mjlab task, one checkpoint | `mjswan[hf,mjlab]` |
 | `mujoco` | `examples/demo/mujoco_models.py`, MuJoCo's `<replicate>` gallery, no policy | core only |
-| `playground` | `examples/demo/playground.py`, MuJoCo Playground 1.0.1's tabletop scenes on the SO-101 and YAM, no policy | core only |
+| `playground` | `examples/demo/playground.py`, MuJoCo Playground 1.0.1: the SO-101 PickCube policy `examples/train` trains, and the tabletop scenes on the SO-101 and YAM, no policy | `mjswan[hf,mjlab]` |
 
 The bare command lists rather than running one, because each of these downloads.
 

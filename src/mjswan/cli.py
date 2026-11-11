@@ -425,7 +425,7 @@ _DEMOS: dict[str, tuple[str, str]] = {
     "mujoco": ("examples.demo.mujoco_models", "MuJoCo's replicate gallery, no policy"),
     "playground": (
         "examples.demo.playground",
-        "MuJoCo Playground's tabletop scenes on SO-101 and YAM, no policy",
+        "MuJoCo Playground: a trained SO-101 PickCube and the tabletop scenes",
     ),
 }
 

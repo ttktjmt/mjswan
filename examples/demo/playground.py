@@ -1,15 +1,19 @@
-"""MuJoCo Playground Tabletop
+"""MuJoCo Playground
 
-The tabletop scenes of MuJoCo Playground 1.0.1's agentic manipulation suite
-(`mujoco_playground/tasks/agentic/tabletop_v0`): nine pick-and-place tasks, each laid out
-in front of both arms the suite drives, the SO-101 and the I2RT YAM.
-`mjswan demo playground` runs it.
+MuJoCo Playground 1.0.1 in the browser, in two parts. `mjswan demo playground` runs it.
 
-Upstream moves the arm with a vision-language agent and an IK controller, neither of
-which runs in a browser, so the scenes carry no policy: each arm holds its home pose, and
-the objects are there to be pushed and grabbed with the mouse.
+- **PickCube**: the SO-101 bringing a cube to a target that moves, driven by a policy
+  trained on Playground's own `SO101PickCube` (`tasks/manipulation/pick_cube`) with
+  `examples/train/so101_pick_cube.py`. The task is stated as an mjlab one, whose
+  lift-cube terms compute Playground's observations.
+- **Tabletop**: the scenes of its agentic manipulation suite (`tasks/agentic/tabletop_v0`),
+  nine pick-and-place tasks, each laid out in front of both arms the suite drives, the
+  SO-101 and the I2RT YAM. Upstream moves the arm with a vision-language agent and an IK
+  controller, neither of which runs in a browser, so these scenes carry no policy: each
+  arm holds its home pose, and the objects are there to be pushed and grabbed with the
+  mouse.
 
-Playground builds these scenes with MuJoCo 4 and imports PyTorch to do it, while mjswan
+Playground builds its scenes with MuJoCo 4 and imports PyTorch to do it, while mjswan
 runs MuJoCo 3.11, so the recipe is restated here rather than imported: the arms from MuJoCo
 Menagerie with the joint dynamics Playground identified on the real ones, the ALOHA
 table, and the objects from aloha_sim, each fetched at a pinned commit and cached. The
@@ -23,17 +27,34 @@ from __future__ import annotations
 
 import os
 import posixpath
+import shutil
+import tempfile
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import mujoco
 import numpy as np
+import onnx
+from mjlab.actuator import XmlActuatorCfg
+from mjlab.entity import EntityArticulationInfoCfg, EntityCfg
+from mjlab.envs import ManagerBasedRlEnvCfg, mdp
+from mjlab.envs.mdp.actions import JointPositionActionCfg
+from mjlab.managers.event_manager import EventTermCfg
+from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
+from mjlab.managers.scene_entity_config import SceneEntityCfg
+from mjlab.scene import SceneCfg
+from mjlab.sim import MujocoCfg, SimulationCfg
+from mjlab.tasks.manipulation import mdp as lift_mdp
+from mjlab.tasks.manipulation.mdp import LiftingCommandCfg
+from mjlab.viewer import ViewerConfig
 
 import mjswan
+from mjswan.source import hf
 
 #: Every file comes from one of these, at the commit given.
 MENAGERIE = (
@@ -630,6 +651,199 @@ def build_scene(arm: Arm, objects: tuple[Obj, ...], seed: int) -> mujoco.MjSpec:
     return scene
 
 
+# PickCube: Playground's `tasks/manipulation/pick_cube`, as an mjlab task
+
+#: The policy `examples/train/so101_pick_cube.py` trained, at the commit this port was
+#: checked against.
+PICK_CUBE_POLICY = (
+    "ttktjmt/so101-pick-cube",
+    "7dfa8ca85964949892ef97427f29c5e0dda0735d",
+)
+
+#: Playground's `TransformActions` scale: 12.5 times the torque limit over each joint's
+#: stiffness, 25 times for the gripper.
+SO101_ACTION_SCALE = {
+    joint: (25.0 if joint == "gripper" else 12.5) * SO101_FORCE_LIMIT / kp
+    for joint, (kp, *_) in SO101_DYNAMICS.items()
+}
+
+
+def _pick_cube_cube() -> mujoco.MjSpec:
+    """Playground's `primitive.cube`: 3 cm, 27 g, on a free joint."""
+    spec = mujoco.MjSpec()
+    body = spec.worldbody.add_body(name="cube")
+    body.add_freejoint(name="cube_freejoint")
+    body.add_geom(
+        name="cube",
+        type=mujoco.mjtGeom.mjGEOM_BOX,
+        size=[0.015, 0.015, 0.015],
+        density=1000.0,
+        condim=3,
+        friction=[1.0, 0.005, 0.0001],
+        rgba=[0.0, 1.0, 0.0, 1.0],
+        contype=2,
+        conaffinity=1,
+        solref=[0.01, 1.0],
+    )
+    return spec
+
+
+def _pick_cube_world(spec: mujoco.MjSpec) -> None:
+    """Playground's plane around mjlab's scene."""
+    spec.attach(
+        mujoco.MjSpec.from_string(PLANE_XML),
+        prefix="",
+        frame=spec.worldbody.add_frame(),
+    )
+    spec.stat.center = [0.25, 0.0, 0.15]
+
+
+def pick_cube_env_cfg() -> ManagerBasedRlEnvCfg:
+    """Playground's `SO101PickCube` as mjlab's lift task states it.
+
+    The observations are mjlab's lift-cube terms, which compute Playground's: the arm's
+    base is the world frame here. Playground reads the cube and gripper positions from
+    `mj_step`'s kinematics, one physics step older than these, up to 4 mm apart on its
+    reference rollout, which the policy does not notice. The target moves every 4 to 7 s
+    as Playground's resetter moves it, without teleporting the cube.
+    """
+    so101 = ARMS[0]
+    return ManagerBasedRlEnvCfg(
+        scene=SceneCfg(
+            entities={
+                "robot": EntityCfg(
+                    spec_fn=_so101,
+                    init_state=EntityCfg.InitialStateCfg(joint_pos=dict(so101.home)),
+                    # `_so101`'s own actuators: Playground's servo model.
+                    articulation=EntityArticulationInfoCfg(
+                        actuators=(XmlActuatorCfg(target_names_expr=tuple(so101.home)),)
+                    ),
+                ),
+                "cube": EntityCfg(
+                    spec_fn=_pick_cube_cube,
+                    init_state=EntityCfg.InitialStateCfg(pos=(0.275, 0.0, 0.015)),
+                ),
+            },
+            extent=0.6,
+            spec_fn=_pick_cube_world,
+        ),
+        observations={
+            "actor": ObservationGroupCfg(
+                {
+                    "joint_pos": ObservationTermCfg(func=mdp.joint_pos_rel),
+                    "joint_vel": ObservationTermCfg(func=mdp.joint_vel_rel),
+                    "ee_to_object": ObservationTermCfg(
+                        func=lift_mdp.ee_to_object_distance,
+                        params={
+                            "object_name": "cube",
+                            "asset_cfg": SceneEntityCfg(
+                                "robot", site_names=("gripperframe",)
+                            ),
+                        },
+                    ),
+                    "object_to_goal": ObservationTermCfg(
+                        func=lift_mdp.object_to_goal_distance,
+                        params={"object_name": "cube", "command_name": "target"},
+                    ),
+                    "last_action": ObservationTermCfg(func=mdp.last_action),
+                }
+            )
+        },
+        actions={
+            "joint_pos": JointPositionActionCfg(
+                entity_name="robot",
+                actuator_names=(".*",),
+                scale=SO101_ACTION_SCALE,
+                use_default_offset=True,
+            )
+        },
+        commands={
+            "target": LiftingCommandCfg(
+                entity_name="cube",
+                resampling_time_range=(4.0, 7.0),
+                difficulty="dynamic",
+                target_position_range=LiftingCommandCfg.TargetPositionRangeCfg(
+                    x=(0.20, 0.30), y=(-0.1, 0.1), z=(0.08, 0.2)
+                ),
+                object_pose_range=None,
+                debug_vis=True,
+                viz=LiftingCommandCfg.VizCfg(target_color=(1.0, 0.0, 0.0, 0.3)),
+            )
+        },
+        events={
+            "reset_robot_joints": EventTermCfg(
+                func=mdp.reset_joints_by_offset,
+                mode="reset",
+                params={
+                    "position_range": (-0.1, 0.1),
+                    "velocity_range": (0.0, 0.0),
+                    "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+                },
+            ),
+            "reset_cube": EventTermCfg(
+                func=mdp.reset_root_state_uniform,
+                mode="reset",
+                params={
+                    "pose_range": {
+                        "x": (-0.075, 0.075),
+                        "y": (-0.1, 0.1),
+                        "yaw": (-np.pi, np.pi),
+                    },
+                    "velocity_range": {},
+                    "asset_cfg": SceneEntityCfg("cube"),
+                },
+            ),
+        },
+        viewer=ViewerConfig(
+            origin_type=ViewerConfig.OriginType.WORLD,
+            lookat=(0.2, 0.0, 0.1),
+            distance=0.8,
+            azimuth=138.0,
+            elevation=-26.0,
+        ),
+        sim=SimulationCfg(
+            mujoco=MujocoCfg(timestep=0.005, impratio=10, cone="elliptic")
+        ),
+        decimation=4,
+    )
+
+
+def _target_viz(cfg: LiftingCommandCfg) -> list[dict[str, Any]]:
+    """The target, a sphere around where the cube's centre should go."""
+    return [
+        {
+            "shape": "sphere",
+            "radius": 0.02,
+            "color": list(cfg.viz.target_color),
+            "origin": {"state": "target_pos"},
+        }
+    ]
+
+
+# mjswan leaves a command class that one task family uses to the port to register.
+mjswan.register_command(
+    "LiftingCommandCfg",
+    mjswan.CommandBinding(
+        state_fields=["target_pos"], command_field="target_pos", viz=_target_viz
+    ),
+)
+
+
+def _pick_cube_policy() -> onnx.ModelProto:
+    """The exported actor, with the weights torch wrote beside it read in.
+
+    Copied out of the Hub's cache first: `onnx.load` will not read weights through its
+    symbolic links.
+    """
+    repo, revision = PICK_CUBE_POLICY
+    with tempfile.TemporaryDirectory() as tmp:
+        for name in ("policy.onnx", "policy.onnx.data"):
+            shutil.copyfile(
+                hf.fetch_file(repo, name, revision=revision), Path(tmp, name)
+            )
+        return onnx.load(str(Path(tmp, "policy.onnx")))
+
+
 # Credits
 
 
@@ -652,9 +866,30 @@ def _attribute(scene: mjswan.SceneHandle, arm: Arm, objects: tuple[Obj, ...]) ->
         scene.add_attribution(component, license=_fetch(repo, path))
 
 
+def add_pick_cube(builder: mjswan.Builder) -> mjswan.SceneHandle:
+    """The SO-101 bringing the cube to a target that moves, driven by its policy."""
+    project = builder.add_project(name="Playground PickCube")
+    scene = project.add_scene_mjlab(
+        "SO101PickCube", name="SO-101", env_cfg=pick_cube_env_cfg()
+    )
+    # Not an mjlab export, so nothing in the file names the joints: one per actuator, in
+    # order, as `_contract` in so101_pick_cube.py records them.
+    scene.add_policy(
+        name="PickCube",
+        policy=_pick_cube_policy(),
+        policy_joint_names=scene.actuated_joint_names(),
+        default_joint_pos=list(ARMS[0].home.values()),
+    )
+    scene.add_attribution(
+        "robotstudio_so101", license=_fetch(MENAGERIE, "robotstudio_so101/LICENSE")
+    )
+    return scene
+
+
 def setup_builder() -> mjswan.Builder:
     """Return the configured builder, not yet built."""
     builder = mjswan.Builder(base_path=os.getenv("MJSWAN_BASE_PATH", "/"))
+    add_pick_cube(builder)
     for arm in ARMS:
         project = builder.add_project(name=f"Playground Tabletop: {arm.name}")
         lookat, distance, azimuth, elevation = arm.overview

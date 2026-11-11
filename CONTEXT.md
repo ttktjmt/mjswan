@@ -70,8 +70,10 @@ examples/            Runnable examples. Python only: assets are fetched at run t
                        extra is what it imports), simple.py (one task,
                        one checkpoint), minimum_policy.py (the smallest complete
                        policy), mujoco_models.py (a gallery, no policy) and playground.py
-                       (MuJoCo Playground's tabletop scenes, no policy, its files from
-                       GitHub at pinned commits). `mjswan demo` runs the four named ones;
+                       (MuJoCo Playground: SO101PickCube as an mjlab task driven by the
+                       policy examples/train trained, and the tabletop scenes, no
+                       policy, its files from GitHub at pinned commits). `mjswan demo`
+                       runs the four named ones;
                        minimum_policy.py is read, not run
   colab/               Google Colab notebooks (demo, anymal_c_velocity)
   train/               so101_pick_cube.py: trains MuJoCo Playground 1.0.1's SO101PickCube on
