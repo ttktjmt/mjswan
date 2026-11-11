@@ -248,17 +248,22 @@ class TestServingADocument:
         with pytest.raises(FileNotFoundError, match="No such app or document"):
             MjswanApp.from_document(tmp_path / "nope.swn")
 
-    def test_serve_cli_refuses_a_document_without_a_manifest(self, tmp_path):
+    def test_serve_cli_refuses_a_document_without_a_manifest(
+        self, tmp_path, monkeypatch
+    ):
+        from rich.console import Console
         from typer.testing import CliRunner
 
         from mjswan.cli import app
 
-        other = tmp_path / "other.swn"
+        other = tmp_path / "other\x1b]0;SPOOFED\x07.swn"
         with zipfile.ZipFile(other, "w") as zf:
             zf.writestr("readme.txt", "hi")
+        monkeypatch.setattr("mjswan.cli.console", Console(width=500))
         result = CliRunner().invoke(app, ["serve", str(other)])
         assert result.exit_code == 1
         assert "not a simulation document" in result.output
+        assert "\x1b]" not in result.output
 
 
 class TestInfoCli:

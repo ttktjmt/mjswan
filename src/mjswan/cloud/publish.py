@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import unicodedata
 import urllib.error
 import urllib.request
 import warnings
@@ -83,6 +85,9 @@ DEFAULT_WEB_BASE: str = "https://mjswan.com"
 TOKEN_ENV_VAR: str = "MJSWAN_TOKEN"
 API_BASE_ENV_VAR: str = "MJSWAN_API_BASE"
 WEB_BASE_ENV_VAR: str = "MJSWAN_WEB_BASE"
+
+#: What a published simulation's id may be, before a URL is built from it.
+_SIM_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
 
 def resolve_api_base(api_base: str | None) -> str:
@@ -563,10 +568,17 @@ def publish_dist(
 
     transport = transport or HttpTransport()
     base = resolve_api_base(api_base)
-    notify = on_progress or (lambda _msg: None)
-    warn = on_warning or (
-        lambda msg: warnings.warn(msg, category=RuntimeWarning, stacklevel=3)
+    report = on_progress or (lambda _msg: None)
+    caution = on_warning or (
+        lambda msg: warnings.warn(msg, category=RuntimeWarning, stacklevel=4)
     )
+
+    # The messages carry names the build's maker chose (its files, its VRMs' authors).
+    def notify(msg: str) -> None:
+        report(_printable(msg))
+
+    def warn(msg: str) -> None:
+        caution(_printable(msg))
 
     # A document uploads exactly the file set its directory would, so the server never
     # needs to know it existed (ADR 0006 §8). The upload runs inside the context: a
@@ -659,8 +671,8 @@ def publish_dist(
             _raise_for_status(commit_resp, "commit")
             commit = _parse_json(commit_resp, "commit")
             sim_id = commit.get("id")
-            if not sim_id:
-                raise PublishError("commit response missing id.")
+            if not isinstance(sim_id, str) or not _SIM_ID.fullmatch(sim_id):
+                raise PublishError("commit response has no valid id.")
 
             return PublishResult(
                 id=sim_id, sim_id=session.get("sim_id", sim_id), upload_id=upload_id
@@ -668,6 +680,11 @@ def publish_dist(
     except DocumentError as exc:
         # Only `unpack_document` raises this; the upload itself speaks PublishError.
         raise PublishError(str(exc), file=Path(dist_dir).name) from exc
+
+
+def _printable(text: str) -> str:
+    """*text* without control characters but newlines."""
+    return "".join(c for c in text if c == "\n" or unicodedata.category(c) != "Cc")
 
 
 def _send(

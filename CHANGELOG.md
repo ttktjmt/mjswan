@@ -1427,3 +1427,10 @@ shortcuts.
   that name, chose what was published. They now check out the tagged commit by SHA; the
   release job stops if the tag already names another commit, and no GitHub Release is
   made if the tag moved meanwhile.
+- **The CLI's inert text covers the values it missed.** `skin map` printed a VRM's bone
+  names as markup, `serve` a `.swn`'s file name with its control characters, and `info`
+  escaped a document's version and format apart, so the two could close one tag between
+  them. `publish_dist` handed file names and VRM authors to `on_progress` and `on_warning`
+  (`print` and `warnings.warn` from the Python API) as they were, and built the page URL
+  from any id the server returned. These now lose their control characters, the CLI
+  escapes their markup, and an id that is not a short URL-safe token is refused.

@@ -830,10 +830,13 @@ class TestPublishDist:
         assert "custom-TS" in str(exc.value)
         assert exc.value.file == "policy.json"
 
-    def test_commit_missing_id(self, tmp_path: Path):
+    @pytest.mark.parametrize(
+        "body", [{}, {"id": 7}, {"id": "[link=https://example.invalid]x"}]
+    )
+    def test_commit_without_a_valid_id(self, tmp_path: Path, body):
         dist = _make_dist(tmp_path)
-        transport = FakeTransport(commit_body={})
-        with pytest.raises(PublishError, match="commit response missing id"):
+        transport = FakeTransport(commit_body=body)
+        with pytest.raises(PublishError, match="commit response has no valid id"):
             publish_dist(dist, token="tok", transport=transport)
 
     def test_failed_put_raises(self, tmp_path: Path):
@@ -1086,6 +1089,24 @@ class TestSkins:
         assert seen == [
             f"{self.SKIN}: its VRM license allows no commercial use (Sample by mjswan (https://vrm.dev/licenses/1.0/))."
         ]
+
+    def test_a_vrm_s_text_reaches_the_callbacks_without_control_characters(
+        self, tmp_path: Path
+    ):
+        meta = {
+            "authors": ["Eve\x1b]0;SPOOFED\x07\x9b"],
+            "commercialUsage": "personalNonProfit",
+        }
+        seen: list[str] = []
+        publish_dist(
+            self._dist(tmp_path, **meta),
+            token="tok",
+            transport=FakeTransport(),
+            on_progress=seen.append,
+            on_warning=seen.append,
+        )
+        said = "".join(seen)
+        assert "Eve]0;SPOOFED" in said and "\x1b" not in said and "\x9b" not in said
 
     def test_an_author_only_vrm_goes_only_on_the_publishers_word(self, tmp_path: Path):
         dist = self._dist(tmp_path, avatarPermission="onlyAuthor")
