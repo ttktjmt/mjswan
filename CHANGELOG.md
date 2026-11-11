@@ -14,6 +14,13 @@ shortcuts.
 
 ### Added
 
+- **`mjswan demo playground`: MuJoCo Playground 1.0.1's tabletop scenes.** The nine
+  pick-and-place tasks of its agentic suite (`tasks/agentic/tabletop_v0`), each in front
+  of the SO-101 and the I2RT YAM, as eighteen scenes with no policy: the arms hold their
+  home pose and the objects can be grabbed. Playground needs MuJoCo 4, so
+  `examples/demo/playground.py` restates its scene recipe against Menagerie and aloha_sim
+  files fetched at pinned commits.
+
 - **`createEngine(element, { archive })`, for a host that renders `.mjz` archives it did not
   build.** `archive: { maxEntries, maxInflatedBytes, extensions }` refuses an archive before
   MuJoCo compiles it when it holds more files, inflates to more bytes, or holds a file whose

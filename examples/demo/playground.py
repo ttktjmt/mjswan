@@ -1,0 +1,690 @@
+"""MuJoCo Playground Tabletop
+
+The tabletop scenes of MuJoCo Playground 1.0.1's agentic manipulation suite
+(`mujoco_playground/tasks/agentic/tabletop_v0`): nine pick-and-place tasks, each laid out
+in front of both arms the suite drives, the SO-101 and the I2RT YAM.
+`mjswan demo playground` runs it.
+
+Upstream moves the arm with a vision-language agent and an IK controller, neither of
+which runs in a browser, so the scenes carry no policy: each arm holds its home pose, and
+the objects are there to be pushed and grabbed with the mouse.
+
+Playground builds these scenes with MuJoCo 4 and imports PyTorch to do it, while mjswan
+runs MuJoCo 3.11, so the recipe is restated here rather than imported: the arms from MuJoCo
+Menagerie with the joint dynamics Playground identified on the real ones, the ALOHA
+table, and the objects from aloha_sim, each fetched at a pinned commit and cached. The
+objects are scattered as Playground's reset scatters them, with a fixed seed per scene.
+
+Adapted from MuJoCo Playground (https://github.com/google-deepmind/mujoco_playground),
+Copyright 2026 Google LLC, Apache License 2.0.
+"""
+
+from __future__ import annotations
+
+import os
+import posixpath
+import urllib.request
+import xml.etree.ElementTree as ET
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from pathlib import Path
+
+import mujoco
+import numpy as np
+
+import mjswan
+
+#: Every file comes from one of these, at the commit given.
+MENAGERIE = (
+    "google-deepmind/mujoco_menagerie",
+    "370c43965323c0944b433b202aac5058b5f907a9",
+)
+ALOHA_SIM = ("google-deepmind/aloha_sim", "d02904607cca1bf6dfb72f30b522506ac7ca0f91")
+
+CACHE_DIR = (
+    Path(os.getenv("XDG_CACHE_HOME", Path.home() / ".cache")) / "mjswan" / "playground"
+)
+
+
+# Fetching
+
+
+def _fetch(repo: tuple[str, str], path: str) -> Path:
+    """One file of a GitHub repository at its pinned commit, downloaded once."""
+    name, commit = repo
+    target = CACHE_DIR / name.replace("/", "_") / commit / path
+    if not target.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        url = f"https://raw.githubusercontent.com/{name}/{commit}/{path}"
+        partial = target.with_name(target.name + ".part")
+        with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310
+            partial.write_bytes(response.read())
+        partial.replace(target)
+    return target
+
+
+def _fetch_mjcf(repo: tuple[str, str], path: str) -> Path:
+    """An MJCF and every mesh and texture file it names."""
+    xml_path = _fetch(repo, path)
+    root = ET.parse(xml_path).getroot()
+    compiler = {k: v for c in root.iter("compiler") for k, v in c.attrib.items()}
+    asset_dir = compiler.get("assetdir", "")
+    dirs = {
+        "mesh": compiler.get("meshdir", asset_dir),
+        "texture": compiler.get("texturedir", asset_dir),
+    }
+    files = [
+        posixpath.normpath(posixpath.join(posixpath.dirname(path), directory, file))
+        for tag, directory in dirs.items()
+        for element in root.iter(tag)
+        if (file := element.get("file"))
+    ]
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        list(pool.map(lambda file: _fetch(repo, file), files))
+    return xml_path
+
+
+def _pin_asset_paths(spec: mujoco.MjSpec) -> mujoco.MjSpec:
+    """Make every mesh and texture path absolute.
+
+    Once attached to another spec, an asset keeps only its file name, and the build
+    could no longer find the file it names.
+    """
+    base = spec.modelfiledir or ""
+    for mesh in spec.meshes:
+        if mesh.file:
+            mesh.file = os.path.abspath(os.path.join(base, spec.meshdir, mesh.file))
+    for texture in spec.textures:
+        if texture.file:
+            texture.file = os.path.abspath(
+                os.path.join(base, spec.texturedir, texture.file)
+            )
+    return spec
+
+
+def _load(repo: tuple[str, str], path: str) -> mujoco.MjSpec:
+    return _pin_asset_paths(mujoco.MjSpec.from_file(str(_fetch_mjcf(repo, path))))
+
+
+def _name_unnamed_geoms(spec: mujoco.MjSpec) -> mujoco.MjSpec:
+    """Name every geom, so that attaching gives each the prefix."""
+    for body in spec.bodies:
+        for i, geom in enumerate(body.geoms):
+            if not geom.name:
+                geom.name = f"{body.name}_geom_{i}"
+    return spec
+
+
+# Arms: Playground's `robots/*/sim` and `tasks/agentic/tabletop_v0/embodiment.py`
+
+#: Per joint: kp, kd, armature, frictionloss, identified from real teleop data.
+SO101_DYNAMICS = {
+    "shoulder_pan": (251.5896, 17.5096, 0.1088, 0.0001),
+    "shoulder_lift": (265.0958, 28.0620, 0.1472, 0.0),
+    "elbow_flex": (243.9844, 25.6669, 0.1224, 0.0),
+    "wrist_flex": (223.2804, 25.4543, 0.1133, 0.0),
+    "wrist_roll": (218.4066, 23.1058, 0.1146, 0.0),
+    "gripper": (223.3508, 34.1633, 0.1985, 0.2517),
+}
+#: STS3215 stall torque: 30 kg cm at 12 V.
+SO101_FORCE_LIMIT = 30 * 9.81 / 100
+
+#: Per actuator: kp, kv, armature, frictionloss, identified on a YAM Pro at 50 Hz. The
+#: gripper's apply to both fingers, the right one mirroring the left.
+YAM_DYNAMICS = {
+    "joint1": (80.0, 6.01, 0.175, 0.567),
+    "joint2": (60.9, 3.82, 0.032, 1.26),
+    "joint3": (37.4, 2.45, 0.032, 1.07),
+    "joint4": (40.0, 2.28, 0.0018, 0.1),
+    "joint5": (7.34, 1.21, 0.00959, 0.0805),
+    "joint6": (10.0, 1.5, 0.0018, 0.1),
+    "gripper": (2000.0, 150.0, 0.1, 0.1),
+}
+YAM_FINGERS = ("left_finger", "right_finger")
+
+
+def _so101() -> mujoco.MjSpec:
+    spec = _name_unnamed_geoms(_load(MENAGERIE, "robotstudio_so101/so101.xml"))
+    for joint, (kp, kd, armature, frictionloss) in SO101_DYNAMICS.items():
+        actuator = spec.actuator(joint)
+        actuator.gaintype = mujoco.mjtGain.mjGAIN_FIXED
+        actuator.biastype = mujoco.mjtBias.mjBIAS_AFFINE
+        actuator.gainprm[0] = kp
+        actuator.biasprm[1] = -kp
+        actuator.biasprm[2] = -kd
+        actuator.forcelimited = True
+        actuator.forcerange = [-SO101_FORCE_LIMIT, SO101_FORCE_LIMIT]
+        spec.joint(joint).armature = armature
+        spec.joint(joint).frictionloss = frictionloss
+    return spec
+
+
+def _yam() -> mujoco.MjSpec:
+    spec = _name_unnamed_geoms(_load(MENAGERIE, "i2rt_yam/yam_linear_4310.xml"))
+    for name, (kp, kv, armature, frictionloss) in YAM_DYNAMICS.items():
+        actuator = spec.actuator(name)
+        actuator.gainprm[0] = kp
+        actuator.biasprm[1] = -kp
+        actuator.biasprm[2] = -kv
+        for joint in YAM_FINGERS if name == "gripper" else (name,):
+            spec.joint(joint).armature = armature
+            spec.joint(joint).frictionloss = frictionloss
+    # `arm` has its origin 1 cm above the bottom of the base plate.
+    spec.worldbody.first_body().pos = [0.0, 0.0, 0.01]
+    # Menagerie's D405 is 16:9; Playground crops it to the real 4:3 stream.
+    camera = spec.camera("wrist_cam")
+    camera.sensor_size[0] = camera.sensor_size[1] * 320.0 / 240.0
+    while spec.keys:
+        spec.delete(spec.keys[0])
+    return spec
+
+
+@dataclass(frozen=True)
+class Arm:
+    name: str
+    spec_fn: Callable[[], mujoco.MjSpec]
+    #: Its Menagerie directory, whose license the scene carries.
+    menagerie_dir: str
+    #: MJCF joint → its position in the arm's home pose.
+    home: dict[str, float]
+    #: Objects scatter in this rectangle, within `max_reach` of `base_xy`.
+    spawn_x: tuple[float, float]
+    spawn_y: tuple[float, float]
+    base_xy: tuple[float, float]
+    max_reach: float
+    #: lookat, distance, azimuth, elevation of upstream's overview camera.
+    overview: tuple[tuple[float, float, float], float, float, float]
+    #: The viewer starts this much further back, so the whole arm is in frame.
+    zoom_out: float = 1.0
+
+
+ARMS = (
+    Arm(
+        name="SO-101",
+        spec_fn=_so101,
+        menagerie_dir="robotstudio_so101",
+        home={
+            "shoulder_pan": -0.192,
+            "shoulder_lift": -0.262,
+            "elbow_flex": 0.253,
+            "wrist_flex": 1.13,
+            "wrist_roll": 0.0793,
+            "gripper": 0.80,
+        },
+        spawn_x=(0.16, 0.27),
+        spawn_y=(-0.13, 0.13),
+        base_xy=(0.04, 0.0),
+        max_reach=0.24,
+        overview=((0.23, 0.0, 0.05), 0.46, 138.0, -26.0),
+        zoom_out=1.3,
+    ),
+    Arm(
+        name="YAM",
+        spec_fn=_yam,
+        menagerie_dir="i2rt_yam",
+        home={
+            "joint1": 0.0,
+            "joint2": 1.012,
+            "joint3": 1.498,
+            "joint4": -1.487,
+            "joint5": 0.0,
+            "joint6": 0.0,
+            "left_finger": 0.0475,
+            "right_finger": 0.0475,
+        },
+        spawn_x=(0.24, 0.40),
+        spawn_y=(-0.14, 0.14),
+        base_xy=(0.0, 0.0),
+        max_reach=0.44,
+        overview=((0.30, 0.0, 0.08), 0.85, 138.0, -26.0),
+    ),
+)
+
+
+# Objects: Playground's `tasks/agentic/tabletop_v0/task.py`
+
+RED = (0.85, 0.15, 0.15, 1.0)
+GREEN = (0.15, 0.75, 0.2, 1.0)
+BLUE = (0.15, 0.35, 0.9, 1.0)
+YELLOW = (0.95, 0.85, 0.15, 1.0)
+WHITE = (0.9, 0.9, 0.9, 1.0)
+ALOHA_ASSETS = "aloha_sim/assets"
+MARKER_XML = f"{ALOHA_ASSETS}/mujoco/Marker/marker.xml"
+
+
+@dataclass(frozen=True)
+class Obj:
+    """A free object: a colored box, a mesh model from aloha_sim, or a custom spec."""
+
+    name: str
+    rgba: tuple[float, float, float, float] = WHITE
+    half_size: tuple[float, float, float] | None = None
+    asset: str | None = None
+    scale: float = 1.0
+    #: Things go into it; never turned at reset.
+    container: bool = False
+    spec_fn: Callable[[str], mujoco.MjSpec] | None = None
+
+    def spec(self) -> mujoco.MjSpec:
+        """The object with its body frame at its bounding-box center."""
+        if self.spec_fn is not None:
+            return _center(self.spec_fn(self.name))
+        if self.asset is not None:
+            return _center(_raw_asset_spec(self.name, self.asset, self.scale))
+        assert self.half_size is not None
+        spec = mujoco.MjSpec()
+        spec.modelname = self.name
+        body = spec.worldbody.add_body(name=self.name)
+        body.add_freejoint(name=f"{self.name}_freejoint")
+        body.add_geom(
+            name=self.name,
+            type=mujoco.mjtGeom.mjGEOM_BOX,
+            size=list(self.half_size),
+            density=1000.0,
+            condim=3,
+            friction=[1.0, 0.005, 0.0001],
+            rgba=list(self.rgba),
+            solref=[0.01, 1],
+        )
+        return spec
+
+
+def _raw_asset_spec(name: str, path: str, scale: float) -> mujoco.MjSpec:
+    """A mesh model, scaled, with its body, joint and geoms named."""
+    spec = _load(ALOHA_SIM, path)
+    spec.modelname = name
+    body = spec.worldbody.first_body()
+    body.name = name
+    body.pos = [0.0, 0.0, 0.0]
+    body.quat = [1.0, 0.0, 0.0, 0.0]
+    if (joint := body.first_joint()) is not None:
+        joint.name = f"{name}_freejoint"
+    for mesh in spec.meshes:
+        mesh.scale = [s * scale for s in mesh.scale]
+    for i, geom in enumerate(body.geoms):
+        if not geom.name:
+            geom.name = f"{name}_geom_{i}"
+        if geom.contype or geom.conaffinity:
+            geom.contype = geom.conaffinity = 1
+    return spec
+
+
+def _bounds(model: mujoco.MjModel) -> tuple[np.ndarray, np.ndarray]:
+    """Center and half extents of the visible geoms' bounding box."""
+    signs = np.array([[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)])
+    lo, hi = np.full(3, np.inf), np.full(3, -np.inf)
+    for g in range(model.ngeom):
+        if model.geom_group[g] > 3:
+            continue
+        rot = np.zeros(9)
+        mujoco.mju_quat2Mat(rot, model.geom_quat[g])
+        corners = model.geom_aabb[g, :3] + signs * model.geom_aabb[g, 3:]
+        corners = model.geom_pos[g] + corners @ rot.reshape(3, 3).T
+        lo, hi = np.minimum(lo, corners.min(0)), np.maximum(hi, corners.max(0))
+    return (lo + hi) / 2, (hi - lo) / 2
+
+
+def _center(spec: mujoco.MjSpec) -> mujoco.MjSpec:
+    center, _ = _bounds(spec.compile())
+    body = spec.worldbody.first_body()
+    for element in (*body.geoms, *body.sites):
+        element.pos = list(np.asarray(element.pos) - center)
+    return spec
+
+
+def _socket(name: str, *, vertical: bool = False) -> mujoco.MjSpec:
+    """ALOHA's four-wall peg socket: a 36 mm tunnel along x, its white collar at -x."""
+    spec = mujoco.MjSpec()
+    spec.modelname = name
+    body = spec.worldbody.add_body(name=name)
+    body.add_freejoint(name=f"{name}_freejoint")
+    parts = (  # name, half size, position, color, mass
+        ("B", [0.046, 0.022, 0.002], [0.002, 0.0, -0.020], BLUE, 0.25),
+        ("T", [0.046, 0.022, 0.002], [0.002, 0.0, 0.020], BLUE, 0.016),
+        ("L", [0.046, 0.002, 0.018], [0.002, -0.020, 0.0], BLUE, 0.016),
+        ("R", [0.046, 0.002, 0.018], [0.002, 0.020, 0.0], BLUE, 0.016),
+        ("rim_B", [0.002, 0.022, 0.002], [-0.046, 0.0, -0.020], WHITE, 0.004),
+        ("rim_T", [0.002, 0.022, 0.002], [-0.046, 0.0, 0.020], WHITE, 0.004),
+        ("rim_L", [0.002, 0.002, 0.018], [-0.046, -0.020, 0.0], WHITE, 0.004),
+        ("rim_R", [0.002, 0.002, 0.018], [-0.046, 0.020, 0.0], WHITE, 0.004),
+        (
+            "wall",
+            [0.004, 0.018, 0.018],
+            [0.044, 0.0, 0.0],
+            RED,
+            0.25 if vertical else 0.016,
+        ),
+    )
+    for suffix, size, pos, rgba, mass in parts:
+        if vertical:  # The entrance faces +z, the stop wall becomes the floor.
+            size = [size[2], size[1], size[0]]
+            pos = [pos[2], pos[1], -pos[0]]
+        body.add_geom(
+            name=f"{name}_{suffix}",
+            type=mujoco.mjtGeom.mjGEOM_BOX,
+            size=size,
+            pos=pos,
+            rgba=list(rgba),
+            mass=mass,
+            condim=4,
+            friction=[1.0, 0.05, 0.001],
+        )
+    return spec
+
+
+def _marker_stand(name: str) -> mujoco.MjSpec:
+    """ALOHA's marker held upright in a base stand."""
+    spec = _raw_asset_spec(name, MARKER_XML, scale=0.85)
+    spec.worldbody.first_body().add_geom(
+        name=f"{name}_base",
+        type=mujoco.mjtGeom.mjGEOM_CYLINDER,
+        size=[0.035, 0.005, 0.0],
+        pos=[0.0, 0.0, 0.005],
+        rgba=list(WHITE),
+        mass=0.5,
+        friction=[1.0, 0.05, 0.001],
+    )
+    return spec
+
+
+def _ycb(name: str, model: str, scale: float, *, container: bool = False) -> Obj:
+    path = f"{ALOHA_ASSETS}/ycb/{model}/google_64k/model.xml"
+    return Obj(name, asset=path, scale=scale, container=container)
+
+
+def _cube(name: str, rgba: tuple[float, float, float, float]) -> Obj:
+    return Obj(name, rgba, half_size=(0.015,) * 3)
+
+
+BOWL = _ycb("bowl", "024_bowl", 0.7, container=True)
+PLATE = _ycb("plate", "029_plate", 0.6, container=True)
+BANANA = _ycb("banana", "011_banana", 0.6)
+MARKER = Obj("marker", asset=MARKER_XML, scale=0.8)
+CUBES = (_cube("red", RED), _cube("green", GREEN), _cube("blue", BLUE))
+PEG = Obj("peg", RED, half_size=(0.010, 0.010, 0.048))
+SOCKET = Obj("socket", container=True, spec_fn=lambda n: _socket(n, vertical=True))
+CAP = Obj("cap", asset=f"{ALOHA_ASSETS}/mujoco/Marker/cap.xml", scale=0.85)
+MARKER_STAND = Obj("marker_stand", container=True, spec_fn=_marker_stand)
+USB = Obj(
+    "usb",
+    asset=f"{ALOHA_ASSETS}/gso/Kingston_DT4000MR_G2_Management_Ready_USB_64GB/model.xml",
+    scale=0.9,
+)
+USB_PORT = Obj("usb_port", container=True, spec_fn=_socket)
+
+#: Scene name, upstream's task name, its prompt, and its objects.
+TASKS = (
+    (
+        "Cube in Bowl",
+        "cube_in_bowl",
+        "Put the green cube in the bowl.",
+        (CUBES[1], BOWL),
+    ),
+    (
+        "Bar in Bowl",
+        "bar_in_bowl",
+        "Put the yellow bar in the bowl.",
+        (Obj("bar", YELLOW, half_size=(0.035, 0.012, 0.014)), BOWL),
+    ),
+    (
+        "Cubes in Bowl",
+        "cubes_in_bowl",
+        "Put all three cubes in the bowl.",
+        (*CUBES, BOWL),
+    ),
+    ("Banana in Bowl", "banana_in_bowl", "Put the banana in the bowl.", (BANANA, BOWL)),
+    (
+        "Marker on Plate",
+        "marker_on_plate",
+        "Put the marker on the plate.",
+        (MARKER, PLATE),
+    ),
+    (
+        "Stack Three",
+        "stack3",
+        "Stack the green cube on the red cube, then the blue cube on top.",
+        CUBES,
+    ),
+    (
+        "Peg in Socket",
+        "peg_in_socket",
+        "Insert the red peg into the blue socket.",
+        (PEG, SOCKET),
+    ),
+    (
+        "Cap the Marker",
+        "cap_fixed_marker",
+        "Place the marker cap onto the upright marker.",
+        (CAP, MARKER_STAND),
+    ),
+    (
+        "USB in Port",
+        "usb_in_port",
+        "Plug the USB thumb drive into the horizontal socket.",
+        (USB, USB_PORT),
+    ),
+)
+
+
+# Scene: Playground's `_base_scene` and `env_config`
+
+TABLE_HEIGHT = 0.75
+
+#: Playground's `_src/objects/assets/primitive/plane.xml`.
+PLANE_XML = """
+<mujoco model="plane">
+  <option timestep="0.002" integrator="implicitfast" cone="elliptic" impratio="10">
+    <flag eulerdamp="disable"/>
+  </option>
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+  </visual>
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512"
+      height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" rgb1="0.2 0.3 0.4"
+      rgb2="0.1 0.2 0.3" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5"
+      reflectance="0.2"/>
+  </asset>
+  <worldbody>
+    <light name="light" pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <light name="front_fill" pos="0 -1.5 1.5" dir="0 1 -1" directional="true"
+      diffuse="0.25 0.25 0.25" specular="0 0 0" castshadow="false"/>
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane" contype="1"/>
+  </worldbody>
+</mujoco>
+"""
+
+#: Playground's `_src/objects/furniture.py`, with Menagerie's ALOHA table meshes.
+ALOHA_TABLE_XML = """
+<mujoco model="aloha_table">
+  <compiler meshdir="{assets}" texturedir="{assets}"/>
+  <asset>
+    <mesh name="tabletop" file="tabletop.obj"/>
+    <mesh name="tablelegs" file="tablelegs.obj"/>
+    <texture name="small_meta_table_diffuse" type="2d" file="small_meta_table_diffuse.png"/>
+    <material name="table" texture="small_meta_table_diffuse"/>
+  </asset>
+  <worldbody>
+    <body name="aloha_table" pos="0 0 0.75">
+      <geom name="tabletop" type="mesh" mesh="tabletop" material="table" pos="0 0 -0.75"
+        quat="1 0 0 1" contype="0" conaffinity="0" group="2"/>
+      <geom name="tablelegs" type="mesh" mesh="tablelegs" material="table" pos="0 0 -0.75"
+        quat="1 0 0 1" contype="0" conaffinity="0" group="2"/>
+      <geom name="table_collision" type="box" size="0.61 0.37 0.1" pos="0 0 -0.1" group="3"
+        condim="3" friction="1 0.005 0.0001" solref="0.01 1"/>
+    </body>
+  </worldbody>
+</mujoco>
+"""
+
+
+def _aloha_table() -> mujoco.MjSpec:
+    files = ("tabletop.obj", "tablelegs.obj", "small_meta_table_diffuse.png")
+    paths = [_fetch(MENAGERIE, f"aloha/assets/{file}") for file in files]
+    xml = ALOHA_TABLE_XML.format(assets=paths[0].parent)
+    return _pin_asset_paths(mujoco.MjSpec.from_string(xml))
+
+
+def _base_scene(arm: Arm) -> mujoco.MjSpec:
+    """The floor, the table with its top at z = 0, and the lights."""
+    scene = mujoco.MjSpec.from_string(PLANE_XML)
+    scene.option.ccd_iterations = 300
+    scene.geom("floor").pos = [0.0, 0.0, -TABLE_HEIGHT]
+    table_frame = scene.worldbody.add_frame(
+        pos=[0.27, 0.0, -TABLE_HEIGHT], quat=[np.sqrt(0.5), 0.0, 0.0, -np.sqrt(0.5)]
+    )
+    scene.attach(_aloha_table(), prefix="table/", frame=table_frame)
+    scene.stat.extent = 4.0
+    center = scene.worldbody.add_body(
+        name="workspace_center", pos=[float(np.mean(arm.spawn_x)), 0.0, 0.0]
+    )
+    key = scene.light("light")
+    key.pos = [0.2, 0.0, 1.4]
+    key.mode = mujoco.mjtCamLight.mjCAMLIGHT_TARGETBODY
+    key.targetbody = center.name
+    key.diffuse = [0.6, 0.6, 0.6]
+    key.castshadow = True
+    for name, pos in (
+        ("left_light", [-0.7, 0.1, 1.2]),
+        ("right_light", [0.7, 0.1, 1.2]),
+    ):
+        light = scene.worldbody.add_light(name=name, pos=pos)
+        light.mode = mujoco.mjtCamLight.mjCAMLIGHT_TARGETBODY
+        light.targetbody = center.name
+        light.diffuse = [0.35, 0.35, 0.35]
+        light.specular = [0.05, 0.05, 0.05]
+        light.castshadow = False
+    return scene
+
+
+def _scatter(
+    arm: Arm, footprints: dict[str, tuple[float, bool]], rng: np.random.Generator
+) -> dict[str, tuple[float, float, float]]:
+    """x, y and yaw per object, as Playground's `ScatterObjectsResetter` draws them.
+
+    ``footprints`` maps each object to its footprint radius and whether to turn it.
+    Objects never overlap, and land within the arm's top-down reach.
+    """
+
+    def draw() -> np.ndarray:
+        while True:
+            xy = rng.uniform(
+                (arm.spawn_x[0], arm.spawn_y[0]), (arm.spawn_x[1], arm.spawn_y[1])
+            )
+            if np.linalg.norm(xy - arm.base_xy) <= arm.max_reach:
+                return xy
+
+    placed: dict[str, tuple[float, float, float]] = {}
+    margin = 0.02
+    # Largest first, so the small ones fit around it.
+    for name, (radius, turn) in sorted(footprints.items(), key=lambda o: -o[1][0]):
+        for _ in range(100):
+            xy = draw()
+            if all(
+                np.linalg.norm(xy - placed[other][:2])
+                >= radius + footprints[other][0] + margin
+                for other in placed
+            ):
+                break
+        placed[name] = (
+            float(xy[0]),
+            float(xy[1]),
+            float(rng.uniform(-np.pi, np.pi)) if turn else 0.0,
+        )
+    return placed
+
+
+def build_scene(arm: Arm, objects: tuple[Obj, ...], seed: int) -> mujoco.MjSpec:
+    """One task's scene, opening on the arm's home pose with the objects scattered."""
+    scene = _base_scene(arm)
+    scene.attach(arm.spec_fn(), prefix="robot/", frame=scene.worldbody.add_frame())
+
+    specs = {obj.name: obj.spec() for obj in objects}
+    halves = {name: _bounds(spec.compile())[1] for name, spec in specs.items()}
+    footprints = {
+        obj.name: (float(max(halves[obj.name][:2])), not obj.container)
+        for obj in objects
+    }
+    poses = _scatter(arm, footprints, np.random.default_rng(seed))
+    for obj in objects:
+        x, y, yaw = poses[obj.name]
+        frame = scene.worldbody.add_frame(
+            pos=[x, y, float(halves[obj.name][2])],
+            quat=[np.cos(yaw / 2), 0.0, 0.0, np.sin(yaw / 2)],
+        )
+        scene.attach(specs[obj.name], prefix=f"{obj.name}/", frame=frame)
+
+    # The browser resets to the first keyframe: the arm at home, holding it.
+    model = scene.compile()
+    data = mujoco.MjData(model)
+    for joint, value in arm.home.items():
+        data.qpos[model.joint(f"robot/{joint}").qposadr[0]] = value
+    for i in range(model.nu):
+        joint = model.actuator_trnid[i, 0]
+        data.ctrl[i] = data.qpos[model.jnt_qposadr[joint]]
+    scene.add_key(name="home", qpos=data.qpos.tolist(), ctrl=data.ctrl.tolist())
+    return scene
+
+
+# Credits
+
+
+def _attribute(scene: mjswan.SceneHandle, arm: Arm, objects: tuple[Obj, ...]) -> None:
+    """Every component's license file, from the commit the scene was built from.
+
+    A scene composed in code has no model directory for the build to find them beside.
+    """
+    licenses = [
+        ("aloha_table", MENAGERIE, "aloha/LICENSE"),
+        (arm.menagerie_dir, MENAGERIE, f"{arm.menagerie_dir}/LICENSE"),
+    ]
+    if any(obj.asset or obj.spec_fn is _marker_stand for obj in objects):
+        licenses.append(("aloha_sim", ALOHA_SIM, "LICENSE"))
+    if any(obj.asset and "/ycb/" in obj.asset for obj in objects):
+        licenses.append(("ycb", ALOHA_SIM, f"{ALOHA_ASSETS}/ycb/LICENSE"))
+    if any(obj.asset and "/gso/" in obj.asset for obj in objects):
+        licenses.append(("gso", ALOHA_SIM, f"{ALOHA_ASSETS}/gso/LICENSE"))
+    for component, repo, path in licenses:
+        scene.add_attribution(component, license=_fetch(repo, path))
+
+
+def setup_builder() -> mjswan.Builder:
+    """Return the configured builder, not yet built."""
+    builder = mjswan.Builder(base_path=os.getenv("MJSWAN_BASE_PATH", "/"))
+    for arm in ARMS:
+        project = builder.add_project(name=f"Playground Tabletop: {arm.name}")
+        lookat, distance, azimuth, elevation = arm.overview
+        for seed, (title, _, _, objects) in enumerate(TASKS):
+            scene = project.add_scene(
+                name=title, spec=build_scene(arm, objects, seed)
+            ).set_viewer(
+                mjswan.ViewerConfig(
+                    lookat=lookat,
+                    distance=distance * arm.zoom_out,
+                    elevation=elevation,
+                    azimuth=azimuth,
+                    origin_type=mjswan.ViewerConfig.OriginType.WORLD,
+                )
+            )
+            _attribute(scene, arm, objects)
+    return builder
+
+
+def main():
+    """Build every scene and open the app.
+
+    Environment variables:
+        MJSWAN_BASE_PATH: Base path for deployment (default: '/')
+        MJSWAN_NO_LAUNCH: Set to '1' to skip launching the browser
+    """
+    app = setup_builder().build()
+    if os.getenv("MJSWAN_NO_LAUNCH") != "1":
+        app.launch()
+
+
+if __name__ == "__main__":
+    main()

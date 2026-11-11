@@ -423,6 +423,10 @@ _DEMOS: dict[str, tuple[str, str]] = {
     "main": ("examples.demo.main", "Eight mjlab tasks and a showcase, as deployed"),
     "simple": ("examples.demo.simple", "One mjlab task, one checkpoint"),
     "mujoco": ("examples.demo.mujoco_models", "MuJoCo's replicate gallery, no policy"),
+    "playground": (
+        "examples.demo.playground",
+        "MuJoCo Playground's tabletop scenes on SO-101 and YAM, no policy",
+    ),
 }
 
 

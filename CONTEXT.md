@@ -69,8 +69,10 @@ examples/            Runnable examples. Python only: assets are fetched at run t
                        and clips, from its deploy repo at a pinned commit; the `demo`
                        extra is what it imports), simple.py (one task,
                        one checkpoint), minimum_policy.py (the smallest complete
-                       policy) and mujoco_models.py (a gallery, no policy). `mjswan demo` runs
-                       the three named ones; minimum_policy.py is read, not run
+                       policy), mujoco_models.py (a gallery, no policy) and playground.py
+                       (MuJoCo Playground's tabletop scenes, no policy, its files from
+                       GitHub at pinned commits). `mjswan demo` runs the four named ones;
+                       minimum_policy.py is read, not run
   colab/               Google Colab notebooks (demo, anymal_c_velocity)
 
                      The W&B-driven examples (defaults, g1_spinkick, myosuite,
@@ -262,7 +264,7 @@ The primary CLI is `mjswan` (Typer-based, defined in `cli.py:app`). Subcommands:
 | `mjswan view <model.xml>` | Build and launch a viewer for a MuJoCo XML/MJCF file |
 | `mjswan serve <dist-dir \| document.swn>` | Serve a pre-built `dist/` directory, or a `.swn` document |
 | `mjswan new <name> [--template hello-world\|policy\|mjlab]` | Scaffold a new project from a template |
-| `mjswan demo [name]` | List the built-in demos, or run one (`main`, `simple`, `mujoco`) |
+| `mjswan demo [name]` | List the built-in demos, or run one (`main`, `simple`, `mujoco`, `playground`) |
 | `mjswan info <dist-dir \| document.swn>` | Show a tree of projects/scenes/policies and asset sizes, each skin with its license |
 | `mjswan publish <dist-dir>` | Upload a built dist's data files to mjswan Cloud (rejects custom-TS builds) |
 | `mjswan skin map <file> [--robot <xml \| mjb \| task>]` | Draft a skin's bone maps against a robot, as a `SkinConfig` to check |
