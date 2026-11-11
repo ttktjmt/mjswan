@@ -424,6 +424,14 @@ class TestDetection:
         found = detect_attributions(spec_asset_directories(spec))
         assert [a.license for a in found] == [_APACHE]
 
+    def test_a_second_file_s_component_stays_within_64_characters(self, tmp_path):
+        xml = _write_model(tmp_path / ("m" * 64))
+        (tmp_path / ("m" * 64) / "LICENSE").write_bytes(_BSD)
+        (tmp_path / ("m" * 64) / "COPYING").write_bytes(_APACHE)
+        spec = mujoco.MjSpec.from_file(str(xml))
+        found = detect_attributions(spec_asset_directories(spec))
+        assert [a.component for a in found] == ["m" * 64, "m" * 62 + "_2"]
+
 
 # ── The build ─────────────────────────────────────────────────────────────────
 
@@ -553,6 +561,22 @@ class TestBuildOutput:
             )
         names = license_names(project._config)
         assert names[(f"NOTICE.{long}", b"b\n")] == f"NOTICE.{'c' * 62}-2"
+
+    def test_each_name_is_its_own_file_and_one_publish_reads(self, minimal_model):
+        from mjswan.build.credit import license_names
+
+        project = Builder().add_project(name="Demo")
+        for scene, component in (("a", "Robot_X"), ("b", "robot_x")):
+            project.add_scene(name=scene, model=minimal_model).add_attribution(
+                component, notice=component
+            )
+        # Longer than an authored name may be, as a detected one was.
+        project._config.scenes[0].attributions.append(
+            Attribution(component="c" * 66, notice=b"c\n")
+        )
+        names = set(license_names(project._config).values())
+        assert names == {"NOTICE.Robot_X", "NOTICE.robot_x-2", f"NOTICE.{'c' * 62}-2"}
+        assert all(is_license_file_path(f"demo/licenses/{n}") for n in names)
 
     def test_no_scene_takes_the_licenses_directory(self, minimal_model):
         project = Builder().add_project(name="Demo")

@@ -241,9 +241,10 @@ def detect_attributions(
                 note_bytes = fresh(note.read_bytes() if note else None)
                 if lic_bytes is None and note_bytes is None:
                     continue
+                suffix = f"_{n + 1}" if n else ""
                 attributions.append(
                     Attribution(
-                        component=component if n == 0 else f"{component}_{n + 1}",
+                        component=f"{component[: 64 - len(suffix)]}{suffix}",
                         license=lic_bytes,
                         notice=note_bytes,
                         origin=str(lic or note),
