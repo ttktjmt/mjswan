@@ -39,6 +39,8 @@ _FLOOR = 0.15
 _NEAR = 0.05
 #: A leading segment shorter than this share of its limb is a stub (a shoulder).
 _STUB = 0.25
+#: More children than any real fork has: not searched for mirrored pairs.
+_MAX_FORK = 64
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,7 @@ class _Skeleton:
         self.low = min(heights)
         self.height = (max(heights) - self.low) or 1.0
         self._subtrees: dict[int, list[int]] = {}
+        self._floor: dict[int, bool] = {}
 
     def subtree(self, i: int) -> list[int]:
         if i not in self._subtrees:
@@ -91,8 +94,10 @@ class _Skeleton:
         return out
 
     def reaches_floor(self, i: int) -> bool:
-        lowest = min(self.pos[j][1] for j in self.subtree(i))
-        return lowest < self.low + _FLOOR * self.height
+        if i not in self._floor:
+            lowest = min(self.pos[j][1] for j in self.subtree(i))
+            self._floor[i] = lowest < self.low + _FLOOR * self.height
+        return self._floor[i]
 
     def mirrored(
         self, a: int, b: int, centre: int, axes: tuple[int, ...] = (0, 2)
@@ -119,6 +124,8 @@ class _Skeleton:
     ) -> list[tuple[int, int, int]]:
         """Mirrored pairs among *node*'s children, with their lateral axis."""
         kids = self.kids[node]
+        if len(kids) > _MAX_FORK:
+            return []
         return [
             (a, b, axis)
             for k, a in enumerate(kids)

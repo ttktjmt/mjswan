@@ -26,6 +26,13 @@ _STORED_SUFFIXES = frozenset({".mjz", ".npz", ".spz"})
 #: Every project id a build writes comes from ``name2id``.
 _BUILT_ID = re.compile(r"[a-z0-9_]+")
 
+#: Summed declared sizes bound the real ones: zipfile stops each entry at its own.
+MAX_UNPACKED_BYTES = 2 * 2**30
+MAX_ENTRIES = 20_000
+#: The methods ``write_document`` uses: bzip2 and LZMA inflate a whole read before
+#: zipfile cuts it at the entry's size.
+_METHODS = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
+
 
 class DocumentError(ValueError):
     """A ``.swn`` that cannot be read as a simulation document."""
@@ -41,6 +48,27 @@ def _symlinked(path: Path) -> DocumentError:
     )
 
 
+def _open(document: Path) -> zipfile.ZipFile:
+    """``document`` opened, if it is one a build could have written."""
+    try:
+        zf = zipfile.ZipFile(document)
+    except zipfile.BadZipFile as exc:
+        raise _not_a_document(document, "not a ZIP archive") from exc
+    infos = zf.infolist()
+    if MANIFEST_NAME not in zf.namelist():
+        why = f"no {MANIFEST_NAME}"
+    elif (
+        len(infos) > MAX_ENTRIES or sum(i.file_size for i in infos) > MAX_UNPACKED_BYTES
+    ):
+        why = f"it unpacks to over {MAX_ENTRIES} files or {MAX_UNPACKED_BYTES} bytes"
+    elif any(i.compress_type not in _METHODS for i in infos):
+        why = "it uses a compression no build writes"
+    else:
+        return zf
+    zf.close()
+    raise _not_a_document(document, why)
+
+
 def is_document(path: str | Path) -> bool:
     """Whether ``path`` is a ``.swn`` file (as opposed to a built directory)."""
     p = Path(path)
@@ -51,15 +79,8 @@ def read_manifest(source: str | Path) -> dict:
     """The manifest of a built directory or a ``.swn`` document."""
     source = Path(source)
     if is_document(source):
-        # Same refusals as unpacking one, so a caller that wants only the manifest gets
-        # "not a document" rather than a zipfile error.
-        try:
-            with zipfile.ZipFile(source) as zf:
-                return json.loads(zf.read(MANIFEST_NAME))
-        except zipfile.BadZipFile as exc:
-            raise _not_a_document(source, "not a ZIP archive") from exc
-        except KeyError as exc:
-            raise _not_a_document(source, f"no {MANIFEST_NAME}") from exc
+        with _open(source) as zf:
+            return json.loads(zf.read(MANIFEST_NAME))
     return json.loads((source / MANIFEST_NAME).read_text())
 
 
@@ -134,14 +155,8 @@ def unpack_document(document: str | Path, target_dir: str | Path) -> Path:
     document = Path(document)
     target_dir = Path(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        zf = zipfile.ZipFile(document)
-    except zipfile.BadZipFile as exc:
-        raise _not_a_document(document, "not a ZIP archive") from exc
-    with zf:
+    with _open(document) as zf:
         names = zf.namelist()
-        if MANIFEST_NAME not in names:
-            raise _not_a_document(document, f"no {MANIFEST_NAME}")
         # `extractall` confines entries itself, by dropping the parts that would escape.
         # Checked first anyway: an entry that needs dropping means a tampered document,
         # better refused than unpacked as a silently mangled tree.

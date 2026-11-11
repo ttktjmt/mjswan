@@ -406,18 +406,32 @@ def _validate_plan(plan: PublishPlan) -> None:
 
 
 def _map_files(plan: PublishPlan) -> None:
-    """Fill ``plan.file_map`` and ``plan.pieces``, and hold the build to the caps the
-    platform counts on them."""
+    """Fill ``plan.file_map`` and ``plan.pieces``, checking the platform's caps as each
+    piece lands so an oversized build is never held whole."""
     sizes: dict[str, int] = {}
+    total = 0
 
     def mapped(label: str, name: str, data: bytes) -> dict:
+        nonlocal total
         _check_size(label, len(data))
         entry = cut(name, data)
         at = 0
         for sha, size in entry.get("chunks", [[entry["sha256"], entry["size"]]]):
-            plan.pieces[sha] = data[at : at + size]
-            sizes[sha] = size
+            if sha not in sizes:
+                sizes[sha] = size
+                total += size
+                plan.pieces[sha] = data[at : at + size]
             at += size
+        if len(sizes) > MAX_PIECES:
+            raise PublishError(
+                f"This build is over {MAX_PIECES} pieces, the most mjswan Cloud takes. "
+                "Reduce the number of scenes/policies/motions in it."
+            )
+        if total > MAX_TOTAL_BYTES:
+            raise PublishError(
+                f"This build holds over {MAX_TOTAL_BYTES // (1024 * 1024)}MB, scenes "
+                "unpacked, the most mjswan Cloud takes."
+            )
         return entry
 
     for f in plan.files:
@@ -432,18 +446,6 @@ def _map_files(plan: PublishPlan) -> None:
             plan.file_map["files"][path] = {"entries": _entries(path, f.source, mapped)}
         else:
             plan.file_map["files"][path] = mapped(path, path, f.source.read_bytes())
-
-    if len(sizes) > MAX_PIECES:
-        raise PublishError(
-            f"This build is {len(sizes)} pieces, and mjswan Cloud takes at most "
-            f"{MAX_PIECES}. Reduce the number of scenes/policies/motions in it."
-        )
-    total = sum(sizes.values())
-    if total > MAX_TOTAL_BYTES:
-        raise PublishError(
-            f"This build holds {total} bytes, scenes unpacked, which exceeds the "
-            f"{MAX_TOTAL_BYTES // (1024 * 1024)}MB limit."
-        )
 
 
 def _entries(path: str, source: Path, mapped: Callable[[str, str, bytes], dict]):
