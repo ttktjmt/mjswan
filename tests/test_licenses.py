@@ -570,7 +570,7 @@ class TestBuildOutput:
             project.add_scene(name=scene, model=minimal_model).add_attribution(
                 component, notice=component
             )
-        # Longer than an authored name may be, as a detected one was.
+        # Over add_attribution's 64-character limit, so appended directly.
         project._config.scenes[0].attributions.append(
             Attribution(component="c" * 66, notice=b"c\n")
         )

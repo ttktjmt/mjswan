@@ -31,8 +31,8 @@ def license_names(project: ProjectConfig) -> LicenseNames:
     """The name each third-party text is written under: its component's, once per text.
     When two texts share a name, the first in scene order keeps it and the others take
     ``-2``, ``-3``, … in scene order, passing over a name another component has. A name
-    that differs from one already written only by case, or that publish would not read
-    as a license file, is numbered too: all are written into one directory."""
+    equal to an earlier one but for case (one file on a case-insensitive disk), or one
+    publish would not read as a license file, is numbered too."""
     variants: dict[str, list[bytes]] = {}
     for scene in project.scenes:
         for attribution in scene.attributions:
