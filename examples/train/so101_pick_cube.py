@@ -9,10 +9,10 @@ one free GPU (Colab or molab), then exported for mjswan. Four steps, each a subc
   export  the policy as ONNX, its contract and a reference rollout (below)
   upload  --out's exports and the newest checkpoint to a Hugging Face model repository
 
-`all` runs train, export and upload in order. Every step can be run again: a session
-that was shut down picks up from the last checkpoint. On Colab put --out on Google
-Drive; on molab, whose sessions can end early, pass --hf-repo so each checkpoint is
-also kept on the Hub (HF_TOKEN in the environment).
+`all` runs train, export and upload in order. Every step can be run again and picks up
+from the newest checkpoint. A Colab or molab session takes its disk with it when it ends,
+so pass --hf-repo there (a write token in HF_TOKEN): each checkpoint is also kept on the
+Hub, and a session that starts with none on disk takes the Hub's newest.
 
 `export` writes, under --out/export:
 
@@ -23,7 +23,7 @@ also kept on the Hub (HF_TOKEN in the environment).
                   port's observation graphs can be checked against Playground's numbers
 
     python so101_pick_cube.py setup
-    python so101_pick_cube.py all --out /content/drive/MyDrive/so101_pick_cube
+    python so101_pick_cube.py all --out so101_pick_cube --hf-repo user/so101-pick-cube
 """
 
 from __future__ import annotations
@@ -39,6 +39,18 @@ from pathlib import Path
 
 PLAYGROUND = "1.0.1"
 ENV_ID = "SO101PickCube"
+MODEL_CARD = f"""\
+---
+tags: [mujoco-playground, mjswan, robotics, reinforcement-learning]
+---
+# SO-101 PickCube for mjswan
+
+PPO on MuJoCo Playground {PLAYGROUND}'s `{ENV_ID}`, trained by mjswan's
+`examples/train/so101_pick_cube.py`.
+
+- `checkpoints/`: rsl-rl checkpoints, the newest resumes training
+- `policy.onnx`, `contract.json`, `reference.npz`: the export an mjswan scene runs
+"""
 #: Playground's own default for this task.
 DEFAULT_ITERATIONS = 1000
 #: Warp 1.18.0's CUDA 12 build, for drivers that predate CUDA 13 (Colab's T4).
@@ -159,8 +171,17 @@ def _hub():
     return HfApi()
 
 
+def _checkpoint(args: argparse.Namespace) -> Path | None:
+    """The newest checkpoint on disk, else the Hub's, for a session that starts empty."""
+    run_dir = args.out / "checkpoints"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint = _newest_checkpoint(run_dir)
+    if checkpoint is None and args.hf_repo:
+        checkpoint = _pull_newest_checkpoint(args.hf_repo, run_dir)
+    return checkpoint
+
+
 def _pull_newest_checkpoint(repo: str, run_dir: Path) -> Path | None:
-    """The Hub's newest checkpoint, for a session that starts with none on disk."""
     from huggingface_hub import hf_hub_download
 
     names = [
@@ -171,11 +192,21 @@ def _pull_newest_checkpoint(repo: str, run_dir: Path) -> Path | None:
     if not names:
         return None
     newest = max(names, key=lambda name: _iteration(Path(name)))
-    print(f"Resuming from the Hub's {newest}.")
+    print(f"Fetched {newest} from the Hub.")
     cached = hf_hub_download(repo, newest)
     target = run_dir / Path(newest).name
     shutil.copyfile(cached, target)
     return target
+
+
+def _claim_repo(repo: str) -> None:
+    """Create the repository and write its card, so a token that cannot write fails now
+    rather than in the background on the first checkpoint."""
+    api = _hub()
+    api.create_repo(repo, exist_ok=True)
+    api.upload_file(
+        path_or_fileobj=MODEL_CARD.encode(), path_in_repo="README.md", repo_id=repo
+    )
 
 
 def _push(repo: str, path: Path, path_in_repo: str) -> None:
@@ -205,12 +236,9 @@ def train(args: argparse.Namespace) -> None:
     from rsl_rl.runners import OnPolicyRunner
 
     run_dir = args.out / "checkpoints"
-    run_dir.mkdir(parents=True, exist_ok=True)
     if args.hf_repo:
-        _hub().create_repo(args.hf_repo, exist_ok=True)
-    resume = _newest_checkpoint(run_dir)
-    if resume is None and args.hf_repo:
-        resume = _pull_newest_checkpoint(args.hf_repo, run_dir)
+        _claim_repo(args.hf_repo)
+    resume = _checkpoint(args)
     done = _iteration(resume) if resume else -1
     if done >= args.iterations - 1:
         print(f"Already trained: {resume.name}.")
@@ -227,17 +255,21 @@ def train(args: argparse.Namespace) -> None:
     runner_cfg.seed = args.seed
 
     uploads: list[threading.Thread] = []
+    failed: set[Path] = set()
+
+    def push(saved: Path) -> None:
+        try:
+            _push(args.hf_repo, saved, f"checkpoints/{saved.name}")
+        except Exception as error:  # The next checkpoint may still get there.
+            failed.add(saved)
+            print(f"Could not upload {saved.name} to the Hub: {error}", flush=True)
 
     class Runner(OnPolicyRunner):
         def save(self, path: str, infos: dict | None = None) -> None:
             super().save(path, infos)
             if args.hf_repo:
                 # Off the training loop: the next iterations need not wait for the Hub.
-                saved = Path(path)
-                upload = threading.Thread(
-                    target=_push,
-                    args=(args.hf_repo, saved, f"checkpoints/{saved.name}"),
-                )
+                upload = threading.Thread(target=push, args=(Path(path),))
                 upload.start()
                 uploads.append(upload)
 
@@ -256,6 +288,10 @@ def train(args: argparse.Namespace) -> None:
     env.close()
     for upload in uploads:
         upload.join()
+    newest = _newest_checkpoint(run_dir)
+    if newest in failed:
+        # The last one is what the next session resumes from: this time a failure stops.
+        _push(args.hf_repo, newest, f"checkpoints/{newest.name}")
 
 
 # export
@@ -341,9 +377,9 @@ def export(args: argparse.Namespace) -> None:
     from mujoco_playground._src.rl import rng
     from rsl_rl.runners import OnPolicyRunner
 
-    checkpoint = _newest_checkpoint(args.out / "checkpoints")
+    checkpoint = _checkpoint(args)
     if checkpoint is None:
-        sys.exit(f"No checkpoint under {args.out / 'checkpoints'}: run `train` first.")
+        sys.exit("No checkpoint on disk or on the Hub: run `train` first.")
     export_dir = args.out / "export"
     export_dir.mkdir(parents=True, exist_ok=True)
 
