@@ -355,8 +355,28 @@ class TestPlanPublish:
     def test_rejects_total_size(self, tmp_path: Path, monkeypatch):
         dist = _make_dist(tmp_path)
         monkeypatch.setattr("mjswan.cloud.publish.MAX_TOTAL_BYTES", 10)
-        with pytest.raises(PublishError, match="scenes unpacked, which exceeds"):
+        with pytest.raises(PublishError, match="scenes unpacked"):
             plan_publish(dist)
+
+    def test_a_build_past_the_cap_is_refused_before_it_is_held_whole(
+        self, tmp_path: Path, monkeypatch
+    ):
+        from mjswan.cloud import blob
+
+        dist = _make_dist(tmp_path)
+        with zipfile.ZipFile(dist / "demo/humanoid/scene.mjz", "w") as archive:
+            for i in range(100):
+                archive.writestr(f"m{i}.stl", bytes([i]) * 50)
+        monkeypatch.setattr("mjswan.cloud.publish.MAX_TOTAL_BYTES", 1000)
+        cuts = []
+        monkeypatch.setattr(
+            "mjswan.cloud.publish.cut",
+            lambda name, data: cuts.append(name) or blob.cut(name, data),
+        )
+        with pytest.raises(PublishError, match="scenes unpacked"):
+            plan_publish(dist)
+        # The three other files, then entries only up to the cap, not all 100.
+        assert len(cuts) <= 3 + 1000 // 50
 
     def test_a_piece_two_files_share_counts_once(self, tmp_path: Path, monkeypatch):
         dist = _make_dist(tmp_path)
@@ -365,7 +385,7 @@ class TestPlanPublish:
         monkeypatch.setattr("mjswan.cloud.publish.MAX_TOTAL_BYTES", 119)
         plan_publish(dist)
         monkeypatch.setattr("mjswan.cloud.publish.MAX_PIECES", 4)
-        with pytest.raises(PublishError, match="5 pieces"):
+        with pytest.raises(PublishError, match="over 4 pieces"):
             plan_publish(dist)
 
     def test_an_archive_is_held_to_the_cap_entry_by_entry(

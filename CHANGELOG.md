@@ -1427,3 +1427,11 @@ shortcuts.
   that name, chose what was published. They now check out the tagged commit by SHA; the
   release job stops if the tag already names another commit, and no GitHub Release is
   made if the tag moved meanwhile.
+- **A file someone else made no longer sets what `info`, `serve`, `publish` or `skin map`
+  costs.** A `.swn` was unpacked whole however far it inflated, `publish` held a build's
+  every piece in memory before counting them against mjswan Cloud's caps, and `skin map`
+  compared every pair of a node's children and rescanned a subtree per mirrored pair, so a
+  small `.glb` took minutes. A `.swn` declaring over 2 GiB or 20000 files, or a compression
+  no build writes, is now refused before anything is written; `publish` stops at a cap as
+  the pieces land; and `skin map` searches no node with over 64 children for a mirrored
+  pair and tests each node against the floor once.

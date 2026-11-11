@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import math
 import runpy
+from collections import Counter
 from pathlib import Path
 
 import mujoco
@@ -19,6 +20,7 @@ from typer.testing import CliRunner
 from mjswan.cli import app
 from mjswan.document.skin import read_skin_file
 from mjswan.rig.guess import (
+    _Skeleton,
     arm_joints,
     draft_source,
     guess_bones,
@@ -118,6 +120,41 @@ class TestGuessHumanoid:
         assert [tuple(file.names[n] for n in limb) for limb in guess.limbs] == [
             (f"hip{i}", f"knee{i}", f"foot{i}") for i in range(3)
         ]
+
+    def test_a_node_with_more_children_than_a_fork_is_not_searched(
+        self, tmp_path, monkeypatch
+    ):
+        leaves = [{"translation": [x, -1, 0]} for _ in range(100) for x in (1, -1)]
+        file = _skin(tmp_path, [{"children": list(range(1, 201))}, *leaves])
+        calls = []
+        mirrored = _Skeleton.mirrored
+        monkeypatch.setattr(
+            _Skeleton, "mirrored", lambda *a: calls.append(a) or mirrored(*a)
+        )
+        assert guess_humanoid(file).kind == "other" and not calls
+
+    def test_each_node_is_tested_for_the_floor_once(self, tmp_path, monkeypatch):
+        # A chain along +x, high above its lowest joint, each link mirrored by k leaves.
+        n, k = 40, 16
+        nodes = [{"translation": [1, 0, 0], "children": [i + 1]} for i in range(n)]
+        nodes[-1]["children"] = []
+        nodes[0]["children"].append(len(nodes))
+        nodes.append({"translation": [0, -10, 0]})
+        for link in nodes[: n - 1]:
+            link["children"] += range(len(nodes), len(nodes) + k)
+            nodes += [{"translation": [-1, 0, 0]} for _ in range(k)]
+        calls = Counter()
+        subtree = _Skeleton.subtree
+        monkeypatch.setattr(
+            _Skeleton, "subtree", lambda sk, i: calls.update([i]) or subtree(sk, i)
+        )
+        assert guess_humanoid(_skin(tmp_path, nodes)).kind == "other"
+        assert max(calls.values()) < k
+
+
+def _skin(tmp_path: Path, nodes: list[dict]):
+    gltf = {"asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}]}
+    return read_skin_file(fx.write_glb(tmp_path / "s.glb", {**gltf, "nodes": nodes}))
 
 
 class TestGuessRobot:
