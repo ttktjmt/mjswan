@@ -26,8 +26,7 @@ _STORED_SUFFIXES = frozenset({".mjz", ".npz", ".spz"})
 #: Every project id a build writes comes from ``name2id``.
 _BUILT_ID = re.compile(r"[a-z0-9_]+")
 
-#: The most a document may unpack to, by its entries' declared sizes, where zipfile
-#: stops each one.
+#: Summed declared sizes bound the real ones: zipfile stops each entry at its own.
 MAX_UNPACKED_BYTES = 2 * 2**30
 MAX_ENTRIES = 20_000
 #: The methods ``write_document`` uses: bzip2 and LZMA inflate a whole read before

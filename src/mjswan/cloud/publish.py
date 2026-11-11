@@ -406,8 +406,8 @@ def _validate_plan(plan: PublishPlan) -> None:
 
 
 def _map_files(plan: PublishPlan) -> None:
-    """Fill ``plan.file_map`` and ``plan.pieces``, holding the build to the caps the
-    platform counts on them as each piece lands, not once it is all in memory."""
+    """Fill ``plan.file_map`` and ``plan.pieces``, checking the platform's caps as each
+    piece lands so an oversized build is never held whole."""
     sizes: dict[str, int] = {}
     total = 0
 
