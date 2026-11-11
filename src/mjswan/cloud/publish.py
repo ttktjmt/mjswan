@@ -573,7 +573,7 @@ def publish_dist(
         lambda msg: warnings.warn(msg, category=RuntimeWarning, stacklevel=4)
     )
 
-    # The messages carry names the build's maker chose (its files, its VRMs' authors).
+    # Messages carry names the build's maker chose: file names, VRM authors.
     def notify(msg: str) -> None:
         report(_printable(msg))
 
@@ -683,7 +683,7 @@ def publish_dist(
 
 
 def _printable(text: str) -> str:
-    """*text* without control characters but newlines."""
+    """*text* without its control characters, newlines kept."""
     return "".join(c for c in text if c == "\n" or unicodedata.category(c) != "Cc")
 
 

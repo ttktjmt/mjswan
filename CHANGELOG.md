@@ -1341,11 +1341,11 @@ shortcuts.
   its markup escaped.
 - **The CLI's inert text covers the values it missed.** `skin map` printed a VRM's bone
   names as markup, `serve` a `.swn`'s file name with its control characters, and `info`
-  escaped a document's version and format apart, so the two could close one tag between
-  them. `publish_dist` handed file names and VRM authors to `on_progress` and `on_warning`
-  (`print` and `warnings.warn` from the Python API) as they were, and built the page URL
-  from any id the server returned. These now lose their control characters, the CLI
-  escapes their markup, and an id that is not a short URL-safe token is refused.
+  escaped a document's version and format separately, so together they could form a tag.
+  `publish_dist` passed file names and VRM authors unchanged to `on_progress` and
+  `on_warning`, which the Python API prints, and built the page URL from any id the
+  server returned. These values now lose their control characters, the CLI escapes their
+  markup, and an id that is not a short URL-safe token is refused.
 - **`mjswan skin map -o` writes the skin file's name as a string.** The draft's docstring
   held the command line verbatim between triple quotes, so a file whose name closed them
   put code into the draft, which ran when the draft was. The docstring is now a quoted
