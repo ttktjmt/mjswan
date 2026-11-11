@@ -1,8 +1,8 @@
 # A copy of mjswan Cloud's cutter test files: hashed byte for byte, so no hook touches them.
 exclude: '^tests/blob_vectors/'
 
-# Every hook runs a tool uv.lock or the template's package-lock.json pins: a remote hook
-# repo would pip-install its own requirements, unlocked. Run `make sync` first.
+# Hooks run tools uv.lock or the template's package-lock.json pins (`make sync` first):
+# a remote hook repo would pip-install its own requirements, unpinned.
 repos:
   - repo: local
     hooks:

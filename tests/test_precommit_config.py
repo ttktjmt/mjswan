@@ -1,4 +1,4 @@
-"""Every pre-commit hook runs a locked tool, never one a hook repo installs from a registry."""
+"""Every pre-commit hook runs a lockfile-pinned tool."""
 
 from __future__ import annotations
 
