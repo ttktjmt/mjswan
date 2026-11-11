@@ -74,6 +74,9 @@ examples/            Runnable examples. Python only: assets are fetched at run t
                        GitHub at pinned commits). `mjswan demo` runs the four named ones;
                        minimum_policy.py is read, not run
   colab/               Google Colab notebooks (demo, anymal_c_velocity)
+  train/               so101_pick_cube.py: trains MuJoCo Playground 1.0.1's SO101PickCube on
+                       one free GPU and exports the ONNX policy, its contract and a reference
+                       rollout for an mjswan port; the Colab and molab notebooks beside it run it
 
                      The W&B-driven examples (defaults, g1_spinkick, myosuite,
                      musclemimic, unitree_rl, gentle_humanoid) live in

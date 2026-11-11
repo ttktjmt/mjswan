@@ -32,6 +32,10 @@ shortcuts.
   home pose and the objects can be grabbed. Playground needs MuJoCo 4, so
   `examples/demo/playground.py` restates its scene recipe against Menagerie and aloha_sim
   files fetched at pinned commits.
+  `examples/train/so101_pick_cube.py`, with a Colab and a molab notebook, trains
+  Playground's `SO101PickCube` on one free GPU with its own environment and PPO settings,
+  resuming from the newest checkpoint, and exports the ONNX policy with the observation
+  layout and a reference rollout a port is checked against.
 
 - **`createEngine(element, { archive })`, for a host that renders `.mjz` archives it did not
   build.** `archive: { maxEntries, maxInflatedBytes, extensions }` refuses an archive before
