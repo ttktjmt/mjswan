@@ -29,7 +29,10 @@ shortcuts.
 - **`mjswan demo playground`: MuJoCo Playground 1.0.1 in the browser.** It opens on
   the SO-101 bringing a cube to a target that moves, driven by a policy trained on
   Playground's `SO101PickCube` with its own environment and PPO settings, the task stated
-  as an mjlab one whose lift-cube terms compute Playground's observations. Then the nine
+  as an mjlab one whose lift-cube terms compute Playground's observations. Beside it, the
+  same task through the wrist camera: `SO101PickCubeVision`, the task Playground's
+  sim-to-real demo deploys, its policy reading the camera's frame (drawn by three.js and
+  averaged to 16 x 16) and moving the arm by deltas at 10 Hz. Then the nine
   pick-and-place tasks of its agentic suite (`tasks/agentic/tabletop_v0`), each in front
   of the SO-101 and the I2RT YAM, as eighteen scenes with no policy: the arms hold their
   home pose and the objects can be grabbed. Playground needs MuJoCo 4, so

@@ -2,10 +2,11 @@
 
 MuJoCo Playground 1.0.1 in the browser, in two parts. `mjswan demo playground` runs it.
 
-- **PickCube**: the SO-101 bringing a cube to a target that moves, driven by a policy
-  trained on Playground's own `SO101PickCube` (`tasks/manipulation/pick_cube`) with
-  `examples/train/so101_pick_cube.py`. The task is stated as an mjlab one, whose
-  lift-cube terms compute Playground's observations.
+- **PickCube**: the SO-101 bringing a cube to a target that moves, driven by policies
+  trained on Playground's own `SO101PickCube` and `SO101PickCubeVision`
+  (`tasks/manipulation/pick_cube`) with `examples/train/so101_pick_cube.py`: one reads
+  the cube's position, the other finds the cube through the wrist camera. Each task is
+  stated as an mjlab one, whose terms compute Playground's observations.
 - **Tabletop**: the scenes of its agentic manipulation suite (`tasks/agentic/tabletop_v0`),
   nine pick-and-place tasks, each laid out in front of both arms the suite drives, the
   SO-101 and the I2RT YAM. Upstream moves the arm with a vision-language agent and an IK
@@ -33,24 +34,28 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import mujoco
 import numpy as np
 import onnx
+import torch
 from mjlab.actuator import XmlActuatorCfg
 from mjlab.entity import EntityArticulationInfoCfg, EntityCfg
 from mjlab.envs import ManagerBasedRlEnvCfg, mdp
 from mjlab.envs.mdp.actions import JointPositionActionCfg
+from mjlab.envs.mdp.actions.actions import JointPositionAction
 from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.scene import SceneCfg
+from mjlab.sensor import CameraSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.tasks.manipulation import mdp as lift_mdp
 from mjlab.tasks.manipulation.mdp import LiftingCommandCfg
+from mjlab.utils.lab_api.math import matrix_from_quat
 from mjlab.viewer import ViewerConfig
 
 import mjswan
@@ -560,26 +565,27 @@ def _base_scene(arm: Arm) -> mujoco.MjSpec:
     )
     scene.attach(_aloha_table(), prefix="table/", frame=table_frame)
     scene.stat.extent = 4.0
-    center = scene.worldbody.add_body(
-        name="workspace_center", pos=[float(np.mean(arm.spawn_x)), 0.0, 0.0]
-    )
+    _workspace_lights(scene, float(np.mean(arm.spawn_x)), room=0.35)
+    return scene
+
+
+def _workspace_lights(scene: mujoco.MjSpec, center_x: float, *, room: float) -> None:
+    """The plane's key light aimed at the workspace, casting shadows, and two room
+    lights beside it of brightness `room`."""
+    center = scene.worldbody.add_body(name="workspace_center", pos=[center_x, 0.0, 0.0])
     key = scene.light("light")
     key.pos = [0.2, 0.0, 1.4]
     key.mode = mujoco.mjtCamLight.mjCAMLIGHT_TARGETBODY
     key.targetbody = center.name
     key.diffuse = [0.6, 0.6, 0.6]
     key.castshadow = True
-    for name, pos in (
-        ("left_light", [-0.7, 0.1, 1.2]),
-        ("right_light", [0.7, 0.1, 1.2]),
-    ):
-        light = scene.worldbody.add_light(name=name, pos=pos)
+    for name, x in (("left_room_light", -0.7), ("right_room_light", 0.7)):
+        light = scene.worldbody.add_light(name=name, pos=[x, 0.1, 1.2])
         light.mode = mujoco.mjtCamLight.mjCAMLIGHT_TARGETBODY
         light.targetbody = center.name
-        light.diffuse = [0.35, 0.35, 0.35]
+        light.diffuse = [room, room, room]
         light.specular = [0.05, 0.05, 0.05]
         light.castshadow = False
-    return scene
 
 
 def _scatter(
@@ -829,19 +835,174 @@ mjswan.register_command(
 )
 
 
-def _pick_cube_policy() -> onnx.ModelProto:
-    """The exported actor, with the weights torch wrote beside it read in.
+def _hub_policy(
+    source: tuple[str, str], files: tuple[str, ...] = ("policy.onnx",)
+) -> onnx.ModelProto:
+    """An exported actor, with any weights torch wrote beside it read in.
 
     Copied out of the Hub's cache first: `onnx.load` will not read weights through its
     symbolic links.
     """
-    repo, revision = PICK_CUBE_POLICY
+    repo, revision = source
     with tempfile.TemporaryDirectory() as tmp:
-        for name in ("policy.onnx", "policy.onnx.data"):
+        for name in files:
             shutil.copyfile(
                 hf.fetch_file(repo, name, revision=revision), Path(tmp, name)
             )
-        return onnx.load(str(Path(tmp, "policy.onnx")))
+        return onnx.load(str(Path(tmp, files[0])))
+
+
+# PickCube Vision: Playground's `SO101PickCubeVision`, the wrist camera for the cube
+
+#: The policy `so101_pick_cube.py --task vision` trained: 700 of its 3000 iterations.
+PICK_CUBE_VISION_POLICY = ("ttktjmt/so101-pick-cube-vision", "REVISION")
+
+#: Playground's `DeltaActions` for the SO-101: radians per unit of action, and the range
+#: each joint's target is held in.
+SO101_DELTA_SCALE = {**{joint: 0.05 for joint in SO101_DYNAMICS}, "gripper": 0.25}
+SO101_DELTA_LIMITS = {
+    "shoulder_pan": (-3.14159, 3.14159),
+    "shoulder_lift": (-1.74533, 1.74533),
+    "elbow_flex": (-0.17453, 2.79253),
+    "wrist_flex": (-1.65806, 1.65806),
+    "wrist_roll": (-2.79253, 2.79253),
+    "gripper": (-0.174533, 1.7453292),
+}
+
+
+@dataclass(kw_only=True)
+class DeltaJointPositionActionCfg(JointPositionActionCfg):
+    """Playground's `DeltaActions`: each action, clipped to ±1 and scaled, moves the
+    joint targets on from where they were, smoothed with the step before. The targets
+    stay within `limits` and start each episode at the default pose."""
+
+    smoothing: float = 0.5
+    limits: dict[str, tuple[float, float]] = field(default_factory=dict)
+
+    def build(self, env: Any) -> DeltaJointPositionAction:
+        return DeltaJointPositionAction(self, env)
+
+
+class DeltaJointPositionAction(JointPositionAction):
+    cfg: DeltaJointPositionActionCfg
+
+    def __init__(self, cfg: DeltaJointPositionActionCfg, env: Any):
+        super().__init__(cfg, env)
+        bounds = torch.tensor(
+            [cfg.limits[name] for name in self.target_names], device=self.device
+        )
+        self._low, self._high = bounds[:, 0], bounds[:, 1]
+        self._target = self._offset.clone()
+        self._step = torch.zeros_like(self._raw_actions)
+
+    def process_actions(self, actions: torch.Tensor) -> None:
+        self._raw_actions[:] = actions
+        step = actions.clamp(-1.0, 1.0) * self._scale
+        smoothing = self.cfg.smoothing
+        self._step = (1.0 - smoothing) * step + smoothing * self._step
+        self._target = torch.clamp(self._target + self._step, self._low, self._high)
+        self._processed_actions = self._target.clone()
+
+    def reset(self, env_ids: Any = None) -> None:
+        super().reset(env_ids)
+        self._target[env_ids] = self._offset[env_ids]
+        self._step[env_ids] = 0.0
+
+
+def _site_pos(env: Any, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """A site's position in the world: Playground's `ee/xpos`."""
+    return env.scene[asset_cfg.name].data.site_pos_w[:, asset_cfg.site_ids].squeeze(1)
+
+
+def _site_xmat(env: Any, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """A site's orientation, its rotation matrix row by row: Playground's `ee/xmat`."""
+    quat = env.scene[asset_cfg.name].data.site_quat_w[:, asset_cfg.site_ids].squeeze(1)
+    return matrix_from_quat(quat).reshape(-1, 9)
+
+
+def _wrist_image(env: Any, sensor_name: str, size: int) -> torch.Tensor:
+    """Playground's `obs_camera`: the camera's square frame, averaged down to `size`."""
+    rgb = lift_mdp.camera_rgb(env, sensor_name)
+    return torch.nn.functional.interpolate(rgb, size=(size, size), mode="area")
+
+
+def _pick_cube_vision_world(spec: mujoco.MjSpec) -> None:
+    """Playground's vision scene: a dim headlight, shadows from the key light and the
+    front fill, room lights, and the arm, the cube and the floor drawn in flat colour
+    (`override_flat_materials`), the floor the SO-101's grey."""
+    _pick_cube_world(spec)
+    _workspace_lights(spec, 0.25, room=0.25)
+    spec.visual.headlight.diffuse = [0.1, 0.1, 0.1]
+    spec.visual.headlight.ambient = [0.15, 0.15, 0.15]
+    fill = spec.light("front_fill")
+    fill.pos = [0.1, -1.0, 1.2]
+    fill.diffuse = [0.35, 0.35, 0.35]
+    fill.castshadow = True
+    spec.geom("floor").rgba = [0.25, 0.25, 0.25, 1.0]
+    for geom in spec.geoms:
+        if geom.name == "floor" or geom.name.startswith(("robot/", "cube/")):
+            geom.material = ""
+
+
+def pick_cube_vision_env_cfg() -> ManagerBasedRlEnvCfg:
+    """Playground's `SO101PickCubeVision`, the task its sim-to-real demo deploys.
+
+    The policy sees the wrist camera's 64 x 64 frame averaged to 16 x 16, beside the
+    joints, the gripper's pose and the target in the gripper's frame, and moves the arm
+    by deltas at 10 Hz. The rest is `pick_cube_env_cfg`. three.js draws the frame, not
+    Playground's ray tracer, so its shading differs from what the policy trained on.
+    """
+    cfg = pick_cube_env_cfg()
+    gripper = SceneEntityCfg("robot", site_names=("gripperframe",))
+    cfg.scene.spec_fn = _pick_cube_vision_world
+    cfg.scene.sensors = (
+        CameraSensorCfg(
+            name="wrist_cam",
+            camera_name="robot/wrist_cam",
+            width=64,
+            height=64,
+            data_types=("rgb",),
+            enabled_geom_groups=(0, 2),
+            use_shadows=True,
+        ),
+    )
+    cfg.observations = {
+        "actor": ObservationGroupCfg(
+            {
+                "joint_pos": ObservationTermCfg(func=mdp.joint_pos_rel),
+                "joint_vel": ObservationTermCfg(func=mdp.joint_vel_rel),
+                "ee_pos": ObservationTermCfg(
+                    func=_site_pos, params={"asset_cfg": gripper}
+                ),
+                "ee_orientation": ObservationTermCfg(
+                    func=_site_xmat, params={"asset_cfg": gripper}
+                ),
+                "goal_position": ObservationTermCfg(
+                    func=lift_mdp.target_position,
+                    params={"command_name": "target", "asset_cfg": gripper},
+                ),
+                "last_action": ObservationTermCfg(func=mdp.last_action),
+            }
+        ),
+        "camera": ObservationGroupCfg(
+            {
+                "camera": ObservationTermCfg(
+                    func=_wrist_image, params={"sensor_name": "wrist_cam", "size": 16}
+                )
+            }
+        ),
+    }
+    cfg.actions = {
+        "joint_pos": DeltaJointPositionActionCfg(
+            entity_name="robot",
+            actuator_names=(".*",),
+            scale=SO101_DELTA_SCALE,
+            limits=SO101_DELTA_LIMITS,
+        )
+    }
+    cfg.sim.mujoco.ccd_iterations = 300
+    cfg.decimation = 20
+    return cfg
 
 
 # Credits
@@ -866,9 +1027,8 @@ def _attribute(scene: mjswan.SceneHandle, arm: Arm, objects: tuple[Obj, ...]) ->
         scene.add_attribution(component, license=_fetch(repo, path))
 
 
-def add_pick_cube(builder: mjswan.Builder) -> mjswan.SceneHandle:
+def add_pick_cube(project: mjswan.ProjectHandle) -> mjswan.SceneHandle:
     """The SO-101 bringing the cube to a target that moves, driven by its policy."""
-    project = builder.add_project(name="Playground PickCube")
     scene = project.add_scene_mjlab(
         "SO101PickCube", name="SO-101", env_cfg=pick_cube_env_cfg()
     )
@@ -876,7 +1036,26 @@ def add_pick_cube(builder: mjswan.Builder) -> mjswan.SceneHandle:
     # order, as `_contract` in so101_pick_cube.py records them.
     scene.add_policy(
         name="PickCube",
-        policy=_pick_cube_policy(),
+        # Exported before the script wrote one file.
+        policy=_hub_policy(PICK_CUBE_POLICY, ("policy.onnx", "policy.onnx.data")),
+        policy_joint_names=scene.actuated_joint_names(),
+        default_joint_pos=list(ARMS[0].home.values()),
+    )
+    scene.add_attribution(
+        "robotstudio_so101", license=_fetch(MENAGERIE, "robotstudio_so101/LICENSE")
+    )
+    return scene
+
+
+def add_pick_cube_vision(project: mjswan.ProjectHandle) -> mjswan.SceneHandle:
+    """The same task, the arm finding the cube through its wrist camera."""
+    scene = project.add_scene_mjlab(
+        "SO101PickCubeVision", name="SO-101 Vision", env_cfg=pick_cube_vision_env_cfg()
+    )
+    scene.add_policy(
+        name="PickCube Vision",
+        policy=_hub_policy(PICK_CUBE_VISION_POLICY),
+        in_keys=["actor", "camera"],
         policy_joint_names=scene.actuated_joint_names(),
         default_joint_pos=list(ARMS[0].home.values()),
     )
@@ -889,7 +1068,9 @@ def add_pick_cube(builder: mjswan.Builder) -> mjswan.SceneHandle:
 def setup_builder() -> mjswan.Builder:
     """Return the configured builder, not yet built."""
     builder = mjswan.Builder(base_path=os.getenv("MJSWAN_BASE_PATH", "/"))
-    add_pick_cube(builder)
+    project = builder.add_project(name="Playground PickCube")
+    add_pick_cube(project)
+    add_pick_cube_vision(project)
     for arm in ARMS:
         project = builder.add_project(name=f"Playground Tabletop: {arm.name}")
         lookat, distance, azimuth, elevation = arm.overview
