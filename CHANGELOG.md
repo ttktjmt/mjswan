@@ -1386,6 +1386,12 @@ shortcuts.
 - **`mjswan publish` refuses a symbolic link in the build** before anything is uploaded.
   It followed one, so a link in a dist someone else handed over uploaded the file it
   named to mjswan Cloud.
+- **Every third-party license text a build credits reaches publish's license check.** Two
+  components differing only by case (`Robot_X`, `robot_x`) shared one file in `licenses/`
+  on a case-insensitive disk, and a model directory's second license file could get a
+  name over 64 characters, which publish does not read as a license file. Either way a
+  credited text, a blocked one included, went unchecked. Such names are now numbered like
+  any other shared name, within 64 characters.
 - **`save_document()` packs only the build's own files.** A manifest project id such as
   `..` packed the files around the build directory, and a symbolic link packed what it
   named. It now refuses an id `name2id` could not have written and any symbolic link,
