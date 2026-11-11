@@ -1339,6 +1339,13 @@ shortcuts.
   `.swn` someone else made could print a link that reads as one URL and opens another,
   or set the terminal's title. Every such value now loses its control characters and has
   its markup escaped.
+- **The CLI's inert text covers the values it missed.** `skin map` printed a VRM's bone
+  names as markup, `serve` a `.swn`'s file name with its control characters, and `info`
+  escaped a document's version and format separately, so together they could form a tag.
+  `publish_dist` passed file names and VRM authors unchanged to `on_progress` and
+  `on_warning`, which the Python API prints, and built the page URL from any id the
+  server returned. These values now lose their control characters, the CLI escapes their
+  markup, and an id that is not a short URL-safe token is refused.
 - **`mjswan skin map -o` writes the skin file's name as a string.** The draft's docstring
   held the command line verbatim between triple quotes, so a file whose name closed them
   put code into the draft, which ran when the draft was. The docstring is now a quoted

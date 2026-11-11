@@ -6,6 +6,7 @@ rich parses ``[...]`` as markup, which would drop them.
 import json
 from pathlib import Path
 
+import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
@@ -42,13 +43,21 @@ def test_the_build_progress_shows_bracketed_names(
     assert "G1 [v2]" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize(
+    "header",
+    [
+        ("[link=https://example.invalid]0.12.9[/link]", 1),
+        ("[link=https://example.invalid", "]"),
+    ],
+    ids=["one-value", "across-values"],
+)
 def test_info_prints_a_document_s_text_inert(
-    tmp_path, minimal_spec, minimal_onnx, build_manifest, monkeypatch
+    tmp_path, minimal_spec, minimal_onnx, build_manifest, monkeypatch, *, header
 ):
     """A received document's strings become neither links nor terminal commands."""
     out = _built(tmp_path, minimal_spec, minimal_onnx, build_manifest)
     manifest = json.loads((out / "manifest.json").read_text())
-    manifest["version"] = "[link=https://example.invalid]0.12.9[/link]"
+    manifest["version"], manifest["format"] = header
     manifest["projects"][0]["name"] = "Demo\x1b]0;SPOOFED\x07"
     (out / "manifest.json").write_text(json.dumps(manifest))
     # A real terminal's console: CliRunner's own output is not a tty.
@@ -58,4 +67,4 @@ def test_info_prints_a_document_s_text_inert(
 
     assert result.exit_code == 0, result.output
     assert "\x1b]" not in result.output
-    assert "[link=https://example.invalid]0.12.9[/link]" in result.output
+    assert "v{}, format {}".format(*header) in result.output

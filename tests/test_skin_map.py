@@ -15,6 +15,7 @@ from pathlib import Path
 import mujoco
 import pytest
 import skin_fixture as fx
+from rich.console import Console
 from typer.testing import CliRunner
 
 from mjswan.cli import app
@@ -303,6 +304,23 @@ class TestDraft:
         assert config.humanoid is None and config.rest_pose is None
         assert {**fx.BONES, "spine": "pelvis"}.items() <= config.bones.items()
         resolve_skin(config, mujoco.MjModel.from_xml_string(fx.robot_xml()))
+
+    def test_the_cli_prints_the_file_s_bone_names_inert(self, tmp_path, monkeypatch):
+        gltf = fx.skeleton_gltf()
+        bones = {
+            "hips": {"node": 0},
+            "[link=https://example.invalid]x\x1b]0;S": {"node": 1},
+        }
+        gltf["extensions"] = {
+            "VRMC_vrm": {"meta": fx.OPEN_META, "humanoid": {"humanBones": bones}}
+        }
+        vrm = fx.write_glb(tmp_path / "a.vrm", gltf)
+        monkeypatch.setattr(
+            "mjswan.cli.console", Console(force_terminal=True, width=500)
+        )
+        result = CliRunner().invoke(app, ["skin", "map", str(vrm)])
+        assert result.exit_code == 0, result.output
+        assert "\x1b]" not in result.output
 
     def test_the_cli_refuses_a_file_it_cannot_read(self, tmp_path):
         bad = tmp_path / "a.gltf"

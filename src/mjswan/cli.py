@@ -109,7 +109,7 @@ def serve_cmd(
         raise typer.Exit(1)
     if is_document(source):
         # Unpacking a large document takes a few seconds; say what the pause is.
-        console.print(f"Expanding {source.name} with the packaged engine...")
+        console.print(f"Expanding {_inert(source.name)} with the packaged engine...")
     try:
         app_to_serve = MjswanApp.from_document(source)
     except DocumentError as exc:
@@ -489,7 +489,8 @@ def info_cmd(
             fmt = manifest.get("format", "?")
             tree = Tree(
                 f"[bold]mjswan {kind}[/bold]: {_inert(str(dist_dir))}  "
-                f"[dim]v{_inert(version)}, format {_inert(fmt)}[/dim]"
+                # One value: escaped apart, `[x` and `]` would form a tag together.
+                f"[dim]{_inert(f'v{version}, format {fmt}')}[/dim]"
             )
             total_bytes = _describe_projects(tree, root, manifest)
     except DocumentError as exc:
@@ -644,7 +645,9 @@ def skin_map_cmd(
         table.add_column(column, style="dim" if column == "how" else None)
     for bone, node in shown.items():
         how = guess.why.get(bone, "") if guess is not None else ""
-        table.add_row(bone, _inert(skin.names[node]), _inert(bones.get(bone, "")), how)
+        table.add_row(
+            _inert(bone), _inert(skin.names[node]), _inert(bones.get(bone, "")), how
+        )
     if shown:
         console.print(table)
     if len(shown) < len(nodes):
