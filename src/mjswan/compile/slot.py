@@ -100,6 +100,13 @@ def traced_action_fields(term: str) -> frozenset[str] | None:
 #: feeds float32 like every slot, so the graph casts back: exact below 2**24 steps.
 _ENV_SLOT_DTYPES: dict[str, torch.dtype] = {"episode_length_buf": torch.long}
 
+#: Structured sensor fields mjlab keeps in an integer dtype (a ``CameraSensor``'s), cast
+#: back the same way: a pixel or an object id is exact in float32.
+_SENSOR_FIELD_DTYPES: dict[str, torch.dtype] = {
+    "rgb": torch.uint8,
+    "segmentation": torch.int32,
+}
+
 
 #: Per narrowed sim slot: the rows the input carries, and the field's full row count.
 SimRows = dict[SlotKey, tuple[list[int], int]]

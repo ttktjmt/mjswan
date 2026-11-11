@@ -40,7 +40,11 @@ MANIFEST_NAME = "manifest.json"
 #: 8: a motion may carry ``frame_fields``, arrays of its ``.npz`` a tracking command's
 #: ``{command, field}`` slot reads at the current frame. An older engine cannot serve
 #: them, and the graph reading one would hold its previous value.
-DOCUMENT_FORMAT = 8
+#:
+#: 9: a graph's ``sensors`` may describe a camera (``kind: "camera"``), whose ``rgb`` the
+#: engine renders, and an observation group may feed a policy input of more than two
+#: dimensions (an image). An older engine would read the camera as a raycast sensor.
+DOCUMENT_FORMAT = 9
 
 #: Input slots the runtime fills itself rather than from an observation group: the
 #: recurrent carry (``is_init``, ``adapt_hx``) and the step counter (``time_step``).

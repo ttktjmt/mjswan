@@ -21,6 +21,7 @@
  * caller holds its previous value.
  */
 
+import type { CameraSensorSet } from '../camera';
 import type { ContactSensorSet } from '../contact';
 import { RaycastSensor, isRaycastField, type RaycastSensorDescriptor } from '../raycast';
 import type { OnnxInputSlot, SlotReader } from '../session';
@@ -63,6 +64,8 @@ export type SlotReaderOptions = {
   raycastSensors?: () => Record<string, RaycastSensorDescriptor>;
   /** The engine owns these, since it advances their history per substep. */
   contactSensors?: () => ContactSensorSet | null;
+  /** The engine owns these too: rendering one needs its scene. */
+  cameraSensors?: () => CameraSensorSet | null;
 };
 
 /** Whether an `Entity.data` field can be served — useful for a build-time check. */
@@ -246,6 +249,8 @@ export function createSlotReader(
           sensorWindow(mjModel, sensor),
         );
         if (contact) return contact;
+        const cameras = options.cameraSensors?.();
+        if (cameras?.has(slot.sensor)) return cameras.read(slot.sensor, slot.field, mjModel);
         return readRaycast(slot.sensor, slot.field, context);
       }
       const window = sensorWindow(mjModel, slot.sensor);

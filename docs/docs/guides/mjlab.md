@@ -180,8 +180,20 @@ builder.build().launch()
 | `env_cfg.episode_length_s` | the episode length `time_out` ends at, for every policy not given an `env_cfg` of its own |
 | `env_cfg.viewer` | the initial camera |
 | terrain flat-patch table | baked spawn points |
-| the task's **runner** config | which observation group the actor reads, and `clip_actions` |
+| the task's **runner** config | which observation group the actor reads, and `clip_actions`; an actor that also reads camera groups, as rsl-rl's CNN model does, takes each as an input of its own name (`in_keys=["actor", "camera"]`) |
 | the live env | the tracing target for every term body |
+
+### Camera observations
+
+A term that reads an mjlab `CameraSensor`'s `rgb` (`camera_rgb`, as
+`Mjlab-Lift-Cube-Yam-Rgb` does) traces like any other: the browser renders the model's
+camera at the sensor's size into the slot, drawing the sensor's `enabled_geom_groups`
+(groups 3 and up too, which the viewer leaves out) and the scene's lights. Debug Viz's
+**Camera** switch shows those images in a corner of the viewer.
+
+The image is three.js drawing the scene, not mujoco_warp's ray tracer: shading, shadows
+and edges differ, so a policy keyed to them may act differently than in mjlab. `depth`
+and `segmentation` are not rendered yet, and an orthographic camera is refused.
 
 Rewards, curricula, metrics and recorders are training-only and simply ignored — mjswan is
 a playback tool, so they never reach the bundle.

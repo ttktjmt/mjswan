@@ -133,3 +133,34 @@ describe('OnnxModule.initInput', () => {
     expect(module.initInput().adapt_hx.dims).toEqual([1, 128]);
   });
 });
+
+describe('OnnxModule.inputDims', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** rsl-rl's CNN export: the flat group, then a 3 x 32 x 32 image. */
+  async function cnn(): Promise<OnnxModule> {
+    const session = {
+      inputNames: ['obs', 'camera'],
+      outputNames: ['actions'],
+      inputMetadata: [
+        { name: 'obs', isTensor: true, type: 'float32', shape: [1, 26] },
+        { name: 'camera', isTensor: true, type: 'float32', shape: [1, 3, 32, 32] },
+      ],
+      release: async () => {},
+    };
+    vi.spyOn(ort.InferenceSession, 'create').mockResolvedValue(session as never);
+    const module = new OnnxModule(new ArrayBuffer(8), { in_keys: ['actor', 'camera'] });
+    await module.init();
+    return module;
+  }
+
+  it('feeds an image group in the shape the network declares', async () => {
+    expect((await cnn()).inputDims('camera', 3 * 32 * 32)).toEqual([1, 3, 32, 32]);
+  });
+
+  it('feeds a flat group, or one whose size disagrees, as a row', async () => {
+    const module = await cnn();
+    expect(module.inputDims('actor', 26)).toEqual([1, 26]);
+    expect(module.inputDims('camera', 10)).toEqual([1, 10]);
+  });
+});

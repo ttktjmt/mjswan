@@ -1,12 +1,13 @@
 """What the browser needs to reproduce a structured sensor a graph reads.
 
-A builtin MuJoCo sensor is a ``sensordata`` window and needs nothing; mjlab's raycast
-and contact sensors have their own state, so a descriptor of it travels with any graph
-whose slots name one.
+A builtin MuJoCo sensor is a ``sensordata`` window and needs nothing; mjlab's raycast,
+contact and camera sensors have their own state, so a descriptor of it travels with any
+graph whose slots name one.
 """
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 
@@ -93,6 +94,46 @@ def raycast_sensor_descriptor(env: Any, sensor_name: str) -> dict[str, Any] | No
     }
 
 
+#: The ``CameraSensorData`` fields the browser renders.
+CAMERA_FIELDS = frozenset({"rgb"})
+
+
+def camera_sensor_descriptor(env: Any, sensor_name: str) -> dict[str, Any] | None:
+    """What the browser needs to render one ``CameraSensor``'s image itself.
+
+    The camera's pose, field of view and intrinsics are the model's, which the browser
+    compiles too, so only the image and what the renderer draws into it travel.
+
+    Returns ``None`` if *sensor_name* is not a camera sensor.
+    """
+    sensor = env.scene.sensors.get(sensor_name)
+    cfg = getattr(sensor, "cfg", None)
+    if cfg is None or type(cfg).__name__ != "CameraSensorCfg":
+        return None
+    if cfg.orthographic:
+        raise ValueError(
+            f"Camera sensor {sensor_name!r} is orthographic; the browser renders "
+            "perspective cameras only."
+        )
+    if not cfg.use_textures:
+        warnings.warn(
+            f"Camera sensor {sensor_name!r} renders without textures in mjlab; the "
+            "browser draws them, so the policy sees textured surfaces it was not "
+            "trained on.",
+            category=RuntimeWarning,
+            stacklevel=2,
+        )
+    return {
+        "kind": "camera",
+        # The model's name for it: the sensor wraps that camera or added it as its own.
+        "camera": sensor.camera_name,
+        "width": int(cfg.width),
+        "height": int(cfg.height),
+        "enabled_geom_groups": [int(g) for g in cfg.enabled_geom_groups],
+        "use_shadows": bool(cfg.use_shadows),
+    }
+
+
 def structured_sensor_descriptors(
     export: Any, env: Any, *, owner: str
 ) -> dict[str, Any]:
@@ -110,17 +151,27 @@ def structured_sensor_descriptors(
         sensor_name, field = name_part.split(".", 1)
         if sensor_name in descriptors:
             continue
-        descriptor = raycast_sensor_descriptor(
-            env, sensor_name
-        ) or contact_sensor_descriptor(env, sensor_name)
+        descriptor = (
+            raycast_sensor_descriptor(env, sensor_name)
+            or contact_sensor_descriptor(env, sensor_name)
+            or camera_sensor_descriptor(env, sensor_name)
+        )
         if descriptor is None:
             sensor = env.scene.sensors.get(sensor_name)
             raise ValueError(
                 f"{owner} reads {sensor_name!r}.{field}, but the browser has no "
-                f"implementation for a {type(sensor).__name__}: only raycast and "
-                "contact sensors can serve fields. Implement it in the runtime and emit "
-                "a descriptor here, hand the term to the browser as a TS class, or drop "
-                "it from the exported set."
+                f"implementation for a {type(sensor).__name__}: only raycast, contact "
+                "and camera sensors can serve fields. Implement it in the runtime and "
+                "emit a descriptor here, hand the term to the browser as a TS class, or "
+                "drop it from the exported set."
             )
         descriptors[sensor_name] = descriptor
+    for namespace, name_part in export.input_slots:
+        sensor_name, _, field = name_part.partition(".")
+        descriptor = descriptors.get(sensor_name) if namespace == _SENSOR_NS else None
+        if descriptor and descriptor["kind"] == "camera" and field not in CAMERA_FIELDS:
+            raise ValueError(
+                f"{owner} reads camera sensor {sensor_name!r}'s {field!r}, but the "
+                f"browser renders only {sorted(CAMERA_FIELDS)}."
+            )
     return descriptors

@@ -14,6 +14,18 @@ shortcuts.
 
 ### Added
 
+- **Camera observations: a policy can read an mjlab `CameraSensor`'s `rgb`** (**document
+  format 9**). A term such as mjlab's `camera_rgb` traces like any other, and the
+  browser renders the model's camera at the sensor's size into its slot, drawing the
+  sensor's `enabled_geom_groups` (groups 3 and up too, which the viewer leaves out) and
+  the scene's lights. The image is fed as float32 like every slot; the graph casts it
+  back to uint8 before the term's own scaling. An actor reading camera groups beside its
+  flat one, as rsl-rl's CNN model does, keeps each as an input of its own name
+  (`in_keys=["actor", "camera"]`), fed in the shape the network declares. Debug Viz's
+  **Camera** switch shows the images the policy read. It is three.js drawing, not
+  mujoco_warp's ray tracer, so shading differs; `depth`, `segmentation` and orthographic
+  cameras are refused at build time.
+
 - **`mjswan demo playground`: MuJoCo Playground 1.0.1's tabletop scenes.** The nine
   pick-and-place tasks of its agentic suite (`tasks/agentic/tabletop_v0`), each in front
   of the SO-101 and the I2RT YAM, as eighteen scenes with no policy: the arms hold their

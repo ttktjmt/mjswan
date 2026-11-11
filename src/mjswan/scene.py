@@ -30,6 +30,7 @@ from .mjlab import (
     adapt_events,
     adapt_observations,
     adapt_terminations,
+    camera_groups,
     resolve_action_scales,
     resolve_actuator_delays,
     resolve_default_joint_vel,
@@ -602,8 +603,13 @@ class SceneHandle:
         runner = resolve_runner_defaults(
             task_id if task_id is not None else self._config.mjlab_task_id
         )
+        scene_cfg = getattr(self._resolve_env_cfg(env_cfg), "scene", None)
         mdp.observations = adapt_observations(
-            observations, obs_groups=runner.obs_groups
+            observations,
+            obs_groups=runner.obs_groups,
+            image_groups=camera_groups(
+                observations, getattr(scene_cfg, "sensors", None)
+            ),
         )
         mdp.commands = adapt_commands(commands) or {}
         mdp.actions = adapt_actions(actions)

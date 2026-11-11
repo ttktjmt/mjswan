@@ -3,11 +3,13 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 import {
+  addSensorGeomMeshes,
   getPosition,
   getQuaternion,
   loadSceneFromURL,
   type ModelFormat,
 } from '../scene/scene';
+import { SensorCameraRenderer, type SensorCameraView } from '../scene/sensorCamera';
 import { loadMjzFile, type ArchiveLimits } from '../utils/mjzLoader';
 import { type Bytes } from '../utils/bytes';
 import type { EnginePlugins } from '../plugins';
@@ -83,11 +85,13 @@ import type { ActionConfigEntry, PolicyConfig } from '../policy/types';
 import { TrackingPolicy } from '../policy/modules/TrackingPolicy';
 import { LocomotionPolicy } from '../policy/modules/LocomotionPolicy';
 import { CommandManager, type CommandTermContext, type CommandsConfig } from '../command';
+import { CameraFeed } from '../debugViz/cameraFeed';
 import { DebugViz, type ViewerSwitch } from '../debugViz/DebugViz';
 import { EventManager, type EventControl } from '../event/EventManager';
 import { ModelFieldDefaults } from '../event/modelWrite';
 import type { EventContext, TerrainData } from '../event/EventBase';
 import { OnnxSessionCache, type SlotReader } from '../onnx/session';
+import { CameraSensorSet, type CameraSensorDescriptor } from '../onnx/camera';
 import { ContactSensorSet, type ContactSensorDescriptor } from '../onnx/contact';
 import type { RaycastSensorDescriptor } from '../onnx/raycast';
 import { createSlotReader, sensorWindow } from '../onnx/slotReader';
@@ -98,6 +102,7 @@ const DEFAULT_TERM_SEED = 0x5eed;
 
 /** The skin's Debug Viz switch, listed after mjlab's drawings and under "Enabled" alike. */
 const XRAY_SWITCH = 'xray';
+const CAMERA_FEED_SWITCH = 'camera';
 
 
 /**
@@ -149,7 +154,10 @@ function buildJointBias(config: PolicyConfig): Map<string, number> {
   return bias;
 }
 
-type StructuredSensorDescriptor = RaycastSensorDescriptor | ContactSensorDescriptor;
+type StructuredSensorDescriptor =
+  | RaycastSensorDescriptor
+  | ContactSensorDescriptor
+  | CameraSensorDescriptor;
 
 /**
  * Descriptors for the structured sensors this policy's graphs read, by kind. Terminations
@@ -158,9 +166,11 @@ type StructuredSensorDescriptor = RaycastSensorDescriptor | ContactSensorDescrip
 function collectStructuredSensors(config: PolicyConfig): {
   raycast: Record<string, RaycastSensorDescriptor>;
   contact: Record<string, ContactSensorDescriptor>;
+  camera: Record<string, CameraSensorDescriptor>;
 } {
   const raycast: Record<string, RaycastSensorDescriptor> = {};
   const contact: Record<string, ContactSensorDescriptor> = {};
+  const camera: Record<string, CameraSensorDescriptor> = {};
   const owners: Array<{ sensors?: Record<string, StructuredSensorDescriptor> }> = [
     ...Object.values(config.observations ?? {}),
     ...Object.values(config.terminations ?? {}),
@@ -168,10 +178,11 @@ function collectStructuredSensors(config: PolicyConfig): {
   for (const owner of owners) {
     for (const [name, descriptor] of Object.entries(owner?.sensors ?? {})) {
       if (descriptor.kind === 'contact') contact[name] = descriptor;
+      else if (descriptor.kind === 'camera') camera[name] = descriptor;
       else raycast[name] = descriptor;
     }
   }
-  return { raycast, contact };
+  return { raycast, contact, camera };
 }
 
 /** A policy with its ONNX weights resolved to bytes; motion data stays lazy. */
@@ -407,6 +418,15 @@ export class mjswanRuntime {
   private raycastSensors: Record<string, RaycastSensorDescriptor> = {};
   /** Owned here, not by the slot reader: the history advances per substep. */
   private contactSensors = new ContactSensorSet();
+  /** Owned here too: rendering one draws this scene. */
+  private cameraSensors = new CameraSensorSet();
+  private sensorCameraRenderer: SensorCameraRenderer | null = null;
+  private readonly cameraFeed: CameraFeed;
+  private readonly cameraFeedSwitch: ViewerSwitch = {
+    label: 'Camera',
+    enabled: false,
+    apply: (visible) => this.cameraFeed.show(visible),
+  };
 
   constructor(
     mujoco: MainModule,
@@ -447,6 +467,7 @@ export class mjswanRuntime {
         jointBias: (name) => this.jointBias.get(name) ?? 0,
         raycastSensors: () => this.raycastSensors,
         contactSensors: () => this.contactSensors,
+        cameraSensors: () => this.cameraSensors,
       },
     );
 
@@ -488,6 +509,7 @@ export class mjswanRuntime {
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.container.appendChild(this.renderer.domElement);
+    this.cameraFeed = new CameraFeed(this.container);
 
     // Always created: the hand spaces stay empty until a session is granted `hand-tracking`.
     const hands = [0, 1].map((i) => this.renderer.xr.getHand(i));
@@ -1429,6 +1451,9 @@ export class mjswanRuntime {
     this.clipActions = null;
     this.raycastSensors = {};
     this.contactSensors = new ContactSensorSet();
+    this.cameraSensors = new CameraSensorSet();
+    this.debugVizSet.removeSwitch(CAMERA_FEED_SWITCH);
+    this.cameraFeed.clear();
     this.debugVizSet.clear();
 
     // An MDP switch, in order (ADR 0006 §9): restore every model field the previous
@@ -1495,6 +1520,14 @@ export class mjswanRuntime {
       const structured = collectStructuredSensors(config);
       this.raycastSensors = structured.raycast;
       this.contactSensors = new ContactSensorSet(structured.contact, budget);
+      this.cameraSensors = new CameraSensorSet(structured.camera, (view) =>
+        this.renderSensorView(view),
+      );
+      if (this.cameraSensors.size > 0 && this.bodies) {
+        const groups = this.cameraSensors.geomGroups();
+        addSensorGeomMeshes(this.mujoco, this.mjModel, { bodies: this.bodies }, groups);
+        this.debugVizSet.addSwitch(CAMERA_FEED_SWITCH, this.cameraFeedSwitch);
+      }
       this.debugVizSet.load(config.debug_vis, this.mujoco, this.mujocoRoot ?? this.scene);
       // Metadata comes from policy.json, bytes from the app; merge them by name.
       if (Array.isArray(config.motions)) {
@@ -2090,7 +2123,7 @@ export class mjswanRuntime {
         input.time_step = new ort.Tensor('float32', new Float32Array([this.onnxTimeStep]), [1, 1]);
       }
       for (const [key, value] of Object.entries(obs)) {
-        input[key] = new ort.Tensor('float32', value, [1, value.length]);
+        input[key] = new ort.Tensor('float32', value, module.inputDims(key, value.length));
       }
       for (const key of module.inKeys) {
         if (!input[key]) {
@@ -2256,6 +2289,20 @@ export class mjswanRuntime {
         20
       );
     }
+  }
+
+  /** A camera sensor's view of the state the observation reads, not the last frame drawn. */
+  private renderSensorView(view: SensorCameraView): Uint8Array | null {
+    if (!this.mjModel || !this.mjData || !this.bodies) return null;
+    for (const [id, body] of Object.entries(this.bodies)) {
+      getPosition(this.mjData.xpos, Number(id), body.position);
+      getQuaternion(this.mjData.xquat, Number(id), body.quaternion);
+    }
+    updateLightsFromData(this.mujoco, this.mjData, this.lights);
+    this.sensorCameraRenderer ??= new SensorCameraRenderer(this.renderer, this.scene);
+    const pixels = this.sensorCameraRenderer.render(view, this.mjModel, this.mjData, this.lights);
+    this.cameraFeed.update(view.cameraId, pixels, view.width, view.height);
+    return pixels;
   }
 
   private syncStaticBodiesFromData(): void {
@@ -2467,6 +2514,9 @@ export class mjswanRuntime {
     this.renderer.xr.removeEventListener('sessionend', this.onXrSessionEnd);
     this.controls.dispose();
     this.renderer.setAnimationLoop(null);
+    this.sensorCameraRenderer?.dispose();
+    this.sensorCameraRenderer = null;
+    this.cameraFeed.dispose();
     this.renderer.dispose();
 
     if (this.renderer.domElement.parentElement) {

@@ -31,6 +31,7 @@ from mjswan.mjlab import (
     adapt_events,
     adapt_observations,
     adapt_terminations,
+    camera_groups,
     resolve_action_scales,
     resolve_actuator_delays,
     resolve_pd_gains,
@@ -472,6 +473,33 @@ class TestMjlabGroupDictSelection:
                 obs_groups={"actor": ("a", "b")},
             )
 
+    def test_an_actor_reading_camera_groups_keeps_them_as_their_own_inputs(self):
+        # rsl-rl's CNN model: the flat group is the input `obs`, each image group an
+        # input of its own name, so mjswan feeds them as two slots, not one vector.
+        actor = ObservationGroupCfg(terms={})
+        camera = ObservationGroupCfg(terms={})
+        critic = ObservationGroupCfg(terms={})
+
+        result = adapt_observations(
+            {"actor": actor, "camera": camera, "critic": critic},
+            obs_groups={"actor": ("actor", "camera"), "critic": ("critic", "camera")},
+            image_groups={"camera"},
+        )
+
+        assert result == {"actor": actor, "camera": camera}
+
+    def test_two_flat_groups_beside_an_image_are_still_refused(self):
+        with pytest.raises(ValueError, match="cannot concatenate"):
+            adapt_observations(
+                {
+                    "a": ObservationGroupCfg(terms={}),
+                    "b": ObservationGroupCfg(terms={}),
+                    "camera": ObservationGroupCfg(terms={}),
+                },
+                obs_groups={"actor": ("a", "b", "camera")},
+                image_groups={"camera"},
+            )
+
     def test_a_dict_sharing_no_key_with_the_task_is_left_alone(self):
         # A task id is not evidence that *this* dict is the task's. On an mjlab scene a
         # policy may still key its group `observation`, or `actor` when the task calls
@@ -511,6 +539,48 @@ class TestMjlabGroupDictSelection:
         assert result is not None
         assert list(result) == ["actor"]
         assert isinstance(result["actor"], ObservationGroupCfg)
+
+
+class TestCameraGroups:
+    """Which groups of a task's observations are images: those with a camera term."""
+
+    @staticmethod
+    def _camera(name: str):
+        return type("CameraSensorCfg", (), {"name": name})()
+
+    def test_a_group_with_a_term_naming_a_camera_is_an_image_group(self):
+        observations = {
+            "actor": FakeMjlabObsGroupCfg(terms={"q": FakeMjlabObsTermCfg(func=len)}),
+            "camera": FakeMjlabObsGroupCfg(
+                terms={
+                    "rgb": FakeMjlabObsTermCfg(
+                        func=len, params={"sensor_name": "camera_d405"}
+                    )
+                }
+            ),
+        }
+        sensors = (self._camera("camera_d405"),)
+
+        assert camera_groups(observations, sensors) == {"camera"}
+
+    def test_a_sensor_that_is_not_a_camera_makes_no_image(self):
+        raycast = type("RayCastSensorCfg", (), {"name": "height_scan"})()
+        observations = {
+            "actor": FakeMjlabObsGroupCfg(
+                terms={
+                    "scan": FakeMjlabObsTermCfg(
+                        func=len, params={"sensor_name": "height_scan"}
+                    )
+                }
+            )
+        }
+
+        assert camera_groups(observations, (raycast,)) == frozenset()
+
+    def test_a_single_group_or_no_sensors_has_none(self):
+        group = FakeMjlabObsGroupCfg(terms={})
+        assert camera_groups(group, (self._camera("cam"),)) == frozenset()
+        assert camera_groups({"actor": group}, None) == frozenset()
 
 
 # ===================================================================

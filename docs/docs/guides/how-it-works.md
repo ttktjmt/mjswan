@@ -160,6 +160,13 @@ reads (below), and a raw `mjData` field:
 { "sim": "cvel", "input": "sim__cvel", "shape": [1, 17, 6], "rows": [1, 4, 7] }
 ```
 
+A structured mjlab sensor has no `sensordata` window, so each field a term reads is a slot of
+its own (`{"sensor": "height_scan", "field": "distances"}`) and the build ships what the
+browser needs to compute it: the rays of a `RayCastSensor`, the layout of a
+`ContactSensor`'s windows, the size and geom groups of a `CameraSensor`, whose `rgb` the
+browser renders. Like every slot it is fed as float32, and the graph casts a uint8 image
+back before the term's own arithmetic.
+
 A raw field is served whole unless the build could tell which rows the term indexes —
 `rows` then names them, in the order the graph takes them, and the graph gathers
 nothing: `site_xmat` on a 2038-site model is 18,342 floats a step read whole, 153 for

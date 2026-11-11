@@ -5,6 +5,7 @@ import { createLights, lightSpecularRatio } from './lights';
 import { createTexture, createSkyboxTexture } from './textures';
 import { createTendonMeshes } from './tendons';
 import { primitiveGeometry, primitiveScale } from './primitive';
+import { VIEWER_GEOM_GROUPS, geomGroupLayer } from './layers';
 
 /** How a scene's model bytes are encoded: `add_scene(spec=...)` writes `mjz`, `model=` `mjb`. */
 export type ModelFormat = 'mjz' | 'mjb';
@@ -157,6 +158,260 @@ function createInfinitePlaneShaderMaterial(params: {
   });
 }
 
+/** What drawing one geom needs from the scene it is drawn into. */
+type GeomMeshContext = {
+  mujoco: MainModule;
+  mjModel: MjModel;
+  bodies: Record<number, THREE.Group>;
+  meshes: Record<number, THREE.BufferGeometry>;
+  specularRatio: number;
+  /** `mjModel.names`, read once for every body. */
+  names: Uint8Array;
+};
+
+function bodyName(mjModel: MjModel, names: Uint8Array, b: number): string {
+  const start = mjModel.name_bodyadr[b];
+  let end = start;
+  while (end < names.length && names[end] !== 0) end++;
+  return new TextDecoder('utf-8').decode(names.subarray(start, end));
+}
+
+/** A group the viewer draws stays on layer 0 as well; any other is a camera sensor's alone. */
+function placeOnGroupLayer(object: THREE.Object3D, group: number): void {
+  if (group < VIEWER_GEOM_GROUPS) object.layers.enable(geomGroupLayer(group));
+  else object.layers.set(geomGroupLayer(group));
+}
+
+/** Add geom `g`'s mesh to its body, creating the body's group if it has none yet. */
+function addGeomMesh(
+  { mujoco, mjModel, bodies, meshes, specularRatio, names }: GeomMeshContext,
+  g: number,
+): void {
+  const b = mjModel.geom_bodyid[g];
+  const type = mjModel.geom_type[g];
+  const size = [
+    mjModel.geom_size[g * 3 + 0],
+    mjModel.geom_size[g * 3 + 1],
+    mjModel.geom_size[g * 3 + 2],
+  ];
+
+  if (!(b in bodies)) {
+    bodies[b] = new THREE.Group();
+
+    bodies[b].name = bodyName(mjModel, names, b);
+
+    bodies[b].bodyID = b;
+    bodies[b].has_custom_mesh = false;
+  }
+
+  let geometry: THREE.BufferGeometry | undefined;
+  switch (type) {
+    case mujoco.mjtGeom.mjGEOM_PLANE.value: {
+      if (size[0] === 0 || size[1] === 0) {
+        // PlaneGeometry(2,2) in XY plane: vertices at (±1, ±1, 0)
+        // Used as a full-screen clip-space quad by the infinite plane shader
+        geometry = new THREE.PlaneGeometry(2, 2);
+      } else {
+        geometry = primitiveGeometry('plane', size);
+      }
+      break;
+    }
+    case mujoco.mjtGeom.mjGEOM_HFIELD.value:
+      geometry = createHFieldGeometry(mjModel, g);
+      break;
+    case mujoco.mjtGeom.mjGEOM_SPHERE.value:
+      geometry = primitiveGeometry('sphere', size);
+      break;
+    case mujoco.mjtGeom.mjGEOM_CAPSULE.value:
+      geometry = primitiveGeometry('capsule', size);
+      break;
+    case mujoco.mjtGeom.mjGEOM_ELLIPSOID.value:
+      geometry = primitiveGeometry('ellipsoid', size);
+      break;
+    case mujoco.mjtGeom.mjGEOM_CYLINDER.value:
+      geometry = primitiveGeometry('cylinder', size);
+      break;
+    case mujoco.mjtGeom.mjGEOM_BOX.value:
+      geometry = primitiveGeometry('box', size);
+      break;
+    case mujoco.mjtGeom.mjGEOM_MESH.value: {
+      const meshID = mjModel.geom_dataid[g];
+
+      if (!(meshID in meshes)) {
+        meshes[meshID] = createMeshGeometry(mjModel, meshID);
+      }
+      geometry = meshes[meshID];
+      bodies[b].has_custom_mesh = true;
+      break;
+    }
+  }
+
+  let color = [
+    mjModel.geom_rgba[g * 4 + 0],
+    mjModel.geom_rgba[g * 4 + 1],
+    mjModel.geom_rgba[g * 4 + 2],
+    mjModel.geom_rgba[g * 4 + 3],
+  ];
+  let texture: THREE.Texture | null = null;
+  if (mjModel.geom_matid[g] !== -1) {
+    const matId = mjModel.geom_matid[g];
+    color = [
+      mjModel.mat_rgba[matId * 4 + 0],
+      mjModel.mat_rgba[matId * 4 + 1],
+      mjModel.mat_rgba[matId * 4 + 2],
+      mjModel.mat_rgba[matId * 4 + 3],
+    ];
+
+    const role = mujoco.mjtTextureRole.mjTEXROLE_RGB.value;
+    const texId = mjModel.mat_texid[matId * mujoco.mjtTextureRole.mjNTEXROLE.value + role];
+    if (texId !== -1) {
+      // A box samples a cube texture as MuJoCo does, so it keeps MuJoCo's face order.
+      const cubeFaceOrder =
+        type === mujoco.mjtGeom.mjGEOM_BOX.value ? [0, 1, 2, 3, 4, 5] : undefined;
+      texture = createTexture({ mujoco, mjModel, texId, cubeFaceOrder });
+      if (texture) {
+        const repeatX = mjModel.mat_texrepeat ? mjModel.mat_texrepeat[matId * 2 + 0] : 1;
+        const repeatY = mjModel.mat_texrepeat ? mjModel.mat_texrepeat[matId * 2 + 1] : 1;
+        texture.repeat.set(repeatX, repeatY);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+      }
+    }
+  }
+
+  const currentMaterial = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(color[0], color[1], color[2]),
+    transparent: color[3] < 1.0,
+    opacity: color[3],
+    ...reflectanceParams(mjModel, mjModel.geom_matid[g], specularRatio),
+  });
+
+  if (texture) {
+    if (!(texture instanceof THREE.CubeTexture)) {
+      currentMaterial.map = texture;
+    } else if (type === mujoco.mjtGeom.mjGEOM_BOX.value) {
+      // MuJoCo samples at the point on the unit box, or on the box itself with `texuniform`.
+      const uniform = mjModel.mat_texuniform[mjModel.geom_matid[g]];
+      sampleCubeTexture(currentMaterial, texture, uniform ? [1, 1, 1] : size);
+    } else {
+      currentMaterial.envMap = texture;
+      currentMaterial.envMapIntensity =
+        mjModel.geom_matid[g] !== -1
+          ? (mjModel.mat_reflectance?.[mjModel.geom_matid[g]] ?? 0)
+          : 0;
+    }
+  }
+
+  if (!geometry) {
+    console.warn(`Skipping geometry ${g} (type ${type}): no valid geometry created`);
+    return;
+  }
+
+  const mesh = new THREE.Mesh(geometry, currentMaterial as THREE.Material);
+  placeOnGroupLayer(mesh, mjModel.geom_group[g]);
+  const ignoreDragForce = bodies[b].name === 'terrain';
+
+  mesh.castShadow = ignoreDragForce ? false : g !== 0;
+  mesh.receiveShadow = type !== mujoco.mjtGeom.mjGEOM_MESH.value;
+  mesh.bodyID = b;
+  // The geom behind this mesh, so a size written at runtime can be drawn.
+  mesh.userData.geomId = g;
+  mesh.userData.ignoreDragForce = ignoreDragForce;
+  bodies[b].userData.ignoreDragForce = ignoreDragForce;
+  bodies[b].add(mesh);
+  if (type === mujoco.mjtGeom.mjGEOM_PLANE.value) {
+    // Read by `Passthrough`, which hides these so an AR session shows the room's floor.
+    mesh.userData.isGroundPlane = true;
+  }
+  getPosition(mjModel.geom_pos, g, mesh.position);
+  const isInfinitePlane =
+    type === mujoco.mjtGeom.mjGEOM_PLANE.value && (size[0] === 0 || size[1] === 0);
+  if (!isInfinitePlane) {
+    getQuaternion(mjModel.geom_quat, g, mesh.quaternion);
+  }
+  if (type === mujoco.mjtGeom.mjGEOM_ELLIPSOID.value) {
+    primitiveScale('ellipsoid', size, mesh.scale);
+  }
+  if (isInfinitePlane) {
+    const baseMat = currentMaterial;
+    const tex = baseMat.map ?? null;
+    const repeatX = tex?.repeat.x ?? 1;
+    const repeatY = tex?.repeat.y ?? 1;
+    // MuJoCo GL_OBJECT_PLANE formula: coeff = 0.5 * texrepeat / halfSize (finite),
+    // or 0.5 * texrepeat (infinite, halfSize=0)
+    const uvScaleX = size[0] > 0 ? (repeatX * 0.5) / size[0] : repeatX * 0.5;
+    const uvScaleZ = size[1] > 0 ? (repeatY * 0.5) / size[1] : repeatY * 0.5;
+    const shaderMat = createInfinitePlaneShaderMaterial({
+      color: baseMat.color.clone(),
+      opacity: baseMat.opacity,
+      texture: tex,
+      uvScaleX,
+      uvScaleZ,
+      planeY: mesh.position.y,
+      centerX: mesh.position.x,
+      centerZ: mesh.position.z,
+      infiniteX: size[0] === 0,
+      infiniteZ: size[1] === 0,
+      halfExtentX: size[0],
+      halfExtentZ: size[1],
+    });
+    mesh.material = shaderMat;
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 1;
+    mesh.onBeforeRender = (_renderer, _scene, camera) => {
+      shaderMat.uniforms.uProjInverse.value.copy(camera.projectionMatrixInverse);
+      shaderMat.uniforms.uCamWorldMatrix.value.copy(camera.matrixWorld);
+    };
+  } else if (type === mujoco.mjtGeom.mjGEOM_PLANE.value) {
+    const frontMat = currentMaterial;
+    const backMat = frontMat.clone();
+    backMat.side = THREE.BackSide;
+    backMat.transparent = true;
+    backMat.opacity = frontMat.opacity * 0.35;
+    backMat.depthWrite = false;
+    const backMesh = new THREE.Mesh(geometry, backMat);
+    backMesh.userData.isGroundPlane = true;
+    backMesh.userData.geomId = g;
+    backMesh.position.copy(mesh.position);
+    backMesh.quaternion.copy(mesh.quaternion);
+    backMesh.raycast = () => {};
+    placeOnGroupLayer(backMesh, mjModel.geom_group[g]);
+    bodies[b].add(backMesh);
+  }
+}
+
+/**
+ * Draw the geoms of `groups` the viewer leaves out (3 and up, collision by convention) on
+ * their group's layer alone, for a camera sensor that enables it. Once per model: a group
+ * already drawn is skipped.
+ */
+export function addSensorGeomMeshes(
+  mujoco: MainModule,
+  mjModel: MjModel,
+  parent: { bodies: Record<number, THREE.Group>; meshes?: Record<number, THREE.BufferGeometry> },
+  groups: Iterable<number>,
+): void {
+  const wanted = new Set([...groups].filter((group) => group >= VIEWER_GEOM_GROUPS));
+  for (const body of Object.values(parent.bodies)) {
+    body.traverse((child) => {
+      const geomId = child.userData.geomId as number | undefined;
+      if (geomId !== undefined) wanted.delete(mjModel.geom_group[geomId]);
+    });
+  }
+  if (wanted.size === 0) return;
+  const context: GeomMeshContext = {
+    mujoco,
+    mjModel,
+    bodies: parent.bodies,
+    meshes: (parent.meshes ??= {}),
+    specularRatio: lightSpecularRatio(mjModel),
+    names: new Uint8Array(mjModel.names),
+  };
+  for (let g = 0; g < mjModel.ngeom; g++) {
+    if (wanted.has(mjModel.geom_group[g])) addGeomMesh(context, g);
+  }
+}
+
 export async function loadSceneFromURL(
   mujoco: MainModule,
   filename: string,
@@ -241,8 +496,7 @@ export async function loadSceneFromURL(
   const mjModel = newModel;
   const mjData = newData;
 
-  const textDecoder = new TextDecoder('utf-8');
-  const namesArray = new Uint8Array(mjModel.names);
+  const names = new Uint8Array(mjModel.names);
 
   const mujocoRoot = new THREE.Group();
   mujocoRoot.name = 'MuJoCo Root';
@@ -252,206 +506,9 @@ export async function loadSceneFromURL(
   const meshes: Record<number, THREE.BufferGeometry> = {};
   const specularRatio = lightSpecularRatio(mjModel);
 
+  const geomContext: GeomMeshContext = { mujoco, mjModel, bodies, meshes, specularRatio, names };
   for (let g = 0; g < mjModel.ngeom; g++) {
-    if (!(mjModel.geom_group[g] < 3)) {
-      continue;
-    }
-
-    const b = mjModel.geom_bodyid[g];
-    const type = mjModel.geom_type[g];
-    const size = [
-      mjModel.geom_size[g * 3 + 0],
-      mjModel.geom_size[g * 3 + 1],
-      mjModel.geom_size[g * 3 + 2],
-    ];
-
-    if (!(b in bodies)) {
-      bodies[b] = new THREE.Group();
-
-      const startIdx = mjModel.name_bodyadr[b];
-      let endIdx = startIdx;
-      while (endIdx < namesArray.length && namesArray[endIdx] !== 0) {
-        endIdx++;
-      }
-      const nameBuffer = namesArray.subarray(startIdx, endIdx);
-      bodies[b].name = textDecoder.decode(nameBuffer);
-
-      bodies[b].bodyID = b;
-      bodies[b].has_custom_mesh = false;
-    }
-
-    let geometry: THREE.BufferGeometry | undefined;
-    switch (type) {
-      case mujoco.mjtGeom.mjGEOM_PLANE.value: {
-        if (size[0] === 0 || size[1] === 0) {
-          // PlaneGeometry(2,2) in XY plane: vertices at (±1, ±1, 0)
-          // Used as a full-screen clip-space quad by the infinite plane shader
-          geometry = new THREE.PlaneGeometry(2, 2);
-        } else {
-          geometry = primitiveGeometry('plane', size);
-        }
-        break;
-      }
-      case mujoco.mjtGeom.mjGEOM_HFIELD.value:
-        geometry = createHFieldGeometry(mjModel, g);
-        break;
-      case mujoco.mjtGeom.mjGEOM_SPHERE.value:
-        geometry = primitiveGeometry('sphere', size);
-        break;
-      case mujoco.mjtGeom.mjGEOM_CAPSULE.value:
-        geometry = primitiveGeometry('capsule', size);
-        break;
-      case mujoco.mjtGeom.mjGEOM_ELLIPSOID.value:
-        geometry = primitiveGeometry('ellipsoid', size);
-        break;
-      case mujoco.mjtGeom.mjGEOM_CYLINDER.value:
-        geometry = primitiveGeometry('cylinder', size);
-        break;
-      case mujoco.mjtGeom.mjGEOM_BOX.value:
-        geometry = primitiveGeometry('box', size);
-        break;
-      case mujoco.mjtGeom.mjGEOM_MESH.value: {
-        const meshID = mjModel.geom_dataid[g];
-
-        if (!(meshID in meshes)) {
-          meshes[meshID] = createMeshGeometry(mjModel, meshID);
-        }
-        geometry = meshes[meshID];
-        bodies[b].has_custom_mesh = true;
-        break;
-      }
-    }
-
-    let color = [
-      mjModel.geom_rgba[g * 4 + 0],
-      mjModel.geom_rgba[g * 4 + 1],
-      mjModel.geom_rgba[g * 4 + 2],
-      mjModel.geom_rgba[g * 4 + 3],
-    ];
-    let texture: THREE.Texture | null = null;
-    if (mjModel.geom_matid[g] !== -1) {
-      const matId = mjModel.geom_matid[g];
-      color = [
-        mjModel.mat_rgba[matId * 4 + 0],
-        mjModel.mat_rgba[matId * 4 + 1],
-        mjModel.mat_rgba[matId * 4 + 2],
-        mjModel.mat_rgba[matId * 4 + 3],
-      ];
-
-      const role = mujoco.mjtTextureRole.mjTEXROLE_RGB.value;
-      const texId = mjModel.mat_texid[matId * mujoco.mjtTextureRole.mjNTEXROLE.value + role];
-      if (texId !== -1) {
-        // A box samples a cube texture as MuJoCo does, so it keeps MuJoCo's face order.
-        const cubeFaceOrder =
-          type === mujoco.mjtGeom.mjGEOM_BOX.value ? [0, 1, 2, 3, 4, 5] : undefined;
-        texture = createTexture({ mujoco, mjModel, texId, cubeFaceOrder });
-        if (texture) {
-          const repeatX = mjModel.mat_texrepeat ? mjModel.mat_texrepeat[matId * 2 + 0] : 1;
-          const repeatY = mjModel.mat_texrepeat ? mjModel.mat_texrepeat[matId * 2 + 1] : 1;
-          texture.repeat.set(repeatX, repeatY);
-          texture.wrapS = THREE.RepeatWrapping;
-          texture.wrapT = THREE.RepeatWrapping;
-        }
-      }
-    }
-
-    const currentMaterial = new THREE.MeshPhysicalMaterial({
-      color: new THREE.Color(color[0], color[1], color[2]),
-      transparent: color[3] < 1.0,
-      opacity: color[3],
-      ...reflectanceParams(mjModel, mjModel.geom_matid[g], specularRatio),
-    });
-
-    if (texture) {
-      if (!(texture instanceof THREE.CubeTexture)) {
-        currentMaterial.map = texture;
-      } else if (type === mujoco.mjtGeom.mjGEOM_BOX.value) {
-        // MuJoCo samples at the point on the unit box, or on the box itself with `texuniform`.
-        const uniform = mjModel.mat_texuniform[mjModel.geom_matid[g]];
-        sampleCubeTexture(currentMaterial, texture, uniform ? [1, 1, 1] : size);
-      } else {
-        currentMaterial.envMap = texture;
-        currentMaterial.envMapIntensity =
-          mjModel.geom_matid[g] !== -1
-            ? (mjModel.mat_reflectance?.[mjModel.geom_matid[g]] ?? 0)
-            : 0;
-      }
-    }
-
-    if (!geometry) {
-      console.warn(`Skipping geometry ${g} (type ${type}): no valid geometry created`);
-      continue;
-    }
-
-    const mesh = new THREE.Mesh(geometry, currentMaterial as THREE.Material);
-    const ignoreDragForce = bodies[b].name === 'terrain';
-
-    mesh.castShadow = ignoreDragForce ? false : g !== 0;
-    mesh.receiveShadow = type !== mujoco.mjtGeom.mjGEOM_MESH.value;
-    mesh.bodyID = b;
-    // The geom behind this mesh, so a size written at runtime can be drawn.
-    mesh.userData.geomId = g;
-    mesh.userData.ignoreDragForce = ignoreDragForce;
-    bodies[b].userData.ignoreDragForce = ignoreDragForce;
-    bodies[b].add(mesh);
-    if (type === mujoco.mjtGeom.mjGEOM_PLANE.value) {
-      // Read by `Passthrough`, which hides these so an AR session shows the room's floor.
-      mesh.userData.isGroundPlane = true;
-    }
-    getPosition(mjModel.geom_pos, g, mesh.position);
-    const isInfinitePlane =
-      type === mujoco.mjtGeom.mjGEOM_PLANE.value && (size[0] === 0 || size[1] === 0);
-    if (!isInfinitePlane) {
-      getQuaternion(mjModel.geom_quat, g, mesh.quaternion);
-    }
-    if (type === mujoco.mjtGeom.mjGEOM_ELLIPSOID.value) {
-      primitiveScale('ellipsoid', size, mesh.scale);
-    }
-    if (isInfinitePlane) {
-      const baseMat = currentMaterial;
-      const tex = baseMat.map ?? null;
-      const repeatX = tex?.repeat.x ?? 1;
-      const repeatY = tex?.repeat.y ?? 1;
-      // MuJoCo GL_OBJECT_PLANE formula: coeff = 0.5 * texrepeat / halfSize (finite),
-      // or 0.5 * texrepeat (infinite, halfSize=0)
-      const uvScaleX = size[0] > 0 ? (repeatX * 0.5) / size[0] : repeatX * 0.5;
-      const uvScaleZ = size[1] > 0 ? (repeatY * 0.5) / size[1] : repeatY * 0.5;
-      const shaderMat = createInfinitePlaneShaderMaterial({
-        color: baseMat.color.clone(),
-        opacity: baseMat.opacity,
-        texture: tex,
-        uvScaleX,
-        uvScaleZ,
-        planeY: mesh.position.y,
-        centerX: mesh.position.x,
-        centerZ: mesh.position.z,
-        infiniteX: size[0] === 0,
-        infiniteZ: size[1] === 0,
-        halfExtentX: size[0],
-        halfExtentZ: size[1],
-      });
-      mesh.material = shaderMat;
-      mesh.frustumCulled = false;
-      mesh.renderOrder = 1;
-      mesh.onBeforeRender = (_renderer, _scene, camera) => {
-        shaderMat.uniforms.uProjInverse.value.copy(camera.projectionMatrixInverse);
-        shaderMat.uniforms.uCamWorldMatrix.value.copy(camera.matrixWorld);
-      };
-    } else if (type === mujoco.mjtGeom.mjGEOM_PLANE.value) {
-      const frontMat = currentMaterial;
-      const backMat = frontMat.clone();
-      backMat.side = THREE.BackSide;
-      backMat.transparent = true;
-      backMat.opacity = frontMat.opacity * 0.35;
-      backMat.depthWrite = false;
-      const backMesh = new THREE.Mesh(geometry, backMat);
-      backMesh.userData.isGroundPlane = true;
-      backMesh.userData.geomId = g;
-      backMesh.position.copy(mesh.position);
-      backMesh.quaternion.copy(mesh.quaternion);
-      backMesh.raycast = () => {};
-      bodies[b].add(backMesh);
-    }
+    if (mjModel.geom_group[g] < VIEWER_GEOM_GROUPS) addGeomMesh(geomContext, g);
   }
 
   createTendonMeshes(mujocoRoot, mjModel);
@@ -461,12 +518,7 @@ export async function loadSceneFromURL(
   for (let b = 0; b < mjModel.nbody; b++) {
     if (!bodies[b]) {
       bodies[b] = new THREE.Group();
-      const startIdx = mjModel.name_bodyadr[b];
-      let endIdx = startIdx;
-      while (endIdx < namesArray.length && namesArray[endIdx] !== 0) {
-        endIdx++;
-      }
-      bodies[b].name = textDecoder.decode(namesArray.subarray(startIdx, endIdx));
+      bodies[b].name = bodyName(mjModel, names, b);
       bodies[b].bodyID = b;
       bodies[b].has_custom_mesh = false;
     }
