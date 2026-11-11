@@ -1,8 +1,14 @@
 """Train MuJoCo Playground's SO-101 PickCube policy for an mjswan scene.
 
-MuJoCo Playground 1.0.1's `SO101PickCube`, the state-observation sibling of the task its
-sim-to-real demo deploys, trained with Playground's own environment and PPO settings on
-one free GPU (Colab or molab), then exported for mjswan. Four steps, each a subcommand:
+MuJoCo Playground 1.0.1's SO-101 PickCube, trained with Playground's own environment and
+PPO settings on one free GPU (Colab or molab), then exported for mjswan. `--task` picks
+the variant:
+
+  state   `SO101PickCube`: joints, gripper and cube positions, the target; 50 Hz
+  vision  `SO101PickCubeVision`, the task its sim-to-real demo deploys: joints, gripper
+          pose, the target in the gripper's frame and the wrist camera's image; 10 Hz
+
+Four steps, each a subcommand:
 
   setup   install Playground 1.0.1 for this machine's CUDA driver
   train   PPO, resuming from the newest checkpoint in --out (or on the Hub)
@@ -16,14 +22,18 @@ Hub, and a session that starts with none on disk takes the Hub's newest.
 
 `export` writes, under --out/export:
 
-  policy.onnx     the actor, its observation normalizer included: obs [1, 24] -> actions [1, 6]
+  policy.onnx     the actor in one file, its observation normalizer included:
+                  obs [1, 24] -> actions [1, 6] (state), or obs [1, 33] and
+                  camera [1, 3, 16, 16] -> actions [1, 6] (vision)
   contract.json   what the policy reads and drives, in order, for the mjswan port
   reference.npz   a deterministic rollout (no observation noise, no domain randomization):
-                  each step's qpos, qvel, mocap_pos, ctrl, observation and action, so the
-                  port's observation graphs can be checked against Playground's numbers
+                  each step's qpos, qvel, mocap_pos, ctrl, observations and action, and
+                  for vision the wrist camera's 64 x 64 frame, so the port's observation
+                  graphs can be checked against Playground's numbers
 
     python so101_pick_cube.py setup
     python so101_pick_cube.py all --out so101_pick_cube --hf-repo user/so101-pick-cube
+    python so101_pick_cube.py all --task vision --out vision --hf-repo user/so101-vision
 """
 
 from __future__ import annotations
@@ -38,21 +48,11 @@ import threading
 from pathlib import Path
 
 PLAYGROUND = "1.0.1"
-ENV_ID = "SO101PickCube"
-MODEL_CARD = f"""\
----
-tags: [mujoco-playground, mjswan, robotics, reinforcement-learning]
----
-# SO-101 PickCube for mjswan
-
-PPO on MuJoCo Playground {PLAYGROUND}'s `{ENV_ID}`, trained by mjswan's
-`examples/train/so101_pick_cube.py`.
-
-- `checkpoints/`: rsl-rl checkpoints, the newest resumes training
-- `policy.onnx`, `contract.json`, `reference.npz`: the export an mjswan scene runs
-"""
-#: Playground's own default for this task.
-DEFAULT_ITERATIONS = 1000
+TASKS = {"state": "SO101PickCube", "vision": "SO101PickCubeVision"}
+#: Kept in a deterministic rollout: every training episode drew its geoms flat.
+UNRANDOMIZED_TERMS = ("override_flat_materials",)
+#: The reference rollout's length.
+REFERENCE_SECONDS = 12.0
 #: Warp 1.18.0's CUDA 12 build, for drivers that predate CUDA 13 (Colab's T4).
 WARP_CU12_WHEELS = "https://github.com/NVIDIA/warp/releases/expanded_assets/v1.18.0"
 TORCH_CU12_INDEX = "https://download.pytorch.org/whl/cu129"
@@ -125,22 +125,52 @@ def _device() -> str:
     return xpu.resolve_device(None)
 
 
-def _build(nworld: int, device: str, *, deterministic: bool):
-    """Playground's own env for `ENV_ID`, built as its registry builds it.
+def _model_card(env_id: str) -> str:
+    return f"""\
+---
+tags: [mujoco-playground, mjswan, robotics, reinforcement-learning]
+---
+# SO-101 PickCube for mjswan
 
-    `deterministic` drops the observation noise and the domain randomization, so a
-    rollout's numbers depend on the state alone.
-    """
+PPO on MuJoCo Playground {PLAYGROUND}'s `{env_id}`, trained by mjswan's
+`examples/train/so101_pick_cube.py`.
+
+- `checkpoints/`: rsl-rl checkpoints, the newest resumes training
+- `policy.onnx`, `contract.json`, `reference.npz`: the export an mjswan scene runs
+"""
+
+
+def _entry(env_id: str):
     from mujoco_playground._src.rl import env_registry
+
+    return env_registry.get(env_id)
+
+
+def _build(env_id: str, nworld: int, device: str, *, deterministic: bool):
+    """Playground's own env for `env_id`, built as its registry builds it.
+
+    `deterministic` drops the observation noise, the camera's pixel noise and the domain
+    randomization, so a rollout's numbers depend on the state alone.
+    """
     from mujoco_playground._src.rl.rsl_rl import vecenv_wrapper
     from reaf.simulation.torch import flat_scene
 
-    entry = env_registry.get(ENV_ID)
+    entry = _entry(env_id)
     env_cfg = entry.env_cfg_fn()
     if deterministic:
         for group in env_cfg.observation_adapter.values():
             group.enable_noise = False
-        env_cfg.resetters.pop("domain_randomization", None)
+            for term in group.terms.values():
+                if "pixel_noise_std" in term.params:
+                    term.params["pixel_noise_std"] = 0.0
+        dr = env_cfg.resetters.get("domain_randomization")
+        if dr is not None:
+            terms = dr.runtime_params["terms"]
+            kept = {name: terms[name] for name in UNRANDOMIZED_TERMS if name in terms}
+            if kept:
+                dr.runtime_params["terms"] = kept
+            else:
+                env_cfg.resetters.pop("domain_randomization")
     env_cfg.sim.nworld = nworld
     env_cfg.sim.xpu_device = device
     env_cfg.sim.impl = "warp"
@@ -199,13 +229,15 @@ def _pull_newest_checkpoint(repo: str, run_dir: Path) -> Path | None:
     return target
 
 
-def _claim_repo(repo: str) -> None:
+def _claim_repo(repo: str, env_id: str) -> None:
     """Create the repository and write its card, so a token that cannot write fails now
     rather than in the background on the first checkpoint."""
     api = _hub()
     api.create_repo(repo, exist_ok=True)
     api.upload_file(
-        path_or_fileobj=MODEL_CARD.encode(), path_in_repo="README.md", repo_id=repo
+        path_or_fileobj=_model_card(env_id).encode(),
+        path_in_repo="README.md",
+        repo_id=repo,
     )
 
 
@@ -215,14 +247,14 @@ def _push(repo: str, path: Path, path_in_repo: str) -> None:
     )
 
 
-def _nworld_for(device: str) -> int:
-    """Playground's 8192 worlds where the GPU holds them, half that on a 16 GB card."""
+def _nworld_for(device: str, default: int) -> int:
+    """Playground's own count where the GPU holds it, at most 4096 on a 16 GB card."""
     import torch
 
     if not device.startswith("cuda"):
         return 16
     memory = torch.cuda.get_device_properties(torch.device(device)).total_memory
-    return 8192 if memory >= 40 * 2**30 else 4096
+    return default if memory >= 40 * 2**30 else min(default, 4096)
 
 
 # train
@@ -235,21 +267,24 @@ def train(args: argparse.Namespace) -> None:
     from mujoco_playground._src.rl import rng
     from rsl_rl.runners import OnPolicyRunner
 
+    env_id = TASKS[args.task]
+    defaults = _entry(env_id).runner_cfg
+    iterations = args.iterations or defaults.max_iterations
     run_dir = args.out / "checkpoints"
     if args.hf_repo:
-        _claim_repo(args.hf_repo)
+        _claim_repo(args.hf_repo, env_id)
     resume = _checkpoint(args)
     done = _iteration(resume) if resume else -1
-    if done >= args.iterations - 1:
+    if done >= iterations - 1:
         print(f"Already trained: {resume.name}.")
         return
 
     device = _device()
     rng.seed(args.seed)
     wp.config.kernel_cache_dir = str(args.warp_cache)
-    nworld = args.nworld or _nworld_for(device)
-    print(f"Training {ENV_ID} on {device} with {nworld} worlds.")
-    _, runner_cfg, env = _build(nworld, device, deterministic=False)
+    nworld = args.nworld or _nworld_for(device, defaults.nworld)
+    print(f"Training {env_id} on {device} with {nworld} worlds, to {iterations}.")
+    _, runner_cfg, env = _build(env_id, nworld, device, deterministic=False)
     for key, value in json.loads(args.overrides or "{}").items():
         setattr(runner_cfg, key, value)
     runner_cfg.seed = args.seed
@@ -282,7 +317,7 @@ def train(args: argparse.Namespace) -> None:
         runner.load(str(resume), map_location=device)
     # rsl-rl reruns the checkpoint's own iteration, so this ends on `iterations - 1`.
     runner.learn(
-        num_learning_iterations=args.iterations - max(done, 0),
+        num_learning_iterations=iterations - max(done, 0),
         init_at_random_ep_len=True,
     )
     env.close()
@@ -306,35 +341,65 @@ def _numpy(value):
     return np.array(value.numpy(), copy=True)
 
 
-def _contract(env_cfg, mj_model, control_dt: float) -> dict:
+def _jsonable(value):
+    """A config value as JSON: sequences as lists, a function or class by its name."""
+    import numpy as np
+
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, (np.floating, np.integer)):
+        return value.item()
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return getattr(value, "__name__", repr(value))
+
+
+def _contract(env_id: str, env_cfg, actor_groups, mj_model, control_dt: float) -> dict:
     """What the policy reads and drives, by name, in the order it reads them."""
     import mujoco
 
     devices = env_cfg.device_layer.devices
-    policy_group = env_cfg.observation_adapter["policy"]
-    action = env_cfg.task_layer.command_processors["action_scale"].runtime_params
     resetter = env_cfg.resetters["pick_cube"].runtime_params
 
     def names(kind, count: int) -> list[str]:
         return [mujoco.mj_id2name(mj_model, kind, i) or "" for i in range(count)]
 
-    return {
-        "env": ENV_ID,
+    def term(name: str, cfg) -> dict:
+        entry = {
+            "name": name,
+            "shape": list(cfg.output_shape or []),
+            "source": _jsonable(cfg.func),
+            "params": _jsonable(cfg.params),
+        }
+        for key in ("scale", "offset", "clip"):
+            if getattr(cfg, key) is not None:
+                entry[key] = _jsonable(getattr(cfg, key))
+        return entry
+
+    contract = {
+        "env": env_id,
         "playground": PLAYGROUND,
         "control_dt": control_dt,
         "physics_dt": float(mj_model.opt.timestep),
-        "observations": [
-            {"name": name, "shape": list(getattr(term, "output_shape", None) or [])}
-            for name, term in policy_group.terms.items()
-        ],
+        "observations": {
+            group: [
+                term(name, cfg)
+                for name, cfg in env_cfg.observation_adapter[group].terms.items()
+            ]
+            for group in actor_groups
+        },
         "joints": list(devices["robot_state"].runtime_params["joint_names"]),
         "home_qpos": [
             float(v) for v in devices["robot_state"].runtime_params["home_qpos"]
         ],
         "action": {
-            "ctrl": "scale * action + offset",
-            "scale": [float(v) for v in action["scale"]],
-            "offset": [float(v) for v in action["offset"]],
+            name: {
+                "processor": component.component_type.__name__,
+                "params": _jsonable(component.runtime_params),
+            }
+            for name, component in env_cfg.task_layer.command_processors.items()
         },
         "ee_site": devices["ee"].runtime_params["site_name"],
         "object_body": devices["object"].runtime_params["body_name"],
@@ -351,10 +416,7 @@ def _contract(env_cfg, mj_model, control_dt: float) -> dict:
             )
         },
         "model": {
-            "qpos_joints": [
-                mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_JOINT, j)
-                for j in range(mj_model.njnt)
-            ],
+            "qpos_joints": names(mujoco.mjtObj.mjOBJ_JOINT, mj_model.njnt),
             "jnt_qposadr": [int(a) for a in mj_model.jnt_qposadr],
             "jnt_dofadr": [int(a) for a in mj_model.jnt_dofadr],
             "actuators": names(mujoco.mjtObj.mjOBJ_ACTUATOR, mj_model.nu),
@@ -365,6 +427,12 @@ def _contract(env_cfg, mj_model, control_dt: float) -> dict:
             ],
         },
     }
+    if "camera" in devices:
+        camera = _jsonable(devices["camera"].runtime_params)
+        name = camera["cam_name"][0]
+        camera["fovy"] = float(mj_model.cam_fovy[mj_model.camera(name).id])
+        contract["camera"] = camera
+    return contract
 
 
 def export(args: argparse.Namespace) -> None:
@@ -378,6 +446,7 @@ def export(args: argparse.Namespace) -> None:
     from mujoco_playground._src.rl import rng
     from rsl_rl.runners import OnPolicyRunner
 
+    env_id = TASKS[args.task]
     checkpoint = _checkpoint(args)
     if checkpoint is None:
         sys.exit("No checkpoint on disk or on the Hub: run `train` first.")
@@ -387,7 +456,7 @@ def export(args: argparse.Namespace) -> None:
     device = _device()
     rng.seed(args.seed)
     wp.config.kernel_cache_dir = str(args.warp_cache)
-    env_cfg, runner_cfg, env = _build(1, device, deterministic=True)
+    env_cfg, runner_cfg, env = _build(env_id, 1, device, deterministic=True)
     runner = OnPolicyRunner(
         env, dataclasses.asdict(runner_cfg), log_dir=None, device=device
     )
@@ -407,50 +476,88 @@ def export(args: argparse.Namespace) -> None:
     onnx.save(onnx.load(str(onnx_path)), str(onnx_path))
     (export_dir / "policy.onnx.data").unlink(missing_ok=True)
     policy = runner.get_inference_policy(device)
-    print(f"Exported {checkpoint.name} to {export_dir / 'policy.onnx'}.")
+    print(f"Exported {checkpoint.name} to {onnx_path}.")
 
-    sim = env.unwrapped.device_layer.sim
-    record: dict[str, list] = {
-        key: [] for key in ("qpos", "qvel", "mocap_pos", "ctrl", "obs", "action")
-    }
+    layer = env.unwrapped.device_layer
+    sim = layer.sim
+    control_dt = float(layer.control_timestep)
+    steps = args.reference_steps or round(REFERENCE_SECONDS / control_dt)
+    actor_groups = list(runner_cfg.obs_groups["actor"])
     obs = env.get_observations()
-    for _ in range(args.reference_steps):
+    # The network's flat input is its 1-D groups side by side; each image is an input.
+    flat = [group for group in actor_groups if obs[group].ndim == 2]
+    images = [group for group in actor_groups if obs[group].ndim > 2]
+    camera_keys = [
+        term.params["camera_key"]
+        for group in images
+        for term in env_cfg.observation_adapter[group].terms.values()
+        if "camera_key" in term.params
+    ]
+    record: dict[str, list] = {
+        key: []
+        for key in ("qpos", "qvel", "mocap_pos", "ctrl", "obs", *images, "action")
+    }
+    for key in camera_keys:
+        record[f"{key}_frame"] = []
+    for _ in range(steps):
         with torch.inference_mode():
             action = policy(obs)
         record["qpos"].append(_numpy(sim.data.qpos)[0])
         record["qvel"].append(_numpy(sim.data.qvel)[0])
         record["mocap_pos"].append(_numpy(sim.data.mocap_pos)[0])
         record["ctrl"].append(_numpy(sim.data.ctrl)[0])
-        record["obs"].append(_numpy(obs["policy"])[0])
+        record["obs"].append(np.concatenate([_numpy(obs[g])[0] for g in flat]))
+        for group in images:
+            record[group].append(_numpy(obs[group])[0])
+        if camera_keys:
+            frames = layer.get_device("camera").get_measurements(sim)
+            for key in camera_keys:
+                record[f"{key}_frame"].append(_numpy(frames[key])[0])
         record["action"].append(_numpy(action)[0])
         obs, _, _, _ = env.step(action)
     arrays = {
-        key: np.asarray(values, dtype=np.float64) for key, values in record.items()
+        key: np.asarray(
+            values,
+            dtype=np.uint8
+            if key.endswith("_frame")
+            else np.float32
+            if key in images
+            else np.float64,
+        )
+        for key, values in record.items()
     }
     np.savez_compressed(export_dir / "reference.npz", **arrays)
 
     # The ONNX graph must give the torch policy's actions on the same observations.
-    session = onnxruntime.InferenceSession(str(export_dir / "policy.onnx"))
-    feed = session.get_inputs()[0].name
+    session = onnxruntime.InferenceSession(str(onnx_path))
+    inputs = session.get_inputs()
     onnx_actions = np.concatenate(
         [
-            session.run(None, {feed: o[None].astype(np.float32)})[0]
-            for o in arrays["obs"]
+            session.run(
+                None,
+                {i.name: arrays[i.name][t][None].astype(np.float32) for i in inputs},
+            )[0]
+            for t in range(steps)
         ]
     )
     gap = float(np.abs(onnx_actions - arrays["action"]).max())
     if gap > 1e-4:
         sys.exit(f"policy.onnx disagrees with the checkpoint by {gap:.2e}.")
 
-    contract = _contract(
-        env_cfg, sim.mj_model, float(env.unwrapped.device_layer.control_timestep)
-    )
+    contract = _contract(env_id, env_cfg, actor_groups, sim.mj_model, control_dt)
+    contract["inputs"] = [
+        {
+            "name": i.name,
+            "groups": flat if i.name == "obs" else [i.name],
+            "shape": list(i.shape),
+        }
+        for i in inputs
+    ]
     contract["checkpoint"] = checkpoint.name
-    contract["obs_size"] = int(arrays["obs"].shape[1])
-    contract["reference_steps"] = args.reference_steps
+    contract["reference_steps"] = steps
     contract["onnx_vs_torch_max_abs"] = gap
     (export_dir / "contract.json").write_text(json.dumps(contract, indent=2) + "\n")
-    print(f"Wrote contract.json and reference.npz ({args.reference_steps} steps).")
+    print(f"Wrote contract.json and reference.npz ({steps} steps).")
     env.close()
 
 
@@ -499,7 +606,14 @@ def main() -> None:
         step.add_argument(
             "--hf-repo", help="a Hugging Face model repository, user/name"
         )
-        step.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS)
+        step.add_argument(
+            "--task", choices=sorted(TASKS), default="state", help="which variant"
+        )
+        step.add_argument(
+            "--iterations",
+            type=int,
+            help="default: Playground's own (1000 for state, 3000 for vision)",
+        )
         step.add_argument(
             "--nworld", type=int, help="parallel worlds (default: by GPU memory)"
         )
@@ -508,7 +622,9 @@ def main() -> None:
             "--overrides", help='runner settings as JSON, e.g. {"save_interval": 50}'
         )
         step.add_argument(
-            "--reference-steps", type=int, default=600, help="12 s at 50 Hz"
+            "--reference-steps",
+            type=int,
+            help=f"default: {REFERENCE_SECONDS:g} s of control steps",
         )
         step.add_argument(
             "--warp-cache",

@@ -38,7 +38,10 @@ shortcuts.
   `examples/train/so101_pick_cube.py`, with a Colab and a molab notebook, is how that
   policy was trained: on one free GPU, resuming from the newest checkpoint on disk or on
   the Hugging Face Hub, then exported as one ONNX file with the observation layout and a
-  reference rollout a port is checked against.
+  reference rollout a port is checked against. `--task vision` trains
+  `SO101PickCubeVision` instead, the wrist-camera task Playground's sim-to-real demo
+  deploys, whose export takes the camera image as a second input and whose reference
+  rollout keeps the camera's frames.
 
 - **`createEngine(element, { archive })`, for a host that renders `.mjz` archives it did not
   build.** `archive: { maxEntries, maxInflatedBytes, extensions }` refuses an archive before

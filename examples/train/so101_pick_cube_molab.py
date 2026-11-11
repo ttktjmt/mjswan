@@ -26,9 +26,11 @@ def _(mo):
     mo.md(r"""
     # Train MuJoCo Playground's SO-101 PickCube for mjswan
 
-    MuJoCo Playground 1.0.1's `SO101PickCube`, the state-observation sibling of the task its
-    sim-to-real demo deploys, trained with Playground's own environment and PPO settings,
-    then exported as the ONNX policy an mjswan scene runs.
+    MuJoCo Playground 1.0.1's SO-101 PickCube, trained with Playground's own environment
+    and PPO settings, then exported as the ONNX policy an mjswan scene runs. The task is
+    `state` (`SO101PickCube`: joints, gripper and cube positions) or `vision`
+    (`SO101PickCubeVision`, the task Playground's sim-to-real demo deploys: the wrist
+    camera's image instead of the cube's position).
 
     Turn on the GPU from the notebook specs button first. molab can end a GPU session
     early, so give a Hugging Face repository: every checkpoint is kept there too, and the
@@ -38,21 +40,22 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    task = mo.ui.dropdown(options=["state", "vision"], value="state", label="Task")
     out = mo.ui.text(value="so101_pick_cube", label="Output folder")
     iterations = mo.ui.number(
-        start=10, stop=10000, step=10, value=1000, label="Iterations"
+        start=0, stop=10000, step=10, value=0, label="Iterations (0: Playground's own)"
     )
     hf_repo = mo.ui.text(
         placeholder="user/so101-pick-cube", label="Hugging Face repository"
     )
     hf_token = mo.ui.text(kind="password", label="Hugging Face token (write)")
     branch = mo.ui.text(value="main", label="mjswan branch to fetch the script from")
-    mo.vstack([out, iterations, hf_repo, hf_token, branch])
-    return branch, hf_repo, hf_token, iterations, out
+    mo.vstack([task, out, iterations, hf_repo, hf_token, branch])
+    return branch, hf_repo, hf_token, iterations, out, task
 
 
 @app.cell
-def _(branch, hf_repo, hf_token):
+def _(branch, hf_repo, hf_token, task):
     import os
     import subprocess
     import sys
@@ -75,8 +78,9 @@ def _(branch, hf_repo, hf_token):
         hub = (
             ["--hf-repo", hf_repo.value] if hf_repo.value and args[0] != "setup" else []
         )
+        chosen = ["--task", task.value] if args[0] in ("train", "export") else []
         process = subprocess.Popen(
-            [sys.executable, str(script), *args, *hub],
+            [sys.executable, str(script), *args, *hub, *chosen],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -108,7 +112,8 @@ def _(mo, run, setup_button):
 @app.cell
 def _(iterations, mo, out, run, train_button):
     mo.stop(not train_button.value)
-    run("train", "--out", out.value, "--iterations", str(iterations.value))
+    count = ["--iterations", str(iterations.value)] if iterations.value else []
+    run("train", "--out", out.value, *count)
 
 
 @app.cell
