@@ -39,10 +39,11 @@ export function cameraFovy(mjModel: MjModel, cameraId: number): number {
 
 /**
  * Pose `camera` as MuJoCo's camera `cameraId` is now. Both look down their local -z with y
- * up, so the camera's world axes carry over with only the world's change of basis.
+ * up, so the camera's world axes carry over with only the world's change of basis. Any
+ * object posed at a camera takes it the same way.
  */
 export function poseCamera(
-  camera: THREE.Camera,
+  camera: THREE.Object3D,
   mjData: MjData,
   cameraId: number,
 ): void {

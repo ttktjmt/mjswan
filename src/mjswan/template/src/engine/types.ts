@@ -145,6 +145,35 @@ export interface DebugVisControls {
   set(id: string, enabled: boolean): void;
 }
 
+/**
+ * One camera sensor of the loaded policy, as mjlab's viewer lists it under "Camera Feeds"
+ * (`viewer/viser/camera_viewer.py`): its image, and its frustum drawn in the scene.
+ */
+export interface CameraFeedDescriptor {
+  /** The sensor's name; the id {@link CameraFeedControls} takes. */
+  id: string;
+  /** As mjlab labels the image: the model camera's name and `_rgb` (`robot/wrist_cam_rgb`). */
+  label: string;
+  /** The image's own size, in pixels. */
+  width: number;
+  height: number;
+  /** The whole factor mjlab's viewer enlarges the image by: 128 over its longer side, at least 1. */
+  scale: number;
+  /** mjlab's "Frustum" checkbox: the camera's frustum drawn in the scene. On by default. */
+  frustum: boolean;
+}
+
+export interface CameraFeedControls {
+  /**
+   * Draw a feed's images into `canvas`: each the one the policy read, the last held while
+   * paused, and on across policy loads while a sensor of that name is read. The canvas is
+   * sized to the image; enlarge it in CSS with `image-rendering: pixelated`. Returns the
+   * detach.
+   */
+  attach(id: string, canvas: HTMLCanvasElement): () => void;
+  setFrustum(id: string, shown: boolean): void;
+}
+
 /** One event term the operator can drive: a `manual` button or an `interval` schedule. */
 export interface EventDescriptor {
   /** The term's config name, and the id {@link EventControls} takes. */
@@ -275,6 +304,8 @@ export interface MjswanEngineState {
   debugVis: ReadonlyArray<DebugVisDescriptor>;
   /** {@link DebugVisControls.setEnabled}'s switch: a drawing shows only while it and its own are on. */
   debugVisEnabled: boolean;
+  /** The policy's camera sensors, in its order; empty when it reads none. */
+  cameraFeeds: ReadonlyArray<CameraFeedDescriptor>;
   /** {@link CameraControls.setTracking}'s switch, and the camera's vertical FOV in degrees. */
   camera: { tracking: boolean; fovy: number };
   /** Event terms the operator can drive; empty when the scene has none. */
@@ -329,6 +360,7 @@ export interface MjswanEngine {
   readonly camera: CameraControls;
   readonly commands: CommandControls;
   readonly debugVis: DebugVisControls;
+  readonly cameraFeeds: CameraFeedControls;
   readonly events: EventControls;
   readonly interaction: InteractionControls;
   readonly xr: XrControls;

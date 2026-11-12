@@ -188,8 +188,11 @@ builder.build().launch()
 A term that reads an mjlab `CameraSensor`'s `rgb` (`camera_rgb`, as
 `Mjlab-Lift-Cube-Yam-Rgb` does) traces like any other: the browser renders the model's
 camera at the sensor's size into the slot, drawing the sensor's `enabled_geom_groups`
-(groups 3 and up too, which the viewer leaves out) and the scene's lights. Debug Viz's
-**Camera** switch shows those images in a corner of the viewer.
+(groups 3 and up too, which the viewer leaves out) and the scene's lights. As in mjlab's
+viewer, the panel's **Camera Feeds** folder, below **Scene**, shows each sensor's image
+under mjlab's label (`robot/camera_d405_rgb`), enlarged by a whole factor toward 128 px,
+and a **Frustum** switch, on at first, that draws the camera's frustum in the scene. The
+image is the one the policy read, not a second render.
 
 The image is three.js drawing the scene, not mujoco_warp's ray tracer: shading, shadows
 and edges differ, so a policy keyed to them may act differently than in mjlab. `depth`

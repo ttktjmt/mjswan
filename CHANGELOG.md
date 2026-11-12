@@ -21,10 +21,13 @@ shortcuts.
   the scene's lights. The image is fed as float32 like every slot; the graph casts it
   back to uint8 before the term's own scaling. An actor reading camera groups beside its
   flat one, as rsl-rl's CNN model does, keeps each as an input of its own name
-  (`in_keys=["actor", "camera"]`), fed in the shape the network declares. Debug Viz's
-  **Camera** switch shows the images the policy read. It is three.js drawing, not
-  mujoco_warp's ray tracer, so shading differs; `depth`, `segmentation` and orthographic
-  cameras are refused at build time.
+  (`in_keys=["actor", "camera"]`), fed in the shape the network declares. The panel's
+  **Camera Feeds** folder, below Scene as in mjlab's viewer, shows each sensor's image
+  as the policy read it under mjlab's label (`robot/wrist_cam_rgb`), enlarged as mjlab
+  enlarges it, with a **Frustum** switch that draws the camera's frustum in the scene;
+  `engine.cameraFeeds` and the state's `cameraFeeds` give a host the same. It is three.js
+  drawing, not mujoco_warp's ray tracer, so shading differs; `depth`, `segmentation` and
+  orthographic cameras are refused at build time.
 
 - **`mjswan demo playground`: MuJoCo Playground 1.0.1 in the browser.** It opens on
   the SO-101 bringing a cube to a target that moves, driven by a policy trained on

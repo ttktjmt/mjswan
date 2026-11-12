@@ -4,6 +4,7 @@
  * [0, 1], the move to channels first) stays in the traced graph.
  */
 
+import type { CameraFeedSensor } from '../scene/cameraFeeds';
 import { rgbFromPixels, type SensorCameraView } from '../scene/sensorCamera';
 import { decodeNames, unprefixed } from './slotReader/indexing';
 
@@ -47,6 +48,16 @@ export class CameraSensorSet {
       for (const group of descriptor.enabled_geom_groups) groups.add(group);
     }
     return [...groups];
+  }
+
+  /** Each sensor whose camera the model has, as Camera Feeds lists it. */
+  feeds(mjModel: MjModel): CameraFeedSensor[] {
+    return Object.entries(this.descriptors).flatMap(([sensor, descriptor]) => {
+      const cameraId = this.cameraId(mjModel, descriptor.camera);
+      if (cameraId < 0) return [];
+      const { camera, width, height } = descriptor;
+      return [{ sensor, camera, cameraId, width, height }];
+    });
   }
 
   /** The sensor's image as mjlab's `[H, W, 3]` pixel values, or null if this set has none. */

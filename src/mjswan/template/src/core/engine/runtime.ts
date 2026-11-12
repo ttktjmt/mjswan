@@ -85,13 +85,13 @@ import type { ActionConfigEntry, PolicyConfig } from '../policy/types';
 import { TrackingPolicy } from '../policy/modules/TrackingPolicy';
 import { LocomotionPolicy } from '../policy/modules/LocomotionPolicy';
 import { CommandManager, type CommandTermContext, type CommandsConfig } from '../command';
-import { CameraFeed } from '../debugViz/cameraFeed';
 import { DebugViz, type ViewerSwitch } from '../debugViz/DebugViz';
 import { EventManager, type EventControl } from '../event/EventManager';
 import { ModelFieldDefaults } from '../event/modelWrite';
 import type { EventContext, TerrainData } from '../event/EventBase';
 import { OnnxSessionCache, type SlotReader } from '../onnx/session';
 import { CameraSensorSet, type CameraSensorDescriptor } from '../onnx/camera';
+import { CameraFeeds } from '../scene/cameraFeeds';
 import { ContactSensorSet, type ContactSensorDescriptor } from '../onnx/contact';
 import type { RaycastSensorDescriptor } from '../onnx/raycast';
 import { createSlotReader, sensorWindow } from '../onnx/slotReader';
@@ -102,7 +102,6 @@ const DEFAULT_TERM_SEED = 0x5eed;
 
 /** The skin's Debug Viz switch, listed after mjlab's drawings and under "Enabled" alike. */
 const XRAY_SWITCH = 'xray';
-const CAMERA_FEED_SWITCH = 'camera';
 
 
 /**
@@ -421,12 +420,8 @@ export class mjswanRuntime {
   /** Owned here too: rendering one draws this scene. */
   private cameraSensors = new CameraSensorSet();
   private sensorCameraRenderer: SensorCameraRenderer | null = null;
-  private readonly cameraFeed: CameraFeed;
-  private readonly cameraFeedSwitch: ViewerSwitch = {
-    label: 'Camera',
-    enabled: false,
-    apply: (visible) => this.cameraFeed.show(visible),
-  };
+  /** mjlab's Camera Feeds: what each camera sensor last saw, and its frustum. */
+  readonly cameraFeeds = new CameraFeeds();
 
   constructor(
     mujoco: MainModule,
@@ -509,7 +504,6 @@ export class mjswanRuntime {
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.container.appendChild(this.renderer.domElement);
-    this.cameraFeed = new CameraFeed(this.container);
 
     // Always created: the hand spaces stay empty until a session is granted `hand-tracking`.
     const hands = [0, 1].map((i) => this.renderer.xr.getHand(i));
@@ -1452,8 +1446,7 @@ export class mjswanRuntime {
     this.raycastSensors = {};
     this.contactSensors = new ContactSensorSet();
     this.cameraSensors = new CameraSensorSet();
-    this.debugVizSet.removeSwitch(CAMERA_FEED_SWITCH);
-    this.cameraFeed.clear();
+    this.cameraFeeds.clear();
     this.debugVizSet.clear();
 
     // An MDP switch, in order (ADR 0006 §9): restore every model field the previous
@@ -1526,7 +1519,11 @@ export class mjswanRuntime {
       if (this.cameraSensors.size > 0 && this.bodies) {
         const groups = this.cameraSensors.geomGroups();
         addSensorGeomMeshes(this.mujoco, this.mjModel, { bodies: this.bodies }, groups);
-        this.debugVizSet.addSwitch(CAMERA_FEED_SWITCH, this.cameraFeedSwitch);
+        this.cameraFeeds.load(
+          this.cameraSensors.feeds(this.mjModel),
+          this.mjModel,
+          this.mujocoRoot ?? this.scene,
+        );
       }
       this.debugVizSet.load(config.debug_vis, this.mujoco, this.mujocoRoot ?? this.scene);
       // Metadata comes from policy.json, bytes from the app; merge them by name.
@@ -2301,7 +2298,7 @@ export class mjswanRuntime {
     updateLightsFromData(this.mujoco, this.mjData, this.lights);
     this.sensorCameraRenderer ??= new SensorCameraRenderer(this.renderer, this.scene);
     const pixels = this.sensorCameraRenderer.render(view, this.mjModel, this.mjData, this.lights);
-    this.cameraFeed.update(view.cameraId, pixels, view.width, view.height);
+    this.cameraFeeds.update(view.cameraId, pixels, view.width, view.height);
     return pixels;
   }
 
@@ -2405,6 +2402,7 @@ export class mjswanRuntime {
 
       this.resizeHandBoneMeshes();
       updateLightsFromData(this.mujoco, this.mjData, this.lights);
+      this.cameraFeeds.pose(this.mjData);
 
       if (this.mujocoRoot && this.mujocoRoot.cylinders) {
         updateTendonRendering(
@@ -2516,7 +2514,7 @@ export class mjswanRuntime {
     this.renderer.setAnimationLoop(null);
     this.sensorCameraRenderer?.dispose();
     this.sensorCameraRenderer = null;
-    this.cameraFeed.dispose();
+    this.cameraFeeds.clear();
     this.renderer.dispose();
 
     if (this.renderer.domElement.parentElement) {
