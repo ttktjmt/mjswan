@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import type { MainModule, MjData, MjModel, MjvPerturb } from 'mujoco';
 
-import { quatApply, quatApplyInv } from '../../observation/math';
+import { quatApplyInv } from '../../observation/math';
 import { mjcToThreeCoordinate, threeToMjcCoordinate } from '../../scene/coordinate';
 import type { WeldHold } from '../../grab/weldHold';
 import type { DragArrow, PushRing } from '../gizmos';
@@ -19,6 +19,8 @@ export interface InteractionSim {
   dynamicBodyIds: Set<number> | null;
   /** Seconds per control step: what an impulse is divided by. */
   controlDt: number;
+  /** The bodies as the renderer draws them this frame. */
+  bodies: Record<number, THREE.Object3D> | null;
 }
 
 export interface ModeContext {
@@ -44,6 +46,8 @@ export interface InteractionMode {
   onCancel(ctx: ModeContext): void;
   /** Once per control step, with the live gesture or null. */
   preStep(gesture: PointerGesture | null, ctx: ModeContext): void;
+  /** Every frame, to draw what moves between control steps. `dt` is sim seconds. */
+  frame?(gesture: PointerGesture | null, ctx: ModeContext, dt: number): void;
   /** Why this mode cannot run in this scene, or null when it can. */
   unavailable?(ctx: ModeContext): string | null;
 }
@@ -64,19 +68,13 @@ export function toBodyFrame(
   return [local[0], local[1], local[2]];
 }
 
-/** The inverse: where that body-frame point is in the drawn scene now. */
+/** The inverse: where that body-frame point is drawn now, on the body's three.js object. */
 export function fromBodyFrame(
-  mjData: MjData,
-  bodyId: number,
+  body: THREE.Object3D,
   local: readonly [number, number, number],
 ): THREE.Vector3 {
-  const quat = [0, 1, 2, 3].map((i) => mjData.xquat[bodyId * 4 + i]);
-  const rotated = quatApply(quat, local);
-  return mjcToThreeCoordinate([
-    rotated[0] + mjData.xpos[bodyId * 3 + 0],
-    rotated[1] + mjData.xpos[bodyId * 3 + 1],
-    rotated[2] + mjData.xpos[bodyId * 3 + 2],
-  ]);
+  body.updateWorldMatrix(true, false);
+  return body.localToWorld(mjcToThreeCoordinate(local));
 }
 
 /** A three.js world vector or point as MuJoCo's axes see it. */

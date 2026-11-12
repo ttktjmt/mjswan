@@ -455,7 +455,9 @@ shortcuts.
   mjlab's viewer does, where the loop used to catch up on as much as 250 ms. A pause stops
   inside a control step and resumes there; a reset there starts a fresh one. The next
   observation waits for a traced command's update to land, which the old loop's sleep
-  between control steps used to cover.
+  between control steps used to cover. Pull's arrow and Push's ring are drawn every frame
+  too, from the bodies as drawn and the pointer, where they moved once per control step;
+  the force behind them is still computed once per control step.
 
 - **Pull drags as MuJoCo Studio does; its slider is now `stiffness`, not `spring`.** The
   spring is `vis.map.stiffness` times the grab point's effective mass, taken when the drag

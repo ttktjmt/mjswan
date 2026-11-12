@@ -1065,6 +1065,7 @@ export class mjswanRuntime {
       mjData: this.mjData,
       dynamicBodyIds: this.dynamicBodyIds,
       controlDt: this.timestep * this.decimation,
+      bodies: this.bodies,
     };
   }
 
@@ -2467,6 +2468,7 @@ export class mjswanRuntime {
       }
     }
 
+    this.interaction.frame();
     this.preview.update();
     this.renderer.render(this.scene, this.camera);
   };

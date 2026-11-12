@@ -45,7 +45,6 @@ export class PushMode implements InteractionMode {
 
   preStep(_gesture: PointerGesture | null, ctx: ModeContext): void {
     const { mujoco, mjData, controlDt } = ctx.sim();
-    ctx.ring.update(controlDt);
     if (!this.pending || !mjData) return;
     // The impulse over exactly one control step, so it is the same at any decimation. The
     // wrench clears the row next step.
@@ -57,5 +56,9 @@ export class PushMode implements InteractionMode {
       direction[2] * newtons,
     ]);
     this.pending = null;
+  }
+
+  frame(_gesture: PointerGesture | null, ctx: ModeContext, dt: number): void {
+    ctx.ring.update(dt);
   }
 }
