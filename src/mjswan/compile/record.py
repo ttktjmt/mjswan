@@ -251,6 +251,10 @@ class _RecordingScene:
         self._reader_fields = reader_fields
         self._sim = sim
 
+    @property
+    def env_origins(self) -> torch.Tensor:
+        return self._real.env_origins
+
     def __getitem__(self, name: str) -> Any:
         real = self._real[name]
         if _is_sensor(self._real, name):

@@ -176,7 +176,17 @@ class _ReplayEntity:
         real_env: Any,
         reader_fields: Collection[str],
     ):
+        self._real_env = real_env
+        self._entity = entity
         self.data = _ReplayData(entity, slots, real_env, reader_fields)
+
+    @property
+    def is_fixed_base(self) -> bool:
+        return self._real_env.scene[self._entity].is_fixed_base
+
+    @property
+    def indexing(self) -> Any:
+        return self._real_env.scene[self._entity].indexing
 
 
 class _ReplaySensorData:
@@ -212,6 +222,10 @@ class _ReplayScene:
         self._sensors = sensors or {}
         self._real_env = real_env
         self._reader_fields = reader_fields
+
+    @property
+    def env_origins(self) -> torch.Tensor:
+        return self._real_env.scene.env_origins
 
     def __getitem__(self, name: str) -> Any:
         real = self._sensors.get(name)
