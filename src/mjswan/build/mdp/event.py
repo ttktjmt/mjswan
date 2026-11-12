@@ -4,8 +4,9 @@ to write."""
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ...envs.mdp.events import EventBinding
 from . import graph
@@ -44,6 +45,12 @@ def serialize_event(
         return term_cfg.to_dict()
 
     resolved = resolved_params(term_cfg.params, env)
+    if isinstance(func, type):
+        from mjlab.managers.manager_base import ManagerTermBase
+
+        if issubclass(func, ManagerTermBase):
+            constructor = cast(Callable[..., Any], func)
+            func = constructor(replace(term_cfg, params=resolved), env).__call__
     provenance = term_provenance(func, resolved)
     try:
         export = trace_event_term(

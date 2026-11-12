@@ -9,13 +9,16 @@ randomness is threaded in as an explicit ``rand`` input replayed by
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from contextlib import contextmanager
+from dataclasses import dataclass, field, fields, is_dataclass
+from typing import Any, Callable, Iterator
 
+import numpy as np
 import torch
 from torch import nn
 
 from .export import (
+    DivergentGraph,
     _classify_tagged,
     _const_values,
     _export_onnx,
@@ -25,6 +28,7 @@ from .export import (
     no_hidden_reads,
 )
 from .model import SET_CONST_FIELDS, ModelPlan, ModelRecorder, ModelReplay
+from .proxy import _is_live_object
 from .record import (
     WriteCaptures,
     _EventCaptureEnv,
@@ -34,6 +38,89 @@ from .record import (
 from .replay import _EventReplayEnv
 from .rng import DrawRecorder, ReplayRng
 from .slot import _MODEL_NS, SlotKey, TaggedKey, _slot_input_name
+
+
+def _state_snapshot(value: Any) -> Any:
+    if isinstance(value, torch.Tensor):
+        return value.detach().clone()
+    if isinstance(value, np.ndarray):
+        return value.copy()
+    if is_dataclass(value) and not isinstance(value, type):
+        return {f.name: _state_snapshot(getattr(value, f.name)) for f in fields(value)}
+    if isinstance(value, dict):
+        return {key: _state_snapshot(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return tuple(_state_snapshot(item) for item in value)
+    if isinstance(value, (str, bytes, bool, int, float, type(None))):
+        return value
+    return ("opaque", id(value))
+
+
+def _same_state(before: Any, after: Any) -> bool:
+    if isinstance(before, torch.Tensor) and isinstance(after, torch.Tensor):
+        return (
+            before.dtype == after.dtype
+            and before.shape == after.shape
+            and torch.equal(before, after)
+        )
+    if isinstance(before, np.ndarray) and isinstance(after, np.ndarray):
+        return before.dtype == after.dtype and np.array_equal(
+            before, after, equal_nan=True
+        )
+    if type(before) is not type(after):
+        return False
+    if isinstance(before, dict):
+        return before.keys() == after.keys() and all(
+            _same_state(before[k], after[k]) for k in before
+        )
+    if isinstance(before, tuple):
+        return len(before) == len(after) and all(
+            _same_state(a, b) for a, b in zip(before, after)
+        )
+    return before == after
+
+
+@contextmanager
+def _event_instance(
+    func: Callable[..., None], proxy: Any, real_env: Any
+) -> Iterator[None]:
+    """Route a bound event's cached env/entities through the same write capture."""
+    owner = getattr(func, "__self__", None)
+    if owner is None or not hasattr(owner, "__dict__"):
+        yield
+        return
+    replacements = {id(real_env): proxy, id(real_env.scene): proxy.scene}
+    entities = getattr(real_env.scene, "entities", {})
+    for name, entity in entities.items():
+        if not hasattr(entity, "data"):
+            continue
+        replacements[id(entity)] = proxy.scene[name]
+        replacements[id(entity.data)] = proxy.scene[name].data
+    original = {}
+    for name, value in vars(owner).items():
+        if id(value) in replacements:
+            original[name] = value
+        elif _is_live_object(value):
+            raise ValueError(
+                f"Event instance caches unsupported live state in {name!r}; read it through the env argument"
+            )
+    try:
+        for name, value in original.items():
+            setattr(owner, name, replacements[id(value)])
+        before = _state_snapshot(
+            {k: v for k, v in vars(owner).items() if k not in original}
+        )
+        yield
+        after = _state_snapshot(
+            {k: v for k, v in vars(owner).items() if k not in original}
+        )
+        if not _same_state(before, after):
+            raise DivergentGraph(
+                "Event instance mutates state between calls; stateful event history is not supported"
+            )
+    finally:
+        for name, value in original.items():
+            setattr(owner, name, value)
 
 
 class _EventModule(nn.Module):
@@ -80,7 +167,10 @@ class _EventModule(nn.Module):
         captures: WriteCaptures = {}
         model = ModelReplay(self._model_plan, rows) if self._model_plan else None
         env = _EventReplayEnv(served, captures, real_env=self._real_env, model=model)
-        with ReplayRng(self._func, rand=rand):
+        with (
+            ReplayRng(self._func, rand=rand),
+            _event_instance(self._func, env, self._real_env),
+        ):
             self._func(env, self._env_ids, **self._params)
         _, tensors = _flatten_captures(captures)
         return (*tensors, *(model.outputs if model else ()))
@@ -135,7 +225,11 @@ def trace_event_term(
     log: list[tuple[TaggedKey, Any]] = []
     captures: WriteCaptures = {}
     proxy = _EventCaptureEnv(env, log, captures, model=True)
-    with DrawRecorder(func) as rec, no_hidden_reads(f"Event term {name!r}"):
+    with (
+        DrawRecorder(func) as rec,
+        no_hidden_reads(f"Event term {name!r}"),
+        _event_instance(func, proxy, env),
+    ):
         func(proxy, env_ids, **params)
     recorder: ModelRecorder | None = proxy.model
     model_writes = recorder.writes if recorder else []
