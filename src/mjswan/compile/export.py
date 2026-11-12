@@ -79,7 +79,45 @@ def _export_onnx(
             opset_version=opset,
             dynamo=False,
         )
-    return _restore_output_names(buffer.getvalue(), output_names)
+    import onnx
+
+    model = onnx.load_from_string(
+        _restore_output_names(buffer.getvalue(), output_names)
+    )
+    if not model.graph.input and not any(
+        node.op_type in _RANDOM_OPS for node in model.graph.node
+    ):
+        # TorchScript can emit invalid index_put graphs for empty index tensors,
+        # even though the entire no-input reset is a constant computation.
+        with torch.no_grad():
+            produced = module(*(value.clone() for value in example))
+        outputs = produced if isinstance(produced, tuple) else (produced,)
+        if len(outputs) != len(output_names):
+            raise ValueError("Constant graph output count differs from requested names")
+        nodes, values = [], []
+        for name, value in zip(output_names, outputs):
+            tensor = onnx.numpy_helper.from_array(value.detach().cpu().numpy())
+            nodes.append(onnx.helper.make_node("Constant", [], [name], value=tensor))
+            values.append(
+                onnx.helper.make_tensor_value_info(name, tensor.data_type, tensor.dims)
+            )
+        model.graph.CopyFrom(
+            onnx.helper.make_graph(nodes, model.graph.name, [], values)
+        )
+    _check_structure(model, "Exported graph")
+    return model.SerializeToString()
+
+
+def _check_structure(model: Any, what: str) -> None:
+    """Check even graphs numeric parity cannot run or deliberately skips."""
+    import onnx
+
+    try:
+        onnx.checker.check_model(model, full_check=True)
+    except (onnx.checker.ValidationError, onnx.shape_inference.InferenceError) as exc:
+        raise DivergentGraph(
+            f"{what} failed ONNX structural validation: {exc}"
+        ) from exc
 
 
 def _restore_output_names(onnx_bytes: bytes, output_names: list[str]) -> bytes:
@@ -323,6 +361,7 @@ def check_against_module(
     import onnx
 
     model = onnx.load_from_string(onnx_bytes)
+    _check_structure(model, what)
     if any(node.op_type in _RANDOM_OPS for node in model.graph.node):
         return
     run = _runner(model, output_names)
