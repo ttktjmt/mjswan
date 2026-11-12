@@ -855,7 +855,10 @@ def _hub_policy(
 # PickCube Vision: Playground's `SO101PickCubeVision`, the wrist camera for the cube
 
 #: The policy `so101_pick_cube.py --task vision` trained: 700 of its 3000 iterations.
-PICK_CUBE_VISION_POLICY = ("ttktjmt/so101-pick-cube-vision", "REVISION")
+PICK_CUBE_VISION_POLICY = (
+    "ttktjmt/so101-pick-cube-vision",
+    "3367267e868664af61a8f2e89d1aa6b8bc18ee1a",
+)
 
 #: Playground's `DeltaActions` for the SO-101: radians per unit of action, and the range
 #: each joint's target is held in.
