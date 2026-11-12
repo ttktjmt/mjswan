@@ -60,14 +60,14 @@ describe('interaction parameter table', () => {
   });
 
   it('clamps to the hard limits, not the slider, and never lets NaN through', () => {
-    const spring = modeSpec('pull').params.find((p) => p.name === 'spring')!;
-    expect(clampParam(spring, -50)).toBe(spring.min);
-    expect(clampParam(spring, 1e9)).toBe(spring.max);
+    const impulse = modeSpec('push').params.find((p) => p.name === 'impulse')!;
+    expect(clampParam(impulse, -50)).toBe(impulse.min);
+    expect(clampParam(impulse, 1e9)).toBe(impulse.max);
     // Past where the slider reaches, which is what the number box is for.
-    const typed = (spring.softMax! + spring.max) / 2;
-    expect(clampParam(spring, typed)).toBe(typed);
-    expect(clampParam(spring, Number.NaN)).toBe(spring.default);
-    expect(clampParam(spring, Number.POSITIVE_INFINITY)).toBe(spring.default);
+    const typed = (impulse.softMax! + impulse.max) / 2;
+    expect(clampParam(impulse, typed)).toBe(typed);
+    expect(clampParam(impulse, Number.NaN)).toBe(impulse.default);
+    expect(clampParam(impulse, Number.POSITIVE_INFINITY)).toBe(impulse.default);
   });
 
   it('holds a checkbox to 0 or 1', () => {

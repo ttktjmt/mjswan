@@ -410,7 +410,11 @@ export function clampActions(action: Float32Array, bound: number | null): void {
   }
 }
 
-/** `decimation` substeps, re-applying the processed action each time: a motor's PD reads live state. */
+/**
+ * `decimation` substeps, re-applying the processed action each time: a motor's PD reads live
+ * state. Returns true, skipping the substeps left, when `mj_step` reset the data itself on a
+ * bad qpos, qvel or qacc. Studio's `StepControl` detects it the same way: the time went back.
+ */
 export function stepPhysics(
   mujoco: { mj_step(model: MjModel, data: MjData): void },
   mjModel: MjModel,
@@ -420,11 +424,14 @@ export function stepPhysics(
   onSubstep?: () => void,
   /** After the step, where mjlab's `scene.update(dt=physics_dt)` reads sensors. */
   onSubstepEnd?: () => void,
-): void {
+): boolean {
   for (let substep = 0; substep < decimation; substep++) {
     applyAction(mjData, terms, substep, decimation);
     onSubstep?.();
+    const time = mjData.time;
     mujoco.mj_step(mjModel, mjData);
+    if (mjData.time < time) return true;
     onSubstepEnd?.();
   }
+  return false;
 }
