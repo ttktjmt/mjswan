@@ -355,8 +355,28 @@ class TestPlanPublish:
     def test_rejects_total_size(self, tmp_path: Path, monkeypatch):
         dist = _make_dist(tmp_path)
         monkeypatch.setattr("mjswan.cloud.publish.MAX_TOTAL_BYTES", 10)
-        with pytest.raises(PublishError, match="scenes unpacked, which exceeds"):
+        with pytest.raises(PublishError, match="scenes unpacked"):
             plan_publish(dist)
+
+    def test_a_build_past_the_cap_is_refused_before_it_is_held_whole(
+        self, tmp_path: Path, monkeypatch
+    ):
+        from mjswan.cloud import blob
+
+        dist = _make_dist(tmp_path)
+        with zipfile.ZipFile(dist / "demo/humanoid/scene.mjz", "w") as archive:
+            for i in range(100):
+                archive.writestr(f"m{i}.stl", bytes([i]) * 50)
+        monkeypatch.setattr("mjswan.cloud.publish.MAX_TOTAL_BYTES", 1000)
+        cuts = []
+        monkeypatch.setattr(
+            "mjswan.cloud.publish.cut",
+            lambda name, data: cuts.append(name) or blob.cut(name, data),
+        )
+        with pytest.raises(PublishError, match="scenes unpacked"):
+            plan_publish(dist)
+        # The three other files, then entries only up to the cap, not all 100.
+        assert len(cuts) <= 3 + 1000 // 50
 
     def test_a_piece_two_files_share_counts_once(self, tmp_path: Path, monkeypatch):
         dist = _make_dist(tmp_path)
@@ -365,7 +385,7 @@ class TestPlanPublish:
         monkeypatch.setattr("mjswan.cloud.publish.MAX_TOTAL_BYTES", 119)
         plan_publish(dist)
         monkeypatch.setattr("mjswan.cloud.publish.MAX_PIECES", 4)
-        with pytest.raises(PublishError, match="5 pieces"):
+        with pytest.raises(PublishError, match="over 4 pieces"):
             plan_publish(dist)
 
     def test_an_archive_is_held_to_the_cap_entry_by_entry(
@@ -830,10 +850,13 @@ class TestPublishDist:
         assert "custom-TS" in str(exc.value)
         assert exc.value.file == "policy.json"
 
-    def test_commit_missing_id(self, tmp_path: Path):
+    @pytest.mark.parametrize(
+        "body", [{}, {"id": 7}, {"id": "[link=https://example.invalid]x"}]
+    )
+    def test_commit_without_a_valid_id(self, tmp_path: Path, body):
         dist = _make_dist(tmp_path)
-        transport = FakeTransport(commit_body={})
-        with pytest.raises(PublishError, match="commit response missing id"):
+        transport = FakeTransport(commit_body=body)
+        with pytest.raises(PublishError, match="commit response has no valid id"):
             publish_dist(dist, token="tok", transport=transport)
 
     def test_failed_put_raises(self, tmp_path: Path):
@@ -1086,6 +1109,24 @@ class TestSkins:
         assert seen == [
             f"{self.SKIN}: its VRM license allows no commercial use (Sample by mjswan (https://vrm.dev/licenses/1.0/))."
         ]
+
+    def test_a_vrm_s_text_reaches_the_callbacks_without_control_characters(
+        self, tmp_path: Path
+    ):
+        meta = {
+            "authors": ["Eve\x1b]0;SPOOFED\x07\x9b"],
+            "commercialUsage": "personalNonProfit",
+        }
+        seen: list[str] = []
+        publish_dist(
+            self._dist(tmp_path, **meta),
+            token="tok",
+            transport=FakeTransport(),
+            on_progress=seen.append,
+            on_warning=seen.append,
+        )
+        said = "".join(seen)
+        assert "Eve]0;SPOOFED" in said and "\x1b" not in said and "\x9b" not in said
 
     def test_an_author_only_vrm_goes_only_on_the_publishers_word(self, tmp_path: Path):
         dist = self._dist(tmp_path, avatarPermission="onlyAuthor")

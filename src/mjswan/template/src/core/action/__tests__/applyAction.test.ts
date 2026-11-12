@@ -394,6 +394,25 @@ describe('stepPhysics', () => {
     expect(run([[0, 1], [1, 3], [3, 4]])).toEqual(run([[0, 4]]));
     expect(run([[0, 4]]).map((v) => Number(v.toFixed(4)))).toEqual([0.1, 0.2, 0.3, 0.4]);
   });
+
+  it("stops at MuJoCo's own reset, which it reads as the time going back", () => {
+    const data = { ...fakeData(0), time: 1 } as unknown as MjData & { time: number };
+    let stepped = 0;
+    const after: number[] = [];
+    const mujoco = {
+      mj_step: () => {
+        stepped++;
+        // The second step diverges: mj_step zeroes the data, time included.
+        data.time = stepped === 2 ? 0 : data.time + 0.002;
+      },
+    };
+    const reset = stepPhysics(mujoco as never, {} as never, data, [], 4, undefined, () => after.push(stepped));
+
+    expect(reset).toBe(true);
+    expect(stepped).toBe(2);
+    expect(after).toEqual([1]);
+    expect(stepPhysics(mujoco as never, {} as never, data, [], 2)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

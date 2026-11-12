@@ -1,15 +1,9 @@
 /**
  * Writing `xfrc_applied` rows. A row acts at the body's centre of mass (`xipos`), not its
  * frame origin (`xpos`), so every moment is taken about `xipos`. The pull is MuJoCo's own
- * `mjv_applyPerturbForce`, the drag `simulate` uses.
+ * `mjv_applyPerturbForce` with Studio's `localmass`, so it drags as MuJoCo Studio does.
  */
 import type { MainModule, MjData, MjModel, MjvPerturb } from 'mujoco';
-
-/**
- * The stiffness hard-coded in `mjv_applyPerturbForce`, which applies
- * `100 * localmass * displacement` newtons. The test pins it against the WASM build.
- */
-export const MJV_PERTURB_STIFFNESS = 100;
 
 export interface DragPull {
   bodyId: number;
@@ -17,13 +11,46 @@ export interface DragPull {
   localPoint: readonly [number, number, number];
   /** Where the pointer wants that point to be: world frame, MuJoCo axes. */
   targetPoint: readonly [number, number, number];
-  /** Newtons per metre of displacement between the two. */
-  forceScale: number;
+  /** The grab point's effective mass, from `perturbMass`. */
+  localmass: number;
+}
+
+type Buffer = { GetView(): ArrayLike<number>; delete(): void };
+
+/**
+ * The grab point's mean effective mass, `3 / tr(J M^-1 J^T)`: what Studio's `InitPerturb`
+ * stores in `localmass` when a drag starts. The spring and its damping scale with it, which
+ * keeps the held force stable for a light body and a heavy one alike.
+ */
+export function perturbMass(
+  mujoco: MainModule,
+  mjModel: MjModel,
+  mjData: MjData,
+  bodyId: number,
+  worldPoint: readonly [number, number, number],
+): number {
+  // The binding writes an out parameter back only into one of its own buffers.
+  const { DoubleBuffer } = mujoco as unknown as { DoubleBuffer: new (size: number) => Buffer };
+  const jac = new DoubleBuffer(3 * mjModel.nv);
+  const solved = new DoubleBuffer(3 * mjModel.nv);
+  try {
+    mujoco.mj_jac(mjModel, mjData, jac, null, [worldPoint[0], worldPoint[1], worldPoint[2]], bodyId);
+    const j = jac.GetView();
+    mujoco.mj_solveM(mjModel, mjData, solved, j as number[]);
+    const x = solved.GetView();
+    let invmass = 0;
+    for (let i = 0; i < j.length; i++) invmass += j[i] * x[i];
+    return invmass === 0 ? 1 : 3 / Math.max(invmass, 1e-15);
+  } finally {
+    jac.delete();
+    solved.delete();
+  }
 }
 
 /**
- * Write `pull` into `mjData.xfrc_applied`, replacing whatever that body's row held.
- * `perturb` is reused across calls: it is an embind handle, not a value.
+ * Write `pull` into `mjData.xfrc_applied`, replacing whatever that body's row held: a spring
+ * of `vis.map.stiffness * localmass` newtons per metre, damped. `perturb` is reused across
+ * calls: it is an embind handle, not a value.
  */
 export function applyDragPull(
   mujoco: MainModule,
@@ -34,9 +61,7 @@ export function applyDragPull(
 ): void {
   perturb.select = pull.bodyId;
   perturb.active = mujoco.mjtPertBit.mjPERT_TRANSLATE.value;
-  // `localmass` carries the viewer's N/m, not the body's mass as in `simulate`, where a
-  // heavy link drags like a light one.
-  perturb.localmass = pull.forceScale / MJV_PERTURB_STIFFNESS;
+  perturb.localmass = pull.localmass;
   perturb.localpos.set(pull.localPoint);
   perturb.refselpos.set(pull.targetPoint);
   mujoco.mjv_applyPerturbForce(mjModel, mjData, perturb);

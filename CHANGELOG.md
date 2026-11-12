@@ -457,6 +457,23 @@ shortcuts.
   observation waits for a traced command's update to land, which the old loop's sleep
   between control steps used to cover.
 
+- **Pull drags as MuJoCo Studio does; its slider is now `stiffness`, not `spring`.** The
+  spring is `vis.map.stiffness` times the grab point's effective mass, taken when the drag
+  starts, with MuJoCo's own damping. A fixed 100 N/m spring with a 10 N·s/m damper held
+  over a 20 ms control step threw any grab point lighter than about 100 g into oscillation
+  until MuJoCo reset the scene; scaling both with the mass keeps the pull stable for a 3 g
+  ball and a robot alike. The **Stiffness** slider (1/s², up to 2500) starts at the
+  model's `<visual><map stiffness>`, 100 unless the model sets it, and is capped at
+  1/control_dt². `setParam('pull', 'spring', …)` now warns and does nothing.
+- **Reset runs as mjlab's viewer runs it.** `engine.reset()`, the Reset button and key, a
+  motion loop and a motion change now reset at the next step boundary instead of in the
+  middle of one, so a policy's inference can no longer land on the reset state, and they
+  reset the terminations too, as `env.reset()` does. Paused, the reset still happens at
+  once.
+- **A scene without a policy starts from a reset.** A load, a model rebuild and
+  `setPolicy(null)` now put the sim at keyframe 0, as mjlab's env starts from `env.reset()`,
+  instead of at the qpos0 a fresh `MjData` holds. `setPolicy(null)` also drops the removed
+  policy's `initial_qpos`, which a later Reset used to apply.
 - **`mjswan publish` sends only what mjswan Cloud does not hold yet.** Cloud keeps every
   file once, under the SHA-256 of its bytes (mjswan-cloud ADR 0017), so `publish` now sends
   a file map: each scene's `.mjz` as its entries, each `.onnx` cut before every tensor of
@@ -966,6 +983,12 @@ shortcuts.
   only while no other file shares it; otherwise each takes the shortest tail of its path
   that tells them apart (`024_bowl/google_64k/meshes/textured.obj`).
 
+- **A simulation that blows up gets mjswan's reset, not just MuJoCo's.** When a step
+  produced a bad qpos, qvel or qacc, `mj_step` zeroed the data itself and the loop went on:
+  no keyframe or initial state, no `mode="reset"` events, the policy and its commands kept
+  their old episode, and a drag kept pulling. The loop now notices the time going back, as
+  Studio does, stops the step's remaining substeps and runs the full reset, as a
+  termination does.
 - **A tracking policy observes the reference frame mjlab gives it after a reset.** mjlab's
   `MotionCommand` writes a reset's start frame into the simulation, then steps one frame
   past it in the compute that follows every reset, so the first observation reads frame
@@ -1394,6 +1417,13 @@ shortcuts.
   `.swn` someone else made could print a link that reads as one URL and opens another,
   or set the terminal's title. Every such value now loses its control characters and has
   its markup escaped.
+- **The CLI's inert text covers the values it missed.** `skin map` printed a VRM's bone
+  names as markup, `serve` a `.swn`'s file name with its control characters, and `info`
+  escaped a document's version and format separately, so together they could form a tag.
+  `publish_dist` passed file names and VRM authors unchanged to `on_progress` and
+  `on_warning`, which the Python API prints, and built the page URL from any id the
+  server returned. These values now lose their control characters, the CLI escapes their
+  markup, and an id that is not a short URL-safe token is refused.
 - **`mjswan skin map -o` writes the skin file's name as a string.** The draft's docstring
   held the command line verbatim between triple quotes, so a file whose name closed them
   put code into the draft, which ran when the draft was. The docstring is now a quoted
@@ -1425,6 +1455,10 @@ shortcuts.
   installed and ran whatever eslint the registry served last, install scripts included.
   The hook now runs `src/mjswan/template/node_modules/.bin/eslint` and fails until
   `npm ci` has run in the template.
+- **The Python pre-commit hooks run the tools `uv.lock` pins.** The whitespace and ruff
+  hooks came from remote hook repositories, which pre-commit installed with pip from
+  unpinned requirements, outside the lock and its three-day cutoff. They now run from
+  `.venv` like `pytest-fast`, so run `make sync` before the first commit.
 - **`mjswan serve` answers only for files inside the app directory.** A symbolic link in
   a served directory someone else supplied was followed, so any local client of the
   server could read the file or folder it named, and every directory without an
@@ -1434,6 +1468,12 @@ shortcuts.
 - **`mjswan publish` refuses a symbolic link in the build** before anything is uploaded.
   It followed one, so a link in a dist someone else handed over uploaded the file it
   named to mjswan Cloud.
+- **Every third-party license text a build credits reaches publish's license check.** Two
+  components differing only by case (`Robot_X`, `robot_x`) shared one file in `licenses/`
+  on a case-insensitive disk, and a model directory's second license file could get a
+  name over 64 characters, which publish does not read as a license file. Either way a
+  credited text, a blocked one included, went unchecked. Such names are now numbered like
+  any other shared name, within 64 characters.
 - **`save_document()` packs only the build's own files.** A manifest project id such as
   `..` packed the files around the build directory, and a symbolic link packed what it
   named. It now refuses an id `name2id` could not have written and any symbolic link,
@@ -1482,3 +1522,10 @@ shortcuts.
   that name, chose what was published. They now check out the tagged commit by SHA; the
   release job stops if the tag already names another commit, and no GitHub Release is
   made if the tag moved meanwhile.
+- **A file someone else made no longer costs `info`, `serve`, `publish` or `skin map`
+  unbounded memory or time.** A `.swn` was unpacked however far it inflated, `publish`
+  held every piece before checking mjswan Cloud's caps, and `skin map` took minutes on a
+  small `.glb` with one wide node. A `.swn` declaring over 2 GiB, over 20000 files or a
+  compression no build writes is now refused before unpacking, `publish` stops at a cap as
+  pieces land, and `skin map` skips nodes with over 64 children and tests each node
+  against the floor once.

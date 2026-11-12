@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ..license import LICENSES_DIR, copyright_line, identify_license, restriction_label
+from ..license import (
+    LICENSES_DIR,
+    copyright_line,
+    identify_license,
+    is_license_file_path,
+    restriction_label,
+)
 from ..license.vrm import vrm_license
 
 if TYPE_CHECKING:
@@ -24,7 +30,9 @@ LicenseNames = dict[tuple[str, bytes], str]
 def license_names(project: ProjectConfig) -> LicenseNames:
     """The name each third-party text is written under: its component's, once per text.
     When two texts share a name, the first in scene order keeps it and the others take
-    ``-2``, ``-3``, … in scene order, passing over a name another component has."""
+    ``-2``, ``-3``, … in scene order, passing over a name another component has. A name
+    equal to an earlier one but for case (one file on a case-insensitive disk), or one
+    publish would not read as a license file, is numbered too."""
     variants: dict[str, list[bytes]] = {}
     for scene in project.scenes:
         for attribution in scene.attributions:
@@ -32,16 +40,20 @@ def license_names(project: ProjectConfig) -> LicenseNames:
                 texts = variants.setdefault(name, [])
                 if text not in texts:
                     texts.append(text)
-    taken = set(variants)
+    reserved = {name.casefold() for name in variants}
+    used: set[str] = set()
     names: LicenseNames = {}
     for name, texts in variants.items():
-        names[(name, texts[0])] = name
         n = 2
-        for text in texts[1:]:
-            while (numbered := _numbered(name, n)) in taken:
-                n += 1
-            taken.add(numbered)
-            names[(name, text)] = numbered
+        for text in texts:
+            out = name
+            if out.casefold() in used or not is_license_file_path(
+                f"p/{LICENSES_DIR}/{out}"
+            ):
+                while (out := _numbered(name, n)).casefold() in reserved | used:
+                    n += 1
+            used.add(out.casefold())
+            names[(name, text)] = out
     return names
 
 

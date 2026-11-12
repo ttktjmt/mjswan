@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { ControlStep } from '../controlStep';
 
-/** A control step of `decimation` physics steps, logging every hook into `calls`. */
-function recording(decimation: number): { step: ControlStep; calls: string[] } {
+/**
+ * A control step of `decimation` physics steps, logging every hook into `calls`; the physics
+ * reports a divergence on any slice that reaches `divergeAt`.
+ */
+function recording(decimation: number, divergeAt = Infinity): { step: ControlStep; calls: string[] } {
   const calls: string[] = [];
   const step = new ControlStep({
     decimation: () => decimation,
@@ -12,9 +15,10 @@ function recording(decimation: number): { step: ControlStep; calls: string[] } {
     },
     physics: (from, to) => {
       calls.push(`physics ${from}-${to}`);
+      return to > divergeAt;
     },
-    end: async () => {
-      calls.push('end');
+    end: async (diverged) => {
+      calls.push(diverged ? 'end diverged' : 'end');
     },
     snapshot: () => {
       calls.push('snapshot');
@@ -57,6 +61,12 @@ describe('ControlStep', () => {
     step.restart();
     await step.spend(5, 5, NO_DEADLINE);
     expect(calls).toEqual(['begin', 'physics 0-2', 'snapshot', 'begin', 'physics 0-1', 'snapshot']);
+  });
+
+  it('ends a control step early when the physics resets itself', async () => {
+    const { step, calls } = recording(20, 2);
+    expect(await step.spend(25, 5, NO_DEADLINE)).toBe(0);
+    expect(calls).toEqual(['begin', 'physics 0-5', 'end diverged']);
   });
 
   it('keeps one step of budget once past the deadline', async () => {

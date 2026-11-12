@@ -304,7 +304,7 @@ export class mjswanRuntime {
     decimation: () => this.decimation,
     begin: () => this.beginControlStep(),
     physics: (from, to) => this.executeSimulationSteps(from, to),
-    end: () => this.endControlStep(),
+    end: (diverged) => this.endControlStep(diverged),
     snapshot: () => this.updateCachedState(),
   });
   /** Null for a policy-less scene. */
@@ -331,6 +331,8 @@ export class mjswanRuntime {
   private policyStateBuilder: PolicyStateBuilder | null;
   private initialQpos: number[] | null;
   private initialQvel: number[] | null;
+  /** A UI reset waiting for the step boundary (`resetSimulation`). */
+  private resetRequested = false;
   private actionManager: ActionManager | null;
   private onnxModule: OnnxModule | null;
   private onnxInputDict: Record<string, ort.Tensor> | null;
@@ -685,13 +687,25 @@ export class mjswanRuntime {
     console.log('[mjswanRuntime] Commands loaded from policy config:', Object.keys(commands));
   }
 
-  /** Reset the simulation state; callable from the UI via the CommandManager. */
+  /**
+   * Reset the simulation; callable from the UI via the CommandManager. Deferred to the next
+   * step boundary, as mjlab's viewer does, so it never lands mid-inference; at once when paused.
+   */
   resetSimulation(): void {
-    // Sync by contract, so the reset terms land a microtask late; the step loop awaits.
-    void this.resetSimulationState().catch((error) => {
-      console.warn('[mjswanRuntime] reset terms failed:', error);
-    });
+    this.resetRequested = true;
+    if (!this.running) void this.applyRequestedReset();
     console.log('[mjswanRuntime] Simulation reset');
+  }
+
+  /** mjlab's `env.reset()`: the whole `_reset_idx`, terminations included. */
+  private async applyRequestedReset(): Promise<void> {
+    this.resetRequested = false;
+    try {
+      await this.resetSimulationState();
+    } catch (error) {
+      console.warn('[mjswanRuntime] reset terms failed:', error);
+    }
+    this.terminationManager?.reset();
   }
 
   async setSelectedMotion(motionName: string | null): Promise<boolean> {
@@ -1394,6 +1408,7 @@ export class mjswanRuntime {
    * before the physics.
    */
   private async beginControlStep(): Promise<void> {
+    if (this.resetRequested) await this.applyRequestedReset();
     if (!this.policyRunner || !this.policyStateBuilder) return;
     // A traced command's update lands asynchronously; mjlab's step has it before the observation.
     await this.commandManager.settled();
@@ -1404,29 +1419,29 @@ export class mjswanRuntime {
   }
 
   /** The part of a control step after the physics. */
-  private async endControlStep(): Promise<void> {
+  private async endControlStep(diverged: boolean): Promise<void> {
     if (!this.mjModel || !this.mjData) return;
     const target = this.timestep * this.decimation;
     this.episodeLength += 1;
 
     // Pre-forward, as in mjlab: derived state lags by one substep, consistently.
-    let autoReset = false;
+    // mj_step's own reset lands on qpos0 with no reset events: mjswan's full reset follows.
+    let autoReset = diverged;
     // Held across the awaits below: `setPolicy` can null the field mid-step.
     const terminations = this.terminationManager;
-    if (terminations && this.policyStateBuilder) {
+    if (!autoReset && terminations && this.policyStateBuilder) {
       const postState = this.policyStateBuilder.build();
-      const result = await terminations.evaluate(postState);
-      if (result.done) {
-        autoReset = true;
-        // Awaited so the writes precede the forward; caught so a failure costs a reset.
-        try {
-          await this.resetSimulationState({ forward: false });
-        } catch (error) {
-          console.warn('[mjswanRuntime] reset terms failed:', error);
-        }
-        // Last, as in mjlab's `_reset_idx`.
-        terminations.reset();
+      autoReset = (await terminations.evaluate(postState)).done;
+    }
+    if (autoReset) {
+      // Awaited so the writes precede the forward; caught so a failure costs a reset.
+      try {
+        await this.resetSimulationState({ forward: false });
+      } catch (error) {
+        console.warn('[mjswanRuntime] reset terms failed:', error);
       }
+      // Last, as in mjlab's `_reset_idx`.
+      terminations?.reset();
     }
 
     // The one forward: clears the loop's staleness and publishes a reset's writes.
@@ -1486,10 +1501,11 @@ export class mjswanRuntime {
     this.termRng = new SeededRng(this.termSeed);
 
     if (!policy) {
-      if (restored && this.mjModel && this.mjData) {
-        this.mujoco.mj_forward(this.mjModel, this.mjData);
-        this.updateCachedState();
-      }
+      // Start from a reset (keyframe 0, not qpos0), as a built mjlab env does, without a
+      // removed policy's initial state.
+      this.initialQpos = null;
+      this.initialQvel = null;
+      await this.resetSimulationState();
       return;
     }
 
@@ -2068,10 +2084,13 @@ export class mjswanRuntime {
     }
   }
 
-  /** Physics steps `from` up to `to` of the control step under way. */
-  private executeSimulationSteps(from: number, to: number): void {
+  /**
+   * Physics steps `from` up to `to` of the control step under way; true when `mj_step` reset
+   * the data itself.
+   */
+  private executeSimulationSteps(from: number, to: number): boolean {
     if (!this.mjModel || !this.mjData) {
-      return;
+      return false;
     }
     if (from === 0) {
       // Viewer-only: pointer modes and tracked hands, not part of the MDP.
@@ -2079,7 +2098,7 @@ export class mjswanRuntime {
       if (this.modelHasHands) this.handMocap.update(this.mjModel, this.mjData);
     }
 
-    stepPhysics(
+    return stepPhysics(
       this.mujoco,
       this.mjModel,
       this.mjData,

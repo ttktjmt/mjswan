@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import unicodedata
 import urllib.error
 import urllib.request
 import warnings
@@ -83,6 +85,9 @@ DEFAULT_WEB_BASE: str = "https://mjswan.com"
 TOKEN_ENV_VAR: str = "MJSWAN_TOKEN"
 API_BASE_ENV_VAR: str = "MJSWAN_API_BASE"
 WEB_BASE_ENV_VAR: str = "MJSWAN_WEB_BASE"
+
+#: What a published simulation's id may be, before a URL is built from it.
+_SIM_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
 
 def resolve_api_base(api_base: str | None) -> str:
@@ -406,18 +411,32 @@ def _validate_plan(plan: PublishPlan) -> None:
 
 
 def _map_files(plan: PublishPlan) -> None:
-    """Fill ``plan.file_map`` and ``plan.pieces``, and hold the build to the caps the
-    platform counts on them."""
+    """Fill ``plan.file_map`` and ``plan.pieces``, checking the platform's caps as each
+    piece lands so an oversized build is never held whole."""
     sizes: dict[str, int] = {}
+    total = 0
 
     def mapped(label: str, name: str, data: bytes) -> dict:
+        nonlocal total
         _check_size(label, len(data))
         entry = cut(name, data)
         at = 0
         for sha, size in entry.get("chunks", [[entry["sha256"], entry["size"]]]):
-            plan.pieces[sha] = data[at : at + size]
-            sizes[sha] = size
+            if sha not in sizes:
+                sizes[sha] = size
+                total += size
+                plan.pieces[sha] = data[at : at + size]
             at += size
+        if len(sizes) > MAX_PIECES:
+            raise PublishError(
+                f"This build is over {MAX_PIECES} pieces, the most mjswan Cloud takes. "
+                "Reduce the number of scenes/policies/motions in it."
+            )
+        if total > MAX_TOTAL_BYTES:
+            raise PublishError(
+                f"This build holds over {MAX_TOTAL_BYTES // (1024 * 1024)}MB, scenes "
+                "unpacked, the most mjswan Cloud takes."
+            )
         return entry
 
     for f in plan.files:
@@ -432,18 +451,6 @@ def _map_files(plan: PublishPlan) -> None:
             plan.file_map["files"][path] = {"entries": _entries(path, f.source, mapped)}
         else:
             plan.file_map["files"][path] = mapped(path, path, f.source.read_bytes())
-
-    if len(sizes) > MAX_PIECES:
-        raise PublishError(
-            f"This build is {len(sizes)} pieces, and mjswan Cloud takes at most "
-            f"{MAX_PIECES}. Reduce the number of scenes/policies/motions in it."
-        )
-    total = sum(sizes.values())
-    if total > MAX_TOTAL_BYTES:
-        raise PublishError(
-            f"This build holds {total} bytes, scenes unpacked, which exceeds the "
-            f"{MAX_TOTAL_BYTES // (1024 * 1024)}MB limit."
-        )
 
 
 def _entries(path: str, source: Path, mapped: Callable[[str, str, bytes], dict]):
@@ -563,10 +570,17 @@ def publish_dist(
 
     transport = transport or HttpTransport()
     base = resolve_api_base(api_base)
-    notify = on_progress or (lambda _msg: None)
-    warn = on_warning or (
-        lambda msg: warnings.warn(msg, category=RuntimeWarning, stacklevel=3)
+    report = on_progress or (lambda _msg: None)
+    caution = on_warning or (
+        lambda msg: warnings.warn(msg, category=RuntimeWarning, stacklevel=4)
     )
+
+    # Messages carry names the build's maker chose: file names, VRM authors.
+    def notify(msg: str) -> None:
+        report(_printable(msg))
+
+    def warn(msg: str) -> None:
+        caution(_printable(msg))
 
     # A document uploads exactly the file set its directory would, so the server never
     # needs to know it existed (ADR 0006 §8). The upload runs inside the context: a
@@ -659,8 +673,8 @@ def publish_dist(
             _raise_for_status(commit_resp, "commit")
             commit = _parse_json(commit_resp, "commit")
             sim_id = commit.get("id")
-            if not sim_id:
-                raise PublishError("commit response missing id.")
+            if not isinstance(sim_id, str) or not _SIM_ID.fullmatch(sim_id):
+                raise PublishError("commit response has no valid id.")
 
             return PublishResult(
                 id=sim_id, sim_id=session.get("sim_id", sim_id), upload_id=upload_id
@@ -668,6 +682,11 @@ def publish_dist(
     except DocumentError as exc:
         # Only `unpack_document` raises this; the upload itself speaks PublishError.
         raise PublishError(str(exc), file=Path(dist_dir).name) from exc
+
+
+def _printable(text: str) -> str:
+    """*text* without its control characters, newlines kept."""
+    return "".join(c for c in text if c == "\n" or unicodedata.category(c) != "Cc")
 
 
 def _send(

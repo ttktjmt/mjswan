@@ -7,10 +7,10 @@ export interface ControlStepHooks {
   decimation(): number;
   /** Observation, inference and the action's targets, before the first physics step. */
   begin(): Promise<void>;
-  /** Physics steps `from` up to `to` of this control step. */
-  physics(from: number, to: number): void;
+  /** Physics steps `from` up to `to`; true when `mj_step` reset the data, ending the step. */
+  physics(from: number, to: number): boolean;
   /** Terminations, the one forward, commands and events, after the last physics step. */
-  end(): Promise<void>;
+  end(diverged: boolean): Promise<void>;
   /** The poses the renderer draws, taken in the middle of a control step. */
   snapshot(): void;
 }
@@ -44,11 +44,11 @@ export class ControlStep {
       const from = this.substep;
       const decimation = this.hooks.decimation();
       const to = Math.min(decimation, from + Math.floor(budget / stepMs));
-      this.hooks.physics(from, to);
+      const diverged = this.hooks.physics(from, to);
       budget -= (to - from) * stepMs;
-      midStep = to < decimation;
+      midStep = !diverged && to < decimation;
       this.substep = midStep ? to : 0;
-      if (!midStep) await this.hooks.end();
+      if (!midStep) await this.hooks.end(diverged);
       if (now() > deadline) {
         budget = Math.min(budget, stepMs);
         break;
