@@ -144,6 +144,7 @@ FakeMjlabSceneEntityCfg = _make_mjlab_class(
 
 FakeMjlabMotionCommandCfg = _make_mjlab_class(
     "MotionCommandCfg",
+    motion_file="",
     anchor_body_name="torso_link",
     body_names=("pelvis", "torso_link"),
     entity_name="robot",

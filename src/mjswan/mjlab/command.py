@@ -31,6 +31,21 @@ def _adapt_command_cfg(term: Any) -> MjswanCommandTermConfig:
             f"Register one with mjswan.register_command()."
         )
 
+    from ..envs.mdp.commands import _MOTION_COMMAND_BINDING
+
+    if spec is _MOTION_COMMAND_BINDING:
+        required = ("motion_file", "anchor_body_name", "body_names")
+        missing = [name for name in required if not hasattr(term, name)]
+        if missing:
+            identity = f"{type(term).__module__}.{type(term).__qualname__}"
+            raise TypeError(
+                f"The builtin TrackingCommand binding cannot adapt {identity}: "
+                f"missing {', '.join(missing)}. Sharing mjlab's config class name "
+                "does not establish the same motion/reference contract. Register "
+                f"an explicit custom binding with mjswan.register_command({class_name!r}, ...) "
+                "that implements this command's own semantics."
+            )
+
     if spec.is_onnx_traced:
         assert spec.state_fields is not None and spec.command_field is not None
         ui = spec.ui(term) if callable(spec.ui) else spec.ui
@@ -65,7 +80,11 @@ def _adapt_command_cfg(term: Any) -> MjswanCommandTermConfig:
 def adapt_commands(
     commands: Mapping[str, Any] | None,
 ) -> dict[str, MjswanCommandTermConfig] | None:
-    """Adapt command configs, converting mjlab types if detected."""
+    """Adapt command configs, converting mjlab types if detected.
+
+    Missing mappings warn and skip; an incompatible builtin motion contract raises
+    rather than silently dropping the command. A custom registration overrides it.
+    """
 
     if commands is None:
         return None
