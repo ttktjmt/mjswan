@@ -412,8 +412,8 @@ export function clampActions(action: Float32Array, bound: number | null): void {
 
 /**
  * `decimation` substeps, re-applying the processed action each time: a motor's PD reads live
- * state. Returns true, skipping the substeps left, when `mj_step` reset the data itself on a
- * bad qpos, qvel or qacc. Studio's `StepControl` detects it the same way: the time went back.
+ * state. Returns true, skipping the rest, when `mj_step` reset a bad state itself, seen as the
+ * time going back (as Studio's `StepControl` checks).
  */
 export function stepPhysics(
   mujoco: { mj_step(model: MjModel, data: MjData): void },

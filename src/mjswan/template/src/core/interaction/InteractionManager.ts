@@ -146,7 +146,7 @@ export class InteractionManager {
    * or a queued shove would land on whichever body inherited the id.
    */
   onSceneLoaded(): void {
-    // Each model brings its own spring, as Studio reads it.
+    // Start at the model's `<visual><map stiffness>`, as Studio uses it.
     const { mjModel } = this.readSim();
     if (mjModel) this.setParam('pull', 'stiffness', mjModel.vis.map.stiffness);
     this.pointer.release();

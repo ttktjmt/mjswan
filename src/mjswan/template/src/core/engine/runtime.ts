@@ -662,9 +662,8 @@ export class mjswanRuntime {
   }
 
   /**
-   * Reset the simulation state; callable from the UI via the CommandManager. As mjlab's
-   * viewer calls `env.reset()`: between two steps, never inside one, so a reset cannot land
-   * while the policy is mid-inference. Paused, nothing steps, so it resets at once.
+   * Reset the simulation; callable from the UI via the CommandManager. Deferred to the next
+   * step boundary, as mjlab's viewer does, so it never lands mid-inference; at once when paused.
    */
   resetSimulation(): void {
     this.resetRequested = true;
@@ -1368,8 +1367,7 @@ export class mjswanRuntime {
           const fresh = await this.runOnnxInference(obs);
           await this.processActions(fresh);
         }
-        // MuJoCo's own reset only zeroed the data: no keyframe, no reset events, the drag
-        // still held. It gets mjswan's whole reset, as Studio runs its `ResetPhysics`.
+        // mj_step's own reset lands on qpos0 with no reset events: mjswan's full reset follows.
         const diverged = this.executeSimulationSteps();
         this.episodeLength += 1;
 
@@ -1459,8 +1457,8 @@ export class mjswanRuntime {
     this.termRng = new SeededRng(this.termSeed);
 
     if (!policy) {
-      // A scene with no MDP starts as mjlab's env does once built, from a reset: keyframe 0,
-      // not the qpos0 a fresh MjData holds. A removed policy's initial state goes with it.
+      // Start from a reset (keyframe 0, not qpos0), as a built mjlab env does, without a
+      // removed policy's initial state.
       this.initialQpos = null;
       this.initialQvel = null;
       await this.resetSimulationState();

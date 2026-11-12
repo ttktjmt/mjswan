@@ -126,7 +126,7 @@ describe('applyDragPull against the real WASM', () => {
     }
   });
 
-  /** A 2 cm cube of water, 8 g: light enough that the old fixed spring threw it apart. */
+  /** A 2 cm cube of water, 8 g: light enough to diverge under a spring not scaled by mass. */
   const SMALL_CUBE = `<mujoco>
     <option timestep="0.002" gravity="0 0 0"/>
     <worldbody>

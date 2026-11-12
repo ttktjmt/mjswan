@@ -36,8 +36,7 @@ export class PullMode implements InteractionMode {
     if (!gesture || this.bodyId <= 0) return;
     const { mujoco, mjModel, mjData, controlDt } = ctx.sim();
     if (!mjModel || !mjData) return;
-    // Held for a control step, the spring overshoots past omega * dt = 1: a slower policy
-    // gets a softer cap than the slider's.
+    // Held for a control step, the spring overshoots once omega * dt > 1.
     mjModel.vis.map.stiffness = Math.min(ctx.params().stiffness, 1 / (controlDt * controlDt));
     const force = ctx.wrench.pull(mujoco, mjModel, mjData, ctx.perturb(), {
       bodyId: this.bodyId,

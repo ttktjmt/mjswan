@@ -40,9 +40,8 @@ export const INTERACTION_MODES: readonly InteractionModeSpec[] = [
     id: 'pull',
     label: 'Pull',
     params: [
-      // `vis.map.stiffness`, which a scene load sets from the model as Studio reads it: the
-      // spring is this times the grab point's effective mass. The hard limit stops where the
-      // force held for a 20 ms control step starts to overshoot, not ten times past the slider.
+      // `vis.map.stiffness`, set from the model on load: the spring is this times the grab
+      // point's effective mass. The hard limit is where a force held for 20 ms overshoots.
       {
         name: 'stiffness', label: 'Stiffness', unit: '1/s²', type: 'slider',
         min: 0, max: 2500, softMin: 0, softMax: 500, step: 10, default: 100,
