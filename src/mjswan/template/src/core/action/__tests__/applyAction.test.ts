@@ -377,6 +377,25 @@ describe('stepPhysics', () => {
     // ctrl = 1 * (1 - qpos); qpos advances 0.1 per substep, so the values must move.
     expect(seen.map(v => Number(v.toFixed(3)))).toEqual([1, 0.9, 0.8]);
   });
+
+  it("stops at MuJoCo's own reset, which it reads as the time going back", () => {
+    const data = { ...fakeData(0), time: 1 } as unknown as MjData & { time: number };
+    let stepped = 0;
+    const after: number[] = [];
+    const mujoco = {
+      mj_step: () => {
+        stepped++;
+        // The second step diverges: mj_step zeroes the data, time included.
+        data.time = stepped === 2 ? 0 : data.time + 0.002;
+      },
+    };
+    const reset = stepPhysics(mujoco as never, {} as never, data, [], 4, undefined, () => after.push(stepped));
+
+    expect(reset).toBe(true);
+    expect(stepped).toBe(2);
+    expect(after).toEqual([1]);
+    expect(stepPhysics(mujoco as never, {} as never, data, [], 2)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

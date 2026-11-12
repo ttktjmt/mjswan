@@ -83,7 +83,7 @@ call order, and `dispose` waits for the one running.
 | `setMotion` | `(name: string \| null) => Promise<boolean>` | Live. Resolves to whether the name was accepted. |
 | `setSkin` | `(input: SkinInput \| null) => Promise<void>` | Live; replaces the skin on show, the model untouched. A file that fails to load leaves the scene without one. |
 | `calibrateSplat` | `(transform: SplatTransform) => void` | Live splat placement, for a calibration UI. |
-| `play` / `pause` / `reset` | `() => void` | Playback. |
+| `play` / `pause` / `reset` | `() => void` | Playback. `reset` runs at the next step boundary, as mjlab's viewer calls `env.reset()` (at once while paused): keyframe 0, the reset events, and every manager's reset, terminations included. |
 | `camera` | `CameraControls` | `set(partial)`, `get()`, `frame()`, and `setTracking(enabled)`, mjlab's **Track camera** (follow the tracked body). A `CameraView`'s `azimuth` and `elevation` are MuJoCo's: the direction the camera looks. |
 | `commands` | `CommandControls` | `set(id, value)`, `trigger(id)`. |
 | `debugVis` | `DebugVisControls` | `set(id, enabled)` for one drawing, `setEnabled(enabled)` for mjlab's Debug Viz **Enabled** over all of them. See [Debug Viz](#debug-viz). |
@@ -163,9 +163,15 @@ The viewer starts in Pull.
 | Mode | `id` | Does | Parameters |
 |---|---|---|---|
 | View | `view` | Nothing: a press on a body orbits the camera, as one on the sky does. For a scene whose bodies fill the frame. | none |
-| Pull | `pull` | Drags a body toward the pointer on a spring while the press is held. The arrow thickens with the force. | `spring` (N/m, default 100) |
+| Pull | `pull` | Drags a body toward the pointer on a damped spring while the press is held, as MuJoCo Studio does. The arrow thickens with the force. | `stiffness` (1/s², default the model's) |
 | Push | `push` | Taps a body to shove it along the inward normal of the face that was hit. | `impulse` (N s, default 10) |
 | Grab | `weld` | Carries a body with the pointer; on release it keeps the speed the carry gave it. The cursor shows a closed hand while something is held. | `softness` (s, default 0.02), `torqueScale` (checkbox, default 1) |
+
+Pull's spring is Studio's: `vis.map.stiffness` times the grab point's effective mass, so a
+light body and a heavy one move alike for the same drag, and a light one cannot be shaken
+apart. `pull.stiffness` sets it; a scene load sets the slider to the model's `<visual><map
+stiffness>` (100 unless the model says otherwise). It is capped at 1/control_dt², where a
+force held for a control step starts to overshoot.
 
 Each `InteractionModeDescriptor` carries an `id`, a `label`, an `available` flag with a
 `reason` when it is false, and a `params` list. A parameter gives `name`, `label`, `unit`,
@@ -176,7 +182,7 @@ anything inside `min` / `max`, and a value past the slider pins its thumb at the
 
 | Parameter | Slider | Accepted |
 |---|---|---|
-| `pull.spring` | 0 to 200 | 0 to 2000 |
+| `pull.stiffness` | 0 to 500 | 0 to 2500 |
 | `push.impulse` | 0.1 to 50 | 0.1 to 500 |
 | `weld.softness` | 0.004 to 0.2 | the same |
 

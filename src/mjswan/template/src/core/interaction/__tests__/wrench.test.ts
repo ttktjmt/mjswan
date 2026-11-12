@@ -94,13 +94,13 @@ describe('InteractionWrench against the real WASM', () => {
         bodyId,
         localPoint: [0, 0, 0],
         targetPoint: target,
-        forceScale: 100,
+        localmass: 1,
       });
     };
     const applied = () =>
       Math.hypot(...Array.from(mjData.xfrc_applied.slice(bodyId * 6, bodyId * 6 + 3) as ArrayLike<number>));
 
-    // A spring: 100 N/m over 0.3 m, then over 5 m, uncapped.
+    // vis.map.stiffness (100) × localmass (1): 100 N/m over 0.3 m, then over 5 m, uncapped.
     expect(pull([0.3, 0, 1])).toBeCloseTo(30, 3);
     expect(pull([0.3, 0, 1])).toBeCloseTo(applied(), 9);
     expect(pull([5, 0, 1])).toBeCloseTo(500, 3);

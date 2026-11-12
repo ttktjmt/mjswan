@@ -408,6 +408,23 @@ shortcuts.
 
 ### Changed
 
+- **Pull drags as MuJoCo Studio does; its slider is now `stiffness`, not `spring`.** The
+  spring is `vis.map.stiffness` times the grab point's effective mass, taken when the drag
+  starts, with MuJoCo's own damping. A fixed 100 N/m spring with a 10 N·s/m damper held
+  over a 20 ms control step threw any grab point lighter than about 100 g into oscillation
+  until MuJoCo reset the scene; scaling both with the mass keeps the pull stable for a 3 g
+  ball and a robot alike. The **Stiffness** slider (1/s², up to 2500) starts at the
+  model's `<visual><map stiffness>`, 100 unless the model sets it, and is capped at
+  1/control_dt². `setParam('pull', 'spring', …)` now warns and does nothing.
+- **Reset runs as mjlab's viewer runs it.** `engine.reset()`, the Reset button and key, a
+  motion loop and a motion change now reset at the next step boundary instead of in the
+  middle of one, so a policy's inference can no longer land on the reset state, and they
+  reset the terminations too, as `env.reset()` does. Paused, the reset still happens at
+  once.
+- **A scene without a policy starts from a reset.** A load, a model rebuild and
+  `setPolicy(null)` now put the sim at keyframe 0, as mjlab's env starts from `env.reset()`,
+  instead of at the qpos0 a fresh `MjData` holds. `setPolicy(null)` also drops the removed
+  policy's `initial_qpos`, which a later Reset used to apply.
 - **`mjswan publish` sends only what mjswan Cloud does not hold yet.** Cloud keeps every
   file once, under the SHA-256 of its bytes (mjswan-cloud ADR 0017), so `publish` now sends
   a file map: each scene's `.mjz` as its entries, each `.onnx` cut before every tensor of
@@ -911,6 +928,12 @@ shortcuts.
 
 ### Fixed
 
+- **A simulation that blows up gets mjswan's reset, not just MuJoCo's.** When a step
+  produced a bad qpos, qvel or qacc, `mj_step` zeroed the data itself and the loop went on:
+  no keyframe or initial state, no `mode="reset"` events, the policy and its commands kept
+  their old episode, and a drag kept pulling. The loop now notices the time going back, as
+  Studio does, stops the step's remaining substeps and runs the full reset, as a
+  termination does.
 - **A tracking policy observes the reference frame mjlab gives it after a reset.** mjlab's
   `MotionCommand` writes a reset's start frame into the simulation, then steps one frame
   past it in the compute that follows every reset, so the first observation reads frame

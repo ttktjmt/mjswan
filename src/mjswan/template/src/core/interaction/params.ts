@@ -40,10 +40,11 @@ export const INTERACTION_MODES: readonly InteractionModeSpec[] = [
     id: 'pull',
     label: 'Pull',
     params: [
-      // Between the grab point and the pointer.
+      // `vis.map.stiffness`, set from the model on load: the spring is this times the grab
+      // point's effective mass. The hard limit is where a force held for 20 ms overshoots.
       {
-        name: 'spring', label: 'Spring', unit: 'N/m', type: 'slider',
-        min: 0, max: 2000, softMin: 0, softMax: 200, step: 1, default: 100,
+        name: 'stiffness', label: 'Stiffness', unit: '1/s²', type: 'slider',
+        min: 0, max: 2500, softMin: 0, softMax: 500, step: 10, default: 100,
       },
     ],
   },
