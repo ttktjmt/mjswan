@@ -3,9 +3,9 @@
 MuJoCo Playground 1.0.1 in the browser, in two parts. `mjswan demo playground` runs it.
 
 - **PickCube**: the SO-101 bringing a cube to a target that moves, driven by policies
-  trained on Playground's own `SO101PickCube` and `SO101PickCubeVision`
-  (`tasks/manipulation/pick_cube`) with `examples/train/so101_pick_cube.py`: one reads
-  the cube's position, the other finds the cube through the wrist camera. Each task is
+  trained on Playground's own `SO101PickCubeVision` and `SO101PickCube`
+  (`tasks/manipulation/pick_cube`) with `examples/train/so101_pick_cube.py`: one finds
+  the cube through the wrist camera, the other reads the cube's position. Each task is
   stated as an mjlab one, whose terms compute Playground's observations.
 - **Tabletop**: the scenes of its agentic manipulation suite (`tasks/agentic/tabletop_v0`),
   nine pick-and-place tasks, each laid out in front of both arms the suite drives, the
@@ -1051,7 +1051,7 @@ def add_pick_cube(project: mjswan.ProjectHandle) -> mjswan.SceneHandle:
 
 
 def add_pick_cube_vision(project: mjswan.ProjectHandle) -> mjswan.SceneHandle:
-    """The same task, the arm finding the cube through its wrist camera."""
+    """PickCube with the arm finding the cube through its wrist camera."""
     scene = project.add_scene_mjlab(
         "SO101PickCubeVision", name="SO-101 Vision", env_cfg=pick_cube_vision_env_cfg()
     )
@@ -1072,8 +1072,9 @@ def setup_builder() -> mjswan.Builder:
     """Return the configured builder, not yet built."""
     builder = mjswan.Builder(base_path=os.getenv("MJSWAN_BASE_PATH", "/"))
     project = builder.add_project(name="Playground PickCube")
-    add_pick_cube(project)
+    # The app opens on the first scene.
     add_pick_cube_vision(project)
+    add_pick_cube(project)
     for arm in ARMS:
         project = builder.add_project(name=f"Playground Tabletop: {arm.name}")
         lookat, distance, azimuth, elevation = arm.overview

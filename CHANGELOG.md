@@ -30,24 +30,24 @@ shortcuts.
   orthographic cameras are refused at build time.
 
 - **`mjswan demo playground`: MuJoCo Playground 1.0.1 in the browser.** It opens on
-  the SO-101 bringing a cube to a target that moves, driven by a policy trained on
-  Playground's `SO101PickCube` with its own environment and PPO settings, the task stated
-  as an mjlab one whose lift-cube terms compute Playground's observations. Beside it, the
-  same task through the wrist camera: `SO101PickCubeVision`, the task Playground's
-  sim-to-real demo deploys, its policy reading the camera's frame (drawn by three.js and
-  averaged to 16 x 16) and moving the arm by deltas at 10 Hz. Then the nine
+  the SO-101 finding a cube through its wrist camera and bringing it to a target that
+  moves, driven by a policy trained on Playground's `SO101PickCubeVision`, the task its
+  sim-to-real demo deploys, with Playground's own environment and PPO settings: the
+  policy reads the camera's frame (drawn by three.js and averaged to 16 x 16) and moves
+  the arm by deltas at 10 Hz. Beside it, the same task read from the cube's position,
+  `SO101PickCube`. Each is stated as an mjlab task whose terms compute Playground's
+  observations. Then the nine
   pick-and-place tasks of its agentic suite (`tasks/agentic/tabletop_v0`), each in front
   of the SO-101 and the I2RT YAM, as eighteen scenes with no policy: the arms hold their
   home pose and the objects can be grabbed. Playground needs MuJoCo 4, so
   `examples/demo/playground.py` restates its scene recipe against Menagerie and aloha_sim
   files fetched at pinned commits.
-  `examples/train/so101_pick_cube.py`, with a Colab and a molab notebook, is how that
-  policy was trained: on one free GPU, resuming from the newest checkpoint on disk or on
-  the Hugging Face Hub, then exported as one ONNX file with the observation layout and a
-  reference rollout a port is checked against. `--task vision` trains
-  `SO101PickCubeVision` instead, the wrist-camera task Playground's sim-to-real demo
-  deploys, whose export takes the camera image as a second input and whose reference
-  rollout keeps the camera's frames.
+  `examples/train/so101_pick_cube.py`, with a Colab and a molab notebook, is how both
+  policies were trained: on one free GPU, resuming from the newest checkpoint on disk or
+  on the Hugging Face Hub, then exported as one ONNX file with the observation layout and
+  a reference rollout a port is checked against. `--task state` (the default) trains
+  `SO101PickCube`, `--task vision` `SO101PickCubeVision`, whose export takes the camera
+  image as a second input and whose reference rollout keeps the camera's frames.
 
 - **`createEngine(element, { archive })`, for a host that renders `.mjz` archives it did not
   build.** `archive: { maxEntries, maxInflatedBytes, extensions }` refuses an archive before
