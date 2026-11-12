@@ -443,6 +443,20 @@ shortcuts.
 
 ### Changed
 
+- **A policy slower than the screen no longer moves the robot in jumps.** The engine ran
+  a control step's physics at once and drew only its end, so a 10 Hz policy (the SO-101
+  Vision scene of `mjswan demo playground`) moved the robot ten times a second while the
+  screen drew sixty. The loop now spends real time as mjlab's viewer does
+  (`viewer/base.py`), a physics step at a time instead of a control step at a time, and
+  draws the poses the physics passes through: a new pose every frame on a 60 Hz screen.
+  The observation, inference, action, terminations, commands and events still run once
+  per control step in the same order, and a seeded rollout is the same, step for step.
+  Behind schedule, a burst stops after one frame and keeps one physics step of budget, as
+  mjlab's viewer does, where the loop used to catch up on as much as 250 ms. A pause stops
+  inside a control step and resumes there; a reset there starts a fresh one. The next
+  observation waits for a traced command's update to land, which the old loop's sleep
+  between control steps used to cover.
+
 - **`mjswan publish` sends only what mjswan Cloud does not hold yet.** Cloud keeps every
   file once, under the SHA-256 of its bytes (mjswan-cloud ADR 0017), so `publish` now sends
   a file map: each scene's `.mjz` as its entries, each `.onnx` cut before every tensor of

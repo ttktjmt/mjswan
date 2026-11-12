@@ -72,8 +72,8 @@ import {
   type OnnxActionProcessConfig,
 } from '../action/OnnxActionProcess';
 import { applyResetTerms } from './resetChain';
+import { ControlStep } from './controlStep';
 import { decimationFor } from './decimation';
-import { nextDeadline } from './stepDeadline';
 import { yieldToBrowser } from './yieldToBrowser';
 import { TerminationManager } from '../termination/TerminationManager';
 import * as ort from 'onnxruntime-web/wasm';
@@ -140,6 +140,9 @@ const DEFAULT_VIEWER_CONTROL_DT = 0.02;
 
 /** The frame time every XR rate is scaled by, capped so a slept tab is not a teleport. */
 const MAX_XR_FRAME_SECONDS = 0.1;
+
+/** mjlab's viewer stops a physics burst after one frame, so the renderer gets its turn. */
+const BURST_MS = 1000 / 60;
 
 /** Keyed by joint name: the slot reader needs entity-joint order, not action order. */
 function buildJointBias(config: PolicyConfig): Map<string, number> {
@@ -297,6 +300,13 @@ export class mjswanRuntime {
   private running: boolean;
   private timestep: number;
   private decimation: number;
+  private readonly controlStep = new ControlStep({
+    decimation: () => this.decimation,
+    begin: () => this.beginControlStep(),
+    physics: (from, to) => this.executeSimulationSteps(from, to),
+    end: () => this.endControlStep(),
+    snapshot: () => this.updateCachedState(),
+  });
   /** Null for a policy-less scene. */
   private controlDt: number | null;
   private loadingScene: Promise<void> | null;
@@ -762,6 +772,7 @@ export class mjswanRuntime {
       this.timestep = Number.isFinite(timestep) && timestep > 0 ? timestep : 0.001;
       // Never inferred: a wrong control rate runs the policy off-speed silently.
       this.decimation = decimationFor(this.controlDt ?? DEFAULT_VIEWER_CONTROL_DT, this.timestep);
+      this.controlStep.restart();
 
       this.lastSimState.bodies.clear();
       this.updateCachedState();
@@ -1355,65 +1366,80 @@ export class mjswanRuntime {
   }
 
   private async runLoop(): Promise<void> {
-    let deadline = performance.now();
+    let budget = 0;
+    let last = performance.now();
     while (this.running) {
-      const target = this.timestep * this.decimation;
-
-      if (this.mjModel && this.mjData) {
-        // Mirrors mjlab's `ManagerBasedRlEnv.step()`, one forward per step:
-        // forward → command → event → obs → action → physics → term → reset.
-        if (this.policyRunner && this.policyStateBuilder) {
-          const state = this.policyStateBuilder.build();
-          const obs = await this.policyRunner.collectObservationsByKey(state);
-          const fresh = await this.runOnnxInference(obs);
-          await this.processActions(fresh);
-        }
-        this.executeSimulationSteps();
-        this.episodeLength += 1;
-
-        // Pre-forward, as in mjlab: derived state lags by one substep, consistently.
-        let autoReset = false;
-        // Held across the awaits below: `setPolicy` can null the field mid-step.
-        const terminations = this.terminationManager;
-        if (terminations && this.policyStateBuilder) {
-          const postState = this.policyStateBuilder.build();
-          const result = await terminations.evaluate(postState);
-          if (result.done) {
-            autoReset = true;
-            // Awaited so the writes precede the forward; caught so a failure costs a reset.
-            try {
-              await this.resetSimulationState({ forward: false });
-            } catch (error) {
-              console.warn('[mjswanRuntime] reset terms failed:', error);
-            }
-            // Last, as in mjlab's `_reset_idx`.
-            terminations.reset();
-          }
-        }
-
-        // The one forward: clears the loop's staleness and publishes a reset's writes.
-        this.mujoco.mj_forward(this.mjModel, this.mjData);
-        this.updateCachedState();
-
-        this.commandManager.update(target, autoReset);
-        this.debugVizSet.update();
-        // Awaited so `mode="interval"` terms resolve in config order.
-        try {
-          await this.eventManager?.tick(target, this.eventContext());
-        } catch (error) {
-          console.warn('[mjswanRuntime] interval events failed:', error);
-        }
-      }
-
       const now = performance.now();
-      deadline = nextDeadline(deadline, now, target * 1000);
-      if (deadline > now) {
-        await new Promise((resolve) => setTimeout(resolve, deadline - now));
+      budget += now - last;
+      last = now;
+      const stepMs = this.timestep * 1000;
+      if (!this.mjModel || !this.mjData) {
+        budget = 0;
+      } else if (budget >= stepMs) {
+        budget = await this.controlStep.spend(budget, stepMs, now + BURST_MS);
+      }
+      if (budget < stepMs) {
+        await new Promise((resolve) => setTimeout(resolve, stepMs - budget));
       } else {
         // Behind schedule: yield anyway, or rAF stops firing and the tab hangs at 100% CPU
         // (issue #103).
         await yieldToBrowser();
       }
+    }
+  }
+
+  /**
+   * A control step mirrors mjlab's `ManagerBasedRlEnv.step()`, one forward per step:
+   * forward → command → event → obs → action → physics → term → reset. This is the part
+   * before the physics.
+   */
+  private async beginControlStep(): Promise<void> {
+    if (!this.policyRunner || !this.policyStateBuilder) return;
+    // A traced command's update lands asynchronously; mjlab's step has it before the observation.
+    await this.commandManager.settled();
+    const state = this.policyStateBuilder.build();
+    const obs = await this.policyRunner.collectObservationsByKey(state);
+    const fresh = await this.runOnnxInference(obs);
+    await this.processActions(fresh);
+  }
+
+  /** The part of a control step after the physics. */
+  private async endControlStep(): Promise<void> {
+    if (!this.mjModel || !this.mjData) return;
+    const target = this.timestep * this.decimation;
+    this.episodeLength += 1;
+
+    // Pre-forward, as in mjlab: derived state lags by one substep, consistently.
+    let autoReset = false;
+    // Held across the awaits below: `setPolicy` can null the field mid-step.
+    const terminations = this.terminationManager;
+    if (terminations && this.policyStateBuilder) {
+      const postState = this.policyStateBuilder.build();
+      const result = await terminations.evaluate(postState);
+      if (result.done) {
+        autoReset = true;
+        // Awaited so the writes precede the forward; caught so a failure costs a reset.
+        try {
+          await this.resetSimulationState({ forward: false });
+        } catch (error) {
+          console.warn('[mjswanRuntime] reset terms failed:', error);
+        }
+        // Last, as in mjlab's `_reset_idx`.
+        terminations.reset();
+      }
+    }
+
+    // The one forward: clears the loop's staleness and publishes a reset's writes.
+    this.mujoco.mj_forward(this.mjModel, this.mjData);
+    this.updateCachedState();
+
+    this.commandManager.update(target, autoReset);
+    this.debugVizSet.update();
+    // Awaited so `mode="interval"` terms resolve in config order.
+    try {
+      await this.eventManager?.tick(target, this.eventContext());
+    } catch (error) {
+      console.warn('[mjswanRuntime] interval events failed:', error);
     }
   }
 
@@ -2021,6 +2047,8 @@ export class mjswanRuntime {
     // terms run, and zeroing after them would drop that step. No reset term reads it: the
     // build refuses a traced action reset that does.
     this.episodeLength = 0;
+    // A reset landing between two slices drops the rest of the control step.
+    this.controlStep.restart();
     this.lastSimState.bodies.clear();
 
     await applyResetTerms({
@@ -2040,13 +2068,16 @@ export class mjswanRuntime {
     }
   }
 
-  private executeSimulationSteps(): void {
+  /** Physics steps `from` up to `to` of the control step under way. */
+  private executeSimulationSteps(from: number, to: number): void {
     if (!this.mjModel || !this.mjData) {
       return;
     }
-    // Viewer-only: pointer modes and tracked hands, not part of the MDP.
-    this.interaction.preStep();
-    if (this.modelHasHands) this.handMocap.update(this.mjModel, this.mjData);
+    if (from === 0) {
+      // Viewer-only: pointer modes and tracked hands, not part of the MDP.
+      this.interaction.preStep();
+      if (this.modelHasHands) this.handMocap.update(this.mjModel, this.mjData);
+    }
 
     stepPhysics(
       this.mujoco,
@@ -2058,6 +2089,8 @@ export class mjswanRuntime {
       // Per substep, not per control step, as mjlab rolls it from
       // `scene.update(dt=physics_dt)` inside its own decimation loop.
       this.contactSensors.size > 0 ? () => this.advanceContactSensors() : undefined,
+      from,
+      to,
     );
   }
 
