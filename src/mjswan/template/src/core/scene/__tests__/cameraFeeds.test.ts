@@ -3,6 +3,7 @@
  * image at, viser's frustum, and the images a host's canvas receives, across policy loads.
  */
 import * as THREE from 'three';
+import type { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { CameraFeeds, feedScale, frustumSegments, type CameraFeedSensor } from '../cameraFeeds';
@@ -137,6 +138,16 @@ describe('CameraFeeds', () => {
     feeds.load([WRIST], mjModel, root);
     feeds.update(1, PIXELS, 2, 2);
     expect(target.drawn).toHaveLength(1);
+  });
+
+  it('draws the frustum as viser does, light grey and 2 px wide', () => {
+    const feeds = new CameraFeeds();
+    const root = new THREE.Group();
+    feeds.load([WRIST], mjModel, root);
+    const material = (root.children[0] as THREE.Mesh).material as LineMaterial;
+    expect(material.linewidth).toBe(2);
+    expect(material.worldUnits).toBe(false);
+    expect(material.color.getHex()).toBe(0xc8c8c8);
   });
 
   it('shows and hides the frustum, which follows its camera', () => {

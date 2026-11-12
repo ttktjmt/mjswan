@@ -7,14 +7,21 @@
 
 import * as THREE from 'three';
 import type { MjData, MjModel } from 'mujoco';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 
 import { cameraFovy, poseCamera } from './sensorCamera';
 
 /** `ViserCameraViewer`'s `min_display_size`: images are enlarged by whole steps toward it. */
 const MIN_DISPLAY_SIZE = 128;
-/** viser's `add_camera_frustum` as mjlab calls it: `scale=0.15, color=(200, 200, 200)`. */
+/**
+ * viser's `add_camera_frustum` as mjlab calls it: `scale=0.15, color=(200, 200, 200)`, and
+ * its default `line_width=2.0`, in CSS pixels as `LineMaterial` takes it.
+ */
 const FRUSTUM_SCALE = 0.15;
 const FRUSTUM_COLOR = 0xc8c8c8;
+const FRUSTUM_LINE_WIDTH = 2;
 
 /** A camera sensor the loaded policy reads, resolved to the model's camera. */
 export interface CameraFeedSensor {
@@ -73,17 +80,16 @@ export function frustumSegments(fovyDeg: number, aspect: number): number[] {
 class Feed {
   /** The last image, RGBA rows top first: what a canvas attached later starts from. */
   last: Uint8ClampedArray | null = null;
-  readonly frustum: THREE.LineSegments;
+  /** Fat lines: WebGL draws its own one pixel wide whatever the width asked. */
+  readonly frustum: LineSegments2;
 
   constructor(readonly sensor: CameraFeedSensor, fovyDeg: number) {
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute(
-      'position',
-      new THREE.Float32BufferAttribute(frustumSegments(fovyDeg, sensor.width / sensor.height), 3),
+    const geometry = new LineSegmentsGeometry().setPositions(
+      frustumSegments(fovyDeg, sensor.width / sensor.height),
     );
-    this.frustum = new THREE.LineSegments(
+    this.frustum = new LineSegments2(
       geometry,
-      new THREE.LineBasicMaterial({ color: FRUSTUM_COLOR }),
+      new LineMaterial({ color: FRUSTUM_COLOR, linewidth: FRUSTUM_LINE_WIDTH }),
     );
     this.frustum.name = `${sensor.camera}_frustum`;
     this.frustum.matrixAutoUpdate = false;
@@ -103,7 +109,7 @@ class Feed {
   dispose(): void {
     this.frustum.removeFromParent();
     this.frustum.geometry.dispose();
-    (this.frustum.material as THREE.Material).dispose();
+    this.frustum.material.dispose();
   }
 }
 

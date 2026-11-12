@@ -169,7 +169,7 @@ folder below **Scene**. The engine keeps the same for a host to draw, one
 | `label` | mjlab's label for the image: the model camera's name and `_rgb` (`robot/wrist_cam_rgb`). |
 | `width`, `height` | The image's own size in pixels. |
 | `scale` | The whole factor mjlab enlarges the image by: 128 over its longer side, at least 1 (a 64 x 64 image at 2). |
-| `frustum` | mjlab's **Frustum** switch, on at first: the camera's frustum drawn in the scene as viser draws it, light grey, at mjlab's scale of 0.15. |
+| `frustum` | mjlab's **Frustum** switch, on at first: the camera's frustum drawn in the scene as viser draws it, in light grey 2 px lines, at mjlab's scale of 0.15. |
 
 `cameraFeeds.attach(id, canvas)` sizes the canvas to the image and draws each one the
 policy reads into it, the last one held while paused; enlarge it in CSS with
