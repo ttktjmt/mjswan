@@ -16,7 +16,7 @@ from typing import Any, Callable, Iterator
 import torch
 from torch import nn
 
-from .action import _OPAQUE, _freeze, _same
+from .action import _freeze, _same
 from .export import (
     DivergentGraph,
     _classify_tagged,
@@ -28,7 +28,7 @@ from .export import (
     no_hidden_reads,
 )
 from .model import SET_CONST_FIELDS, ModelPlan, ModelRecorder, ModelReplay
-from .proxy import _is_live_object
+from .proxy import _holds_live
 from .record import (
     WriteCaptures,
     _EventCaptureEnv,
@@ -43,26 +43,6 @@ from .slot import _MODEL_NS, SlotKey, TaggedKey, _slot_input_name
 def same_values(a: Any, b: Any) -> bool:
     """Whether *a* and *b* agree by content, as a class event's state is compared."""
     return _same(_freeze(a), _freeze(b))
-
-
-def _holds_live(value: Any, owner: Any, depth: int = 0) -> bool:
-    """Whether *value* is or holds a live object, inside plain objects too. *owner* is
-    skipped: the cfg mjlab built a class term from holds the instance as its func."""
-    if value is owner or depth > 3:
-        return False
-    if _is_live_object(value):
-        return True
-    if isinstance(value, dict):
-        members = value.values()
-    elif isinstance(value, (list, tuple, set, frozenset)):
-        members = value
-    elif not isinstance(value, _OPAQUE) and isinstance(
-        getattr(value, "__dict__", None), dict
-    ):
-        members = vars(value).values()
-    else:
-        return False
-    return any(_holds_live(v, owner, depth + 1) for v in members)
 
 
 @contextmanager
@@ -81,17 +61,22 @@ def _event_instance(
             continue
         replacements[id(entity)] = proxy.scene[name]
         replacements[id(entity.data)] = proxy.scene[name].data
+    # A path back to the instance is not followed: the cfg mjlab built it from holds
+    # it as the func.
+    within = frozenset({id(owner)})
     original = {}
     for name, value in vars(owner).items():
         if id(value) in replacements:
             original[name] = value
-        elif _holds_live(value, owner):
+        elif _holds_live(value, within):
             raise ValueError(
                 f"Event instance caches unsupported live state in {name!r}; read it through the env argument"
             )
     # Frozen outside the swap, so a path back to the instance meets the real env, not
     # a proxy whose own records grow during the call.
-    before = {k: _freeze(v) for k, v in vars(owner).items() if k not in original}
+    before = {
+        k: _freeze(v, within) for k, v in vars(owner).items() if k not in original
+    }
     try:
         for name, value in original.items():
             setattr(owner, name, replacements[id(value)])
@@ -99,7 +84,7 @@ def _event_instance(
     finally:
         for name, value in original.items():
             setattr(owner, name, value)
-    after = {k: _freeze(v) for k, v in vars(owner).items() if k not in original}
+    after = {k: _freeze(v, within) for k, v in vars(owner).items() if k not in original}
     if not _same(before, after):
         raise DivergentGraph(
             "Event instance mutates state between calls; stateful event history is not supported"

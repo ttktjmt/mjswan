@@ -3,8 +3,9 @@ it, with the env and entities it keeps routed through the tracer."""
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -239,18 +240,34 @@ def test_the_cfg_mjlab_built_the_instance_from_may_lead_back_to_it(tmp_path):
     )
 
 
-@pytest.mark.parametrize("box", ["namespace", "set"])
-def test_state_inside_a_plain_object_is_compared_too(tmp_path, box):
+@dataclass(slots=True)
+class _Slots:
+    item: Any
+
+
+#: Each kind of plain object the walk sees into: how to wrap a value, and reach it.
+_HOLDERS = {
+    "namespace": (lambda item: SimpleNamespace(item=item), lambda held: held.item),
+    "slots": (_Slots, lambda held: held.item),
+    "deep": (
+        lambda item: {"a": {"b": {"c": {"d": item}}}},
+        lambda held: held["a"]["b"]["c"]["d"],
+    ),
+}
+
+
+@pytest.mark.parametrize("kind", [*_HOLDERS, "set"])
+def test_state_inside_a_plain_object_is_compared_too(tmp_path, kind):
     class Hidden(ManagerTermBase):
         def __init__(self, cfg, env):
             super().__init__(env)
-            self._seen = SimpleNamespace(calls=0) if box == "namespace" else set()
+            self._held = set() if kind == "set" else _HOLDERS[kind][0]([0])
 
         def __call__(self, env, env_ids):
-            if box == "namespace":
-                self._seen.calls += 1
+            if kind == "set":
+                self._held.add(len(self._held))
             else:
-                self._seen.add(len(self._seen))
+                _HOLDERS[kind][1](self._held)[0] += 1
             position = torch.zeros(1, 1)
             env.scene["robot"].write_joint_state_to_sim(
                 position, torch.zeros_like(position)
@@ -263,14 +280,17 @@ def test_state_inside_a_plain_object_is_compared_too(tmp_path, box):
         )
 
 
-def test_an_entity_inside_a_plain_object_is_refused(tmp_path):
+@pytest.mark.parametrize("kind", list(_HOLDERS))
+def test_an_entity_inside_a_plain_object_is_refused(tmp_path, kind):
+    wrap, unwrap = _HOLDERS[kind]
+
     class Nested(ManagerTermBase):
         def __init__(self, cfg, env):
             super().__init__(env)
-            self._parts = SimpleNamespace(entity=env.scene["robot"])
+            self._parts = wrap(env.scene["robot"])
 
         def __call__(self, env, env_ids):
-            position = self._parts.entity.data.joint_pos[:, [0]] + 1.0
+            position = unwrap(self._parts).data.joint_pos[:, [0]] + 1.0
             env.scene["robot"].write_joint_state_to_sim(
                 position, torch.zeros_like(position), env_ids=env_ids
             )

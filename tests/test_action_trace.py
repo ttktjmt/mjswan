@@ -10,6 +10,10 @@ check is for, and what the tracer refuses instead of shipping a frozen copy.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from types import SimpleNamespace
+from typing import Any
+
 import numpy as np
 import pytest
 
@@ -25,6 +29,8 @@ from mjswan.build.mdp.action import (  # noqa: E402
 )
 from mjswan.compile.action import (  # noqa: E402
     UntraceableAction,
+    _freeze,
+    _same,
     compare_body,
     trace_action_term,
 )
@@ -157,11 +163,14 @@ def test_a_term_overriding_apply_needs_a_binding_to_say_what_it_does(env):
         (fx.on_arm(fx.CountingActionCfg), r"changes \['_steps'\]"),
         (fx.on_arm(fx.LazyCounterActionCfg), r"creates \['_calls'\]"),
         (fx.on_arm(fx.QueueLagActionCfg), r"changes \['_queue'\]"),
+        (fx.on_arm(fx.SlotsCounterActionCfg), r"changes \['_box'\]"),
+        (fx.on_arm(fx.DeepCounterActionCfg), r"changes \['_deep'\]"),
         (fx.on_arm(fx.WritingActionCfg), r"set_joint_position_target"),
         (fx.on_arm(fx.SceneWritingActionCfg), r"write_joint_state_to_sim"),
         (fx.on_arm(fx.BufferWritingActionCfg), r"entity\.data\.joint_pos_target"),
         (fx.on_arm(fx.AliasActionCfg), r"views of one tensor"),
         (fx.on_arm(fx.CachedDataActionCfg), r"keeps \['_data'\]"),
+        (fx.on_arm(fx.NestedDataActionCfg), r"keeps \['_parts'\]"),
         (fx.on_arm(fx.ClockResetActionCfg), r"episode_length_buf in reset"),
         (fx.on_arm(fx.BiasReadingActionCfg), r"robot\.encoder_bias"),
     ],
@@ -169,11 +178,14 @@ def test_a_term_overriding_apply_needs_a_binding_to_say_what_it_does(env):
         "python-counter",
         "attribute-made-in-the-body",
         "state-in-a-deque",
+        "state-in-a-slotted-dataclass",
+        "state-five-containers-down",
         "writes-the-sim",
         "writes-the-sim-through-the-scene",
         "writes-an-entity-buffer",
         "aliased-state",
         "cached-entity-data",
+        "entity-data-inside-an-object",
         "reset-reads-the-episode-clock",
         "reads-a-field-the-browser-does-not-serve",
     ],
@@ -193,6 +205,61 @@ def test_a_scene_write_leaves_the_trace_env_alone(env):
 def test_an_untouched_nan_is_not_state_the_body_changed(env):
     term = fx.on_arm(fx.NanFieldActionCfg).build(env)
     trace_action_term(term, name="joint_pos")
+
+
+@dataclass
+class _Box:
+    item: Any
+
+
+@dataclass(slots=True)
+class _SlotBox:
+    item: Any
+
+
+def _looped():
+    node = SimpleNamespace(item=[0])
+    node.self = node
+    return node
+
+
+@pytest.mark.parametrize(
+    ("make", "change"),
+    [
+        (lambda: torch.zeros(2), lambda v: v.add_(1)),
+        (lambda: np.zeros(2), lambda v: v.__iadd__(1)),
+        (lambda: {"k": [0]}, lambda v: v["k"].append(1)),
+        (lambda: SimpleNamespace(item=[0]), lambda v: v.item.append(1)),
+        (lambda: {0}, lambda v: v.add(1)),
+        (lambda: _Box([0]), lambda v: v.item.append(1)),
+        (lambda: _SlotBox([0]), lambda v: v.item.append(1)),
+        (lambda: [[[[[[0]]]]]], lambda v: v[0][0][0][0][0].append(1)),
+        (_looped, lambda v: v.item.append(1)),
+    ],
+    ids=[
+        "tensor",
+        "array",
+        "container",
+        "plain-object",
+        "set",
+        "dataclass",
+        "slotted-dataclass",
+        "six-deep",
+        "cycle",
+    ],
+)
+def test_a_change_anywhere_inside_kept_state_is_seen(make, change):
+    value = make()
+    before = _freeze(value)
+    assert _same(before, _freeze(value))
+    change(value)
+    assert not _same(before, _freeze(value))
+
+
+def test_values_compare_by_value_and_code_by_identity():
+    assert _same(_freeze(slice(None)), _freeze(slice(None)))
+    assert not _same(_freeze(slice(0)), _freeze(slice(1)))
+    assert not _same(_freeze(lambda: 0), _freeze(lambda: 0))
 
 
 def test_a_clipped_term_rebinding_twice_keeps_its_processed_action_as_state(env):
@@ -364,6 +431,21 @@ def test_an_observation_reads_only_a_traced_terms_state_and_processed_action(env
             term._target_ids
         with pytest.raises(UnsupportedEnvRead):
             term._entity
+
+
+def test_an_observation_cannot_reach_the_entity_through_a_holder(env):
+    from mjswan.compile.record import _RecordingEnv
+    from mjswan.compile.slot import UnsupportedEnvRead, traced_action_state
+
+    real = env.action_manager.get_term("joint_pos")
+    real._parts = SimpleNamespace(entity=real._entity)
+    try:
+        with traced_action_state({"joint_pos": ["_target"]}):
+            term = _RecordingEnv(env).action_manager.get_term("joint_pos")
+            with pytest.raises(UnsupportedEnvRead):
+                term._parts
+    finally:
+        del real._parts
 
 
 def _find(tree, key):

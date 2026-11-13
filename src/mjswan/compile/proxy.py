@@ -8,8 +8,10 @@ command's tensor attributes, ``env.sim``. A raw sim field travels as a
 
 from __future__ import annotations
 
+import collections
 import copy
 import functools
+import types
 from typing import Any, Callable, Collection
 
 import torch
@@ -153,6 +155,60 @@ def _is_live_object(value: Any, depth: int = 0) -> bool:
     )
 
 
+#: Values compared by identity alone: their contents are code, not state.
+_OPAQUE = (
+    types.FunctionType,
+    types.MethodType,
+    types.BuiltinFunctionType,
+    types.ModuleType,
+    type,
+    functools.partial,
+)
+
+_CONTAINERS = (list, tuple, set, frozenset, collections.deque)
+
+
+def _attrs(value: Any) -> dict[str, Any] | None:
+    """A plain object's attributes, from its ``__dict__`` and its ``__slots__``, or
+    ``None`` for code and anything else without either."""
+    if isinstance(value, _OPAQUE):
+        return None
+    state = getattr(value, "__dict__", None)
+    found = dict(state) if isinstance(state, dict) else None
+    for cls in type(value).__mro__:
+        slots = cls.__dict__.get("__slots__", ())
+        for slot in (slots,) if isinstance(slots, str) else slots:
+            if slot in ("__dict__", "__weakref__"):
+                continue
+            found = {} if found is None else found
+            mangled = slot.startswith("__") and not slot.endswith("__")
+            try:
+                found[slot] = getattr(
+                    value, f"_{cls.__name__.lstrip('_')}{slot}" if mangled else slot
+                )
+            except AttributeError:  # an unset slot
+                pass
+    return found
+
+
+def _holds_live(value: Any, within: frozenset[int] = frozenset()) -> bool:
+    """Whether *value* is a live object or holds one at any depth, inside containers
+    and plain objects. A reference back to a value in *within* (ids of the values
+    enclosing it) is passed over."""
+    if id(value) in within:
+        return False
+    if _is_live_object(value):
+        return True
+    within = within | {id(value)}
+    if isinstance(value, dict):
+        members = value.values()
+    elif isinstance(value, _CONTAINERS):
+        members = value
+    else:
+        members = (_attrs(value) or {}).values()
+    return any(_holds_live(v, within) for v in members)
+
+
 class _EnvConstants:
     """A term's ``_env`` read off a proxy: the forwarded constants, nothing live."""
 
@@ -193,7 +249,7 @@ def _action_term_proxy(
         if isinstance(value, torch.Tensor):
             if attr == _PROCESSED_FIELD or (traced is not None and attr in traced):
                 return read_state(attr, value)
-        elif not _is_live_object(value):
+        elif not _holds_live(value, frozenset({id(real)})):
             return value
         raise refuse_read(real, attr, _TERM_ENV_READS, "action_manager.get_term(...).")
 

@@ -138,13 +138,13 @@ shortcuts.
   a target kind, a ramp across the substeps (`interpolate`) or a hold of the measured pose
   after a reset (`hold_s`), both of a position target. The build looks the binding up, so
   `register_action` may come before or after `add_policy`, or again after it. A body a
-  graph cannot reproduce fails the build with the fix in the message: Python state (a
-  counter, an attribute made in the body, a deque of past actions), a write to the sim or
-  to an entity's buffers, two state fields that share one tensor, a live mjlab object
-  cached at init (the entity's data, the scene, the sim), a field the browser's slot
-  reader does not serve, or a reset that reads the episode clock. One of mjlab's own
-  classes mjswan has none of, such as `DifferentialIKActionCfg`, is still skipped with a
-  warning.
+  graph cannot reproduce fails the build with the fix in the message: Python state at any
+  depth (a counter, an attribute made in the body, a deque of past actions), a write to
+  the sim or to an entity's buffers, two state fields that share one tensor, a live mjlab
+  object cached at init, even inside a plain object (the entity's data, the scene, the
+  sim), a field the browser's slot reader does not serve, or a reset that reads the
+  episode clock. One of mjlab's own classes mjswan has none of, such as
+  `DifferentialIKActionCfg`, is still skipped with a warning.
 
 - **`RelativeJointPositionActionCfg`** (`joint_position_relative`): the target is the
   measured joint position plus `scale * a`, read every substep, as mjlab's
@@ -983,10 +983,10 @@ shortcuts.
   arguments. The trace now runs the instance mjlab built with the env, with the env and
   entities it keeps routed through the tracer, or builds one the same way when the env
   holds none or the scene's events give the term other params. A class whose call
-  changes its own state is refused, state kept inside a plain object included. So is an
-  event term that keeps an entity or sensor inside such an object, and an event or action
-  term that keeps the sim's raw arrays (`env.sim.data.*`): their reads would freeze at
-  build time.
+  changes its own state is refused, state at any depth inside a plain object included.
+  So is an event term that keeps an entity or sensor inside such an object, and an event
+  or action term that keeps the sim's raw arrays (`env.sim.data.*`): their reads would
+  freeze at build time.
 
 - **Observation and termination terms may read `env.scene.env_origins` and an entity's
   `indexing` and `is_fixed_base`.** Tracing failed on these reads; the graph now holds
