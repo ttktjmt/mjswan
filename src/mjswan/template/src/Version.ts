@@ -39,4 +39,8 @@ export const GITHUB_CONTRIBUTORS: Contributor[] = [
     login: "CharlieLeee",
     html_url: "https://github.com/CharlieLeee",
   },
+  {
+    login: "M-Colley",
+    html_url: "https://github.com/M-Colley",
+  },
 ];
