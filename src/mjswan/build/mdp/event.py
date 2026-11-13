@@ -3,7 +3,9 @@ to write."""
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -45,9 +47,12 @@ def serialize_event(
 
     resolved = resolved_params(term_cfg.params, env)
     provenance = term_provenance(func, resolved)
+    body = func
     try:
+        if inspect.isclass(func):
+            body = _term_instance(func, name, term_cfg, resolved, env).__call__
         export = trace_event_term(
-            func,
+            body,
             resolved,
             env,
             name=name,
@@ -57,7 +62,7 @@ def serialize_event(
     except DivergentGraph:
         raise
     except (ValueError, UnsupportedEnvRead) as exc:
-        nothing_to_write = event_writes_nothing_reason(func, env, resolved)
+        nothing_to_write = event_writes_nothing_reason(body, env, resolved)
         if nothing_to_write is not None:
             return {
                 "name": name,
@@ -124,6 +129,21 @@ def _check_disabled_when(events: Mapping[str, EventTermCfg]) -> None:
                 f'mode="interval" term of this scene (it has '
                 f"{sorted(n for n, t in events.items() if t.mode == 'interval')})."
             )
+
+
+def _term_instance(
+    cls: type[Any], name: str, term_cfg: EventTermCfg, params: dict[str, Any], env: Any
+) -> Any:
+    """The instance mjlab built for this class term with the env, else one built the way
+    mjlab builds it, for a term the env's event manager does not hold."""
+    manager = getattr(env, "event_manager", None)
+    try:
+        built = manager.get_term_cfg(name).func if manager is not None else None
+    except ValueError:
+        built = None
+    if isinstance(built, cls):
+        return built
+    return cls(cfg=replace(term_cfg, params=params), env=env)
 
 
 def serialize_events(
