@@ -399,7 +399,11 @@ def event_writes_nothing_reason(
     func: Callable[..., None], env: Any, params: dict[str, Any]
 ) -> str | None:
     """Why *func*'s trace legitimately captured no write, or ``None``."""
-    func_name = getattr(func, "__name__", "")
+    func_name = (
+        type(func.__self__).__name__
+        if inspect.ismethod(func)
+        else getattr(func, "__name__", "")
+    )
     reason = EVENTS_WITH_NOTHING_TO_WRITE.get(func_name)
     if reason is not None:
         return reason

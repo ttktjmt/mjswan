@@ -116,6 +116,7 @@ def _live_classes() -> tuple[type, ...]:
         from mjlab.scene import Scene
         from mjlab.sensor import Sensor
         from mjlab.sim.sim import Simulation
+        from mjlab.sim.sim_data import TorchArray, WarpBridge
     except ImportError:
         return ()
     return (
@@ -127,13 +128,16 @@ def _live_classes() -> tuple[type, ...]:
         Scene,
         Sensor,
         Simulation,
+        TorchArray,
+        WarpBridge,
     )
 
 
 def _is_live_object(value: Any, depth: int = 0) -> bool:
     """Whether *value* holds sim state that changes under a term: an entity or its
-    data, a sensor, the scene, the sim, the env, a manager or its term, or a container
-    of one. A read through it bypasses the tracer and would bake as a constant."""
+    data, a sensor, the scene, the sim or one of its arrays, the env, a manager or its
+    term, or a container of one. A read through it bypasses the tracer and would bake
+    as a constant."""
     if isinstance(value, (torch.Tensor, str, bytes, int, float, type(None))):
         return False
     if isinstance(value, (list, tuple, set, frozenset)):
