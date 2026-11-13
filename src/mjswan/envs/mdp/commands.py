@@ -313,14 +313,12 @@ def _motion_rsi_trace(cfg: Any) -> tuple[Any, dict[str, Any]] | None:
     )
 
 
-register_command(
-    "MotionCommandCfg",
-    CommandBinding(
-        ts_name="TrackingCommand",
-        serializer=serialize_motion_command,
-        reset_trace=_motion_rsi_trace,
-    ),
+_MOTION_COMMAND_BINDING = CommandBinding(
+    ts_name="TrackingCommand",
+    serializer=serialize_motion_command,
+    reset_trace=_motion_rsi_trace,
 )
+register_command("MotionCommandCfg", _MOTION_COMMAND_BINDING)
 
 
 __all__ = [
