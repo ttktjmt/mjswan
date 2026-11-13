@@ -135,14 +135,21 @@ def _term_instance(
     cls: type[Any], name: str, term_cfg: EventTermCfg, params: dict[str, Any], env: Any
 ) -> Any:
     """The instance mjlab built for this class term with the env, else one built the way
-    mjlab builds it, for a term the env's event manager does not hold."""
+    mjlab builds it, for a term the env's event manager does not hold, or holds with
+    other params (a scene's own events overriding the task's)."""
+    from ...compile.event import same_values
+
     manager = getattr(env, "event_manager", None)
     try:
-        built = manager.get_term_cfg(name).func if manager is not None else None
+        built = manager.get_term_cfg(name) if manager is not None else None
     except ValueError:
         built = None
-    if isinstance(built, cls):
-        return built
+    if (
+        built is not None
+        and isinstance(built.func, cls)
+        and same_values(built.params, params)
+    ):
+        return built.func
     return cls(cfg=replace(term_cfg, params=params), env=env)
 
 

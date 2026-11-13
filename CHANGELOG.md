@@ -980,10 +980,13 @@ shortcuts.
 ### Fixed
 
 - **An event term written as a class traces.** Its constructor was handed the event's
-  arguments. The trace now runs the instance mjlab built with the env, or one built the
-  same way, with the env and entities it keeps routed through the tracer. A class whose
-  call changes its own state is refused, and so is an event or action term that keeps the
-  sim's raw arrays (`env.sim.data.*`), whose reads would freeze at build time.
+  arguments. The trace now runs the instance mjlab built with the env, with the env and
+  entities it keeps routed through the tracer, or builds one the same way when the env
+  holds none or the scene's events give the term other params. A class whose call
+  changes its own state is refused, state kept inside a plain object included. So is an
+  event term that keeps an entity or sensor inside such an object, and an event or action
+  term that keeps the sim's raw arrays (`env.sim.data.*`): their reads would freeze at
+  build time.
 
 - **Observation and termination terms may read `env.scene.env_origins` and an entity's
   `indexing` and `is_fixed_base`.** Tracing failed on these reads; the graph now holds

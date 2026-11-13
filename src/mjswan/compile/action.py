@@ -164,7 +164,7 @@ def _freeze(value: Any, depth: int = 0) -> Any:
         return value.detach().clone()
     if isinstance(value, np.ndarray):
         return value.copy()
-    if isinstance(value, (*_SCALARS, complex, bytes, enum.Enum, np.generic)):
+    if isinstance(value, (*_SCALARS, complex, bytes, enum.Enum, np.generic, slice)):
         return value
     if depth > 3 or isinstance(value, _OPAQUE) or _is_live_object(value):
         return _Same(value)
