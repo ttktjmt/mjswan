@@ -228,6 +228,11 @@ holding it across frames. A reset is not a separate code path; it is the same gr
 called with `resample_mask = 1`, and with `reset_mask = 1` for what a term's `reset` adds
 (mjlab's `init_velocity_prob` start).
 
+An event written as a class, as mjlab allows, is traced through the instance mjlab built
+with the env. An event graph keeps no state between firings, so a class whose call
+changes its own state fails the build, as does one that keeps the sim's raw arrays
+(`env.sim.data.*`) from its `__init__`, since reading them would freeze at build time.
+
 mjlab's command bodies narrow to the envs a draw selected (`env_ids[mask]`,
 `mask.nonzero()`) and skip an empty set. The tracer keeps such a set whole and carries the
 mask, so a write through it becomes a `where`, an entity write a gated one, and the
