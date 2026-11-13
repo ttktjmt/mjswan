@@ -72,8 +72,6 @@ def _event_instance(
             raise ValueError(
                 f"Event instance caches unsupported live state in {name!r}; read it through the env argument"
             )
-    # Frozen outside the swap, so a path back to the instance meets the real env, not
-    # a proxy whose own records grow during the call.
     before = {
         k: _freeze(v, within) for k, v in vars(owner).items() if k not in original
     }
