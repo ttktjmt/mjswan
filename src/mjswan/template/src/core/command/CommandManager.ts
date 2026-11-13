@@ -182,6 +182,11 @@ export class CommandManager {
     }
   }
 
+  /** Resolves once every term's last `update` has landed. */
+  async settled(): Promise<void> {
+    await Promise.all([...this.terms.values()].map((term) => term.settled?.()));
+  }
+
   /** `shown` is the viewer's Debug Viz "Enabled". */
   updateDebugVisuals(shown = true): void {
     for (const term of this.terms.values()) {

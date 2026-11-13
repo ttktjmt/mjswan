@@ -29,7 +29,7 @@ from .command import adapt_commands
 from .detect import is_from_mjlab
 from .env import build_mjlab_env, build_single_entity_trace_env
 from .event import adapt_events, apply_terrain_spawn
-from .observation import DEFAULT_OBS_GROUP_KEY, adapt_observations
+from .observation import DEFAULT_OBS_GROUP_KEY, adapt_observations, camera_groups
 from .runner import MjlabRunnerDefaults, resolve_runner_defaults
 from .sim import apply_mjlab_sim_options, ensure_mjlab_extensions
 from .termination import adapt_terminations
@@ -41,6 +41,7 @@ __all__ = [
     "adapt_commands",
     "adapt_events",
     "adapt_observations",
+    "camera_groups",
     "adapt_terminations",
     "apply_mjlab_sim_options",
     "apply_terrain_spawn",

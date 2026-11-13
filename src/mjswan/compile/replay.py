@@ -36,6 +36,7 @@ from .slot import (
     _ENV_NS,
     _ENV_SLOT_DTYPES,
     _EVENT_ENV_READS,
+    _SENSOR_FIELD_DTYPES,
     _SENSOR_NS,
     _SIM_NS,
     _TERM_ENV_READS,
@@ -190,7 +191,9 @@ class _ReplaySensorData:
     def __getattr__(self, name: str) -> Any:
         key = (_SENSOR_NS, f"{self._sensor}.{name}")
         if key in self._slots:
-            return self._slots[key]
+            dtype = _SENSOR_FIELD_DTYPES.get(name)
+            value = self._slots[key]
+            return value if dtype is None else value.to(dtype)
         # Discovery records tensors only; a term may branch on a field being `None`.
         if hasattr(self._real.data, name) and getattr(self._real.data, name) is None:
             return None

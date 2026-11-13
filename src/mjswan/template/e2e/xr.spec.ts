@@ -434,6 +434,7 @@ test('a policy switch during an inference drops its output instead of failing th
       inKeys: ['actor'],
       outKeys: ['action'],
       initInput: () => ({}),
+      inputDims: (_key: string, length: number) => [1, length],
       dispose: async () => {},
       runInference: async () => {
         started();

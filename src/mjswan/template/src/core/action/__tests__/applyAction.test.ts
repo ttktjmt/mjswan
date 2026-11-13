@@ -378,6 +378,23 @@ describe('stepPhysics', () => {
     expect(seen.map(v => Number(v.toFixed(3)))).toEqual([1, 0.9, 0.8]);
   });
 
+  it('takes a control step in slices as it takes it whole', () => {
+    // A ramp reads each substep's index within the control step.
+    const run = (slices: Array<[number, number]>): number[] => {
+      const data = fakeData(1);
+      const ramp = oneJoint({ rampFrom: new Float32Array(1) });
+      processAction(ramp, Float32Array.from([0.4]), CONTEXT);
+      const seen: number[] = [];
+      const mujoco = { mj_step: () => seen.push(data.ctrl[0]) };
+      for (const [from, to] of slices) {
+        stepPhysics(mujoco as never, {} as never, data, [ramp], 4, undefined, undefined, from, to);
+      }
+      return seen;
+    };
+    expect(run([[0, 1], [1, 3], [3, 4]])).toEqual(run([[0, 4]]));
+    expect(run([[0, 4]]).map((v) => Number(v.toFixed(4)))).toEqual([0.1, 0.2, 0.3, 0.4]);
+  });
+
   it("stops at MuJoCo's own reset, which it reads as the time going back", () => {
     const data = { ...fakeData(0), time: 1 } as unknown as MjData & { time: number };
     let stepped = 0;

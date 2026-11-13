@@ -87,6 +87,7 @@ call order, and `dispose` waits for the one running.
 | `camera` | `CameraControls` | `set(partial)`, `get()`, `frame()`, and `setTracking(enabled)`, mjlab's **Track camera** (follow the tracked body). A `CameraView`'s `azimuth` and `elevation` are MuJoCo's: the direction the camera looks. |
 | `commands` | `CommandControls` | `set(id, value)`, `trigger(id)`. |
 | `debugVis` | `DebugVisControls` | `set(id, enabled)` for one drawing, `setEnabled(enabled)` for mjlab's Debug Viz **Enabled** over all of them. See [Debug Viz](#debug-viz). |
+| `cameraFeeds` | `CameraFeedControls` | `attach(id, canvas)` draws a camera sensor's images into a canvas and returns the detach; `setFrustum(id, shown)` is mjlab's **Frustum** switch. See [Camera feeds](#camera-feeds). |
 | `events` | `EventControls` | `fire(name)` for a `manual` term, `setArmed(name, armed)` for an `interval` one. |
 | `interaction` | `InteractionControls` | `setMode(id)`, `getMode()`, `setParam(mode, name, value)`, `getParams(mode)`, `cancel()`. See [Pointer interaction](#pointer-interaction). |
 | `xr` | `XrControls` | `enter(id)`, `exit()`, `setHandTracking(enabled)`. See [WebXR](#webxr). |
@@ -113,6 +114,8 @@ interface MjswanEngineState {
   debugVis: ReadonlyArray<DebugVisDescriptor>;
   /** `debugVis.setEnabled`'s switch: a drawing shows only while it and its own are on. */
   debugVisEnabled: boolean;
+  /** The policy's camera sensors, in its order; empty when it reads none. */
+  cameraFeeds: ReadonlyArray<CameraFeedDescriptor>;
   /** `camera.setTracking`'s switch, and the vertical FOV in degrees. */
   camera: { tracking: boolean; fovy: number };
   /** Event terms the operator can drive; empty when the scene has none. */
@@ -153,6 +156,26 @@ checkbox reads, and whether it is `enabled`:
 `state.debugVisEnabled` is the folder's **Enabled**. mjlab's **All envs** has no
 counterpart: the browser runs one env. The bundled app draws the folder inside mjlab's
 **Scene** section, recorded from mjlab at build time (the manifest's `viewer_gui`).
+
+### Camera feeds
+
+mjlab's viewer shows its camera sensors apart from Debug Viz, in a **Camera Feeds**
+folder below **Scene**. The engine keeps the same for a host to draw, one
+`CameraFeedDescriptor` per sensor the policy reads:
+
+| Field | Holds |
+|---|---|
+| `id` | The sensor's name, which `cameraFeeds.attach` and `setFrustum` take. |
+| `label` | mjlab's label for the image: the model camera's name and `_rgb` (`robot/wrist_cam_rgb`). |
+| `width`, `height` | The image's own size in pixels. |
+| `scale` | The whole factor mjlab enlarges the image by: 128 over its longer side, at least 1 (a 64 x 64 image at 2). |
+| `frustum` | mjlab's **Frustum** switch, on at first: the camera's frustum drawn in the scene as viser draws it, in light grey 2 px lines, at mjlab's scale of 0.15. |
+
+`cameraFeeds.attach(id, canvas)` sizes the canvas to the image and draws each one the
+policy reads into it, the last one held while paused; enlarge it in CSS with
+`image-rendering: pixelated`. It is the observation's own render, so the image on show is
+exactly what the policy got. A canvas stays attached across a policy load while the new
+policy reads a sensor of that name; call the returned detach when it goes.
 
 ### Pointer interaction
 

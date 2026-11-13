@@ -30,6 +30,7 @@ import { CreditsPanel, type SceneCredits } from './CreditsPanel';
 import FloatingPanel from './FloatingPanel';
 import { LabeledInput } from './LabeledInput';
 import { CommandSection } from './CommandSection';
+import { CameraFeedsSection } from './CameraFeedsSection';
 import { InteractionSection } from './InteractionSection';
 import { WebXrSection } from './WebXrSection';
 import { SliderRow } from './SliderRow';
@@ -39,6 +40,7 @@ import VIEWER_GUI_PATHS from './viewer_gui_bindings.json';
 import type { ViewerGuiNode } from '../manifest';
 import type {
   CommandDescriptor,
+  CameraFeedDescriptor,
   DebugVisDescriptor,
   EventDescriptor,
   HandTrackingDescriptor,
@@ -106,6 +108,12 @@ interface ControlPanelProps {
   debugVisEnabled?: boolean;
   /** engine.debugVis.setEnabled. */
   onDebugVisEnabledChange?: (enabled: boolean) => void;
+  /** The policy's camera sensors (engine state's `cameraFeeds`); empty, no section. */
+  cameraFeeds?: CameraFeedDescriptor[];
+  /** engine.cameraFeeds.attach. */
+  onCameraFeedAttach?: (id: string, canvas: HTMLCanvasElement) => () => void;
+  /** engine.cameraFeeds.setFrustum. */
+  onCameraFrustumChange?: (id: string, shown: boolean) => void;
   /** mjlab's viewer Scene section as the build recorded it; absent, no section. */
   viewerGui?: ViewerGuiNode[];
   /** engine state's `camera`, for the Scene section's Camera folder. */
@@ -280,6 +288,9 @@ function ControlPanel(props: ControlPanelProps) {
     onDebugVisChange,
     debugVisEnabled = true,
     onDebugVisEnabledChange,
+    cameraFeeds = [],
+    onCameraFeedAttach,
+    onCameraFrustumChange,
     viewerGui,
     camera,
     onCameraTrackingChange,
@@ -811,6 +822,15 @@ function ControlPanel(props: ControlPanelProps) {
               bindings={viewerBindings}
               debugVis={debugVis}
               onDebugVisChange={(id, enabled) => onDebugVisChange?.(id, enabled)}
+            />
+          )}
+
+          {/* Below Scene, as mjlab's viewer adds it. */}
+          {cameraFeeds.length > 0 && onCameraFeedAttach && onCameraFrustumChange && (
+            <CameraFeedsSection
+              feeds={cameraFeeds}
+              onAttach={onCameraFeedAttach}
+              onFrustumChange={onCameraFrustumChange}
             />
           )}
 

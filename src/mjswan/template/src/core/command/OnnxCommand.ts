@@ -160,6 +160,10 @@ export class OnnxCommand implements CommandTerm {
     });
   }
 
+  async settled(): Promise<void> {
+    await this.inFlight?.catch(() => {});
+  }
+
   /**
    * Resample **now**, as mjlab's `CommandTerm.reset` does — before the step's single
    * forward, so an `entity_write` it emits is published by that forward rather than

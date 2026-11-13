@@ -26,7 +26,11 @@ from .observation import (
     serialize_observation_group,
     serialize_observation_term,
 )
-from .sensor import contact_sensor_descriptor, raycast_sensor_descriptor
+from .sensor import (
+    camera_sensor_descriptor,
+    contact_sensor_descriptor,
+    raycast_sensor_descriptor,
+)
 from .termination import (
     FUSED_TERMINATION_KEY,
     serialize_termination,
@@ -37,6 +41,7 @@ __all__ = [
     "FUSED_TERMINATION_KEY",
     "command_config",
     "command_widths",
+    "camera_sensor_descriptor",
     "contact_sensor_descriptor",
     "debug_vis_entry",
     "onnx_ref",

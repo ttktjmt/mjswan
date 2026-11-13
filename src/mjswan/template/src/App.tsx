@@ -351,6 +351,12 @@ function AppContent() {
     engineRef.current?.debugVis.setEnabled(enabled);
   }, []);
 
+  const handleCameraFeedAttach = useCallback(
+    (id: string, canvas: HTMLCanvasElement) =>
+      engineRef.current?.cameraFeeds.attach(id, canvas) ?? (() => {}),
+    [],
+  );
+
   const handlePanelVisibleChange = useCallback((visible: boolean) => {
     setPanelVisible(visible);
   }, []);
@@ -420,6 +426,9 @@ function AppContent() {
             onDebugVisChange={handleDebugVisChange}
             debugVisEnabled={debugVisEnabled}
             onDebugVisEnabledChange={handleDebugVisEnabledChange}
+            cameraFeeds={engineState?.cameraFeeds ? [...engineState.cameraFeeds] : []}
+            onCameraFeedAttach={handleCameraFeedAttach}
+            onCameraFrustumChange={(id, shown) => engineRef.current?.cameraFeeds.setFrustum(id, shown)}
             viewerGui={catalog.viewerGui}
             camera={engineState?.camera}
             onCameraTrackingChange={(enabled) => engineRef.current?.camera.setTracking(enabled)}

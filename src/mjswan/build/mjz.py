@@ -30,6 +30,13 @@ def _strip_leading_dotdot(path: str) -> str:
     return "/".join(parts) if parts else ""
 
 
+def _is_absolute(posix_path: str) -> bool:
+    """An absolute POSIX path (/foo/...) or Windows drive path (C:/foo/...)."""
+    return posixpath.isabs(posix_path) or (
+        len(posix_path) >= 3 and posix_path[1] == ":" and posix_path[2] == "/"
+    )
+
+
 def _make_zip_safe_path(path: str) -> str:
     """Return a ZIP-safe relative path.
 
@@ -39,13 +46,62 @@ def _make_zip_safe_path(path: str) -> str:
     by the :func:`_strip_leading_dotdot` logic.
     """
     posix_path = path.replace("\\", "/")
-    # Absolute POSIX path (/foo/...) or Windows drive path (C:/foo/...)
-    is_absolute = posixpath.isabs(posix_path) or (
-        len(posix_path) >= 3 and posix_path[1] == ":" and posix_path[2] == "/"
-    )
-    if is_absolute:
+    if _is_absolute(posix_path):
         return posixpath.basename(posix_path)
     return _strip_leading_dotdot(posix_path)
+
+
+def _absolute_entry_names(paths: list[str]) -> dict[str, str]:
+    """ZIP entries for the absolute paths among ``paths``, one per distinct file.
+
+    An absolute path goes in under its basename unless another one with that basename
+    is a different file, as when two attached models each ship a ``textured.obj``:
+    then each takes the shortest tail of its path that tells them apart.
+    """
+    groups: dict[str, set[str]] = {}
+    for path in paths:
+        posix_path = path.replace("\\", "/")
+        if _is_absolute(posix_path):
+            normalized = posixpath.normpath(posix_path)
+            groups.setdefault(posixpath.basename(normalized), set()).add(normalized)
+    names: dict[str, str] = {}
+    for group in groups.values():
+        parts = {path: path.split("/") for path in group}
+        depth = 1
+        while len({"/".join(p[-depth:]) for p in parts.values()}) < len(group):
+            depth += 1
+        for path, split in parts.items():
+            names[path] = "/".join(split[-depth:]).lstrip("/")
+    return names
+
+
+def _entry_name(path: str, absolute_names: dict[str, str]) -> str:
+    """The ZIP entry for one referenced path: its unique name if absolute."""
+    posix_path = path.replace("\\", "/")
+    if _is_absolute(posix_path):
+        named = absolute_names.get(posixpath.normpath(posix_path))
+        if named:
+            return named
+    return _make_zip_safe_path(path)
+
+
+def _referenced_paths(
+    spec: mujoco.MjSpec, mesh_dir: str, texture_dir: str
+) -> list[str]:
+    """Every asset path the spec names, joined to its directory hint."""
+
+    def joined(dir_hint: str, filename: str) -> str:
+        return posixpath.join(dir_hint, filename) if dir_hint else filename
+
+    paths = [joined(mesh_dir, mesh.file) for mesh in spec.meshes if mesh.file]
+    for texture in spec.textures:
+        cubefiles = [texture.cubefiles[i] for i in range(len(texture.cubefiles))]
+        for name in [texture.file, *cubefiles]:
+            if name:
+                paths.append(joined(texture_dir, name))
+    paths.extend(hfield.file for hfield in spec.hfields if hfield.file)
+    paths.extend(skin.file for skin in spec.skins if skin.file)
+    return paths
 
 
 def _iter_asset_lookup_candidates(path: str) -> list[str]:
@@ -81,6 +137,9 @@ def collect_spec_assets(spec: mujoco.MjSpec) -> dict[str, bytes]:
     base_dir = spec.modelfiledir or ""
     mesh_dir = spec.meshdir or ""
     texture_dir = spec.texturedir or ""
+    absolute_names = _absolute_entry_names(
+        _referenced_paths(spec, mesh_dir, texture_dir)
+    )
 
     assets: dict[str, bytes] = {}
 
@@ -92,7 +151,7 @@ def collect_spec_assets(spec: mujoco.MjSpec) -> dict[str, bytes]:
         # OS-native path for filesystem reads
         full = os.path.join(base_dir, rel)
         if os.path.isfile(full):
-            assets[_make_zip_safe_path(rel)] = Path(full).read_bytes()
+            assets[_entry_name(rel, absolute_names)] = Path(full).read_bytes()
 
     # Meshes
     for mesh in spec.meshes:
@@ -115,13 +174,20 @@ def collect_spec_assets(spec: mujoco.MjSpec) -> dict[str, bytes]:
     return assets
 
 
-def _rewrite_xml_paths(xml_str: str, mesh_dir: str, texture_dir: str) -> str:
+def _rewrite_xml_paths(
+    xml_str: str,
+    mesh_dir: str,
+    texture_dir: str,
+    absolute_names: dict[str, str] | None = None,
+) -> str:
     """Rewrite asset paths in MuJoCo XML so the file is self-contained.
 
     Resolves ``meshdir``/``texturedir`` + ``file`` into a single normalised
     path (with leading ``..`` stripped), then removes the directory hints
-    from ``<compiler>`` elements.
+    from ``<compiler>`` elements. ``absolute_names`` is what
+    :func:`_absolute_entry_names` gave the archive's entries.
     """
+    names = absolute_names or {}
     root = ET.fromstring(xml_str)
 
     # Rewrite <compiler> meshdir / texturedir
@@ -134,7 +200,7 @@ def _rewrite_xml_paths(xml_str: str, mesh_dir: str, texture_dir: str) -> str:
         f = mesh.get("file")
         if f:
             rel = posixpath.join(mesh_dir, f) if mesh_dir else f
-            mesh.set("file", _make_zip_safe_path(rel))
+            mesh.set("file", _entry_name(rel, names))
 
     # Rewrite <texture file/cube-map="...">
     _TEX_FILE_ATTRS = (
@@ -151,14 +217,14 @@ def _rewrite_xml_paths(xml_str: str, mesh_dir: str, texture_dir: str) -> str:
             f = tex.get(attr)
             if f:
                 rel = posixpath.join(texture_dir, f) if texture_dir else f
-                tex.set(attr, _make_zip_safe_path(rel))
+                tex.set(attr, _entry_name(rel, names))
 
     # Rewrite <hfield file="..."> and <skin file="...">
     for tag in ("hfield", "skin"):
         for elem in root.iter(tag):
             f = elem.get("file")
             if f:
-                elem.set("file", _make_zip_safe_path(f))
+                elem.set("file", _entry_name(f, names))
 
     # Fix <default> hierarchy errors from spec.to_xml():
     # 1. Remove classless nested defaults ("empty class name" error).
@@ -254,6 +320,9 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
     base_dir = spec.modelfiledir or ""
     mesh_dir = spec.meshdir or ""
     texture_dir = spec.texturedir or ""
+    absolute_names = _absolute_entry_names(
+        _referenced_paths(spec, mesh_dir, texture_dir)
+    )
 
     # Collect assets from disk, falling back to spec.assets with suffix matching
     # (mjlab stores assets under prefixed keys like "assets/robot/model.stl").
@@ -286,7 +355,7 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
         rel = posixpath.join(mesh_dir, mesh.file) if mesh_dir else mesh.file
         data = _read_asset(rel)
         if data is not None:
-            files_to_zip[_make_zip_safe_path(rel)] = data
+            files_to_zip[_entry_name(rel, absolute_names)] = data
 
     for texture in spec.textures:
         for fname in [texture.file] + [
@@ -297,21 +366,21 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
             rel = posixpath.join(texture_dir, fname) if texture_dir else fname
             data = _read_asset(rel)
             if data is not None:
-                files_to_zip[_make_zip_safe_path(rel)] = data
+                files_to_zip[_entry_name(rel, absolute_names)] = data
 
     for hfield in spec.hfields:
         if not hfield.file:
             continue
         data = _read_asset(hfield.file)
         if data is not None:
-            files_to_zip[_make_zip_safe_path(hfield.file)] = data
+            files_to_zip[_entry_name(hfield.file, absolute_names)] = data
 
     for skin in spec.skins:
         if not skin.file:
             continue
         data = _read_asset(skin.file)
         if data is not None:
-            files_to_zip[_make_zip_safe_path(skin.file)] = data
+            files_to_zip[_entry_name(skin.file, absolute_names)] = data
 
     # Buffer textures have no backing file and cause spec.to_xml() to raise FatalError.
     # Temporarily assign each one a filename and restore after to_xml().
@@ -346,7 +415,7 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
     for texture, orig_file in _buffer_tex_restore:
         texture.file = orig_file
 
-    xml_str = _rewrite_xml_paths(xml_str, mesh_dir, texture_dir)
+    xml_str = _rewrite_xml_paths(xml_str, mesh_dir, texture_dir, absolute_names)
     files_to_zip[spec.modelname + ".xml"] = xml_str
 
     # Write the ZIP

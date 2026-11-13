@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 import { mjcToThreeCoordinate } from './coordinate';
+import { SENSOR_LIGHT_LAYER } from './layers';
 
 interface CreateLightsParams {
   mujoco: MainModule;
@@ -191,6 +192,7 @@ export function createLights({
         }
       }
 
+      light.layers.enable(SENSOR_LIGHT_LAYER);
       mujocoRoot.add(light);
       lights.push(light);
     }
@@ -215,6 +217,7 @@ export function createLights({
     headLight.position.set(0, 0, 2);
     headLight.target.position.set(0, 0, 0);
     headLight.userData.isHeadlight = true;
+    headLight.layers.enable(SENSOR_LIGHT_LAYER);
     mujocoRoot.add(headLight);
     lights.push(headLight);
   }
@@ -222,6 +225,7 @@ export function createLights({
   if (!ambientSum.equals(new THREE.Color(0, 0, 0))) {
     // Same pi as above: intensity 1 would land pi times too dark.
     const ambientLight = new THREE.AmbientLight(ambientSum, Math.PI);
+    ambientLight.layers.enable(SENSOR_LIGHT_LAYER);
     mujocoRoot.add(ambientLight);
     lights.push(ambientLight);
   }

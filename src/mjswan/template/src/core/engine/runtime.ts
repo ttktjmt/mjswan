@@ -3,11 +3,13 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 import {
+  addSensorGeomMeshes,
   getPosition,
   getQuaternion,
   loadSceneFromURL,
   type ModelFormat,
 } from '../scene/scene';
+import { SensorCameraRenderer, type SensorCameraView } from '../scene/sensorCamera';
 import { loadMjzFile, type ArchiveLimits } from '../utils/mjzLoader';
 import { type Bytes } from '../utils/bytes';
 import type { EnginePlugins } from '../plugins';
@@ -70,8 +72,8 @@ import {
   type OnnxActionProcessConfig,
 } from '../action/OnnxActionProcess';
 import { applyResetTerms } from './resetChain';
+import { ControlStep } from './controlStep';
 import { decimationFor } from './decimation';
-import { nextDeadline } from './stepDeadline';
 import { yieldToBrowser } from './yieldToBrowser';
 import { TerminationManager } from '../termination/TerminationManager';
 import * as ort from 'onnxruntime-web/wasm';
@@ -88,6 +90,8 @@ import { EventManager, type EventControl } from '../event/EventManager';
 import { ModelFieldDefaults } from '../event/modelWrite';
 import type { EventContext, TerrainData } from '../event/EventBase';
 import { OnnxSessionCache, type SlotReader } from '../onnx/session';
+import { CameraSensorSet, type CameraSensorDescriptor } from '../onnx/camera';
+import { CameraFeeds } from '../scene/cameraFeeds';
 import { ContactSensorSet, type ContactSensorDescriptor } from '../onnx/contact';
 import type { RaycastSensorDescriptor } from '../onnx/raycast';
 import { createSlotReader, sensorWindow } from '../onnx/slotReader';
@@ -137,6 +141,9 @@ const DEFAULT_VIEWER_CONTROL_DT = 0.02;
 /** The frame time every XR rate is scaled by, capped so a slept tab is not a teleport. */
 const MAX_XR_FRAME_SECONDS = 0.1;
 
+/** mjlab's viewer stops a physics burst after one frame, so the renderer gets its turn. */
+const BURST_MS = 1000 / 60;
+
 /** Keyed by joint name: the slot reader needs entity-joint order, not action order. */
 function buildJointBias(config: PolicyConfig): Map<string, number> {
   const bias = new Map<string, number>();
@@ -149,7 +156,10 @@ function buildJointBias(config: PolicyConfig): Map<string, number> {
   return bias;
 }
 
-type StructuredSensorDescriptor = RaycastSensorDescriptor | ContactSensorDescriptor;
+type StructuredSensorDescriptor =
+  | RaycastSensorDescriptor
+  | ContactSensorDescriptor
+  | CameraSensorDescriptor;
 
 /**
  * Descriptors for the structured sensors this policy's graphs read, by kind. Terminations
@@ -158,9 +168,11 @@ type StructuredSensorDescriptor = RaycastSensorDescriptor | ContactSensorDescrip
 function collectStructuredSensors(config: PolicyConfig): {
   raycast: Record<string, RaycastSensorDescriptor>;
   contact: Record<string, ContactSensorDescriptor>;
+  camera: Record<string, CameraSensorDescriptor>;
 } {
   const raycast: Record<string, RaycastSensorDescriptor> = {};
   const contact: Record<string, ContactSensorDescriptor> = {};
+  const camera: Record<string, CameraSensorDescriptor> = {};
   const owners: Array<{ sensors?: Record<string, StructuredSensorDescriptor> }> = [
     ...Object.values(config.observations ?? {}),
     ...Object.values(config.terminations ?? {}),
@@ -168,10 +180,11 @@ function collectStructuredSensors(config: PolicyConfig): {
   for (const owner of owners) {
     for (const [name, descriptor] of Object.entries(owner?.sensors ?? {})) {
       if (descriptor.kind === 'contact') contact[name] = descriptor;
+      else if (descriptor.kind === 'camera') camera[name] = descriptor;
       else raycast[name] = descriptor;
     }
   }
-  return { raycast, contact };
+  return { raycast, contact, camera };
 }
 
 /** A policy with its ONNX weights resolved to bytes; motion data stays lazy. */
@@ -287,6 +300,13 @@ export class mjswanRuntime {
   private running: boolean;
   private timestep: number;
   private decimation: number;
+  private readonly controlStep = new ControlStep({
+    decimation: () => this.decimation,
+    begin: () => this.beginControlStep(),
+    physics: (from, to) => this.executeSimulationSteps(from, to),
+    end: (diverged) => this.endControlStep(diverged),
+    snapshot: () => this.updateCachedState(),
+  });
   /** Null for a policy-less scene. */
   private controlDt: number | null;
   private loadingScene: Promise<void> | null;
@@ -409,6 +429,11 @@ export class mjswanRuntime {
   private raycastSensors: Record<string, RaycastSensorDescriptor> = {};
   /** Owned here, not by the slot reader: the history advances per substep. */
   private contactSensors = new ContactSensorSet();
+  /** Owned here too: rendering one draws this scene. */
+  private cameraSensors = new CameraSensorSet();
+  private sensorCameraRenderer: SensorCameraRenderer | null = null;
+  /** mjlab's Camera Feeds: what each camera sensor last saw, and its frustum. */
+  readonly cameraFeeds = new CameraFeeds();
 
   constructor(
     mujoco: MainModule,
@@ -449,6 +474,7 @@ export class mjswanRuntime {
         jointBias: (name) => this.jointBias.get(name) ?? 0,
         raycastSensors: () => this.raycastSensors,
         contactSensors: () => this.contactSensors,
+        cameraSensors: () => this.cameraSensors,
       },
     );
 
@@ -760,6 +786,7 @@ export class mjswanRuntime {
       this.timestep = Number.isFinite(timestep) && timestep > 0 ? timestep : 0.001;
       // Never inferred: a wrong control rate runs the policy off-speed silently.
       this.decimation = decimationFor(this.controlDt ?? DEFAULT_VIEWER_CONTROL_DT, this.timestep);
+      this.controlStep.restart();
 
       this.lastSimState.bodies.clear();
       this.updateCachedState();
@@ -1038,6 +1065,7 @@ export class mjswanRuntime {
       mjData: this.mjData,
       dynamicBodyIds: this.dynamicBodyIds,
       controlDt: this.timestep * this.decimation,
+      bodies: this.bodies,
     };
   }
 
@@ -1353,66 +1381,81 @@ export class mjswanRuntime {
   }
 
   private async runLoop(): Promise<void> {
-    let deadline = performance.now();
+    let budget = 0;
+    let last = performance.now();
     while (this.running) {
-      const target = this.timestep * this.decimation;
-
-      if (this.resetRequested) await this.applyRequestedReset();
-      if (this.mjModel && this.mjData) {
-        // Mirrors mjlab's `ManagerBasedRlEnv.step()`, one forward per step:
-        // forward → command → event → obs → action → physics → term → reset.
-        if (this.policyRunner && this.policyStateBuilder) {
-          const state = this.policyStateBuilder.build();
-          const obs = await this.policyRunner.collectObservationsByKey(state);
-          const fresh = await this.runOnnxInference(obs);
-          await this.processActions(fresh);
-        }
-        // mj_step's own reset lands on qpos0 with no reset events: mjswan's full reset follows.
-        const diverged = this.executeSimulationSteps();
-        this.episodeLength += 1;
-
-        // Pre-forward, as in mjlab: derived state lags by one substep, consistently.
-        let autoReset = diverged;
-        // Held across the awaits below: `setPolicy` can null the field mid-step.
-        const terminations = this.terminationManager;
-        if (!autoReset && terminations && this.policyStateBuilder) {
-          const postState = this.policyStateBuilder.build();
-          autoReset = (await terminations.evaluate(postState)).done;
-        }
-        if (autoReset) {
-          // Awaited so the writes precede the forward; caught so a failure costs a reset.
-          try {
-            await this.resetSimulationState({ forward: false });
-          } catch (error) {
-            console.warn('[mjswanRuntime] reset terms failed:', error);
-          }
-          // Last, as in mjlab's `_reset_idx`.
-          terminations?.reset();
-        }
-
-        // The one forward: clears the loop's staleness and publishes a reset's writes.
-        this.mujoco.mj_forward(this.mjModel, this.mjData);
-        this.updateCachedState();
-
-        this.commandManager.update(target, autoReset);
-        this.debugVizSet.update();
-        // Awaited so `mode="interval"` terms resolve in config order.
-        try {
-          await this.eventManager?.tick(target, this.eventContext());
-        } catch (error) {
-          console.warn('[mjswanRuntime] interval events failed:', error);
-        }
-      }
-
       const now = performance.now();
-      deadline = nextDeadline(deadline, now, target * 1000);
-      if (deadline > now) {
-        await new Promise((resolve) => setTimeout(resolve, deadline - now));
+      budget += now - last;
+      last = now;
+      const stepMs = this.timestep * 1000;
+      if (!this.mjModel || !this.mjData) {
+        budget = 0;
+      } else if (budget >= stepMs) {
+        budget = await this.controlStep.spend(budget, stepMs, now + BURST_MS);
+      }
+      if (budget < stepMs) {
+        await new Promise((resolve) => setTimeout(resolve, stepMs - budget));
       } else {
         // Behind schedule: yield anyway, or rAF stops firing and the tab hangs at 100% CPU
         // (issue #103).
         await yieldToBrowser();
       }
+    }
+  }
+
+  /**
+   * A control step mirrors mjlab's `ManagerBasedRlEnv.step()`, one forward per step:
+   * forward → command → event → obs → action → physics → term → reset. This is the part
+   * before the physics.
+   */
+  private async beginControlStep(): Promise<void> {
+    if (this.resetRequested) await this.applyRequestedReset();
+    if (!this.policyRunner || !this.policyStateBuilder) return;
+    // A traced command's update lands asynchronously; mjlab's step has it before the observation.
+    await this.commandManager.settled();
+    const state = this.policyStateBuilder.build();
+    const obs = await this.policyRunner.collectObservationsByKey(state);
+    const fresh = await this.runOnnxInference(obs);
+    await this.processActions(fresh);
+  }
+
+  /** The part of a control step after the physics. */
+  private async endControlStep(diverged: boolean): Promise<void> {
+    if (!this.mjModel || !this.mjData) return;
+    const target = this.timestep * this.decimation;
+    this.episodeLength += 1;
+
+    // Pre-forward, as in mjlab: derived state lags by one substep, consistently.
+    // mj_step's own reset lands on qpos0 with no reset events: mjswan's full reset follows.
+    let autoReset = diverged;
+    // Held across the awaits below: `setPolicy` can null the field mid-step.
+    const terminations = this.terminationManager;
+    if (!autoReset && terminations && this.policyStateBuilder) {
+      const postState = this.policyStateBuilder.build();
+      autoReset = (await terminations.evaluate(postState)).done;
+    }
+    if (autoReset) {
+      // Awaited so the writes precede the forward; caught so a failure costs a reset.
+      try {
+        await this.resetSimulationState({ forward: false });
+      } catch (error) {
+        console.warn('[mjswanRuntime] reset terms failed:', error);
+      }
+      // Last, as in mjlab's `_reset_idx`.
+      terminations?.reset();
+    }
+
+    // The one forward: clears the loop's staleness and publishes a reset's writes.
+    this.mujoco.mj_forward(this.mjModel, this.mjData);
+    this.updateCachedState();
+
+    this.commandManager.update(target, autoReset);
+    this.debugVizSet.update();
+    // Awaited so `mode="interval"` terms resolve in config order.
+    try {
+      await this.eventManager?.tick(target, this.eventContext());
+    } catch (error) {
+      console.warn('[mjswanRuntime] interval events failed:', error);
     }
   }
 
@@ -1444,6 +1487,8 @@ export class mjswanRuntime {
     this.clipActions = null;
     this.raycastSensors = {};
     this.contactSensors = new ContactSensorSet();
+    this.cameraSensors = new CameraSensorSet();
+    this.cameraFeeds.clear();
     this.debugVizSet.clear();
 
     // An MDP switch, in order (ADR 0006 §9): restore every model field the previous
@@ -1511,6 +1556,18 @@ export class mjswanRuntime {
       const structured = collectStructuredSensors(config);
       this.raycastSensors = structured.raycast;
       this.contactSensors = new ContactSensorSet(structured.contact, budget);
+      this.cameraSensors = new CameraSensorSet(structured.camera, (view) =>
+        this.renderSensorView(view),
+      );
+      if (this.cameraSensors.size > 0 && this.bodies) {
+        const groups = this.cameraSensors.geomGroups();
+        addSensorGeomMeshes(this.mujoco, this.mjModel, { bodies: this.bodies }, groups);
+        this.cameraFeeds.load(
+          this.cameraSensors.feeds(this.mjModel),
+          this.mjModel,
+          this.mujocoRoot ?? this.scene,
+        );
+      }
       this.debugVizSet.load(config.debug_vis, this.mujoco, this.mujocoRoot ?? this.scene);
       // Metadata comes from policy.json, bytes from the app; merge them by name.
       if (Array.isArray(config.motions)) {
@@ -2007,6 +2064,8 @@ export class mjswanRuntime {
     // terms run, and zeroing after them would drop that step. No reset term reads it: the
     // build refuses a traced action reset that does.
     this.episodeLength = 0;
+    // A reset landing between two slices drops the rest of the control step.
+    this.controlStep.restart();
     this.lastSimState.bodies.clear();
 
     await applyResetTerms({
@@ -2026,14 +2085,19 @@ export class mjswanRuntime {
     }
   }
 
-  /** True when `mj_step` reset the data itself. */
-  private executeSimulationSteps(): boolean {
+  /**
+   * Physics steps `from` up to `to` of the control step under way; true when `mj_step` reset
+   * the data itself.
+   */
+  private executeSimulationSteps(from: number, to: number): boolean {
     if (!this.mjModel || !this.mjData) {
       return false;
     }
-    // Viewer-only: pointer modes and tracked hands, not part of the MDP.
-    this.interaction.preStep();
-    if (this.modelHasHands) this.handMocap.update(this.mjModel, this.mjData);
+    if (from === 0) {
+      // Viewer-only: pointer modes and tracked hands, not part of the MDP.
+      this.interaction.preStep();
+      if (this.modelHasHands) this.handMocap.update(this.mjModel, this.mjData);
+    }
 
     return stepPhysics(
       this.mujoco,
@@ -2045,6 +2109,8 @@ export class mjswanRuntime {
       // Per substep, not per control step, as mjlab rolls it from
       // `scene.update(dt=physics_dt)` inside its own decimation loop.
       this.contactSensors.size > 0 ? () => this.advanceContactSensors() : undefined,
+      from,
+      to,
     );
   }
 
@@ -2107,7 +2173,7 @@ export class mjswanRuntime {
         input.time_step = new ort.Tensor('float32', new Float32Array([this.onnxTimeStep]), [1, 1]);
       }
       for (const [key, value] of Object.entries(obs)) {
-        input[key] = new ort.Tensor('float32', value, [1, value.length]);
+        input[key] = new ort.Tensor('float32', value, module.inputDims(key, value.length));
       }
       for (const key of module.inKeys) {
         if (!input[key]) {
@@ -2275,6 +2341,20 @@ export class mjswanRuntime {
     }
   }
 
+  /** A camera sensor's view of the state the observation reads, not the last frame drawn. */
+  private renderSensorView(view: SensorCameraView): Uint8Array | null {
+    if (!this.mjModel || !this.mjData || !this.bodies) return null;
+    for (const [id, body] of Object.entries(this.bodies)) {
+      getPosition(this.mjData.xpos, Number(id), body.position);
+      getQuaternion(this.mjData.xquat, Number(id), body.quaternion);
+    }
+    updateLightsFromData(this.mujoco, this.mjData, this.lights);
+    this.sensorCameraRenderer ??= new SensorCameraRenderer(this.renderer, this.scene);
+    const pixels = this.sensorCameraRenderer.render(view, this.mjModel, this.mjData, this.lights);
+    this.cameraFeeds.update(view.cameraId, pixels, view.width, view.height);
+    return pixels;
+  }
+
   private syncStaticBodiesFromData(): void {
     if (!this.mjModel || !this.mjData || !this.bodies) {
       return;
@@ -2375,6 +2455,7 @@ export class mjswanRuntime {
 
       this.resizeHandBoneMeshes();
       updateLightsFromData(this.mujoco, this.mjData, this.lights);
+      this.cameraFeeds.pose(this.mjData);
 
       if (this.mujocoRoot && this.mujocoRoot.cylinders) {
         updateTendonRendering(
@@ -2387,6 +2468,7 @@ export class mjswanRuntime {
       }
     }
 
+    this.interaction.frame();
     this.preview.update();
     this.renderer.render(this.scene, this.camera);
   };
@@ -2484,6 +2566,9 @@ export class mjswanRuntime {
     this.renderer.xr.removeEventListener('sessionend', this.onXrSessionEnd);
     this.controls.dispose();
     this.renderer.setAnimationLoop(null);
+    this.sensorCameraRenderer?.dispose();
+    this.sensorCameraRenderer = null;
+    this.cameraFeeds.clear();
     this.renderer.dispose();
 
     if (this.renderer.domElement.parentElement) {

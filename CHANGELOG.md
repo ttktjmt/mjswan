@@ -14,6 +14,41 @@ shortcuts.
 
 ### Added
 
+- **Camera observations: a policy can read an mjlab `CameraSensor`'s `rgb`** (**document
+  format 9**). A term such as mjlab's `camera_rgb` traces like any other, and the
+  browser renders the model's camera at the sensor's size into its slot, drawing the
+  sensor's `enabled_geom_groups` (groups 3 and up too, which the viewer leaves out) and
+  the scene's lights. The image is fed as float32 like every slot; the graph casts it
+  back to uint8 before the term's own scaling. An actor reading camera groups beside its
+  flat one, as rsl-rl's CNN model does, keeps each as an input of its own name
+  (`in_keys=["actor", "camera"]`), fed in the shape the network declares. The panel's
+  **Camera Feeds** folder, below Scene as in mjlab's viewer, shows each sensor's image
+  as the policy read it under mjlab's label (`robot/wrist_cam_rgb`), enlarged as mjlab
+  enlarges it, with a **Frustum** switch that draws the camera's frustum in the scene;
+  `engine.cameraFeeds` and the state's `cameraFeeds` give a host the same. It is three.js
+  drawing, not mujoco_warp's ray tracer, so shading differs; `depth`, `segmentation` and
+  orthographic cameras are refused at build time.
+
+- **`mjswan demo playground`: MuJoCo Playground 1.0.1 in the browser.** It opens on
+  the SO-101 finding a cube through its wrist camera and bringing it to a target that
+  moves, driven by a policy trained on Playground's `SO101PickCubeVision`, the task its
+  sim-to-real demo deploys, with Playground's own environment and PPO settings: the
+  policy reads the camera's frame (drawn by three.js and averaged to 16 x 16) and moves
+  the arm by deltas at 10 Hz. Beside it, the same task read from the cube's position,
+  `SO101PickCube`. Each is stated as an mjlab task whose terms compute Playground's
+  observations. Then the nine
+  pick-and-place tasks of its agentic suite (`tasks/agentic/tabletop_v0`), each in front
+  of the SO-101 and the I2RT YAM, as eighteen scenes with no policy: the arms hold their
+  home pose and the objects can be grabbed. Playground needs MuJoCo 4, so
+  `examples/demo/playground.py` restates its scene recipe against Menagerie and aloha_sim
+  files fetched at pinned commits.
+  `examples/train/so101_pick_cube.py`, with a Colab and a molab notebook, is how both
+  policies were trained: on one free GPU, resuming from the newest checkpoint on disk or
+  on the Hugging Face Hub, then exported as one ONNX file with the observation layout and
+  a reference rollout a port is checked against. `--task state` (the default) trains
+  `SO101PickCube`, `--task vision` `SO101PickCubeVision`, whose export takes the camera
+  image as a second input and whose reference rollout keeps the camera's frames.
+
 - **`createEngine(element, { archive })`, for a host that renders `.mjz` archives it did not
   build.** `archive: { maxEntries, maxInflatedBytes, extensions }` refuses an archive before
   MuJoCo compiles it when it holds more files, inflates to more bytes, or holds a file whose
@@ -407,6 +442,22 @@ shortcuts.
   dialog it opens.
 
 ### Changed
+
+- **A policy slower than the screen no longer moves the robot in jumps.** The engine ran
+  a control step's physics at once and drew only its end, so a 10 Hz policy (the SO-101
+  Vision scene of `mjswan demo playground`) moved the robot ten times a second while the
+  screen drew sixty. The loop now spends real time as mjlab's viewer does
+  (`viewer/base.py`), a physics step at a time instead of a control step at a time, and
+  draws the poses the physics passes through: a new pose every frame on a 60 Hz screen.
+  The observation, inference, action, terminations, commands and events still run once
+  per control step in the same order, and a seeded rollout is the same, step for step.
+  Behind schedule, a burst stops after one frame and keeps one physics step of budget, as
+  mjlab's viewer does, where the loop used to catch up on as much as 250 ms. A pause stops
+  inside a control step and resumes there; a reset there starts a fresh one. The next
+  observation waits for a traced command's update to land, which the old loop's sleep
+  between control steps used to cover. Pull's arrow and Push's ring are drawn every frame
+  too, from the bodies as drawn and the pointer, where they moved once per control step;
+  the force behind them is still computed once per control step.
 
 - **Pull drags as MuJoCo Studio does; its slider is now `stiffness`, not `spring`.** The
   spring is `vis.map.stiffness` times the grab point's effective mass, taken when the drag
@@ -927,6 +978,12 @@ shortcuts.
   3.11, so a 3.10 install could only resolve the vulnerable releases.
 
 ### Fixed
+
+- **Attached models that each ship a file of the same name keep their own in a `.mjz`.** An
+  absolute asset path went into the archive under its basename, so two YCB objects in one
+  scene, each with a `textured.obj`, packed one mesh for both. A basename now stands alone
+  only while no other file shares it; otherwise each takes the shortest tail of its path
+  that tells them apart (`024_bowl/google_64k/meshes/textured.obj`).
 
 - **A simulation that blows up gets mjswan's reset, not just MuJoCo's.** When a step
   produced a bad qpos, qvel or qacc, `mj_step` zeroed the data itself and the loop went on:

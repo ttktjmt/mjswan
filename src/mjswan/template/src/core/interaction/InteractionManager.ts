@@ -1,6 +1,6 @@
 /**
- * Pointer interaction: the active mode, each mode's parameters, and the hook the step loop
- * calls. Viewer-only: nothing here is part of a task or reaches Python.
+ * Pointer interaction: the active mode, each mode's parameters, and the hooks the step loop
+ * and the render loop call. Viewer-only: nothing here is part of a task or reaches Python.
  */
 import * as THREE from 'three';
 import type { MjvPerturb } from 'mujoco';
@@ -57,6 +57,8 @@ export class InteractionManager {
   private readonly values = defaultParams();
   private active: InteractionModeId = DEFAULT_INTERACTION_MODE;
   private perturbHandle: MjvPerturb | null = null;
+  /** Sim time at the last frame, so a drawing advances with the sim and holds when it pauses. */
+  private frameTime = 0;
 
   constructor(options: InteractionManagerOptions) {
     this.readSim = options.sim;
@@ -162,6 +164,15 @@ export class InteractionManager {
     if (!sim.mjData) return;
     this.wrench.begin(sim.mjData);
     this.current()?.preStep(this.pointer.current(), this.context());
+  }
+
+  /** Every frame, before the render: the active mode draws against the bodies as posed. */
+  frame(): void {
+    const time = this.readSim().mjData?.time ?? 0;
+    // A reset or a new scene rewinds the clock: nothing to advance by.
+    const dt = Math.max(0, time - this.frameTime);
+    this.frameTime = time;
+    this.current()?.frame?.(this.pointer.current(), this.context(), dt);
   }
 
   dispose(): void {

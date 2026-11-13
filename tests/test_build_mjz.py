@@ -13,9 +13,11 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
+import mujoco
 import pytest
 
 from mjswan.build.mjz import (
+    _absolute_entry_names,
     _buffer_texture_to_png,
     _make_zip_safe_path,
     _rewrite_xml_paths,
@@ -90,6 +92,43 @@ class TestMakeZipSafePath:
 
     def test_only_dotdot_returns_empty(self):
         assert _make_zip_safe_path("../..") == ""
+
+
+# ===========================================================================
+# L1: _absolute_entry_names
+# ===========================================================================
+class TestAbsoluteEntryNames:
+    def test_a_unique_basename_stays_a_basename(self):
+        assert _absolute_entry_names(["/models/bowl/textured.obj"]) == {
+            "/models/bowl/textured.obj": "textured.obj"
+        }
+
+    def test_shared_basenames_take_the_shortest_tail_that_differs(self):
+        names = _absolute_entry_names(
+            [
+                "/ycb/024_bowl/google_64k/meshes/textured.obj",
+                "/ycb/011_banana/google_64k/meshes/textured.obj",
+            ]
+        )
+        assert names == {
+            "/ycb/024_bowl/google_64k/meshes/textured.obj": (
+                "024_bowl/google_64k/meshes/textured.obj"
+            ),
+            "/ycb/011_banana/google_64k/meshes/textured.obj": (
+                "011_banana/google_64k/meshes/textured.obj"
+            ),
+        }
+
+    def test_one_file_named_twice_is_one_entry(self):
+        names = _absolute_entry_names(["/a/mesh.stl", "/a/./mesh.stl"])
+        assert names == {"/a/mesh.stl": "mesh.stl"}
+
+    def test_a_path_that_is_another_ones_tail_stays_relative(self):
+        names = _absolute_entry_names(["/a/x.stl", "/b/a/x.stl"])
+        assert names == {"/a/x.stl": "a/x.stl", "/b/a/x.stl": "b/a/x.stl"}
+
+    def test_relative_paths_are_left_out(self):
+        assert _absolute_entry_names(["meshes/foo.stl", "../bar.png"]) == {}
 
 
 # ===========================================================================
@@ -280,6 +319,41 @@ class TestToZipDeflated:
         assert spec.meshdir == orig_meshdir
         assert spec.texturedir == orig_texturedir
         assert [(m.name, m.file) for m in spec.meshes] == orig_mesh_files
+
+    def test_attached_meshes_sharing_a_basename_keep_their_own_files(
+        self, tmp_path: Path
+    ):
+        """Two attached models that each ship a ``part.obj`` (YCB objects do)."""
+        tetra = "v 0 0 0\nv {s} 0 0\nv 0 {s} 0\nv 0 0 {s}\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n"
+        scene = mujoco.MjSpec()
+        for name, size in (("small", 0.1), ("large", 0.3)):
+            mesh_dir = tmp_path / name / "meshes"
+            mesh_dir.mkdir(parents=True)
+            (mesh_dir / "part.obj").write_text(tetra.format(s=size))
+            child = mujoco.MjSpec()
+            child.add_mesh(name="part", file=str(mesh_dir / "part.obj"))
+            body = child.worldbody.add_body(name="body")
+            body.add_geom(type=mujoco.mjtGeom.mjGEOM_MESH, meshname="part")
+            scene.attach(child, prefix=f"{name}/", frame=scene.worldbody.add_frame())
+
+        out = tmp_path / "scene.mjz"
+        to_zip_deflated(scene, str(out))
+
+        with zipfile.ZipFile(out) as zf:
+            assert {"small/meshes/part.obj", "large/meshes/part.obj"} <= set(
+                zf.namelist()
+            )
+        model = mujoco.MjSpec.from_zip(str(out)).compile()
+        extents = {
+            model.mesh(i).name: float(
+                model.mesh_vert[
+                    model.mesh_vertadr[i] : model.mesh_vertadr[i]
+                    + model.mesh_vertnum[i]
+                ].max()
+            )
+            for i in range(model.nmesh)
+        }
+        assert extents["large/part"] > 2 * extents["small/part"]
 
     def test_falls_back_to_basename_for_spec_assets(self):
         class FakeMesh:

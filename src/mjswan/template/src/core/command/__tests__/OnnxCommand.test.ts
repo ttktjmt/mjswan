@@ -738,6 +738,23 @@ describe('OnnxCommand: sync/async boundary', () => {
     expect(session.inFlightCount).toBe(1);
   });
 
+  it('settled() resolves once the update in flight has landed', async () => {
+    const session = new FakeSession(() => velocityOutputs(1, 2, 3), true);
+    const cmd = new OnnxCommand('twist', VELOCITY_CFG, null, {
+      session,
+      rng: new SeededRng(1),
+    });
+    cmd.update(0.02);
+    let landed = false;
+    const settled = cmd.settled().then(() => (landed = true));
+    await settle();
+    expect(landed).toBe(false);
+
+    session.flush();
+    await settled;
+    expect(Array.from(cmd.getCommand())).toEqual([1, 2, 3]);
+  });
+
   it('skips frames while inference is in flight (never queues a backlog)', async () => {
     const session = new FakeSession(() => velocityOutputs(1, 2, 3), true);
     const cmd = new OnnxCommand('twist', VELOCITY_CFG, null, {
