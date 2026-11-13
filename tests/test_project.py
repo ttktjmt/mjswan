@@ -532,6 +532,7 @@ class TestPolicyHandle:
 
         class MotionCommandCfg:
             __module__ = "mjlab.fake"
+            motion_file = ""
 
             def __init__(self):
                 self.anchor_body_name = "torso_link"
@@ -572,6 +573,7 @@ class TestPolicyHandle:
 
         class MotionCommandCfg:
             __module__ = "mjlab.fake"
+            motion_file = ""
 
             def __init__(self):
                 self.anchor_body_name = "torso_link"

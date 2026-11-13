@@ -20,6 +20,7 @@ import { INTERACTION_MODES, INTERACTION_MODE_IDS } from '../core/interaction/par
 import { createSerial } from './serial';
 import type {
   CameraControls,
+  CameraFeedControls,
   CommandControls,
   CommandDescriptor,
   CreateEngineOptions,
@@ -116,6 +117,7 @@ class Engine implements MjswanEngine {
   readonly camera: CameraControls;
   readonly commands: CommandControls;
   readonly debugVis: DebugVisControls;
+  readonly cameraFeeds: CameraFeedControls;
   readonly events: EventControls;
   readonly interaction: InteractionControls;
   readonly xr: XrControls;
@@ -153,6 +155,13 @@ class Engine implements MjswanEngine {
       },
       set: (id, enabled) => {
         this.runtime.debugViz.set(id, enabled);
+        this.refresh();
+      },
+    };
+    this.cameraFeeds = {
+      attach: (id, canvas) => this.runtime.cameraFeeds.attach(id, canvas),
+      setFrustum: (id, shown) => {
+        this.runtime.cameraFeeds.setFrustum(id, shown);
         this.refresh();
       },
     };
@@ -210,6 +219,7 @@ class Engine implements MjswanEngine {
       commandValues: cm.getValues(),
       debugVis: this.runtime.debugViz.entries(),
       debugVisEnabled: this.runtime.debugViz.isShown(),
+      cameraFeeds: this.runtime.cameraFeeds.list(),
       camera: { tracking: this.runtime.isCameraTracking, fovy: this.runtime.getCameraView().fovy },
       events: this.runtime.eventControls(),
       interactions: this.runtime.interactionModes().map((mode) => ({

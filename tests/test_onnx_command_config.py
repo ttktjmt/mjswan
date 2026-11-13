@@ -608,6 +608,56 @@ def test_a_sensor_field_left_uncomputed_replays_as_none():
     assert export.reference_output.tolist() == [True]
 
 
+def test_a_cameras_uint8_image_is_fed_as_float32_and_cast_back():
+    """mjlab's `camera_rgb` reads `CameraSensor.data.rgb`, uint8, and scales it itself.
+
+    The browser feeds every slot as float32, so the graph takes the pixels as float32
+    and casts back to uint8 before the term's own `.float() / 255`: the same numbers,
+    and a graph whose input type the runtime can feed.
+    """
+    import onnx
+    from onnx.reference import ReferenceEvaluator
+
+    from mjswan.compile.term import trace_term
+
+    pixels = torch.arange(2 * 2 * 3, dtype=torch.uint8).reshape(1, 2, 2, 3) * 20
+
+    class _CameraData:
+        def __init__(self):
+            self.rgb = pixels
+            self.depth = None
+
+    class _Sensor:
+        def __init__(self):
+            self.data = _CameraData()
+
+    class _Scene:
+        def __init__(self):
+            self.sensors = {"camera_d405": _Sensor()}
+
+        def __getitem__(self, name):
+            return self.sensors[name]
+
+    class _Env:
+        def __init__(self):
+            self.scene = _Scene()
+
+    def camera_rgb(env, sensor_name="camera_d405"):
+        rgb = env.scene[sensor_name].data.rgb
+        return rgb.permute(0, 3, 1, 2).float() / 255.0
+
+    export = trace_term(camera_rgb, {}, _Env(), name="camera_rgb")
+    model = onnx.load_from_string(export.onnx_bytes)
+    (graph_input,) = model.graph.input
+    assert graph_input.type.tensor_type.elem_type == onnx.TensorProto.FLOAT
+
+    (out,) = ReferenceEvaluator(model).run(
+        None, {graph_input.name: pixels.numpy().astype("float32")}
+    )
+    expected = (pixels.permute(0, 3, 1, 2).float() / 255.0).numpy()
+    assert out == pytest.approx(expected)
+
+
 # ---------------------------------------------------------------------------
 # Termination fusion, whose payoff scales with the traced-term count: two or three in the
 # locomotion and manipulation tasks, four in the tracking tasks.

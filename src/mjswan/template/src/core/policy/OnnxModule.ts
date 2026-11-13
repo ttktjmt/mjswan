@@ -75,6 +75,20 @@ export class OnnxModule {
   }
 
   /**
+   * The dims to feed an observation group of `length` values under `key`: the network's
+   * own when they hold exactly that many (a CNN's `[1, C, H, W]` image), else a row.
+   */
+  inputDims(key: string, length: number): number[] {
+    const index = this.inKeys.indexOf(key);
+    const meta = index >= 0 ? this.session?.inputMetadata?.[index] : undefined;
+    if (meta?.isTensor && meta.shape.length > 2) {
+      const dims = meta.shape.map((d) => (typeof d === 'number' && d > 0 ? d : 1));
+      if (dims.reduce((a, b) => a * b, 1) === length) return dims;
+    }
+    return [1, length];
+  }
+
+  /**
    * `adapt_hx`'s shape as the network declares it, a dynamic axis read as 1, so a carry
    * wider than 128 starts at its own width.
    */

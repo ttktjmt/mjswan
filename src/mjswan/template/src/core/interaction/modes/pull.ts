@@ -12,11 +12,14 @@ export class PullMode implements InteractionMode {
   private bodyId = 0;
   private grab: [number, number, number] = [0, 0, 0];
   private localmass = 1;
+  /** Newtons, set each control step: the arrow's girth between them. */
+  private force = 0;
 
   onDown(gesture: PointerGesture, ctx: ModeContext): PointerClaim {
     const { mujoco, mjModel, mjData } = ctx.sim();
     if (!mjModel || !mjData || gesture.hit.bodyId <= 0) return 'none';
     this.bodyId = gesture.hit.bodyId;
+    this.force = 0;
     this.grab = toBodyFrame(mjData, this.bodyId, gesture.hit.point);
     // Once per grab, at the pose it was grabbed in, as Studio's `InitPerturb`.
     this.localmass = perturbMass(mujoco, mjModel, mjData, this.bodyId, toMjc(gesture.hit.point));
@@ -38,12 +41,17 @@ export class PullMode implements InteractionMode {
     if (!mjModel || !mjData) return;
     // Held for a control step, the spring overshoots once omega * dt > 1.
     mjModel.vis.map.stiffness = Math.min(ctx.params().stiffness, 1 / (controlDt * controlDt));
-    const force = ctx.wrench.pull(mujoco, mjModel, mjData, ctx.perturb(), {
+    this.force = ctx.wrench.pull(mujoco, mjModel, mjData, ctx.perturb(), {
       bodyId: this.bodyId,
       localPoint: this.grab,
       targetPoint: toMjc(gesture.ray),
       localmass: this.localmass,
     });
-    ctx.arrow.show(fromBodyFrame(mjData, this.bodyId, this.grab), gesture.ray, force);
+  }
+
+  frame(gesture: PointerGesture | null, ctx: ModeContext): void {
+    if (!gesture || this.bodyId <= 0) return;
+    const body = ctx.sim().bodies?.[this.bodyId];
+    if (body) ctx.arrow.show(fromBodyFrame(body, this.grab), gesture.ray, this.force);
   }
 }

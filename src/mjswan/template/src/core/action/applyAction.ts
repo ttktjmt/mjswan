@@ -411,9 +411,10 @@ export function clampActions(action: Float32Array, bound: number | null): void {
 }
 
 /**
- * `decimation` substeps, re-applying the processed action each time: a motor's PD reads live
- * state. Returns true, skipping the rest, when `mj_step` reset a bad state itself, seen as the
- * time going back (as Studio's `StepControl` checks).
+ * Substeps `from` up to `to` of a control step of `decimation` (all of it by default),
+ * re-applying the processed action each time: a motor's PD reads live state. Returns true,
+ * skipping the rest, when `mj_step` reset a bad state itself, seen as the time going back
+ * (as Studio's `StepControl` checks).
  */
 export function stepPhysics(
   mujoco: { mj_step(model: MjModel, data: MjData): void },
@@ -424,8 +425,10 @@ export function stepPhysics(
   onSubstep?: () => void,
   /** After the step, where mjlab's `scene.update(dt=physics_dt)` reads sensors. */
   onSubstepEnd?: () => void,
+  from = 0,
+  to = decimation,
 ): boolean {
-  for (let substep = 0; substep < decimation; substep++) {
+  for (let substep = from; substep < to; substep++) {
     applyAction(mjData, terms, substep, decimation);
     onSubstep?.();
     const time = mjData.time;

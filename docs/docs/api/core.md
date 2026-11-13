@@ -1143,7 +1143,7 @@ mjswan.register_command(mjlab_name: str, spec: CommandBinding) -> None
 
 Register an adapter from a custom mjlab `*CommandCfg` class to a browser-side command term. `mjlab_name` should typically be the mjlab config class name (e.g. `"LiftingCommandCfg"`).
 
-mjswan binds two of mjlab's command classes itself: `UniformVelocityCommandCfg`, traced from its own body and drawn with mjlab's arrows, and `MotionCommandCfg`, native, with its reset jitter traced. A class only one task uses is that task's to register: `examples/demo/main.py` registers `LiftingCommandCfg` with a `trace_override` and a `viz`.
+mjswan binds two of mjlab's command classes itself: `UniformVelocityCommandCfg`, traced from its own body and drawn with mjlab's arrows, and `MotionCommandCfg`, native, with its reset jitter traced. The `MotionCommandCfg` binding needs mjlab's `motion_file`, `anchor_body_name` and `body_names`, so another class of that name (MyoSuite's) raises a `TypeError` until it is registered with a binding of its own. A class only one task uses is that task's to register: `examples/demo/main.py` registers `LiftingCommandCfg` with a `trace_override` and a `viz`.
 
 ---
 

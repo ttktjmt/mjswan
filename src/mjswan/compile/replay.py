@@ -36,6 +36,7 @@ from .slot import (
     _ENV_NS,
     _ENV_SLOT_DTYPES,
     _EVENT_ENV_READS,
+    _SENSOR_FIELD_DTYPES,
     _SENSOR_NS,
     _SIM_NS,
     _TERM_ENV_READS,
@@ -176,7 +177,17 @@ class _ReplayEntity:
         real_env: Any,
         reader_fields: Collection[str],
     ):
+        self._real_env = real_env
+        self._entity = entity
         self.data = _ReplayData(entity, slots, real_env, reader_fields)
+
+    @property
+    def is_fixed_base(self) -> bool:
+        return self._real_env.scene[self._entity].is_fixed_base
+
+    @property
+    def indexing(self) -> Any:
+        return self._real_env.scene[self._entity].indexing
 
 
 class _ReplaySensorData:
@@ -190,7 +201,9 @@ class _ReplaySensorData:
     def __getattr__(self, name: str) -> Any:
         key = (_SENSOR_NS, f"{self._sensor}.{name}")
         if key in self._slots:
-            return self._slots[key]
+            dtype = _SENSOR_FIELD_DTYPES.get(name)
+            value = self._slots[key]
+            return value if dtype is None else value.to(dtype)
         # Discovery records tensors only; a term may branch on a field being `None`.
         if hasattr(self._real.data, name) and getattr(self._real.data, name) is None:
             return None
@@ -212,6 +225,10 @@ class _ReplayScene:
         self._sensors = sensors or {}
         self._real_env = real_env
         self._reader_fields = reader_fields
+
+    @property
+    def env_origins(self) -> torch.Tensor:
+        return self._real_env.scene.env_origins
 
     def __getitem__(self, name: str) -> Any:
         real = self._sensors.get(name)

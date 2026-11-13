@@ -38,6 +38,7 @@ from .slot import (
     _ENV_NS,
     _ENV_SLOT_DTYPES,
     _EVENT_ENV_READS,
+    _SENSOR_FIELD_DTYPES,
     _SENSOR_NS,
     _SIM_NS,
     _TERM_ENV_READS,
@@ -251,6 +252,10 @@ class _RecordingScene:
         self._reader_fields = reader_fields
         self._sim = sim
 
+    @property
+    def env_origins(self) -> torch.Tensor:
+        return self._real.env_origins
+
     def __getitem__(self, name: str) -> Any:
         real = self._real[name]
         if _is_sensor(self._real, name):
@@ -280,7 +285,9 @@ class _RecordingSensorData:
     def __getattr__(self, name: str) -> Any:
         value = getattr(self._real, name)
         if isinstance(value, torch.Tensor):
-            self._log.append(((_SENSOR_NS, f"{self._sensor}.{name}"), value))
+            # Logged as the float32 the browser feeds; replay casts back to its dtype.
+            logged = value.to(torch.float32) if name in _SENSOR_FIELD_DTYPES else value
+            self._log.append(((_SENSOR_NS, f"{self._sensor}.{name}"), logged))
         return value
 
 

@@ -37,7 +37,7 @@ async function main(): Promise<void> {
       runtime: {
         mjModel: { nbody: number; neq: number } | null;
         mjData: { xfrc_applied: ArrayLike<number>; eq_active: ArrayLike<number> } | null;
-        executeSimulationSteps(): void;
+        executeSimulationSteps(from: number, to: number): boolean;
       };
     }
   ).runtime;
@@ -47,11 +47,11 @@ async function main(): Promise<void> {
   // After each step, not on a timer: a loop behind schedule runs steps back to back between
   // yields, and a timer there misses the one step a push lasts.
   const step = runtime.executeSimulationSteps.bind(runtime);
-  runtime.executeSimulationSteps = () => {
-    step();
+  runtime.executeSimulationSteps = (from, to) => {
+    const diverged = step(from, to);
     const { mjData, mjModel } = runtime;
     // Absent while a scene or the XR hands rebuild the model.
-    if (!mjData || !mjModel) return;
+    if (!mjData || !mjModel) return diverged;
     for (let body = 1; body < mjModel.nbody; body++) {
       const at = body * 6;
       const force = Math.hypot(mjData.xfrc_applied[at], mjData.xfrc_applied[at + 1], mjData.xfrc_applied[at + 2]);
@@ -60,6 +60,7 @@ async function main(): Promise<void> {
     for (let eq = 0; eq < mjModel.neq; eq++) {
       if (mjData.eq_active[eq]) welded = true;
     }
+    return diverged;
   };
 
   window.__probe = {

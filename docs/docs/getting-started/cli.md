@@ -95,13 +95,15 @@ With no name it lists the bundled demos; with one it runs that demo. They live u
 mode from a clone (`uv sync`, or `pip install -e .`): the command runs the checkout mjswan
 was installed from, whatever the current directory. They fetch what they show (from
 mjlab, from the Hugging Face Hub, or from upstream): Hub downloads are cached for later
-runs, while `mujoco` fetches MuJoCo's gallery at the `3.11.0` tag again each time.
+runs, and `playground` caches its GitHub files under `~/.cache/mjswan/playground`, while
+`mujoco` fetches MuJoCo's gallery at the `3.11.0` tag again each time.
 
 | Demo | Source | Needs |
 |---|---|---|
 | `main` | `examples/demo/main.py`, the demo deployed to GitHub Pages | `mjswan[demo]` (`hf`, `mjlab` and `wbc-mjlab`) |
 | `simple` | `examples/demo/simple.py`, one mjlab task, one checkpoint | `mjswan[hf,mjlab]` |
 | `mujoco` | `examples/demo/mujoco_models.py`, MuJoCo's `<replicate>` gallery, no policy | core only |
+| `playground` | `examples/demo/playground.py`, MuJoCo Playground 1.0.1: the SO-101 PickCube policies `examples/train` trains, one reading the cube's position and one the wrist camera, and the tabletop scenes on the SO-101 and YAM, no policy | `mjswan[hf,mjlab]` |
 
 The bare command lists rather than running one, because each of these downloads.
 

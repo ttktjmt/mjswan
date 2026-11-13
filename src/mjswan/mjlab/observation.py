@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import warnings
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 
 from ..document.manifest import DEFAULT_IN_KEYS
@@ -200,6 +200,7 @@ def _is_obs_group(value: Any) -> bool:
 def _select_policy_group(
     observations: Mapping[str, Any],
     obs_groups: Mapping[str, tuple[str, ...]] | None,
+    image_groups: Collection[str] = (),
 ) -> Mapping[str, Any]:
     """Reduce mjlab's network-keyed group dict to what the exported actor reads.
 
@@ -211,38 +212,68 @@ def _select_policy_group(
     A key the runner attributes to no network (``"command_"`` on a multi-input policy)
     is an author-added slot and stays, and a dict sharing no key with the actor's is not
     the task's and is left alone.
+
+    An actor reading images as well (rsl-rl's CNN model) takes its one flat group as
+    the input ``obs`` and each of *image_groups* as an input of the group's own name,
+    so those keep their names beside the default slot.
     """
     if not observations:
         return observations
     actor_groups = tuple((obs_groups or {}).get(_MJLAB_ACTOR_NETWORK) or ())
     if not actor_groups or set(actor_groups).isdisjoint(observations):
         return observations
-    if len(actor_groups) != 1:
-        # rsl-rl concatenates several groups per network; mjswan feeds one vector per
-        # ONNX input, and taking the first would silently shorten it.
+    flat_groups = [g for g in actor_groups if g not in image_groups]
+    if len(flat_groups) != 1:
+        # rsl-rl concatenates a network's flat groups into one input; mjswan feeds one
+        # group per ONNX input, and taking the first would silently shorten it.
         raise ValueError(
             "The task's runner config feeds its actor network "
-            f"{len(actor_groups)} concatenated observation groups "
-            f"({', '.join(map(repr, actor_groups))}). mjswan feeds one group per "
+            f"{len(flat_groups)} concatenated observation groups "
+            f"({', '.join(map(repr, flat_groups))}). mjswan feeds one group per "
             "ONNX input and cannot concatenate them, so pass the single group the "
             "exported policy actually takes: "
             "`observations=env_cfg.observations[<name>]`."
         )
-    actor_key = actor_groups[0]
+    actor_key = flat_groups[0]
+    actor_images = set(actor_groups) - {actor_key}
     network_groups = {g for groups in (obs_groups or {}).values() for g in groups}
     selected: dict[str, Any] = {}
     for key, group in observations.items():
         if key == actor_key:
             selected[DEFAULT_OBS_GROUP_KEY] = group
-        elif key not in network_groups:
+        elif key in actor_images or key not in network_groups:
             selected[key] = group
     return selected
+
+
+def camera_groups(observations: Any, sensors: Any) -> frozenset[str]:
+    """The groups of mjlab's ``env_cfg.observations`` with a term reading a camera.
+
+    rsl-rl gives each image group an input of its own, by the tensor's rank; a camera
+    is what makes a term's output an image, and naming one is all the config says.
+    """
+    if not isinstance(observations, Mapping):
+        return frozenset()
+    cameras = {
+        sensor.name
+        for sensor in sensors or ()
+        if type(sensor).__name__ == "CameraSensorCfg"
+    }
+    return frozenset(
+        key
+        for key, group in observations.items()
+        if any(
+            (getattr(term, "params", None) or {}).get("sensor_name") in cameras
+            for term in (getattr(group, "terms", None) or {}).values()
+        )
+    )
 
 
 def adapt_observations(
     observations: Mapping[str, Any] | Any | None,
     *,
     obs_groups: Mapping[str, tuple[str, ...]] | None = None,
+    image_groups: Collection[str] = (),
 ) -> dict[str, MjswanObservationGroupCfg] | None:
     """Adapt observation groups, converting mjlab types if detected.
 
@@ -258,14 +289,15 @@ def adapt_observations(
     dropped: silently beside an ``actor`` group, since the pair is mjlab's own dict,
     with a warning otherwise.
 
-    *obs_groups* is the runner's ``rl_cfg.obs_groups``, read only for the dict form.
+    *obs_groups* is the runner's ``rl_cfg.obs_groups`` and *image_groups* what
+    :func:`camera_groups` found, both read only for the dict form.
     """
     if observations is None:
         return None
     if _is_obs_group(observations):
         observations = {DEFAULT_OBS_GROUP_KEY: observations}
     else:
-        observations = _select_policy_group(observations, obs_groups)
+        observations = _select_policy_group(observations, obs_groups, image_groups)
 
     # `Any`-valued while filling: the last branch passes a duck-typed group through.
     adapted: dict[str, Any] = {}
@@ -291,4 +323,4 @@ def adapt_observations(
     return adapted
 
 
-__all__ = ["DEFAULT_OBS_GROUP_KEY", "adapt_observations"]
+__all__ = ["DEFAULT_OBS_GROUP_KEY", "adapt_observations", "camera_groups"]
