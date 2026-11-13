@@ -44,7 +44,14 @@ from .export import (
     reference_runner,
 )
 from .gate import GatedIndexing, MaskedRows
-from .proxy import _CONTAINERS, _attrs, _holds_live, _is_live_object, _is_sensor
+from .proxy import (
+    _CONTAINERS,
+    _attrs,
+    _holds_live,
+    _is_live_object,
+    _is_sensor,
+    _sim_memory,
+)
 from .record import _RecordingEnv
 from .replay import _ReplayEnv
 from .rng import DrawRecorder, ReplayRng
@@ -322,26 +329,29 @@ def _entity_attrs(term: Any, name: str) -> tuple[str, list[str]]:
     """The entity the term drives, and every attribute holding it.
 
     Refuses an attribute holding another live object (the entity's data, another
-    entity, the scene, the sim, the env, a sensor or a manager's term): the term cached
-    it at init, so its reads would bypass the tracer and bake as constants.
+    entity, the scene, the sim, the env, a sensor or a manager's term) or a view of the
+    sim's arrays: the term cached it at init, so its reads would bypass the tracer and
+    bake as constants.
     """
     env = term._env
     entity_name = term.cfg.entity_name
     entity = env.scene[entity_name]
     attrs: list[str] = []
     foreign: list[str] = []
+    within, sim = frozenset({id(term)}), _sim_memory(env)
     for attr, value in vars(term).items():
         if value is entity:
             attrs.append(attr)
-        elif attr not in ("_env", "cfg") and _holds_live(value, frozenset({id(term)})):
+        elif attr not in ("_env", "cfg") and _holds_live(value, within, sim):
             foreign.append(attr)
     if foreign:
         raise UntraceableAction(
-            f"Action term {name!r} keeps {foreign}, which is or holds a live mjlab "
-            f"object other than its entity {entity_name!r}, from its __init__. Its "
-            "reads would bypass the tracer and freeze at their build-time values; read "
-            "it through self._env or the entity in the body instead, via "
-            "mjswan.register_action(..., ActionBinding(trace_override=...))."
+            f"Action term {name!r} keeps {foreign}, which is or holds live sim state "
+            f"(a mjlab object other than its entity {entity_name!r}, or a view of the "
+            "sim's arrays) from its __init__. Its reads would bypass the tracer and "
+            "freeze at their build-time values; read it through self._env or the entity "
+            "in the body instead, via mjswan.register_action(..., "
+            "ActionBinding(trace_override=...))."
         )
     return entity_name, attrs
 

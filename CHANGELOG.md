@@ -141,9 +141,9 @@ shortcuts.
   graph cannot reproduce fails the build with the fix in the message: Python state at any
   depth (a counter, an attribute made in the body, a deque of past actions), a write to
   the sim or to an entity's buffers, two state fields that share one tensor, a live mjlab
-  object cached at init, even inside a plain object (the entity's data, the scene, the
-  sim), a field the browser's slot reader does not serve, or a reset that reads the
-  episode clock. One of mjlab's own classes mjswan has none of, such as
+  object or a view of the sim's arrays cached at init, even inside a plain object (the
+  entity's data, the scene, the sim, `env.sim.data.qpos[:]`), a field the browser's slot
+  reader does not serve, or a reset that reads the episode clock. One of mjlab's own classes mjswan has none of, such as
   `DifferentialIKActionCfg`, is still skipped with a warning.
 
 - **`RelativeJointPositionActionCfg`** (`joint_position_relative`): the target is the
@@ -985,8 +985,8 @@ shortcuts.
   holds none or the scene's events give the term other params. A class whose call
   changes its own state is refused, state at any depth inside a plain object included.
   So is an event term that keeps an entity or sensor inside such an object, and an event
-  or action term that keeps the sim's raw arrays (`env.sim.data.*`): their reads would
-  freeze at build time.
+  or action term that keeps the sim's arrays or a view of them (`env.sim.data.qpos[:]`,
+  a raw warp array): their reads would freeze at build time.
 
 - **Observation and termination terms may read `env.scene.env_origins` and an entity's
   `indexing` and `is_fixed_base`.** Tracing failed on these reads; the graph now holds

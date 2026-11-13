@@ -28,7 +28,7 @@ from .export import (
     no_hidden_reads,
 )
 from .model import SET_CONST_FIELDS, ModelPlan, ModelRecorder, ModelReplay
-from .proxy import _holds_live
+from .proxy import _holds_live, _sim_memory
 from .record import (
     WriteCaptures,
     _EventCaptureEnv,
@@ -64,11 +64,12 @@ def _event_instance(
     # A path back to the instance is not followed: the cfg mjlab built it from holds
     # it as the func.
     within = frozenset({id(owner)})
+    sim = _sim_memory(real_env)
     original = {}
     for name, value in vars(owner).items():
         if id(value) in replacements:
             original[name] = value
-        elif _holds_live(value, within):
+        elif _holds_live(value, within, sim):
             raise ValueError(
                 f"Event instance caches unsupported live state in {name!r}; read it through the env argument"
             )

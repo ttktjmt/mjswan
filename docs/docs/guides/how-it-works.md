@@ -232,8 +232,8 @@ An event written as a class, as mjlab allows, is traced through the instance mjl
 with the env, or a new one when the scene's events give it other params. An event graph
 keeps no state between firings, so a class whose call changes its own state fails the
 build, state inside a plain object it keeps included. So does one that keeps the sim's
-raw arrays (`env.sim.data.*`), or an entity inside a plain object, from its `__init__`,
-since reading them would freeze at build time.
+arrays or a view of them (`env.sim.data.qpos[:]`, a raw warp array), or an entity inside
+a plain object, from its `__init__`, since reading them would freeze at build time.
 
 mjlab's command bodies narrow to the envs a draw selected (`env_ids[mask]`,
 `mask.nonzero()`) and skip an empty set. The tracer keeps such a set whole and carries the

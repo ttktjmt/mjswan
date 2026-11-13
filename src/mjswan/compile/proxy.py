@@ -14,6 +14,7 @@ import functools
 import types
 from typing import Any, Callable, Collection
 
+import numpy as np
 import torch
 
 from .slot import _TERM_ENV_READS, _forward_env_attr, refuse_read
@@ -191,12 +192,58 @@ def _attrs(value: Any) -> dict[str, Any] | None:
     return found
 
 
-def _holds_live(value: Any, within: frozenset[int] = frozenset()) -> bool:
+_Span = tuple[str, int, int]
+
+
+def _span(value: Any) -> _Span | None:
+    """The memory *value* views, as ``(device, start, end)``: a tensor's storage, an
+    array's buffer or a warp array's allocation, else ``None``."""
+    if isinstance(value, torch.Tensor):
+        storage = value.untyped_storage()
+        return (
+            str(value.device),
+            storage.data_ptr(),
+            storage.data_ptr() + storage.nbytes(),
+        )
+    if isinstance(value, np.ndarray):
+        start = value.__array_interface__["data"][0]
+        return "cpu", start, start + value.nbytes
+    if type(value).__module__.startswith("warp.") and isinstance(
+        getattr(value, "ptr", None), int
+    ):
+        return str(value.device), value.ptr, value.ptr + (value.capacity or 0)
+    return None
+
+
+def _sim_memory(env: Any) -> tuple[_Span, ...]:
+    """The spans of the sim's own buffers, which a term must read through the env: a
+    view of one kept from ``__init__`` freezes at its build-time values."""
+    sim = getattr(env, "sim", None)
+    stack = [getattr(sim, "wp_data", None), getattr(sim, "wp_model", None)]
+    spans = []
+    while stack:
+        value = stack.pop()
+        if (span := _span(value)) is not None:
+            spans.append(span)
+        elif isinstance(value, (list, tuple)):
+            stack.extend(value)
+        elif type(value).__module__.split(".")[0] == "mujoco_warp":
+            stack.extend(getattr(value, "__dict__", {}).values())
+    return tuple(spans)
+
+
+def _holds_live(
+    value: Any, within: frozenset[int] = frozenset(), sim: tuple[_Span, ...] = ()
+) -> bool:
     """Whether *value* is a live object or holds one at any depth, inside containers
-    and plain objects. A reference back to a value in *within* (ids of the values
+    and plain objects. A tensor or array counts when it views a buffer in *sim* (from
+    :func:`_sim_memory`). A reference back to a value in *within* (ids of the values
     enclosing it) is passed over."""
     if id(value) in within:
         return False
+    if (span := _span(value)) is not None:
+        device, start, end = span
+        return any(d == device and s < end and start < e for d, s, e in sim)
     if _is_live_object(value):
         return True
     within = within | {id(value)}
@@ -206,7 +253,7 @@ def _holds_live(value: Any, within: frozenset[int] = frozenset()) -> bool:
         members = value
     else:
         members = (_attrs(value) or {}).values()
-    return any(_holds_live(v, within) for v in members)
+    return any(_holds_live(v, within, sim) for v in members)
 
 
 class _EnvConstants:
@@ -238,6 +285,8 @@ def _action_term_proxy(
     bake. A property runs on the stand-in, so what it reads comes back through here.
     """
 
+    sim = _sim_memory(getattr(real, "_env", None))
+
     def __getattribute__(self: Any, attr: str) -> Any:  # noqa: N807
         if attr == "raw_action" and traced is None:
             return raw_action()
@@ -249,7 +298,7 @@ def _action_term_proxy(
         if isinstance(value, torch.Tensor):
             if attr == _PROCESSED_FIELD or (traced is not None and attr in traced):
                 return read_state(attr, value)
-        elif not _holds_live(value, frozenset({id(real)})):
+        elif not _holds_live(value, frozenset({id(real)}), sim):
             return value
         raise refuse_read(real, attr, _TERM_ENV_READS, "action_manager.get_term(...).")
 

@@ -256,6 +256,41 @@ class NestedDataAction(DeltaAction):
 
 
 @dataclass(kw_only=True)
+class SimViewActionCfg(JointPositionActionCfg):
+    def build(self, env):
+        return SimViewAction(self, env)
+
+
+class SimViewAction(JointPositionAction):
+    """Adds the measured pose, read off a view of the sim's qpos kept at init."""
+
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        self._qpos = env.sim.data.qpos[:]
+
+    def process_actions(self, actions):
+        super().process_actions(actions)
+        adr = self._entity.indexing.joint_q_adr
+        self._processed_actions = self._processed_actions + self._qpos[:, adr]
+
+
+@dataclass(kw_only=True)
+class ScratchActionCfg(JointPositionActionCfg):
+    def build(self, env):
+        return ScratchAction(self, env)
+
+
+class ScratchAction(JointPositionAction):
+    """Keeps a warp scratch array of its own, as ``DifferentialIKAction`` does."""
+
+    def __init__(self, cfg, env):
+        import warp as wp
+
+        super().__init__(cfg, env)
+        self._scratch = wp.zeros(3, dtype=wp.float32, device="cpu")
+
+
+@dataclass(kw_only=True)
 class SceneWritingActionCfg(JointPositionActionCfg):
     def build(self, env):
         return SceneWritingAction(self, env)

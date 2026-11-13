@@ -171,6 +171,7 @@ def test_a_term_overriding_apply_needs_a_binding_to_say_what_it_does(env):
         (fx.on_arm(fx.AliasActionCfg), r"views of one tensor"),
         (fx.on_arm(fx.CachedDataActionCfg), r"keeps \['_data'\]"),
         (fx.on_arm(fx.NestedDataActionCfg), r"keeps \['_parts'\]"),
+        (fx.on_arm(fx.SimViewActionCfg), r"keeps \['_qpos'\]"),
         (fx.on_arm(fx.ClockResetActionCfg), r"episode_length_buf in reset"),
         (fx.on_arm(fx.BiasReadingActionCfg), r"robot\.encoder_bias"),
     ],
@@ -186,6 +187,7 @@ def test_a_term_overriding_apply_needs_a_binding_to_say_what_it_does(env):
         "aliased-state",
         "cached-entity-data",
         "entity-data-inside-an-object",
+        "a-view-of-the-sims-qpos",
         "reset-reads-the-episode-clock",
         "reads-a-field-the-browser-does-not-serve",
     ],
@@ -205,6 +207,11 @@ def test_a_scene_write_leaves_the_trace_env_alone(env):
 def test_an_untouched_nan_is_not_state_the_body_changed(env):
     term = fx.on_arm(fx.NanFieldActionCfg).build(env)
     trace_action_term(term, name="joint_pos")
+
+
+def test_a_warp_scratch_array_of_its_own_is_not_sim_state(env):
+    pytest.importorskip("warp")
+    trace_action_term(fx.on_arm(fx.ScratchActionCfg).build(env), name="joint_pos")
 
 
 @dataclass

@@ -390,3 +390,55 @@ def test_on_a_real_env_entity_reads_stay_live_and_cached_sim_data_is_refused(
     )
     outputs = session.run(None, {"robot__joint_pos": torch.tensor([[0.25]]).numpy()})
     torch.testing.assert_close(torch.from_numpy(outputs[0]), torch.tensor([[0.35]]))
+
+
+def _real_env():
+    mujoco = pytest.importorskip("mujoco")
+    from mjswan.mjlab.env import build_single_entity_trace_env
+
+    return build_single_entity_trace_env(lambda: mujoco.MjSpec.from_string(_MODEL))
+
+
+def _keeping(kept):
+    class Keeps(ManagerTermBase):
+        def __init__(self, cfg, env):
+            super().__init__(env)
+            self._asset = env.scene["robot"]
+            self._kept = kept(env)
+
+        def __call__(self, env, env_ids):
+            position = self._asset.data.joint_pos + 0.1
+            self._asset.write_joint_state_to_sim(
+                position, torch.zeros_like(position), env_ids=env_ids
+            )
+
+    return Keeps
+
+
+#: Each way a term can keep the sim's own memory instead of reading it through the env.
+_SIM_VIEWS = {
+    "warp-array": lambda env: env.sim.wp_data.qpos,
+    "torch-view": lambda env: env.sim.data.qpos[:],
+    "model-view": lambda env: env.sim.model.body_mass[:],
+    "numpy-view": lambda env: env.sim.wp_data.qpos.numpy(),
+    "inside-an-object": lambda env: SimpleNamespace(qpos=env.sim.data.qpos[:]),
+}
+
+
+@pytest.mark.parametrize("kind", list(_SIM_VIEWS))
+def test_a_view_of_the_sims_memory_is_refused(tmp_path, kind):
+    cfg = EventTermCfg(func=_keeping(_SIM_VIEWS[kind]), mode="reset")
+    with pytest.raises(ValueError, match="unsupported live state in '_kept'"):
+        serialize_event("keeps", cfg, _real_env(), tmp_path)
+
+
+@pytest.mark.parametrize("kind", ["tensor-copy", "own-warp-array"])
+def test_memory_of_its_own_is_not_the_sims(tmp_path, kind):
+    wp = pytest.importorskip("warp")
+    kept = {
+        "tensor-copy": lambda env: env.sim.data.qpos[:].clone(),
+        "own-warp-array": lambda env: wp.zeros(3, dtype=wp.float32, device="cpu"),
+    }[kind]
+    serialize_event(
+        "keeps", EventTermCfg(func=_keeping(kept), mode="reset"), _real_env(), tmp_path
+    )
