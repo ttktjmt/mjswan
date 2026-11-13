@@ -979,6 +979,20 @@ shortcuts.
 
 ### Fixed
 
+- **Observation and termination terms may read `env.scene.env_origins` and an entity's
+  `indexing` and `is_fixed_base`.** Tracing failed on these reads; the graph now holds
+  their trace-time values, as it does an entity's other constants.
+
+- **A reset that reads no state and writes through an empty index loads in the browser.**
+  Its graph had an empty required input, which ONNX Runtime refused. A graph with no
+  inputs and no random draws now ships as its constant outputs, and every graph must pass
+  `onnx.checker`'s full check, so a malformed one fails the build instead of the browser.
+
+- **A class that only shares mjlab's name `MotionCommandCfg` is refused.** MyoSuite's has
+  no `motion_file`, `anchor_body_name` or `body_names`, yet was adapted as the native
+  `TrackingCommand` with an empty anchor and body list. It now raises a `TypeError` naming
+  the missing fields; register a binding for it with `register_command`.
+
 - **Attached models that each ship a file of the same name keep their own in a `.mjz`.** An
   absolute asset path went into the archive under its basename, so two YCB objects in one
   scene, each with a `textured.obj`, packed one mesh for both. A basename now stands alone

@@ -181,8 +181,9 @@ math enters the graph and the raw fields it reads become `sim` slots. For the pr
 the browser's slot reader does reproduce in TypeScript, the build emits the property's
 value as one entity `data` slot instead and keeps the math out of the graph.
 
-Anything model-derived and therefore constant — an entity's indices, `default_joint_pos`,
-`encoder_bias` — is baked into the graph instead of becoming a slot.
+Anything constant in the browser's single env (an entity's indices and `is_fixed_base`,
+`default_joint_pos`, `encoder_bias`, the scene's `env_origins`) is baked into the graph
+instead of becoming a slot.
 
 The action slot is the whole vector the policy last output, after `clip_actions`. A
 term-scoped `last_action(action_name=...)` reads the same slot, and the graph slices that
@@ -311,7 +312,9 @@ fails where the graph disagrees: a value the body works out in Python (`.item()`
 of a tensor, an `if` on a tensor, a counter) is fixed in the graph. The error names the
 term and, where the tracer warned, the line. A read the tracer refuses fails the build even
 behind a `getattr` default or `hasattr`, when mjlab's env has the attribute. A graph that
-draws its own random numbers (`torch.rand` in a body) is not compared.
+draws its own random numbers (`torch.rand` in a body) is not compared, but like every
+graph it must pass `onnx.checker`'s full check, so a malformed graph fails the build
+rather than the browser.
 
 In practice tracing failures are rare, because mjlab must run thousands of parallel
 environments on a GPU. That forces term bodies to avoid per-environment Python
