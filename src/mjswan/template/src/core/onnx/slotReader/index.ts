@@ -88,7 +88,12 @@ export function readSimField(
   if (typeof value === 'number') return new Float32Array([value]);
   if (!value || typeof (value as ArrayLike<number>).length !== 'number') return null;
   const array = value as ArrayLike<number>;
-  if (!rows) return Float32Array.from(array);
+  // Only what reserveTermFeeds charged: the whole field at numel(shape[1:]), or rows.
+  if (!rows) {
+    const charged = (Array.isArray(shape) ? shape : []).slice(1).reduce((a, b) => a * b, 1);
+    return Array.isArray(shape) && array.length === charged ? Float32Array.from(array) : null;
+  }
+  if (!Array.isArray(rows)) return null;
   const width = (shape ?? []).slice(2).reduce((a, b) => a * b, 1);
   const out = new Float32Array(rows.length * width);
   for (let i = 0; i < rows.length; i++) {

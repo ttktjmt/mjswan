@@ -332,6 +332,8 @@ export class PolicyRunner {
           : null;
       if (!offsets) return base;
       this.budget.reserve(Math.max(...offsets) + 1, base.size, `observation "${entry.name}" history`);
+      // Its output holds a frame per offset every step, repeated offsets included.
+      this.budget.reserve(offsets.length, base.size, `observation "${entry.name}" history output`);
       return new HistoryObservation(this, entry, base, offsets);
     };
 

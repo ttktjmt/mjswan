@@ -117,10 +117,11 @@ export function readModelSlot(
   const width = modelRowWidth(mjModel, values, slot.element);
   if (!rows || width === null) return null;
   const traced = (slot.shape ?? []).slice(2).reduce((a, b) => a * b, 1);
-  if (slot.shape && traced !== width) {
+  // What reserveTermFeeds charged: shape[1] rows of shape[2:].
+  if (traced !== width || slot.shape?.[1] !== rows.length) {
     console.warn(
-      `[slotReader] mjModel.${field} is ${width} wide per ${slot.element}, but the ` +
-        `graph was traced with ${traced}.`,
+      `[slotReader] mjModel.${field} is ${rows.length} x ${width} for these ${slot.element}s, ` +
+        `but the graph was traced with ${JSON.stringify(slot.shape)}.`,
     );
     return null;
   }
