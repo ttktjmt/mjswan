@@ -122,12 +122,13 @@ class PublishError(Exception):
     """Raised when a publish cannot proceed (validation or server rejection).
 
     Carries an optional ``file`` so a 422 server response of the shape
-    ``{"error", "file"}`` can be surfaced verbatim to the user.
+    ``{"error", "file"}`` can be surfaced to the user.
     """
 
     def __init__(self, message: str, *, file: str | None = None) -> None:
-        super().__init__(message)
-        self.file = file
+        # Messages carry VRM meta and server text, and the Python API prints them as raised.
+        super().__init__(_printable(str(message)))
+        self.file = None if file is None else _printable(str(file))
 
 
 # ── HTTP transport (injectable so tests need no network) ──────────────────────
@@ -271,11 +272,15 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
     if not dist_dir.is_dir():
         raise PublishError(f"Not a directory: {dist_dir}")
 
-    config_path = _find_config(dist_dir)
+    from ..document import DocumentError, read_manifest
+
+    _find_config(dist_dir)
     try:
-        config = json.loads(config_path.read_text())
+        config = read_manifest(dist_dir)
     except json.JSONDecodeError as exc:
         raise PublishError(f"Invalid manifest.json: {exc}")
+    except DocumentError as exc:
+        raise PublishError(str(exc), file="manifest.json") from None
 
     if config.get("uses_custom_js") is True:
         raise PublishError(
@@ -453,15 +458,37 @@ def _map_files(plan: PublishPlan) -> None:
             plan.file_map["files"][path] = mapped(path, path, f.source.read_bytes())
 
 
+#: The methods build/mjz.py writes; bzip2 and LZMA inflate a whole read first.
+_ARCHIVE_METHODS = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
+
+
 def _entries(path: str, source: Path, mapped: Callable[[str, str, bytes], dict]):
     """A scene archive's entries in its order, each mapped; the platform zips them again."""
+    # The caps mapped() applies count a repeated entry once, so the reads need their own.
     try:
         with zipfile.ZipFile(source) as archive:
-            out = []
-            for info in archive.infolist():
+            infos = archive.infolist()
+            if len(infos) > MAX_PIECES:
+                raise PublishError(
+                    f"{path} has over {MAX_PIECES} entries, the most mjswan Cloud takes.",
+                    file=path,
+                )
+            out, read = [], 0
+            for info in infos:
                 label = f"{path}/{info.filename}"
-                _check_size(label, info.file_size)  # before inflating it
-                data = archive.read(info)
+                if info.compress_type not in _ARCHIVE_METHODS:
+                    raise PublishError(
+                        f"{label} uses a compression no build writes.", file=label
+                    )
+                _check_size(label, info.file_size)
+                read += info.file_size
+                if read > MAX_TOTAL_BYTES:
+                    raise PublishError(
+                        f"{path} unpacks to over {MAX_TOTAL_BYTES} bytes.", file=path
+                    )
+                # read(n) inflates at most n bytes; read() inflates up to 2**30 first.
+                with archive.open(info) as entry:
+                    data = entry.read(info.file_size)
                 out.append(
                     {"name": info.filename, **mapped(label, info.filename, data)}
                 )

@@ -1448,7 +1448,8 @@ shortcuts.
   `publish_dist` passed file names and VRM authors unchanged to `on_progress` and
   `on_warning`, which the Python API prints, and built the page URL from any id the
   server returned. These values now lose their control characters, the CLI escapes their
-  markup, and an id that is not a short URL-safe token is refused.
+  markup, and an id that is not a short URL-safe token is refused. The text of a
+  `PublishError`, which carries VRM meta and the server's error, loses them too.
 - **`mjswan skin map -o` writes the skin file's name as a string.** The draft's docstring
   held the command line verbatim between triple quotes, so a file whose name closed them
   put code into the draft, which ran when the draft was. The docstring is now a quoted
@@ -1553,4 +1554,8 @@ shortcuts.
   small `.glb` with one wide node. A `.swn` declaring over 2 GiB, over 20000 files or a
   compression no build writes is now refused before unpacking, `publish` stops at a cap as
   pieces land, and `skin map` skips nodes with over 64 children and tests each node
-  against the floor once.
+  against the floor once. What got around those bounds is bounded too: a manifest is read
+  up to 16 MiB before it is parsed; `publish` reads a scene's `.mjz` only in a build's
+  compressions, at most 1000 entries and 128 MiB of reads, each entry no further than its
+  declared size; and `skin map` does not search a skeleton of over 1024 joints, where
+  listing each joint's descendants cost joints times depth.

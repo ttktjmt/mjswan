@@ -403,6 +403,26 @@ class TestPlanPublish:
             plan_publish(dist)
         assert exc.value.file == "demo/humanoid/scene.mjz/big.stl"
 
+    def test_an_archive_is_read_only_as_a_build_writes_it(
+        self, tmp_path: Path, monkeypatch
+    ):
+        dist = _make_dist(tmp_path)
+        mjz = dist / "demo/humanoid/scene.mjz"
+        with zipfile.ZipFile(mjz, "w") as archive:
+            archive.writestr("a.stl", b"y" * 300, zipfile.ZIP_BZIP2)
+        with pytest.raises(PublishError, match="compression no build writes"):
+            plan_publish(dist)
+        # Identical entries are one piece, but each is read.
+        with zipfile.ZipFile(mjz, "w") as archive:
+            for i in range(MAX_PIECES + 1):
+                archive.writestr(f"{i}.stl", b"y" * 300, zipfile.ZIP_DEFLATED)
+        with pytest.raises(PublishError, match=f"over {MAX_PIECES} entries"):
+            plan_publish(dist)
+        monkeypatch.setattr("mjswan.cloud.publish.MAX_PIECES", 2 * MAX_PIECES)
+        monkeypatch.setattr("mjswan.cloud.publish.MAX_TOTAL_BYTES", 200_000)
+        with pytest.raises(PublishError, match="unpacks to over 200000 bytes"):
+            plan_publish(dist)
+
     def test_a_damaged_archive_is_refused(self, tmp_path: Path):
         dist = _make_dist(tmp_path)
         (dist / "demo/humanoid/scene.mjz").write_bytes(b"MJZ" * 10)
@@ -849,6 +869,16 @@ class TestPublishDist:
             publish_dist(dist, token="tok", transport=transport)
         assert "custom-TS" in str(exc.value)
         assert exc.value.file == "policy.json"
+
+    def test_422_is_surfaced_without_control_characters(self, tmp_path: Path):
+        transport = FakeTransport(
+            session_status=422,
+            session_error={"error": "bad\x1b]0;SPOOFED\x07", "file": "p\x9b.json"},
+        )
+        with pytest.raises(PublishError) as exc:
+            publish_dist(_make_dist(tmp_path), token="tok", transport=transport)
+        assert "bad]0;SPOOFED" in str(exc.value) and "\x1b" not in str(exc.value)
+        assert exc.value.file == "p.json"
 
     @pytest.mark.parametrize(
         "body", [{}, {"id": 7}, {"id": "[link=https://example.invalid]x"}]
