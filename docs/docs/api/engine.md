@@ -75,6 +75,10 @@ the hand-tracking switch disagrees with it; everything else is live. The verbs t
 the model (`loadScene`, `setPolicy`, `setMotion`, `setSkin` and that rebuild) run one at a time, in
 call order, and `dispose` waits for the one running.
 
+`loadScene` gives MuJoCo an empty file area each time, so no file an earlier model unpacked
+is read for the next one's includes or assets. That is all it isolates between loads: a host
+that renders documents of different authors gives each document its own engine.
+
 | Member | Signature | Notes |
 |---|---|---|
 | `loadScene` | `(input: SceneInput) => Promise<void>` | Full model rebuild. |

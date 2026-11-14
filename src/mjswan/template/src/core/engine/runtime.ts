@@ -10,7 +10,7 @@ import {
   type ModelFormat,
 } from '../scene/scene';
 import { SensorCameraRenderer, type SensorCameraView } from '../scene/sensorCamera';
-import { loadMjzFile, type ArchiveLimits } from '../utils/mjzLoader';
+import { loadMjzFile, resetWorking, WORKING, type ArchiveLimits } from '../utils/mjzLoader';
 import { type Bytes } from '../utils/bytes';
 import type { EnginePlugins } from '../plugins';
 import { type SplatTransform, type SplatMesh, loadSplat, disposeSplat, applySplatTransform } from '../scene/splat';
@@ -369,6 +369,8 @@ export class mjswanRuntime {
   onXrChange: (() => void) | null = null;
   /** The scene MJCF as shipped, so a rebuild can add or drop the hands. Null for `.mjb`. */
   private sceneXml: { file: string; text: string } | null = null;
+  /** When the last model's files were dated (`resetWorking`). */
+  private workingTime = 0;
   private modelFormat: ModelFormat | null = null;
   private scenePrefixed = false;
   /** Loaded again onto the new model by a rebuild. */
@@ -479,7 +481,7 @@ export class mjswanRuntime {
       },
     );
 
-    const workingPath = '/working';
+    const workingPath = WORKING;
     try {
       this.mujoco.FS.mkdir(workingPath);
     } catch (error: unknown) {
@@ -812,21 +814,23 @@ export class mjswanRuntime {
   // No scene cache to reclaim on OOM, so surface it as WasmMemoryLimitError directly.
   private async buildSceneFromModel(model: ArrayBuffer, format: ModelFormat): Promise<void> {
     try {
+      // Nothing of the last model stays to be rebuilt: its files go with it.
+      this.workingTime = resetWorking(this.mujoco, this.workingTime);
+      this.sceneXml = null;
       let modelPath: string;
       this.modelFormat = format;
       if (format === 'mjb') {
         // `loadSceneFromURL` reads a `.mjb` path with `mj_loadModel`. A compiled model has
         // no XML to inject into, so the XR hands and Grab stay off.
         modelPath = 'scene.mjb';
-        this.mujoco.FS.writeFile(`/working/${modelPath}`, new Uint8Array(model));
-        this.sceneXml = null;
+        this.mujoco.FS.writeFile(`${WORKING}/${modelPath}`, new Uint8Array(model));
         this.scenePrefixed = false;
         this.grabInjected = false;
         this.injectedWithoutPolicy = false;
         this.modelHasHands = false;
       } else {
-        modelPath = await loadMjzFile(this.mujoco, model, this.archive);
-        const text = readMjcfFile(this.mujoco, `/working/${modelPath}`);
+        modelPath = await loadMjzFile(this.mujoco, model, this.archive, this.workingTime);
+        const text = readMjcfFile(this.mujoco, `${WORKING}/${modelPath}`);
         this.sceneXml = { file: modelPath, text };
         this.scenePrefixed = isEntityPrefixed(text);
         this.injectViewerBodies(this.wantsHands());
@@ -865,7 +869,7 @@ export class mjswanRuntime {
           'entity-prefixed, so an extra body would change a traced graph\'s input width.',
       );
     }
-    this.mujoco.FS.writeFile(`/working/${file}`, injected);
+    this.mujoco.FS.writeFile(`${WORKING}/${file}`, injected);
   }
 
   async startLoop(): Promise<void> {

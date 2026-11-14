@@ -17,6 +17,22 @@ export interface ArchiveLimits {
   extensions: readonly string[];
 }
 
+/** Where a model's files are written for MuJoCo to open. */
+export const WORKING = '/working';
+
+/**
+ * Give the next model an empty /working, and return the time to date its files with: past
+ * `after`, the last model's, by a whole second. MuJoCo resolves a model's includes and
+ * assets against everything in /working, and caches a mesh by its path and its modification
+ * time in whole seconds, so a file an earlier model left, or one written at the same path
+ * in the same second, would stand in for the next model's own.
+ */
+export function resetWorking(mujoco: MainModule, after: number): number {
+  mujoco.FS.unmount(WORKING);
+  mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, WORKING);
+  return Math.max(Date.now(), after + 1000);
+}
+
 /** Inside the archive and nowhere else: no root, no `..`, nothing a reader takes differently. */
 const isSafePath = (name: string) =>
   !name.startsWith('/') &&
@@ -76,11 +92,13 @@ function inflate(file: JSZip.JSZipObject, room: number): Promise<Uint8Array> {
  * With `limits`, the archive is refused, before MuJoCo compiles any of it, for a file
  * past them or at a name they do not take. JSZip names a file from its local header, or
  * the Unicode path in its directory record, so the name checked is the one written.
+ * `mtime` dates every file written (`resetWorking`).
  */
 export async function loadMjzFile(
     mujoco: MainModule,
     mjzBytes: ArrayBuffer,
-    limits?: ArchiveLimits
+    limits?: ArchiveLimits,
+    mtime?: number
 ): Promise<string> {
     const zip = await JSZip.loadAsync(mjzBytes);
     const files = Object.entries(zip.files).filter(([, file]) => !file.dir);
@@ -120,7 +138,7 @@ export async function loadMjzFile(
             throw error;
         }
         room -= content.length;
-        const fsPath = `/working/${sanitized}`;
+        const fsPath = `${WORKING}/${sanitized}`;
 
         // Create directories
         const dirPath = fsPath.substring(0, fsPath.lastIndexOf('/'));
@@ -132,6 +150,7 @@ export async function loadMjzFile(
 
         // Write file
         mujoco.FS.writeFile(fsPath, content);
+        if (mtime !== undefined) mujoco.FS.utime(fsPath, mtime, mtime);
 
         // Track root XML
         if (sanitized.endsWith('.xml') && !sanitized.includes('/')) {
