@@ -11,6 +11,7 @@ from __future__ import annotations
 import collections
 import contextlib
 import io
+import types
 from dataclasses import dataclass
 
 import mujoco
@@ -235,6 +236,61 @@ class CachedDataAction(DeltaAction):
 
 
 @dataclass(kw_only=True)
+class NestedDataActionCfg(DeltaActionCfg):
+    def build(self, env):
+        return NestedDataAction(self, env)
+
+
+class NestedDataAction(DeltaAction):
+    """``CachedDataAction`` with the data one object down."""
+
+    def __init__(self, cfg, env):
+        self._parts = types.SimpleNamespace(data=env.scene[cfg.entity_name].data)
+        super().__init__(cfg, env)
+
+    def _initialize_target(self, env_ids):
+        current = self._parts.data.joint_pos[env_ids][:, self._target_ids]
+        self._target[env_ids] = self._clamp(current, env_ids)
+        self._processed_actions[env_ids] = self._target[env_ids]
+        self._prev_target[env_ids] = self._target[env_ids]
+
+
+@dataclass(kw_only=True)
+class SimViewActionCfg(JointPositionActionCfg):
+    def build(self, env):
+        return SimViewAction(self, env)
+
+
+class SimViewAction(JointPositionAction):
+    """Adds the measured pose, read off a view of the sim's qpos kept at init."""
+
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        self._qpos = env.sim.data.qpos[:]
+
+    def process_actions(self, actions):
+        super().process_actions(actions)
+        adr = self._entity.indexing.joint_q_adr
+        self._processed_actions = self._processed_actions + self._qpos[:, adr]
+
+
+@dataclass(kw_only=True)
+class ScratchActionCfg(JointPositionActionCfg):
+    def build(self, env):
+        return ScratchAction(self, env)
+
+
+class ScratchAction(JointPositionAction):
+    """Keeps a warp scratch array of its own, as ``DifferentialIKAction`` does."""
+
+    def __init__(self, cfg, env):
+        import warp as wp
+
+        super().__init__(cfg, env)
+        self._scratch = wp.zeros(3, dtype=wp.float32, device="cpu")
+
+
+@dataclass(kw_only=True)
 class SceneWritingActionCfg(JointPositionActionCfg):
     def build(self, env):
         return SceneWritingAction(self, env)
@@ -283,6 +339,47 @@ class LazyCounterAction(JointPositionAction):
         if self._calls <= 50:
             actions = torch.zeros_like(actions)
         super().process_actions(actions)
+
+
+@dataclass(slots=True)
+class _Steps:
+    count: int = 0
+
+
+@dataclass(kw_only=True)
+class SlotsCounterActionCfg(JointPositionActionCfg):
+    def build(self, env):
+        return SlotsCounterAction(self, env)
+
+
+class SlotsCounterAction(JointPositionAction):
+    """Counts steps in a slotted dataclass, which has no ``__dict__`` to compare."""
+
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        self._box = _Steps()
+
+    def process_actions(self, actions):
+        super().process_actions(actions)
+        self._box.count += 1
+
+
+@dataclass(kw_only=True)
+class DeepCounterActionCfg(JointPositionActionCfg):
+    def build(self, env):
+        return DeepCounterAction(self, env)
+
+
+class DeepCounterAction(JointPositionAction):
+    """Counts steps five containers down."""
+
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        self._deep = {"a": {"b": {"c": {"d": [0]}}}}
+
+    def process_actions(self, actions):
+        super().process_actions(actions)
+        self._deep["a"]["b"]["c"]["d"][0] += 1
 
 
 @dataclass(kw_only=True)

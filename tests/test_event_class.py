@@ -3,7 +3,9 @@ it, with the env and entities it keeps routed through the tracer."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -12,6 +14,7 @@ ort = pytest.importorskip("onnxruntime")
 ManagerTermBase = pytest.importorskip("mjlab.managers.manager_base").ManagerTermBase
 
 from mjswan.build.mdp.event import serialize_event  # noqa: E402
+from mjswan.build.mdp.provenance import resolved_params  # noqa: E402
 from mjswan.compile.export import DivergentGraph  # noqa: E402
 from mjswan.managers.event_manager import EventTermCfg  # noqa: E402
 
@@ -157,7 +160,7 @@ def test_the_instance_the_env_built_is_traced_and_no_second_one_is_made(tmp_path
     built = _Offset(cfg, env)
     built._offset = 5.0
     env.event_manager = SimpleNamespace(
-        get_term_cfg=lambda name: SimpleNamespace(func=built)
+        get_term_cfg=lambda name: SimpleNamespace(func=built, params={})
     )
     entry = serialize_event("offset", cfg, env, tmp_path)
     assert _Offset.built == 1
@@ -168,6 +171,135 @@ def test_the_instance_the_env_built_is_traced_and_no_second_one_is_made(tmp_path
         None, {"robot__joint_pos": torch.tensor([[1.0, 2.0, 3.0]]).numpy()}
     )
     torch.testing.assert_close(torch.from_numpy(outputs[0]), torch.tensor([[6.0]]))
+
+
+def _first_output(tmp_path, entry, joint_pos):
+    session = ort.InferenceSession(
+        str(tmp_path / entry["onnx"]), providers=["CPUExecutionProvider"]
+    )
+    return session.run(None, {"robot__joint_pos": torch.tensor([joint_pos]).numpy()})[0]
+
+
+def _built_by_manager(env, cfg):
+    """Build *cfg*'s instance the way mjlab's manager does, which sets the func on the
+    cfg it built from to the instance."""
+    built = replace(cfg, params=resolved_params(cfg.params, env))
+    built.func = cfg.func(cfg=built, env=env)
+    env.event_manager = SimpleNamespace(get_term_cfg=lambda name: built)
+
+
+class _FirstJoint(_Selector):
+    def resolve(self, scene):
+        self.joint_ids = [0]
+
+
+def test_params_the_scene_overrides_get_their_own_instance(tmp_path):
+    env = SimpleNamespace(
+        scene=_Scene(robot=_Entity()), num_envs=1, device="cpu", step_dt=0.02
+    )
+    _CachedReset.initialized = 0
+    _built_by_manager(
+        env,
+        EventTermCfg(
+            func=_CachedReset, mode="reset", params={"asset_cfg": _FirstJoint()}
+        ),
+    )
+    cfg = EventTermCfg(
+        func=_CachedReset, mode="reset", params={"asset_cfg": _Selector()}
+    )
+    entry = serialize_event("reset", cfg, env, tmp_path)
+    assert _CachedReset.initialized == 2
+    assert entry["write_targets"][0]["joint_ids"] == [2]
+    torch.testing.assert_close(
+        torch.from_numpy(_first_output(tmp_path, entry, [1.0, 2.0, 3.0])),
+        torch.tensor([[3.02]]),
+    )
+
+
+class _KeepsCfg(ManagerTermBase):
+    def __init__(self, cfg, env):
+        super().__init__(env)
+        self.cfg = cfg
+        self._entity = env.scene["robot"]
+
+    def __call__(self, env, env_ids):
+        position = self._entity.data.joint_pos[:, [0]] + 1.0
+        self._entity.write_joint_state_to_sim(
+            position, torch.zeros_like(position), env_ids=env_ids
+        )
+
+
+def test_the_cfg_mjlab_built_the_instance_from_may_lead_back_to_it(tmp_path):
+    env = SimpleNamespace(scene=_Scene(robot=_Entity()), num_envs=1, device="cpu")
+    cfg = EventTermCfg(func=_KeepsCfg, mode="reset")
+    _built_by_manager(env, cfg)
+    entry = serialize_event("keeps_cfg", cfg, env, tmp_path)
+    torch.testing.assert_close(
+        torch.from_numpy(_first_output(tmp_path, entry, [1.0, 2.0, 3.0])),
+        torch.tensor([[2.0]]),
+    )
+
+
+@dataclass(slots=True)
+class _Slots:
+    item: Any
+
+
+#: Each kind of plain object the walk sees into: how to wrap a value, and reach it.
+_HOLDERS = {
+    "namespace": (lambda item: SimpleNamespace(item=item), lambda held: held.item),
+    "slots": (_Slots, lambda held: held.item),
+    "deep": (
+        lambda item: {"a": {"b": {"c": {"d": item}}}},
+        lambda held: held["a"]["b"]["c"]["d"],
+    ),
+}
+
+
+@pytest.mark.parametrize("kind", [*_HOLDERS, "set"])
+def test_state_inside_a_plain_object_is_compared_too(tmp_path, kind):
+    class Hidden(ManagerTermBase):
+        def __init__(self, cfg, env):
+            super().__init__(env)
+            self._held = set() if kind == "set" else _HOLDERS[kind][0]([0])
+
+        def __call__(self, env, env_ids):
+            if kind == "set":
+                self._held.add(len(self._held))
+            else:
+                _HOLDERS[kind][1](self._held)[0] += 1
+            position = torch.zeros(1, 1)
+            env.scene["robot"].write_joint_state_to_sim(
+                position, torch.zeros_like(position)
+            )
+
+    env = SimpleNamespace(scene=_Scene(robot=_Entity()), num_envs=1, device="cpu")
+    with pytest.raises(DivergentGraph, match="stateful event history"):
+        serialize_event(
+            "hidden", EventTermCfg(func=Hidden, mode="reset"), env, tmp_path
+        )
+
+
+@pytest.mark.parametrize("kind", list(_HOLDERS))
+def test_an_entity_inside_a_plain_object_is_refused(tmp_path, kind):
+    wrap, unwrap = _HOLDERS[kind]
+
+    class Nested(ManagerTermBase):
+        def __init__(self, cfg, env):
+            super().__init__(env)
+            self._parts = wrap(env.scene["robot"])
+
+        def __call__(self, env, env_ids):
+            position = unwrap(self._parts).data.joint_pos[:, [0]] + 1.0
+            env.scene["robot"].write_joint_state_to_sim(
+                position, torch.zeros_like(position), env_ids=env_ids
+            )
+
+    env = SimpleNamespace(scene=_Scene(robot=_Entity()), num_envs=1, device="cpu")
+    with pytest.raises(ValueError, match="unsupported live state in '_parts'"):
+        serialize_event(
+            "nested", EventTermCfg(func=Nested, mode="reset"), env, tmp_path
+        )
 
 
 @pytest.mark.parametrize("bridged", [False, True])
@@ -258,3 +390,55 @@ def test_on_a_real_env_entity_reads_stay_live_and_cached_sim_data_is_refused(
     )
     outputs = session.run(None, {"robot__joint_pos": torch.tensor([[0.25]]).numpy()})
     torch.testing.assert_close(torch.from_numpy(outputs[0]), torch.tensor([[0.35]]))
+
+
+def _real_env():
+    mujoco = pytest.importorskip("mujoco")
+    from mjswan.mjlab.env import build_single_entity_trace_env
+
+    return build_single_entity_trace_env(lambda: mujoco.MjSpec.from_string(_MODEL))
+
+
+def _keeping(kept):
+    class Keeps(ManagerTermBase):
+        def __init__(self, cfg, env):
+            super().__init__(env)
+            self._asset = env.scene["robot"]
+            self._kept = kept(env)
+
+        def __call__(self, env, env_ids):
+            position = self._asset.data.joint_pos + 0.1
+            self._asset.write_joint_state_to_sim(
+                position, torch.zeros_like(position), env_ids=env_ids
+            )
+
+    return Keeps
+
+
+#: Each way a term can keep the sim's own memory instead of reading it through the env.
+_SIM_VIEWS = {
+    "warp-array": lambda env: env.sim.wp_data.qpos,
+    "torch-view": lambda env: env.sim.data.qpos[:],
+    "model-view": lambda env: env.sim.model.body_mass[:],
+    "numpy-view": lambda env: env.sim.wp_data.qpos.numpy(),
+    "inside-an-object": lambda env: SimpleNamespace(qpos=env.sim.data.qpos[:]),
+}
+
+
+@pytest.mark.parametrize("kind", list(_SIM_VIEWS))
+def test_a_view_of_the_sims_memory_is_refused(tmp_path, kind):
+    cfg = EventTermCfg(func=_keeping(_SIM_VIEWS[kind]), mode="reset")
+    with pytest.raises(ValueError, match="unsupported live state in '_kept'"):
+        serialize_event("keeps", cfg, _real_env(), tmp_path)
+
+
+@pytest.mark.parametrize("kind", ["tensor-copy", "own-warp-array"])
+def test_memory_of_its_own_is_not_the_sims(tmp_path, kind):
+    wp = pytest.importorskip("warp")
+    kept = {
+        "tensor-copy": lambda env: env.sim.data.qpos[:].clone(),
+        "own-warp-array": lambda env: wp.zeros(3, dtype=wp.float32, device="cpu"),
+    }[kind]
+    serialize_event(
+        "keeps", EventTermCfg(func=_keeping(kept), mode="reset"), _real_env(), tmp_path
+    )

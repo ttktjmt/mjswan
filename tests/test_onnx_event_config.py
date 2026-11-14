@@ -348,6 +348,33 @@ class TestOperations:
         )
         assert env.sim.model.body_mass.equal(before)
 
+    def test_a_class_term_mjlab_built_traces_through_its_own_instance(self, tmp_path):
+        from dataclasses import replace
+
+        from mjswan.build.mdp.provenance import resolved_params
+
+        class Mass:
+            built = 0
+
+            def __init__(self, cfg, env):
+                type(self).built += 1
+                self.cfg = cfg
+                self._env = env
+
+            def __call__(self, env, env_ids, asset_cfg, ranges):
+                _dr().body_mass(self._env, env_ids, asset_cfg=asset_cfg, ranges=ranges)
+
+        env = _TinyEnv()
+        cfg = _term(Mass, {"asset_cfg": _robot(), "ranges": (0.8, 1.2)})
+        # mjlab's manager resolves a copy and sets its func to the instance, so the
+        # instance's cfg leads back to it.
+        built = replace(cfg, params=resolved_params(cfg.params, env))
+        built.func = Mass(built, env)
+        env.event_manager = SimpleNamespace(get_term_cfg=lambda name: built)
+        entry = _serialize(Mass, cfg.params, tmp_path, env=env)
+        assert Mass.built == 1
+        assert entry["set_const"] is True
+
 
 class TestDistributions:
     """`rand` carries each sampler as the uniforms behind it; the graph maps them."""

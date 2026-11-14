@@ -15,12 +15,9 @@ actions, resets and episode clocks.
 
 from __future__ import annotations
 
-import collections
 import contextlib
 import enum
-import functools
 import math
-import types
 from dataclasses import dataclass, field
 from typing import Any, Collection, Literal
 
@@ -47,7 +44,14 @@ from .export import (
     reference_runner,
 )
 from .gate import GatedIndexing, MaskedRows
-from .proxy import _is_live_object, _is_sensor
+from .proxy import (
+    _CONTAINERS,
+    _attrs,
+    _holds_live,
+    _is_live_object,
+    _is_sensor,
+    _sim_memory,
+)
 from .record import _RecordingEnv
 from .replay import _ReplayEnv
 from .rng import DrawRecorder, ReplayRng
@@ -86,16 +90,6 @@ _SIM_FIELDS = (
     "xfrc_applied",
     "mocap_pos",
     "mocap_quat",
-)
-
-#: Values compared by identity alone: their contents are code, not state.
-_OPAQUE = (
-    types.FunctionType,
-    types.MethodType,
-    types.BuiltinFunctionType,
-    types.ModuleType,
-    type,
-    functools.partial,
 )
 
 
@@ -157,23 +151,26 @@ class _Same:
     __hash__ = None  # type: ignore[assignment]
 
 
-def _freeze(value: Any, depth: int = 0) -> Any:
+def _freeze(value: Any, within: frozenset[int] = frozenset()) -> Any:
     """*value* as it stands, to compare after a body runs: containers and plain objects
-    by content, tensors and arrays by value, live objects and code by identity."""
+    by content at any depth, tensors and arrays by value, and live objects, code and a
+    reference back to a value in *within* (ids of the values enclosing it) by
+    identity."""
     if isinstance(value, torch.Tensor):
         return value.detach().clone()
     if isinstance(value, np.ndarray):
         return value.copy()
-    if isinstance(value, (*_SCALARS, complex, bytes, enum.Enum, np.generic)):
+    if isinstance(value, (*_SCALARS, complex, bytes, enum.Enum, np.generic, slice)):
         return value
-    if depth > 3 or isinstance(value, _OPAQUE) or _is_live_object(value):
+    if id(value) in within or _is_live_object(value):
         return _Same(value)
+    within = within | {id(value)}
     if isinstance(value, dict):
-        return (dict, {k: _freeze(v, depth + 1) for k, v in value.items()})
-    if isinstance(value, (list, tuple, set, frozenset, collections.deque)):
-        return (type(value), [_freeze(v, depth + 1) for v in value])
-    if isinstance(state := getattr(value, "__dict__", None), dict):
-        return (type(value), {k: _freeze(v, depth + 1) for k, v in state.items()})
+        return (dict, {k: _freeze(v, within) for k, v in value.items()})
+    if isinstance(value, _CONTAINERS):
+        return (type(value), [_freeze(v, within) for v in value])
+    if (attrs := _attrs(value)) is not None:
+        return (type(value), {k: _freeze(v, within) for k, v in attrs.items()})
     return _Same(value)
 
 
@@ -332,25 +329,28 @@ def _entity_attrs(term: Any, name: str) -> tuple[str, list[str]]:
     """The entity the term drives, and every attribute holding it.
 
     Refuses an attribute holding another live object (the entity's data, another
-    entity, the scene, the sim, the env, a sensor or a manager's term): the term cached
-    it at init, so its reads would bypass the tracer and bake as constants.
+    entity, the scene, the sim, the env, a sensor or a manager's term) or a view of the
+    sim's arrays: the term cached it at init, so its reads would bypass the tracer and
+    bake as constants.
     """
     env = term._env
     entity_name = term.cfg.entity_name
     entity = env.scene[entity_name]
     attrs: list[str] = []
     foreign: list[str] = []
+    within, sim = frozenset({id(term)}), _sim_memory(env)
     for attr, value in vars(term).items():
         if value is entity:
             attrs.append(attr)
-        elif attr not in ("_env", "cfg") and _is_live_object(value):
+        elif attr not in ("_env", "cfg") and _holds_live(value, within, sim):
             foreign.append(attr)
     if foreign:
         raise UntraceableAction(
-            f"Action term {name!r} keeps {foreign}, a live mjlab object other than its "
-            f"entity {entity_name!r}, from its __init__. Its reads would bypass the "
-            "tracer and freeze at their build-time values; read it through self._env "
-            "or the entity in the body instead, via mjswan.register_action(..., "
+            f"Action term {name!r} keeps {foreign}, which is or holds live sim state "
+            f"(a mjlab object other than its entity {entity_name!r}, or a view of the "
+            "sim's arrays) from its __init__. Its reads would bypass the tracer and "
+            "freeze at their build-time values; read it through self._env or the entity "
+            "in the body instead, via mjswan.register_action(..., "
             "ActionBinding(trace_override=...))."
         )
     return entity_name, attrs

@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import inspect
 from contextlib import contextmanager
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator
 
-import numpy as np
 import torch
 from torch import nn
 
+from .action import _freeze, _same
 from .export import (
     DivergentGraph,
     _classify_tagged,
@@ -28,7 +28,7 @@ from .export import (
     no_hidden_reads,
 )
 from .model import SET_CONST_FIELDS, ModelPlan, ModelRecorder, ModelReplay
-from .proxy import _is_live_object
+from .proxy import _holds_live, _sim_memory
 from .record import (
     WriteCaptures,
     _EventCaptureEnv,
@@ -40,44 +40,9 @@ from .rng import DrawRecorder, ReplayRng
 from .slot import _MODEL_NS, SlotKey, TaggedKey, _slot_input_name
 
 
-def _state_snapshot(value: Any) -> Any:
-    if isinstance(value, torch.Tensor):
-        return value.detach().clone()
-    if isinstance(value, np.ndarray):
-        return value.copy()
-    if is_dataclass(value) and not isinstance(value, type):
-        return {f.name: _state_snapshot(getattr(value, f.name)) for f in fields(value)}
-    if isinstance(value, dict):
-        return {key: _state_snapshot(item) for key, item in value.items()}
-    if isinstance(value, (tuple, list)):
-        return tuple(_state_snapshot(item) for item in value)
-    if isinstance(value, (str, bytes, bool, int, float, type(None))):
-        return value
-    return ("opaque", id(value))
-
-
-def _same_state(before: Any, after: Any) -> bool:
-    if isinstance(before, torch.Tensor) and isinstance(after, torch.Tensor):
-        return (
-            before.dtype == after.dtype
-            and before.shape == after.shape
-            and torch.equal(before, after)
-        )
-    if isinstance(before, np.ndarray) and isinstance(after, np.ndarray):
-        return before.dtype == after.dtype and np.array_equal(
-            before, after, equal_nan=True
-        )
-    if type(before) is not type(after):
-        return False
-    if isinstance(before, dict):
-        return before.keys() == after.keys() and all(
-            _same_state(before[k], after[k]) for k in before
-        )
-    if isinstance(before, tuple):
-        return len(before) == len(after) and all(
-            _same_state(a, b) for a, b in zip(before, after)
-        )
-    return before == after
+def same_values(a: Any, b: Any) -> bool:
+    """Whether *a* and *b* agree by content, as a class event's state is compared."""
+    return _same(_freeze(a), _freeze(b))
 
 
 @contextmanager
@@ -96,31 +61,33 @@ def _event_instance(
             continue
         replacements[id(entity)] = proxy.scene[name]
         replacements[id(entity.data)] = proxy.scene[name].data
+    # A path back to the instance is not followed: the cfg mjlab built it from holds
+    # it as the func.
+    within = frozenset({id(owner)})
+    sim = _sim_memory(real_env)
     original = {}
     for name, value in vars(owner).items():
         if id(value) in replacements:
             original[name] = value
-        elif _is_live_object(value):
+        elif _holds_live(value, within, sim):
             raise ValueError(
                 f"Event instance caches unsupported live state in {name!r}; read it through the env argument"
             )
+    before = {
+        k: _freeze(v, within) for k, v in vars(owner).items() if k not in original
+    }
     try:
         for name, value in original.items():
             setattr(owner, name, replacements[id(value)])
-        before = _state_snapshot(
-            {k: v for k, v in vars(owner).items() if k not in original}
-        )
         yield
-        after = _state_snapshot(
-            {k: v for k, v in vars(owner).items() if k not in original}
-        )
-        if not _same_state(before, after):
-            raise DivergentGraph(
-                "Event instance mutates state between calls; stateful event history is not supported"
-            )
     finally:
         for name, value in original.items():
             setattr(owner, name, value)
+    after = {k: _freeze(v, within) for k, v in vars(owner).items() if k not in original}
+    if not _same(before, after):
+        raise DivergentGraph(
+            "Event instance mutates state between calls; stateful event history is not supported"
+        )
 
 
 class _EventModule(nn.Module):
