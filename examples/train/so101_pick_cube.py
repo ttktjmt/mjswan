@@ -281,7 +281,8 @@ def train(args: argparse.Namespace) -> None:
 
     device = _device()
     rng.seed(args.seed)
-    wp.config.kernel_cache_dir = str(args.warp_cache)
+    if args.warp_cache:
+        wp.config.kernel_cache_dir = str(args.warp_cache)
     nworld = args.nworld or _nworld_for(device, defaults.nworld)
     print(f"Training {env_id} on {device} with {nworld} worlds, to {iterations}.")
     _, runner_cfg, env = _build(env_id, nworld, device, deterministic=False)
@@ -455,7 +456,8 @@ def export(args: argparse.Namespace) -> None:
 
     device = _device()
     rng.seed(args.seed)
-    wp.config.kernel_cache_dir = str(args.warp_cache)
+    if args.warp_cache:
+        wp.config.kernel_cache_dir = str(args.warp_cache)
     env_cfg, runner_cfg, env = _build(env_id, 1, device, deterministic=True)
     runner = OnPolicyRunner(
         env, dataclasses.asdict(runner_cfg), log_dir=None, device=device
@@ -629,8 +631,7 @@ def main() -> None:
         step.add_argument(
             "--warp-cache",
             type=Path,
-            default=Path("/tmp/wp_kernel_cache"),
-            help="compiled kernels",
+            help="compiled kernels (default: Warp's per-user cache)",
         )
     args = parser.parse_args()
     args.run(args)
