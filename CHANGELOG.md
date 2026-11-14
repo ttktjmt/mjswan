@@ -1512,7 +1512,10 @@ shortcuts.
   MuJoCo reads them, tags by local name since MuJoCo ignores XML namespaces, and a path
   outside it raises `ValueError`. Paths elsewhere in the same repository still work. An
   MJCF with a `<!DOCTYPE>` raises too: MuJoCo ends one at its first `>`, so what the check
-  reads as an entity value is markup MuJoCo compiles.
+  reads as an entity value is markup MuJoCo compiles. The parsed model's asset paths are
+  checked again as the build reads them: an attached `<model>` in a deeper directory
+  keeps its `../` paths, which MuJoCo resolved from its own directory and the build from
+  the scene's.
 - **A document can no longer hold the viewer's tab with one number or pattern.** Four
   values a document controls set work that ran on the page's thread with no bound: an
   action term's `actuator_names` or `clip` pattern, matched by V8's backtracking `RegExp`

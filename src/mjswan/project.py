@@ -288,6 +288,15 @@ class ProjectHandle:
         repo_root = local_dir.parents[depth - 1] if depth else local_dir
         _refuse_files_outside(repo_root, xml_path, f"{repo_id}/{path}")
         spec = mujoco.MjSpec.from_file(str(xml_path))
+        # MuJoCo resolved an attached <model>'s assets from its own directory, the build
+        # reads them from the scene's: check them again as the build will.
+        top = os.path.normpath(os.path.abspath(repo_root))
+        for directory in spec_asset_directories(spec):
+            if not _within(top, str(directory)):
+                raise ValueError(
+                    f"{repo_id}/{path} reads files in {directory}, outside the "
+                    "repository."
+                )
         return self.add_scene(
             name=name or scene_name_for(repo_id, path),
             spec=spec,
@@ -420,6 +429,13 @@ def _collect_mjlab_scene_assets(scene_cfg: Any) -> dict[str, bytes]:
     return assets
 
 
+def _within(top: str, path: str) -> bool:
+    try:
+        return os.path.commonpath([top, path]) == top
+    except ValueError:  # another drive
+        return False
+
+
 def _refuse_files_outside(root: Path, xml_path: Path, label: str) -> None:
     """Refuse an MJCF that names a file outside ``root``, before MuJoCo opens any.
 
@@ -433,11 +449,7 @@ def _refuse_files_outside(root: Path, xml_path: Path, label: str) -> None:
 
     def inside(*parts: str) -> str:
         full = os.path.normpath(os.path.join(*(p.replace("\\", "/") for p in parts)))
-        try:
-            ok = os.path.commonpath([top, full]) == top
-        except ValueError:  # another drive
-            ok = False
-        if not ok:
+        if not _within(top, full):
             raise ValueError(f"{label} names {parts[-1]!r}, outside the repository.")
         return full
 

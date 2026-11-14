@@ -296,6 +296,26 @@ class TestContainment:
         with pytest.raises(ValueError, match="DOCTYPE"):
             project.add_scene_hf("org/assets", "scenes/unitree_g1/scene.xml")
 
+    @pytest.mark.usefixtures("fake_hub", "private")
+    def test_an_attached_model_cannot_carry_a_path_outside_the_repository(
+        self, project, tmp_path
+    ):
+        # Inside from the child's directory, outside from the scene's, which the build uses.
+        scene = tmp_path / "repo/scenes/unitree_g1"
+        (scene / "a/b/c").mkdir(parents=True)
+        (scene / "a/b/c/child.xml").write_text(
+            '<mujoco model="child"><asset><mesh name="p" file="../../../private/link.stl"/>'
+            '</asset><worldbody><body name="cb"><geom type="mesh" mesh="p"/></body>'
+            "</worldbody></mujoco>"
+        )
+        (scene / "scene.xml").write_text(
+            '<mujoco model="main"><asset><model name="c" file="a/b/c/child.xml"/></asset>'
+            '<worldbody><attach model="c" body="cb" prefix="c_"/></worldbody></mujoco>'
+        )
+
+        with pytest.raises(ValueError, match="outside the repository"):
+            project.add_scene_hf("org/assets", "scenes/unitree_g1/scene.xml")
+
     def test_an_include_inside_the_repository_builds(self, project, fake_hub, tmp_path):
         model = tmp_path / "repo/scenes/unitree_g1"
         asset = '<asset><mesh name="link" file="meshes/link.stl"/></asset>'
