@@ -497,7 +497,16 @@ describe('createSlotReader — sim slots', () => {
     const { mjModel, mjData } = fakeScene();
     mjData.act = Float64Array.from([0.25, 0.5, 0.75]);
     const read = createSlotReader(() => ({ mjModel, mjData }) as unknown as SlotReaderContext);
-    close(read({ sim: 'act' }), [0.25, 0.5, 0.75]);
+    close(read({ sim: 'act', shape: [1, 3] }), [0.25, 0.5, 0.75]);
+  });
+
+  it('reads no more of a field than the traced shape the load charged', () => {
+    const { mjModel, mjData } = fakeScene();
+    mjData.act = Float64Array.from([0.25, 0.5, 0.75]);
+    const read = createSlotReader(() => ({ mjModel, mjData }) as unknown as SlotReaderContext);
+    expect(read({ sim: 'act' })).toBeNull();
+    expect(read({ sim: 'act', shape: [1, 1] })).toBeNull();
+    expect(read({ sim: 'qpos', rows: { length: 1e6 } as never, shape: [1, 1] })).toBeNull();
   });
 
   it('wraps a scalar field such as time in a one-element array', () => {
@@ -571,6 +580,18 @@ describe('createSlotReader: model slots', () => {
     };
     close(read(slot), [3, 0.3, 0.03, 1, 0.1, 0.01]);
     close(read({ ...slot, default: true }), [7, 7, 7, 9, 9, 9]);
+  });
+
+  it('reads no more rows than the traced shape names', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const scene = context();
+    (scene.mjModel as unknown as Mutable).geom_friction = new Float64Array(9);
+    const read = createSlotReader(() => scene);
+    const slot = { model: 'geom_friction', element: 'geom', names: ['cube/geom'], shape: [1, 1, 3] };
+    expect(read({ ...slot, names: Array(82).fill('cube/geom') })).toBeNull();
+    expect(read({ ...slot, shape: undefined })).toBeNull();
+    expect(read(slot)).not.toBeNull();
+    warn.mockRestore();
   });
 });
 

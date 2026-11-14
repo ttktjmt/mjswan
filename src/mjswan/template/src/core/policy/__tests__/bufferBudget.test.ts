@@ -2,7 +2,14 @@
 import { describe, expect, it } from 'vitest';
 import { substepOptions } from '../../action/applyAction';
 import { ContactSensorSet } from '../../onnx/contact';
-import { BufferBudget, MAX_BUFFERED, MAX_FRAMES, reserveTermFeeds } from '../bufferBudget';
+import {
+  BufferBudget,
+  MAX_BUFFERED,
+  MAX_CAMERA_READS,
+  MAX_CAMERA_SENSORS,
+  MAX_FRAMES,
+  reserveTermFeeds,
+} from '../bufferBudget';
 import { PolicyRunner } from '../PolicyRunner';
 import type { PolicyConfig, PolicyRunnerContext } from '../types';
 
@@ -34,6 +41,14 @@ describe('a declared count past the limit', () => {
       },
     } as unknown as PolicyConfig;
     await expect(new PolicyRunner(config, {}).init({} as PolicyRunnerContext)).rejects.toThrow(/buffer limit/);
+  });
+
+  it('stops a history whose repeated offsets stack past the total', async () => {
+    const history = (offsets: number[]) =>
+      ({ observations: { actor: [{ name: 'c', native: 'constant', size: 1600, value: Array(1600).fill(0), history_offsets: offsets }] } }) as unknown as PolicyConfig;
+    // One frame in the ring, ten thousand in each step's output.
+    await expect(new PolicyRunner(history(Array(10_000).fill(0)), {}).init({} as PolicyRunnerContext)).rejects.toThrow(/history output/);
+    await expect(new PolicyRunner(history([0, 4, 9]), {}).init({} as PolicyRunnerContext)).resolves.not.toThrow();
   });
 
   it('stops a command delay', () => {
@@ -119,6 +134,32 @@ describe('reserveTermFeeds', () => {
     ['one scan read by many slots', { terminations: terminations(scan(10, 1000), reads(100)) }],
   ])('refuses %s', (_, config) => {
     expect(reserve(config)).toThrow(/limit/);
+  });
+
+  describe('camera sensors', () => {
+    const camera = (width: number, height: number) => ({ kind: 'camera', camera: 'wrist', width, height, enabled_geom_groups: [], use_shadows: false });
+    // A one-value slot: the image is rendered at the descriptor's size all the same.
+    const rgb = (sensor: string, n: number) =>
+      Array.from({ length: n }, (_, i) => ({ sensor, field: 'rgb', input: `i${i}`, shape: [1, 1] }));
+    const load = (slots: object[], cameras: Record<string, ReturnType<typeof camera>>) => () =>
+      reserveTermFeeds({ observations: { actor: [{ name: 'o', input_slots: slots }] } }, new BufferBudget(), cameras);
+    const many = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`c${i}`, camera(1, 1)]));
+
+    it('admits a vision policy', () => {
+      expect(load(rgb('cam', 1), { cam: camera(64, 64) })).not.toThrow();
+      expect(load([], many(MAX_CAMERA_SENSORS))).not.toThrow();
+    });
+
+    it.each([
+      ['a large image read by a one-value slot', rgb('cam', 1), { cam: camera(2400, 2400) }, /buffer limit/],
+      ['a sensor named __proto__', rgb('__proto__', 1), JSON.parse(`{"__proto__":${JSON.stringify(camera(2400, 2400))}}`), /buffer limit/],
+      ['more renders a step than the limit', rgb('cam', MAX_CAMERA_READS + 1), { cam: camera(1, 1) }, /camera images a step/],
+      ['more sensors than the limit', [], many(MAX_CAMERA_SENSORS + 1), /camera sensors/],
+      ['an empty image', [], { cam: camera(0, 64) }, /0x64 image/],
+      ['a fractional size', [], { cam: camera(1.5, 64) }, /1.5x64 image/],
+    ])('refuses %s', (_, slots, cameras, error) => {
+      expect(load(slots, cameras)).toThrow(error);
+    });
   });
 
   it('counts a debug drawing per reward that lists the sensor', () => {

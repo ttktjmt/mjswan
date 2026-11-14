@@ -77,6 +77,17 @@ export function frustumSegments(fovyDeg: number, aspect: number): number[] {
   ];
 }
 
+/** RGBA rows top first and opaque, from WebGL's bottom-first readback. */
+function flipped(pixels: Uint8Array, width: number, height: number): Uint8ClampedArray {
+  const image = new Uint8ClampedArray(width * height * 4);
+  const rowBytes = width * 4;
+  for (let row = 0; row < height; row++) {
+    image.set(pixels.subarray((height - 1 - row) * rowBytes, (height - row) * rowBytes), row * rowBytes);
+  }
+  for (let alpha = 3; alpha < image.length; alpha += 4) image[alpha] = 255;
+  return image;
+}
+
 class Feed {
   /** The last image, RGBA rows top first: what a canvas attached later starts from. */
   last: Uint8ClampedArray | null = null;
@@ -162,17 +173,14 @@ export class CameraFeeds {
 
   /** A camera's image just rendered: RGBA rows bottom first, as WebGL reads them. */
   update(cameraId: number, pixels: Uint8Array, width: number, height: number): void {
+    // One copy a read, shared by every feed of this camera at this size: they only read it.
+    let image: Uint8ClampedArray | null = null;
     for (const [id, feed] of this.feeds) {
       const { sensor } = feed;
       if (sensor.cameraId !== cameraId || sensor.width !== width || sensor.height !== height) {
         continue;
       }
-      const image = new Uint8ClampedArray(width * height * 4);
-      const rowBytes = width * 4;
-      for (let row = 0; row < height; row++) {
-        image.set(pixels.subarray((height - 1 - row) * rowBytes, (height - row) * rowBytes), row * rowBytes);
-      }
-      for (let alpha = 3; alpha < image.length; alpha += 4) image[alpha] = 255;
+      image ??= flipped(pixels, width, height);
       feed.last = image;
       for (const canvas of this.canvases.get(id) ?? []) feed.draw(canvas);
     }

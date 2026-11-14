@@ -4,6 +4,12 @@ export const MAX_FRAMES = 10_000;
 export const MAX_BUFFERED = 16_000_000;
 /** Rays one policy may cast a control step, every cast site together (a height scan is ~200). */
 export const MAX_RAYS = 65_536;
+/** Camera sensors one policy may declare: each keeps a feed image, a render target and a frustum. */
+export const MAX_CAMERA_SENSORS = 16;
+/** Camera images one policy may render a control step, every slot together: each is a whole-scene draw. */
+export const MAX_CAMERA_READS = 64;
+/** Floats a camera read allocates per pixel: the readback, the rgb image, the feed's copy, a canvas's ImageData. */
+const READ_FLOATS_PER_PIXEL = 6;
 /** A frame object's heap beyond its data, in floats, so empty frames still count. */
 const FRAME_OVERHEAD = 64;
 
@@ -16,6 +22,7 @@ const size = (n: unknown): n is number => Number.isSafeInteger(n) && (n as numbe
 export class BufferBudget {
   private remaining = MAX_BUFFERED;
   private rays = MAX_RAYS;
+  private renders = MAX_CAMERA_READS;
 
   reserve(frames: number, width: number, label: string): void {
     const cost = frames * (width + FRAME_OVERHEAD);
@@ -31,6 +38,13 @@ export class BufferBudget {
       throw new Error(`mjswan: ${label} casts ${count} rays a step, past this policy's ray limit.`);
     }
     this.rays -= count;
+  }
+
+  reserveRender(label: string): void {
+    if (this.renders < 1) {
+      throw new Error(`mjswan: ${label} renders past this policy's limit of ${MAX_CAMERA_READS} camera images a step.`);
+    }
+    this.renders -= 1;
   }
 }
 
@@ -56,9 +70,27 @@ function walk(value: unknown, visit: (entry: Entry) => void): void {
  * Reserve what a policy's term graphs are fed each step, before any of them runs: each
  * rand vector and input slot, and each raycast sensor's buffers (13 floats a ray). Rays count
  * per cast site, since a sensor recasts on every read of a ray field and every drawing.
+ * `cameras` are the camera sensors the runtime keeps, each slot reading one rendering its
+ * image at the descriptor's size, whatever the slot's shape says.
  */
-export function reserveTermFeeds(config: object, budget: BufferBudget): void {
+export function reserveTermFeeds(
+  config: object,
+  budget: BufferBudget,
+  cameras: Record<string, { width: unknown; height: unknown }> = {},
+): void {
   const sections = SECTIONS.map((s) => (config as Entry)[s]);
+  const named = Object.entries(cameras);
+  if (named.length > MAX_CAMERA_SENSORS) {
+    throw new Error(`mjswan: the policy declares ${named.length} camera sensors, past its limit of ${MAX_CAMERA_SENSORS}.`);
+  }
+  const pixels = new Map<string, number>();
+  for (const [name, { width, height }] of named) {
+    if (!size(width) || !size(height) || width < 1 || height < 1) {
+      throw new Error(`mjswan: camera sensor ${JSON.stringify(name)} declares a ${width}x${height} image.`);
+    }
+    budget.reserve(1, 2 * width * height, `camera sensor ${JSON.stringify(name)}`);
+    pixels.set(name, width * height);
+  }
   const raycasts = new Map<string, Raycast>();
   walk(sections, (entry) => {
     for (const [name, d] of Object.entries(isEntry(entry.sensors) ? entry.sensors : {})) {
@@ -79,6 +111,11 @@ export function reserveTermFeeds(config: object, budget: BufferBudget): void {
       budget.reserve(1, width, `input slot ${JSON.stringify(s.input)}`);
       const ray = typeof s.sensor === 'string' ? raycasts.get(s.sensor) : undefined;
       if (ray && RAY_FIELDS.has(s.field as string)) budget.reserveRays(raysOf(ray), `sensor "${s.sensor}"`);
+      const image = s.field === 'rgb' && typeof s.sensor === 'string' ? pixels.get(s.sensor) : undefined;
+      if (image !== undefined) {
+        budget.reserveRender(`sensor ${JSON.stringify(s.sensor)}`);
+        budget.reserve(1, READ_FLOATS_PER_PIXEL * image, `sensor ${JSON.stringify(s.sensor)} image`);
+      }
     }
   });
   // DebugViz holds its own casters, and each drawing traces on every update.
