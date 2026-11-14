@@ -41,6 +41,9 @@ _NEAR = 0.05
 _STUB = 0.25
 #: More children than any real fork has: not searched for mirrored pairs.
 _MAX_FORK = 64
+#: More joints than any rig this drafts: subtree() lists each joint's descendants and the
+#: spine walk rescans them, so the cost grows as joints times depth.
+_MAX_JOINTS = 1024
 
 
 @dataclass(frozen=True)
@@ -137,6 +140,8 @@ class _Skeleton:
 def guess_humanoid(file: SkinFile) -> SkinGuess:
     """The humanoid of a ``.glb``, its front legs as arms if it walks on four."""
     sk = _Skeleton(file)
+    if len(sk.joints) > _MAX_JOINTS:
+        return SkinGuess(kind="other")
     by_size = sorted(sk.joints, key=lambda j: len(sk.subtree(j)), reverse=True)
     hips = next(
         (j for j in by_size if any(sk.reaches_floor(a) for a, _, _ in sk.pairs(j))),

@@ -16,7 +16,12 @@ import pytest
 
 from mjswan.app import MjswanApp
 from mjswan.builder import Builder
-from mjswan.cloud.publish import HttpResponse, plan_publish, publish_dist
+from mjswan.cloud.publish import (
+    HttpResponse,
+    PublishError,
+    plan_publish,
+    publish_dist,
+)
 from mjswan.document import (
     DocumentError,
     document_files,
@@ -159,6 +164,20 @@ class TestWriteAndUnpack:
         with pytest.raises(DocumentError, match="not a simulation document"):
             unpack_document(doc, tmp_path / "target")
         assert not any((tmp_path / "target").iterdir())
+
+    def test_a_manifest_past_its_cap_is_refused_before_it_is_parsed(
+        self, built, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr("mjswan.document.container.MAX_MANIFEST_BYTES", 100)
+        (built / "manifest.json").write_text(json.dumps({"pad": "x" * 200}))
+        doc = tmp_path / "big.swn"
+        with zipfile.ZipFile(doc, "w") as zf:
+            zf.writestr("manifest.json", json.dumps({"pad": "x" * 200}))
+        for source in (built, doc):
+            with pytest.raises(DocumentError, match="over 100 bytes"):
+                read_manifest(source)
+        with pytest.raises(PublishError, match="over 100 bytes"):
+            plan_publish(built)
 
     def test_a_zip_without_a_manifest_is_not_a_document(self, tmp_path):
         other = tmp_path / "other.swn"

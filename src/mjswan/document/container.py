@@ -29,6 +29,8 @@ _BUILT_ID = re.compile(r"[a-z0-9_]+")
 #: Summed declared sizes bound the real ones: zipfile stops each entry at its own.
 MAX_UNPACKED_BYTES = 2 * 2**30
 MAX_ENTRIES = 20_000
+#: json.loads builds about 25 times a manifest's bytes in objects; real ones are a few MB.
+MAX_MANIFEST_BYTES = 16 * 2**20
 #: The methods ``write_document`` uses: bzip2 and LZMA inflate a whole read before
 #: zipfile cuts it at the entry's size.
 _METHODS = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
@@ -78,10 +80,18 @@ def is_document(path: str | Path) -> bool:
 def read_manifest(source: str | Path) -> dict:
     """The manifest of a built directory or a ``.swn`` document."""
     source = Path(source)
+    # read(n) inflates at most n bytes; read() inflates up to 2**30 before cutting.
     if is_document(source):
-        with _open(source) as zf:
-            return json.loads(zf.read(MANIFEST_NAME))
-    return json.loads((source / MANIFEST_NAME).read_text())
+        with _open(source) as zf, zf.open(MANIFEST_NAME) as f:
+            data = f.read(MAX_MANIFEST_BYTES + 1)
+    else:
+        with open(source / MANIFEST_NAME, "rb") as f:
+            data = f.read(MAX_MANIFEST_BYTES + 1)
+    if len(data) > MAX_MANIFEST_BYTES:
+        raise _not_a_document(
+            source, f"its {MANIFEST_NAME} is over {MAX_MANIFEST_BYTES} bytes"
+        )
+    return json.loads(data)
 
 
 def document_files(dist_dir: str | Path) -> list[Path]:
