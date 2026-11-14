@@ -1533,7 +1533,15 @@ shortcuts.
   10000 bytes and its shape is checked before any dtype, the budget takes only
   non-negative integers and charges those feeds before any graph runs (rays per read,
   65536 a step in all), and a document event writes only mjModel's float parameters:
-  writing an index array such as `jnt_qposadr` moved MuJoCo's memory accesses.
+  writing an index array such as `jnt_qposadr` moved MuJoCo's memory accesses. Camera
+  sensors, slots and histories got around the budget as well: a camera's image was drawn
+  at its declared size for every slot that read it, whatever the slot's shape, and every
+  camera sensor kept a feed and a frustum uncharged; a slot with an object `rows`,
+  repeated model names or no shape read more than it was charged; and repeated
+  `history_offsets` stacked one output frame each on a one-frame charge. A policy now
+  declares at most 16 camera sensors and renders at most 64 images a step, each charged
+  at its size; a slot reads only what it was charged, or nothing; and a history's output
+  is charged as well as its ring.
 - **A skin can no longer make three-vrm hold the viewer's tab.** three-vrm did work the
   skin file (often a third party's avatar) controls with no bound: every expression bind
   over every primitive of its node, and a full ancestor walk per node constraint, on each

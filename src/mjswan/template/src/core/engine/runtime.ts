@@ -170,9 +170,10 @@ function collectStructuredSensors(config: PolicyConfig): {
   contact: Record<string, ContactSensorDescriptor>;
   camera: Record<string, CameraSensorDescriptor>;
 } {
-  const raycast: Record<string, RaycastSensorDescriptor> = {};
-  const contact: Record<string, ContactSensorDescriptor> = {};
-  const camera: Record<string, CameraSensorDescriptor> = {};
+  // No prototype: a sensor named `__proto__` is kept, counted and charged like any other.
+  const raycast: Record<string, RaycastSensorDescriptor> = Object.create(null);
+  const contact: Record<string, ContactSensorDescriptor> = Object.create(null);
+  const camera: Record<string, CameraSensorDescriptor> = Object.create(null);
   const owners: Array<{ sensors?: Record<string, StructuredSensorDescriptor> }> = [
     ...Object.values(config.observations ?? {}),
     ...Object.values(config.terminations ?? {}),
@@ -1528,9 +1529,10 @@ export class mjswanRuntime {
 
     try {
       const config = policy.config;
+      const structured = collectStructuredSensors(config);
       // Before any graph runs: a startup event and a command reset run theirs during the load.
       const budget = new BufferBudget();
-      reserveTermFeeds(config, budget);
+      reserveTermFeeds(config, budget, structured.camera);
       if (!kept) await this.policyGraphs.load(policy.graphs ?? []);
       if (config.events && config.events.length > 0) {
         this.eventManager = new EventManager(
@@ -1553,7 +1555,6 @@ export class mjswanRuntime {
       }
       this.jointBias = buildJointBias(config);
       this.clipActions = readClipActions(config.clip_actions);
-      const structured = collectStructuredSensors(config);
       this.raycastSensors = structured.raycast;
       this.contactSensors = new ContactSensorSet(structured.contact, budget);
       this.cameraSensors = new CameraSensorSet(structured.camera, (view) =>
