@@ -21,6 +21,7 @@ from typer.testing import CliRunner
 from mjswan.cli import app
 from mjswan.document.skin import read_skin_file
 from mjswan.rig.guess import (
+    _MAX_JOINTS,
     _Skeleton,
     arm_joints,
     draft_source,
@@ -151,6 +152,18 @@ class TestGuessHumanoid:
         )
         assert guess_humanoid(_skin(tmp_path, nodes)).kind == "other"
         assert max(calls.values()) < k
+
+    def test_a_skeleton_larger_than_any_rig_is_not_searched(
+        self, tmp_path, monkeypatch
+    ):
+        nodes = [{"children": list(range(1, _MAX_JOINTS + 1))}] + [{}] * _MAX_JOINTS
+        calls = []
+        subtree = _Skeleton.subtree
+        monkeypatch.setattr(
+            _Skeleton, "subtree", lambda sk, i: calls.append(i) or subtree(sk, i)
+        )
+        assert guess_humanoid(_skin(tmp_path, nodes)).kind == "other"
+        assert not calls
 
 
 def _skin(tmp_path: Path, nodes: list[dict]):
