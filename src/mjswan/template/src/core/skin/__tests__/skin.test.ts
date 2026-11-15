@@ -324,6 +324,15 @@ describe('Skin', () => {
     expect(beside.hiddenBodies).toEqual([]);
   });
 
+  it.each([
+    [{}, true],
+    [{ hide_robot: false }, false],
+    [{ hide_robot: false, hide_tendons: true }, true],
+    [{ hide_tendons: false }, false],
+  ])('hides the tendons as hide_tendons says, else with the robot: %o', async (shown, hides) => {
+    expect((await Skin.load(vrmFile('1'), { ...CONFIG, ...shown })).hidesTendons).toBe(hides);
+  });
+
   it('draws a .glb in MToon when asked, its shade a share of its colour', async () => {
     const file = gltfFile();
     const json = JSON.parse(new TextDecoder().decode(new Uint8Array(file.data, 20)).trim());

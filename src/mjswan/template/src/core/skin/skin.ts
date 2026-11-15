@@ -584,6 +584,11 @@ export class Skin {
     return null;
   }
 
+  /** Whether the scene's tendons go undrawn while the skin is shown. */
+  get hidesTendons(): boolean {
+    return this.config.hide_tendons ?? this.config.hide_robot !== false;
+  }
+
   /** Spring joints MuJoCo simulates; zero when three-vrm runs them. */
   get simulatedSpringJoints(): number {
     return this.springs?.jointCount ?? 0;

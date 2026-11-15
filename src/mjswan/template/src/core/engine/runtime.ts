@@ -941,10 +941,11 @@ export class mjswanRuntime {
     this.debugVizSet.removeSwitch(XRAY_SWITCH);
     this.robotThrough.restore();
     this.drawRobot(skin.hiddenBodies, true);
+    this.drawTendons(true);
     skin.dispose();
   }
 
-  /** With `hide_robot`, the robot is drawn under its skin only see-through. */
+  /** With `hide_robot`, the robot is drawn under its skin only see-through; with `hide_tendons`, its tendons not at all. */
   private drawRobotUnderSkin(): void {
     const skin = this.skin;
     if (!skin) return;
@@ -952,6 +953,13 @@ export class mjswanRuntime {
     if (through) this.robotThrough.apply(skin.hiddenBodies.map((b) => this.bodies![b]));
     else this.robotThrough.restore();
     this.drawRobot(skin.hiddenBodies, through);
+    this.drawTendons(!skin.hidesTendons);
+  }
+
+  private drawTendons(drawn: boolean): void {
+    const root = this.mujocoRoot;
+    if (root?.cylinders) root.cylinders.visible = drawn;
+    if (root?.spheres) root.spheres.visible = drawn;
   }
 
   /**
@@ -2452,7 +2460,8 @@ export class mjswanRuntime {
       updateLightsFromData(this.mujoco, this.mjData, this.lights);
       this.cameraFeeds.pose(this.mjData);
 
-      if (this.mujocoRoot && this.mujocoRoot.cylinders) {
+      // Hidden under a skin: posed again from the latest snapshot once shown.
+      if (this.mujocoRoot?.cylinders?.visible) {
         updateTendonRendering(
           this.mjModel,
           {
