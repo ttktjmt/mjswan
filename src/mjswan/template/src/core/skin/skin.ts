@@ -53,6 +53,7 @@ const SUPPORT_BAND = 0.25;
 const ONE = new THREE.Vector3(1, 1, 1);
 const _placed = new THREE.Matrix4();
 const _at = new THREE.Vector3();
+const _turn = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
 /** `mj_ray` writes the geom it hit here. */
 const hitGeom = new Int32Array(1);
@@ -66,6 +67,17 @@ type BodyPose = {
   toAt: THREE.Vector3;
   nowAt: THREE.Vector3;
 };
+
+function newPose(): BodyPose {
+  return {
+    from: new THREE.Quaternion(),
+    to: new THREE.Quaternion(),
+    now: new THREE.Quaternion(),
+    fromAt: new THREE.Vector3(),
+    toAt: new THREE.Vector3(),
+    nowAt: new THREE.Vector3(),
+  };
+}
 
 /** A bone fixed to a body: where it sits in the body's frame, from the calibration pose. */
 type Attachment = { name: string; bone: THREE.Object3D; bodyId: number; inBody: THREE.Matrix4 };
@@ -106,6 +118,22 @@ export function geomBottom(mujoco: MainModule, model: MjModel, data: MjData, g: 
   return z + zx * cx + zy * cy + zz * cz - Math.abs(zx) * hx - Math.abs(zy) * hy - Math.abs(zz) * hz;
 }
 
+/** Body `b`'s pose in `data`, in three.js's frame. */
+function bodyMatrix(data: MjData, b: number, target: THREE.Matrix4): THREE.Matrix4 {
+  _at.set(data.xpos[b * 3], data.xpos[b * 3 + 2], -data.xpos[b * 3 + 1]);
+  return target.compose(_at, fromMujoco(data.xquat, b, _turn), ONE);
+}
+
+/** Fixed bones in the order `fix` sets them: each after the bones it hangs from. */
+function byDepth(attached: Attachment[]): Attachment[] {
+  const depth = (node: THREE.Object3D) => {
+    let d = 0;
+    for (let p = node.parent; p; p = p.parent) d++;
+    return d;
+  };
+  return attached.sort((a, b) => depth(a.bone) - depth(b.bone));
+}
+
 /** The model's body `name` names: itself, else the one `<entity>/<name>`, as Python's `resolve_body`. */
 function findBody(mjModel: MjModel, name: string): number {
   let suffixed = -1;
@@ -135,8 +163,8 @@ export class Skin {
   private rootBody = -1;
   /** The tree the root body is in: the robot, whose own geoms are not its ground. */
   private robotRoot = -1;
-  /** The root bone's height above the model's lowest point, at rest. */
-  private readonly restHeight: number;
+  /** The root bone's height above the model's lowest point, at rest; measured when a character is first bound. */
+  private restHeight: number | null = null;
   private heightRatio = 1;
   private mujoco: MainModule | null = null;
   private poses = new Map<number, BodyPose>();
@@ -181,11 +209,6 @@ export class Skin {
       }
     }
     this.root.updateMatrixWorld(true);
-    const rootBone = model.rig.node(model.rig.root);
-    const lowest = this.lowestVertex();
-    // A model with no mesh stands on its origin.
-    const ground = Number.isFinite(lowest) ? lowest : 0;
-    this.restHeight = rootBone ? rootBone.getWorldPosition(new THREE.Vector3()).y - ground : 0;
   }
 
   static async load(data: ArrayBuffer, config: SkinConfig): Promise<Skin> {
@@ -194,13 +217,19 @@ export class Skin {
 
   /** Resolve the bone map against a (re)built model. Unresolved bones are left at rest. */
   bind(mujoco: MainModule, mjModel: MjModel): void {
-    // First, while the avatar is still at rest: the spring model is built from that pose.
+    const modelled = this.config.fit === 'modelled';
+    // First, while the avatar is still at rest: its height, and the spring model built from that pose.
+    if (!modelled) this.restHeight ??= this.measureRestHeight();
     if (!this.springsBuilt) {
       this.springsBuilt = true;
       this.springs = this.buildSprings(mujoco);
     }
     this.normalizeToon(mjModel);
     this.mujoco = mujoco;
+    if (modelled) {
+      this.bindModelled(mujoco, mjModel);
+      return;
+    }
 
     const skeleton = this.model.rig;
     const mapped: Array<{ name: string; bodyId: number; ancestors: string[] }> = [];
@@ -220,19 +249,7 @@ export class Skin {
     this.nodes = this.rig.bones.map((bone) => skeleton.node(bone.name)!);
     this.world = this.rig.bones.map(() => new THREE.Quaternion());
     this.local = this.rig.bones.map(() => new THREE.Quaternion());
-    this.poses = new Map(
-      this.rig.bones.map((bone) => [
-        bone.bodyId,
-        {
-          from: new THREE.Quaternion(),
-          to: new THREE.Quaternion(),
-          now: new THREE.Quaternion(),
-          fromAt: new THREE.Vector3(),
-          toAt: new THREE.Vector3(),
-          nowAt: new THREE.Vector3(),
-        },
-      ]),
-    );
+    this.poses = new Map(this.rig.bones.map((bone) => [bone.bodyId, newPose()]));
 
     const root = this.rig.bones.find((bone) => bone.name === skeleton.root);
     this.rootBone = root ? skeleton.node(root.name) : null;
@@ -250,8 +267,8 @@ export class Skin {
       this.rootBody >= 0 ? this.hipsOffset.clone().applyQuaternion(zeroPose[this.rootBody]).y : 0;
     const rootHeight =
       (this.config.root_height ?? zeroPoseHeight(mjModel, zeroPose, this.rootBody)) + offsetHeight;
-    this.heightRatio =
-      this.config.height_ratio ?? (this.restHeight > 0 && rootHeight > 0 ? this.restHeight / rootHeight : 1);
+    const restHeight = this.restHeight ?? 0;
+    this.heightRatio = this.config.height_ratio ?? (restHeight > 0 && rootHeight > 0 ? restHeight / rootHeight : 1);
 
     // The container turns the model frame onto the robot's facing; see retarget.ts.
     const offset = this.config.offset ?? [0, 0, 0];
@@ -337,15 +354,88 @@ export class Skin {
       });
       this.root.position.copy(offset);
       this.root.updateMatrixWorld(true);
-      const depth = (node: THREE.Object3D) => {
-        let d = 0;
-        for (let p = node.parent; p; p = p.parent) d++;
-        return d;
-      };
-      return attached.sort((a, b) => depth(a.bone) - depth(b.bone));
+      return byDepth(attached);
     } finally {
       data.delete();
     }
+  }
+
+  /**
+   * `fit: 'modelled'`: each joint fixed to its body where the skin binds it, so that with
+   * the robot at `rest_qpos` its meshes are drawn where the file models them, `align`
+   * away, and move as the bodies do. A mesh moved by a joint with no body is not drawn.
+   */
+  private bindModelled(mujoco: MainModule, mjModel: MjModel): void {
+    const skeleton = this.model.rig;
+    this.root.position.set(0, 0, 0);
+    this.root.quaternion.identity();
+    this.root.updateMatrixWorld(true);
+    this.rig = { bones: [], facing: new THREE.Quaternion(), frame: new THREE.Quaternion() };
+    this.nodes = [];
+    this.limbs = [];
+    this.rootBone = null;
+    this.rootBody = -1;
+    skeleton.autoUpdate = false;
+    this.lastTime = null;
+
+    const data = new mujoco.MjData(mjModel);
+    try {
+      if (this.config.rest_qpos) data.qpos.set(Array.from(this.config.rest_qpos).slice(0, mjModel.nq));
+      mujoco.mj_kinematics(mjModel, data);
+      const [x, y, z] = Array.from(this.config.align ?? [0, 0, 0]);
+      const align = new THREE.Matrix4().makeTranslation(x, z, -y);
+      this.attached = byDepth(
+        Object.entries(this.config.bones).flatMap(([joint, name]) => {
+          const bone = skeleton.rawNode(joint);
+          const bind = bone && this.model.binds.get(bone);
+          const bodyId = findBody(mjModel, name);
+          if (!bind || bodyId < 0) {
+            console.warn(`[Skin] ${joint} -> ${name}: ${bind ? 'no such body' : 'not a joint of this file'}`);
+            return [];
+          }
+          const inBody = bodyMatrix(data, bodyId, new THREE.Matrix4()).invert().multiply(align).multiply(bind);
+          return [{ name: joint, bone, bodyId, inBody }];
+        }),
+      );
+    } finally {
+      data.delete();
+    }
+    this.poses = new Map(this.attached.map(({ bodyId }) => [bodyId, newPose()]));
+    const trees = new Set(this.attached.map(({ bodyId }) => mjModel.body_rootid[bodyId]));
+    this.hiddenBodies = [];
+    if (this.config.hide_robot !== false) {
+      for (let b = 1; b < mjModel.nbody; b++) if (trees.has(mjModel.body_rootid[b])) this.hiddenBodies.push(b);
+    }
+    this.hideUnposed();
+  }
+
+  /** Each skinned mesh drawn only if every joint that moves it is fixed to a body: one that is not would stay behind. */
+  private hideUnposed(): void {
+    const posed = new Set(this.attached.map(({ bone }) => bone));
+    let hidden = 0;
+    this.model.scene.traverse((object) => {
+      const mesh = object as THREE.SkinnedMesh;
+      if (!mesh.isSkinnedMesh) return;
+      const loose = new Set(mesh.skeleton.bones.flatMap((bone, i) => (posed.has(bone) ? [] : [i])));
+      const joints = mesh.geometry.getAttribute('skinIndex');
+      const weights = mesh.geometry.getAttribute('skinWeight');
+      let moved = false;
+      for (let v = 0; v < joints.count && loose.size && !moved; v++) {
+        for (let k = 0; k < 4; k++) moved ||= weights.getComponent(v, k) > 0 && loose.has(joints.getComponent(v, k));
+      }
+      mesh.visible = !moved;
+      if (moved) hidden++;
+    });
+    if (hidden) console.info(`[Skin] ${hidden} meshes not drawn: each is moved by a joint on no body`);
+  }
+
+  /** The root bone's height above the model's lowest point, at rest. */
+  private measureRestHeight(): number {
+    const rootBone = this.model.rig.node(this.model.rig.root);
+    const lowest = this.lowestVertex();
+    // A model with no mesh stands on its origin.
+    const ground = Number.isFinite(lowest) ? lowest : 0;
+    return rootBone ? rootBone.getWorldPosition(new THREE.Vector3()).y - ground : 0;
   }
 
   /** The lowest point of the robot's colliding geoms (MuJoCo z); Infinity without one. */

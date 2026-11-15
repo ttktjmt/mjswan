@@ -275,9 +275,11 @@ export function sanitizeName(name: string): string {
  * `root_velocity_b` write; 6 an action term's traced `process` and `reset` graphs, its
  * `interpolate`, `hold_s` and `delay`, the `joint_position_relative` type, and the
  * `action_term` input slot (ADR 0009); 7 a scene's `skins`; 8 a motion's `frame_fields`;
- * 9 a camera sensor's descriptor and an image-shaped policy input.
+ * 9 a camera sensor's descriptor and an image-shaped policy input; 10 a skin modelled on
+ * the robot (`fit: 'modelled'`), with `align`, `rest_qpos`, a solid material and
+ * `hide_tendons`.
  */
-export const MAX_DOCUMENT_FORMAT = 9;
+export const MAX_DOCUMENT_FORMAT = 10;
 
 /**
  * Refuse a document this reader cannot read: one without a `format`, or one newer than it

@@ -10,6 +10,7 @@ import type { MainModule, MjData, MjModel } from 'mujoco';
 import { Skin, geomBottom, type SkinConfig } from '../skin';
 import { checkSpringChains } from '../budget';
 import { asPainted, loadSkinModel } from '../skinModel';
+import { fromMujoco } from '../retarget';
 
 /** Bone, parent, offset from the parent in VRM 1.0's frame (facing +z, left at +x). */
 const SKELETON: Array<[string, string | null, [number, number, number]]> = [
@@ -702,6 +703,230 @@ describe('a model rebuilt under the skin', () => {
     data.delete();
     model.delete();
     skin.dispose();
+  });
+});
+
+/**
+ * A robot a skin was modelled on: a free pelvis 0.9 m up and an arm hinged on it, its
+ * capsule centred 1.05 m up. Keyframe `raised` lifts and turns the pelvis and swings the arm.
+ */
+const MODELLED_XML = `<mujoco><worldbody>
+  <body name="robot/pelvis" pos="0 0 0.9"><freejoint/><geom type="sphere" size="0.05"/>
+    <body name="robot/arm" pos="0 0.2 0.3"><joint name="shoulder" axis="0 1 0"/>
+      <geom type="capsule" fromto="0 0 0 0 0 -0.3" size="0.03"/>
+    </body>
+  </body>
+</worldbody><keyframe><key name="raised" qpos="0.1 0 1 0.9950042 0 0 0.0998334 1.2"/></keyframe></mujoco>`;
+
+/** A skin joint: its world pose in the file (y up), and the joint it hangs from. */
+type FileJoint = { name: string; at: [number, number, number]; turn: THREE.Quaternion; parent?: number };
+
+/** One triangle, each corner moved by `[joint, weight]` pairs. */
+type FileTriangle = { name: string; corners: Array<[number, number, number]>; weights: Array<Array<[number, number]>> };
+
+/**
+ * The robot's skin as a .glb modelled on it: joints on the pelvis origin (turned over, as
+ * the atlas's pelvis is) and on the arm's capsule (turned a quarter), and one on nothing;
+ * each triangle a mesh of its own, bound where the joints rest.
+ */
+const JOINTS: FileJoint[] = [
+  { name: 'pelvis_j', at: [0, 0.9, 0], turn: new THREE.Quaternion(1, 0, 0, 0) },
+  {
+    name: 'arm_j',
+    at: [0, 1.05, -0.2],
+    turn: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2),
+    parent: 0,
+  },
+  { name: 'stray_j', at: [1, 1, 1], turn: new THREE.Quaternion() },
+];
+const TRIANGLES: FileTriangle[] = [
+  { name: 'torso', corners: [[0, 0.9, 0], [0.1, 0.9, 0], [0, 1, 0]], weights: [[[0, 1]], [[0, 1]], [[0, 1]]] },
+  { name: 'sleeve', corners: [[0, 1.05, -0.2], [0.05, 1, -0.2], [0, 0.95, -0.25]], weights: [[[1, 1]], [[1, 1]], [[1, 1]]] },
+  {
+    name: 'elbow',
+    corners: [[0, 1.1, -0.15], [0.05, 1.1, -0.1], [0, 1.15, -0.1]],
+    weights: [[[0, 0.5], [1, 0.5]], [[0, 0.25], [1, 0.75]], [[0, 1]]],
+  },
+  { name: 'patch', corners: [[1, 1, 1], [1.1, 1, 1], [1, 1.1, 1]], weights: [[[2, 1]], [[1, 0.5], [2, 0.5]], [[1, 1]]] },
+];
+
+const ONE_SCALE = new THREE.Vector3(1, 1, 1);
+
+function modelledFile(): ArrayBuffer {
+  const world = JOINTS.map(({ at, turn }) => new THREE.Matrix4().compose(new THREE.Vector3(...at), turn, ONE_SCALE));
+  const meshNodes = TRIANGLES.map((_, i) => JOINTS.length + 1 + i);
+  const nodes: object[] = [
+    { name: 'Rig', children: [...JOINTS.flatMap((j, i) => (j.parent === undefined ? [i + 1] : [])), ...meshNodes] },
+    ...JOINTS.map((joint, i) => {
+      const local = joint.parent === undefined ? world[i] : world[joint.parent].clone().invert().multiply(world[i]);
+      const [t, r] = [new THREE.Vector3(), new THREE.Quaternion()];
+      local.decompose(t, r, new THREE.Vector3());
+      const children = JOINTS.flatMap((j, k) => (j.parent === i ? [k + 1] : []));
+      return { name: joint.name, translation: t.toArray(), rotation: r.toArray(), children };
+    }),
+    ...TRIANGLES.map(({ name }, i) => ({ name, mesh: i, skin: 0 })),
+  ];
+  const chunks: ArrayBufferView[] = [];
+  const views: object[] = [];
+  const accessors: object[] = [];
+  let offset = 0;
+  const add = (data: Float32Array | Uint8Array, accessor: object) => {
+    views.push({ buffer: 0, byteOffset: offset, byteLength: data.byteLength });
+    accessors.push({ bufferView: views.length - 1, ...accessor });
+    chunks.push(data);
+    offset += data.byteLength;
+    return accessors.length - 1;
+  };
+  const meshes = TRIANGLES.map(({ corners, weights }) => {
+    const flat = corners.flat();
+    const position = add(new Float32Array(flat), {
+      componentType: 5126,
+      count: 3,
+      type: 'VEC3',
+      min: [0, 1, 2].map((k) => Math.min(...corners.map((c) => c[k]))),
+      max: [0, 1, 2].map((k) => Math.max(...corners.map((c) => c[k]))),
+    });
+    const pad = (pairs: Array<[number, number]>, k: 0 | 1) => [0, 1, 2, 3].map((i) => pairs[i]?.[k] ?? 0);
+    const joints = add(Uint8Array.from(weights.flatMap((pairs) => pad(pairs, 0))), { componentType: 5121, count: 3, type: 'VEC4' });
+    const weight = add(new Float32Array(weights.flatMap((pairs) => pad(pairs, 1))), { componentType: 5126, count: 3, type: 'VEC4' });
+    return { primitives: [{ attributes: { POSITION: position, JOINTS_0: joints, WEIGHTS_0: weight } }] };
+  });
+  const inverseBindMatrices = add(new Float32Array(world.flatMap((m) => m.clone().invert().toArray())), {
+    componentType: 5126,
+    count: JOINTS.length,
+    type: 'MAT4',
+  });
+  const bin = new Uint8Array(offset);
+  let at = 0;
+  for (const chunk of chunks) {
+    bin.set(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength), at);
+    at += chunk.byteLength;
+  }
+  return glb(
+    {
+      asset: { version: '2.0' },
+      scene: 0,
+      scenes: [{ nodes: [0] }],
+      nodes,
+      meshes,
+      skins: [{ joints: JOINTS.map((_, i) => i + 1), inverseBindMatrices }],
+      buffers: [{ byteLength: offset }],
+      bufferViews: views,
+      accessors,
+    },
+    bin,
+  );
+}
+/** The skin's manifest entry, as the build writes it: the joint on nothing left out. */
+const MODELLED: SkinConfig = {
+  format: 'gltf',
+  fit: 'modelled',
+  bones: { pelvis_j: 'robot/pelvis', arm_j: 'robot/arm' },
+  nodes: { pelvis_j: 1, arm_j: 2 },
+  hide_robot: false,
+};
+
+describe('a skin modelled on the robot', () => {
+  let real: MainModule;
+  let model: MjModel;
+  beforeAll(async () => {
+    real = await (await import('mujoco')).default();
+    model = (real as unknown as { MjModel: { from_xml_string(xml: string): MjModel } }).MjModel.from_xml_string(
+      MODELLED_XML,
+    );
+  });
+
+  /** MuJoCo's bodies at keyframe `key` (else `qpos0`), drawn as the runtime draws them. */
+  const bodiesAt = (key?: number): Record<number, THREE.Object3D> => {
+    const data = new real.MjData(model);
+    if (key !== undefined) real.mj_resetDataKeyframe(model, data, key);
+    real.mj_kinematics(model, data);
+    const out: Record<number, THREE.Object3D> = {};
+    for (let b = 0; b < model.nbody; b++) {
+      out[b] = new THREE.Object3D();
+      out[b].position.set(data.xpos[b * 3], data.xpos[b * 3 + 2], -data.xpos[b * 3 + 1]);
+      fromMujoco(data.xquat, b, out[b].quaternion);
+    }
+    data.delete();
+    return out;
+  };
+  const posed = async (pose: Record<number, THREE.Object3D>, config: Partial<SkinConfig> = {}) => {
+    const skin = await Skin.load(modelledFile(), { ...MODELLED, ...config });
+    skin.bind(real, model);
+    skin.update(pose, 0);
+    skin.root.updateMatrixWorld(true);
+    return skin;
+  };
+  /** Each corner of triangle `name` where the skin draws it. */
+  const drawn = (skin: Skin, name: string) => {
+    const mesh = skin.root.getObjectByName(name) as THREE.SkinnedMesh;
+    return [0, 1, 2].map((i) => mesh.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld));
+  };
+  const corners = (name: string) => TRIANGLES.find((t) => t.name === name)!.corners.map((c) => new THREE.Vector3(...c));
+  const expectAt = (got: THREE.Vector3[], want: THREE.Vector3[]) =>
+    got.forEach((corner, i) => expect(corner.distanceTo(want[i])).toBeLessThan(1e-6));
+
+  it('draws every mesh where the file has it, the robot at rest', async () => {
+    // Measuring a character's height skins every vertex on the CPU, which a modelled skin never needs.
+    const skinning = vi.spyOn(THREE.SkinnedMesh.prototype, 'getVertexPosition');
+    const skin = await posed(bodiesAt());
+    expect(skinning).not.toHaveBeenCalled();
+    skinning.mockRestore();
+    for (const name of ['torso', 'sleeve', 'elbow']) expectAt(drawn(skin, name), corners(name));
+    expect(skin.root.position.length()).toBe(0);
+  });
+
+  it('moves each mesh as the bodies it is bound to have moved since rest', async () => {
+    const rest = bodiesAt();
+    const raised = bodiesAt(0);
+    const moved = (b: number) => {
+      const matrix = (o: THREE.Object3D) => new THREE.Matrix4().compose(o.position, o.quaternion, ONE_SCALE);
+      return matrix(raised[b]).multiply(matrix(rest[b]).invert());
+    };
+    const [pelvis, arm] = [moved(1), moved(2)];
+    const skin = await posed(raised);
+    expectAt(drawn(skin, 'torso'), corners('torso').map((c) => c.applyMatrix4(pelvis)));
+    expectAt(drawn(skin, 'sleeve'), corners('sleeve').map((c) => c.applyMatrix4(arm)));
+    // Blended linearly, as the file weighs its corners.
+    const [w0, w1, w2] = [0.5, 0.25, 1];
+    const blend = (c: THREE.Vector3, w: number) =>
+      c.clone().applyMatrix4(pelvis).multiplyScalar(w).add(c.clone().applyMatrix4(arm).multiplyScalar(1 - w));
+    expectAt(drawn(skin, 'elbow'), corners('elbow').map((c, i) => blend(c, [w0, w1, w2][i])));
+  });
+
+  it('puts the file align away, and takes its rest from rest_qpos', async () => {
+    const aligned = await posed(bodiesAt(), { align: [0.1, -0.2, 0.05] });
+    // MuJoCo's (x, y, z) is three.js's (x, z, -y).
+    expectAt(drawn(aligned, 'torso'), corners('torso').map((c) => c.add(new THREE.Vector3(0.1, 0.05, 0.2))));
+    const restQpos = Array.from(model.key_qpos as Float64Array).slice(0, model.nq);
+    const atKey = await posed(bodiesAt(0), { rest_qpos: restQpos });
+    for (const name of ['torso', 'sleeve', 'elbow']) expectAt(drawn(atKey, name), corners(name));
+  });
+
+  it('leaves undrawn a mesh a joint on no body moves, and hides the robot only when asked', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const skin = await posed(bodiesAt());
+    const visible = (name: string) => skin.root.getObjectByName(name)!.visible;
+    expect(['torso', 'sleeve', 'elbow', 'patch'].map(visible)).toEqual([true, true, true, false]);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('1 meshes not drawn'));
+    info.mockRestore();
+    expect(skin.hiddenBodies).toEqual([]);
+    expect((await posed(bodiesAt(), { hide_robot: true })).hiddenBodies).toEqual([1, 2]);
+  });
+
+  it('draws a solid colour as stored, not metallic, smooth where the file has no normals', async () => {
+    const material = (skin: Skin) => (skin.root.getObjectByName('torso') as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    const normals = (skin: Skin) => (skin.root.getObjectByName('torso') as THREE.Mesh).geometry.getAttribute('normal');
+    // As three.js loads a mesh with no material or normals: metallic and faceted.
+    const bare = await posed(bodiesAt());
+    expect([material(bare).metalness, material(bare).flatShading]).toEqual([1, true]);
+    const solid = await posed(bodiesAt(), { material: { solid: { color: [0.42, 0.11, 0.1], opacity: 0.5, smooth: true } } });
+    expect(material(solid).color.toArray()).toEqual([0.42, 0.11, 0.1].map((c) => expect.closeTo(c, 6)));
+    expect([material(solid).metalness, material(solid).flatShading]).toEqual([0, false]);
+    expect([material(solid).opacity, material(solid).transparent]).toEqual([0.5, true]);
+    expect(normals(solid)).toBeDefined();
+    const faceted = await posed(bodiesAt(), { material: { solid: { color: [1, 1, 1], opacity: 1, smooth: false } } });
+    expect([material(faceted).flatShading, material(faceted).transparent, normals(faceted)]).toEqual([true, false, undefined]);
   });
 });
 

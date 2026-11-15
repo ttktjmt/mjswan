@@ -19,12 +19,17 @@ import {
 import { BoundedSpringBones, checkConstraints, checkSpringChains } from './budget';
 import { modelFrame } from './retarget';
 import { NodeRig, humanoidRig, type SkinRig } from './rig';
-import type { SkinConfig, SpringChainConfig, ToonConfig } from './config';
+import type { SkinConfig, SolidConfig, SpringChainConfig, ToonConfig } from './config';
 
 export interface SkinModel {
   /** The file's scene in metres, with its rig's normalized nodes; at rest until posed. */
   readonly scene: THREE.Object3D;
   readonly rig: SkinRig;
+  /**
+   * A .glb's skin joints, each at its bind pose in `scene`'s frame: where it stands for
+   * its meshes to be drawn as the file models them. Empty for a VRM.
+   */
+  readonly binds: ReadonlyMap<THREE.Object3D, THREE.Matrix4>;
   readonly springBoneManager: VRMSpringBoneManager | null;
   /** `S` in retarget.ts: the turn from the file's frame onto VRM 1.0's, which faces +z. */
   readonly frame: THREE.Quaternion;
@@ -99,6 +104,7 @@ function fromVrm(gltf: GLTF): SkinModel {
   return {
     scene: vrm.scene,
     rig: humanoidRig(vrm.humanoid),
+    binds: new Map(),
     springBoneManager: vrm.springBoneManager ?? null,
     frame: modelFrame(vrm.meta?.metaVersion),
     // `vrm.update` but for its springs, which the skin runs itself, and its expressions, settled above.
@@ -129,14 +135,28 @@ async function fromGltf(gltf: GLTF, config: SkinConfig): Promise<SkinModel> {
   scene.add(rig.normalizedRoot);
   const springBoneManager = config.springs?.length ? await springs(config.springs, node) : null;
   if (config.material?.toon) toon(gltf.scene, config.material.toon);
+  if (config.material?.solid) solid(gltf.scene, config.material.solid);
   return {
     scene,
     rig,
+    binds: bindPoses(gltf.scene),
     springBoneManager,
     frame: new THREE.Quaternion().setFromAxisAngle(UP, -FACING_TURNS[config.facing ?? '+z']),
     update: () => rig.update(),
     dispose: () => VRMUtils.deepDispose(scene),
   };
+}
+
+/** Each skin joint's bind pose (the inverse of its inverse bind matrix) in `file`'s parent's frame. */
+function bindPoses(file: THREE.Object3D): Map<THREE.Object3D, THREE.Matrix4> {
+  const binds = new Map<THREE.Object3D, THREE.Matrix4>();
+  file.traverse((object) => {
+    const { skeleton } = object as THREE.SkinnedMesh;
+    skeleton?.bones.forEach((bone, i) => {
+      if (!binds.has(bone)) binds.set(bone, file.matrix.clone().multiply(skeleton.boneInverses[i].clone().invert()));
+    });
+  });
+  return binds;
 }
 
 /** Metres to `object`'s own units. */
@@ -226,4 +246,22 @@ function toon(scene: THREE.Object3D, style: ToonConfig): void {
     if (!mesh.isMesh) return;
     mesh.material = Array.isArray(mesh.material) ? mesh.material.map(swap) : swap(mesh.material);
   });
+}
+
+/**
+ * Every mesh in one colour, not metallic, its colour drawn as stored. A mesh with no
+ * normals, which three.js draws faceted, is given smooth ones unless `smooth` is off.
+ */
+function solid(scene: THREE.Object3D, { color, opacity, smooth }: SolidConfig): void {
+  const material = new THREE.MeshStandardMaterial({ color: new THREE.Color(...color), opacity, transparent: opacity < 1 });
+  const faceted = smooth ? material : Object.assign(material.clone(), { flatShading: true });
+  const replaced = new Set<THREE.Material>();
+  scene.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    for (const each of [mesh.material].flat()) replaced.add(each);
+    if (smooth && !mesh.geometry.getAttribute('normal')) mesh.geometry.computeVertexNormals();
+    mesh.material = mesh.geometry.getAttribute('normal') ? material : faceted;
+  });
+  for (const each of replaced) each.dispose();
 }

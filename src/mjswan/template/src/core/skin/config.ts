@@ -4,10 +4,19 @@
  * Types only, so the manifest and the engine's types bring no skin code with them.
  */
 
-/** One skin (see `mjswan.SkinConfig`). */
+/** One skin (see `mjswan.SkinConfig` and `mjswan.ModelledSkinConfig`). */
 export interface SkinConfig {
   /** `'vrm'` names its own bones; `'gltf'`, a `.glb`, has them named by `nodes`. */
   format: 'vrm' | 'gltf';
+  /**
+   * `'modelled'`: a `.glb` made over the robot at its rest pose, in its world frame, each
+   * joint in `nodes` fixed to its body in `bones`. Absent: a character, retargeted.
+   */
+  fit?: 'modelled';
+  /** `fit: 'modelled'`: added to the file to put it on the robot, MuJoCo's frame, metres. Absent: zero. */
+  align?: ArrayLike<number>;
+  /** `fit: 'modelled'`: the robot's `qpos` as the file was modelled. Absent: `qpos0`. */
+  rest_qpos?: ArrayLike<number>;
   /** Bone -> robot body: VRM humanoid bone names for a VRM, `nodes` keys for a `.glb`. */
   bones: Record<string, string>;
   /** `.glb` only: bone -> node index. The topmost of them carries the position. */
@@ -22,8 +31,8 @@ export interface SkinConfig {
   facing?: '+z' | '-z' | '+x' | '-x';
   /** `.glb` only: chains that swing as a VRM's spring bones do. */
   springs?: SpringChainConfig[];
-  /** `.glb` only: its PBR materials drawn as MToon. */
-  material?: { toon: ToonConfig };
+  /** `.glb` only: its PBR materials drawn as MToon, or every mesh in one colour. */
+  material?: { toon?: ToonConfig; solid?: SolidConfig };
   /** Bone -> `[x, y, z, w]`, in the avatar's VRM-1.0 frame: its turn at the rest pose. */
   rest_offsets?: Record<string, ArrayLike<number>>;
   /** Robot root height -> avatar root height. Absent: the avatar root's height at rest over `root_height`. */
@@ -36,6 +45,8 @@ export interface SkinConfig {
   hips_offset?: ArrayLike<number>;
   /** Stop drawing the robot the skin follows, the avatar in its place. Absent: true; false draws both. */
   hide_robot?: boolean;
+  /** Stop drawing the model's tendons while the skin is shown. Absent: as `hide_robot`. */
+  hide_tendons?: boolean;
   /** Scales the toon colours once they are divided by the scene's light. Absent: 1. */
   brightness?: number;
   /** True simulates the spring bones in MuJoCo instead of three-vrm. Absent: false. */
@@ -75,4 +86,12 @@ export interface ToonConfig {
   shade: number;
   toony: number;
   shift: number;
+}
+
+/** One colour, not metallic, drawn as stored, as MuJoCo's `rgba` is. */
+export interface SolidConfig {
+  color: [number, number, number];
+  opacity: number;
+  /** A mesh with no normals given smooth ones, not drawn faceted. */
+  smooth: boolean;
 }
