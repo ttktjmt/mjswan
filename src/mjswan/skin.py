@@ -204,10 +204,6 @@ class SkinConfig:
     is still simulated, collides and can be grabbed, and Debug Viz's Xray switch draws
     it through the skin."""
 
-    hide_tendons: bool | None = None
-    """Stop drawing the model's tendons while the skin is shown. ``None``: as
-    ``hide_robot``."""
-
     brightness: float = 1.0
     """Scales the character's toon (MToon) colours, which the viewer first divides by the
     scene's summed light when that exceeds 1: a toon shader takes every light it faces in
@@ -237,6 +233,10 @@ class SkinConfig:
     notice: str | None = None
     """``.glb`` only: its attribution, a path or the text itself, written to
     ``NOTICE.skin-<id>``."""
+
+    hide_tendons: bool | None = None
+    """Stop drawing the model's tendons while the skin is shown. ``None``: as
+    ``hide_robot``."""
 
     name: str = ""
     """Shown in the viewer's Skin menu. Set by :meth:`~mjswan.scene.SceneHandle.add_skin`."""

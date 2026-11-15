@@ -954,12 +954,12 @@ class mjswan.SkinConfig(
     offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     hips_offset: tuple[float, float, float] | None = None,
     hide_robot: bool = True,
-    hide_tendons: bool | None = None,
     brightness: float = 1.0,
     mujoco_springs: bool = False,
     retarget: Literal["rotation", "position", "hybrid"] = "hybrid",
     license: str | None = None,
     notice: str | None = None,
+    hide_tendons: bool | None = None,
 )
 ```
 

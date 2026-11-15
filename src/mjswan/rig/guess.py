@@ -2,9 +2,9 @@
 
 A file modelled on the robot itself, most of its joints resting on the robot's bodies, is
 drafted as one. Any other skin's side is read from the skeleton's shape: the hips are the
-joint two mirrored chains reaching the floor hang from, the spine its chain toward the head, the arms the
-mirrored pair reaching farthest to the side on the way (a four-legged animal's front
-legs). The robot's side is read from its bodies' names. ``rest_pose`` is not guessed (a
+joint two mirrored chains reaching the floor hang from, the spine its chain toward the
+head, the arms the mirrored pair reaching farthest to the side on the way (a four-legged
+animal's front legs). The robot's side is read from its bodies' names. ``rest_pose`` is not guessed (a
 robot's link origins sit off the joints they look like, so a solved T-pose comes out
 degrees wrong); the robots checked by hand are known instead.
 """

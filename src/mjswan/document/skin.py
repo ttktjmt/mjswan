@@ -60,9 +60,9 @@ class SkinFile:
     json_bytes: int = 0
     """The length of its JSON chunk, which mjswan Cloud bounds."""
     without_material: int = 0
-    """Its mesh primitives with no material, which three.js draws metallic."""
+    """How many of its mesh primitives have no material: three.js draws them metallic."""
     without_normals: int = 0
-    """Its mesh primitives with no normals, which three.js draws faceted."""
+    """How many have no normals: three.js draws them faceted."""
 
     def node(self, name: str) -> int:
         """The one node called *name*; the error names the closest ones."""

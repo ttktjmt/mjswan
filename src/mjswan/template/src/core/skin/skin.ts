@@ -421,6 +421,7 @@ export class Skin {
       const mesh = object as THREE.SkinnedMesh;
       if (mesh.isSkinnedMesh && mesh.visible) meshes.push(mesh);
     });
+    if (meshes.length < 2) return;
     // What mergeGeometries needs alike, checked first so a mismatch merges nothing quietly.
     const layout = ({ material, skeleton, bindMatrix, geometry }: THREE.SkinnedMesh) => [
       material,
@@ -432,7 +433,6 @@ export class Skin {
         .map(([name, a]) => `${name}:${a.array.constructor.name}:${a.itemSize}:${a.normalized}`)
         .sort(),
     ];
-    if (meshes.length < 2) return;
     const first = layout(meshes[0]);
     const alike = (mesh: THREE.SkinnedMesh) => {
       const each = layout(mesh);
@@ -457,10 +457,10 @@ export class Skin {
     let hidden = 0;
     this.model.scene.traverse((object) => {
       const mesh = object as THREE.SkinnedMesh;
-      if (!mesh.isSkinnedMesh) return;
+      const joints = mesh.isSkinnedMesh && mesh.geometry.getAttribute('skinIndex');
+      const weights = mesh.isSkinnedMesh && mesh.geometry.getAttribute('skinWeight');
+      if (!joints || !weights) return;
       const loose = new Set(mesh.skeleton.bones.flatMap((bone, i) => (posed.has(bone) ? [] : [i])));
-      const joints = mesh.geometry.getAttribute('skinIndex');
-      const weights = mesh.geometry.getAttribute('skinWeight');
       let moved = false;
       for (let v = 0; v < joints.count && loose.size && !moved; v++) {
         for (let k = 0; k < 4; k++) moved ||= weights.getComponent(v, k) > 0 && loose.has(joints.getComponent(v, k));
