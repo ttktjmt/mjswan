@@ -50,7 +50,14 @@ from .policy import (
     drives_joints,
     onnx_output_width,
 )
-from .skin import ResolvedSkin, SkinConfig, SkinHandle, resolve_skin
+from .skin import (
+    ModelledSkinConfig,
+    ResolvedModelledSkin,
+    ResolvedSkin,
+    SkinConfig,
+    SkinHandle,
+    resolve_skin,
+)
 from .splat import SplatConfig, SplatHandle
 from .viewer import ViewerConfig
 
@@ -382,7 +389,7 @@ class SceneConfig:
     viewer: ViewerConfig | None = None
     """Optional viewer configuration for this scene."""
 
-    skins: list[ResolvedSkin] = field(default_factory=list)
+    skins: list[ResolvedSkin | ResolvedModelledSkin] = field(default_factory=list)
     """Skins, resolved against their files and the model when added; the viewer shows one
     at a time, the first by default."""
 
@@ -1679,7 +1686,9 @@ class SceneHandle:
         self._config.viewer = config
         return self
 
-    def add_skin(self, name: str, config: SkinConfig) -> SkinHandle:
+    def add_skin(
+        self, name: str, config: SkinConfig | ModelledSkinConfig
+    ) -> SkinHandle:
         """Add a rigged character, posed every frame from the robot's bodies, to the Skin
         menu.
 
@@ -1690,11 +1699,14 @@ class SceneHandle:
         ``.glb``'s ``license`` and ``notice`` are written to the project's ``licenses/``
         as ``LICENSE.skin-<id>`` and ``NOTICE.skin-<id>``. The file, the bone map and
         ``rest_pose`` are checked against the scene's model here rather than at
-        playback, and the rest pose and hips are measured from it.
+        playback, and the rest pose and hips are measured from it. A
+        :class:`~mjswan.skin.ModelledSkinConfig` is matched instead: each joint to the
+        body it rests on.
 
         Args:
             name: Shown in the Skin menu.
-            config: The character's file, bone map, rest pose and placement.
+            config: The character's file, bone map, rest pose and placement, or a
+                file modelled on the robot.
 
         Returns:
             SkinHandle for the added skin.
@@ -1702,8 +1714,9 @@ class SceneHandle:
         Raises:
             FileNotFoundError: The source file does not exist.
             urllib.error.URLError: The source URL does not download.
-            ValueError: The file is not a self-contained binary glTF, or a bone, node,
-                body, joint or keyframe the config names is not there.
+            ValueError: The file is not a self-contained binary glTF, a bone, node,
+                body, joint or keyframe the config names is not there, or too few of a
+                modelled skin's joints rest on the robot.
         """
         name, skin_id = assign_name(
             name, {s.config.id for s in self._config.skins}, kind="skin", stacklevel=3

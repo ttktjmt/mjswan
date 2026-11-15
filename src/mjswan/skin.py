@@ -2,19 +2,22 @@
 
 A ``.vrm`` names its own bones; a ``.glb``'s are named by ``humanoid`` or by node name.
 Spring bones swing outside the scene's model, so physics, collision and the policy never
-see them.
+see them. A ``.glb`` modelled on the robot itself is not fitted at all: each joint is
+fixed to the body it rests on.
 """
 
 from __future__ import annotations
 
 import re
 import warnings
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 import mujoco
+import numpy as np
 
 from .document.skin import FACING_TURNS, SkinFile, read_skin_file
 from .rig.humanoid import (
@@ -28,6 +31,7 @@ from .rig.pose import (
     euler_to_quat,
     hips_offset,
     limb_ratios,
+    match_by_position,
     pose_at_rest,
     quat_mul,
     resolve_body,
@@ -84,6 +88,39 @@ class ToonShading:
 
 
 @dataclass(frozen=True)
+class SolidShading:
+    """Every mesh in one colour, not metallic. ``color`` is drawn as stored, as MuJoCo's
+    ``rgba`` is, not decoded from linear as a glTF's colours are. ``smooth`` gives a mesh
+    with no normals smooth ones, where three.js would draw it faceted."""
+
+    color: tuple[float, float, float]
+    opacity: float = 1.0
+    smooth: bool = True
+
+    def __post_init__(self) -> None:
+        if len(self.color) != 3 or not all(0 <= c <= 1 for c in self.color):
+            raise ValueError(f"color is three values from 0 to 1, got {self.color!r}.")
+        if not 0 < self.opacity <= 1:
+            raise ValueError(f"opacity must be over 0, at most 1; got {self.opacity}.")
+
+
+@dataclass(frozen=True)
+class MatchByPosition:
+    """Each joint of a modelled skin on the body whose origin, or one of whose geoms'
+    centres, lies nearest it with the robot at ``rest_pose``, within ``tolerance``
+    metres."""
+
+    tolerance: float = 0.005
+    align: bool = True
+    """First move the file onto the robot, by the translation most joints agree on: for
+    a scene that stands the robot elsewhere than the file has it."""
+
+    def __post_init__(self) -> None:
+        if self.tolerance <= 0:
+            raise ValueError(f"tolerance must be positive, got {self.tolerance}.")
+
+
+@dataclass(frozen=True)
 class SkinConfig:
     """Everything one skin needs.
 
@@ -128,8 +165,8 @@ class SkinConfig:
     springs: Sequence[SpringChain] = ()
     """``.glb`` only: chains that swing, as a VRM's spring bones do."""
 
-    material: ToonShading | None = None
-    """``.glb`` only: draw its PBR materials as MToon."""
+    material: ToonShading | SolidShading | None = None
+    """``.glb`` only: draw its PBR materials as MToon, or every mesh in one colour."""
 
     rest_pose: str | Mapping[str, float] | None = None
     """The robot's pose while the character holds its own rest pose, as the file has it:
@@ -165,6 +202,10 @@ class SkinConfig:
     ``False`` draws both, as when ``offset`` stands it beside the robot. A hidden robot
     is still simulated, collides and can be grabbed, and Debug Viz's Xray switch draws
     it through the skin."""
+
+    hide_tendons: bool | None = None
+    """Stop drawing the model's tendons while the skin is shown. ``None``: as
+    ``hide_robot``."""
 
     brightness: float = 1.0
     """Scales the character's toon (MToon) colours, which the viewer first divides by the
@@ -238,6 +279,62 @@ class SkinConfig:
 
 
 @dataclass(frozen=True)
+class ModelledSkinConfig:
+    """A ``.glb`` modelled on the robot: made over it at its rest pose, in its world frame
+    (glTF's, y up), as MyoSuite's muscle atlas is over its full body. Nothing is fitted
+    or measured: each joint is fixed to the body it rests on and moves as that body
+    does. A character goes in :class:`SkinConfig`."""
+
+    source: str
+    """Local path or http(s) URL of the ``.glb``, bundled byte for byte."""
+
+    bones: Mapping[str, str] | MatchByPosition = MatchByPosition()
+    """Joint (a node name) -> robot body, a body name leaving out its entity prefix if it
+    likes; or :class:`MatchByPosition`, the body each joint rests on. The meshes a joint
+    with no body moves go undrawn."""
+
+    rest_pose: str | Mapping[str, float] | None = None
+    """The robot's pose the file was modelled at: a keyframe's name, or joint -> value
+    (radians, metres) over the zero pose. ``None``: the zero pose."""
+
+    scale: float = 1.0
+    """Metres per unit of the file."""
+
+    hide_robot: bool = False
+    """Stop drawing the robot the joints follow. The default draws both, the file over
+    the robot."""
+
+    hide_tendons: bool | None = None
+    """Stop drawing the model's tendons while the skin is shown, as for meshes that draw
+    the muscles themselves. ``None``: as ``hide_robot``."""
+
+    material: ToonShading | SolidShading | None = None
+    """Draw its PBR materials as MToon, or every mesh in one colour: for a file with no
+    materials or normals, which three.js draws metallic and faceted."""
+
+    license: str | None = None
+    """A path to its license text, or a generatable SPDX id, written to
+    ``LICENSE.skin-<id>`` beside the scene."""
+
+    notice: str | None = None
+    """Its attribution, a path or the text itself, written to ``NOTICE.skin-<id>``."""
+
+    name: str = ""
+    """Shown in the viewer's Skin menu. Set by :meth:`~mjswan.scene.SceneHandle.add_skin`."""
+
+    id: str = ""
+    """``name2id(name)``, unique within the scene; the bundled file's stem."""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.bones, MatchByPosition) and not self.bones:
+            raise ValueError(
+                "ModelledSkinConfig.bones is empty: map a joint, or match by position."
+            )
+        if self.scale <= 0:
+            raise ValueError(f"scale must be positive, got {self.scale}.")
+
+
+@dataclass(frozen=True)
 class ResolvedSkin:
     """A skin as :meth:`~mjswan.scene.SceneHandle.add_skin` resolved it against its file
     and the scene's model: what the build writes."""
@@ -268,14 +365,44 @@ class ResolvedSkin:
         )
 
 
-def resolve_skin(config: SkinConfig, model: mujoco.MjModel | None) -> ResolvedSkin:
+@dataclass(frozen=True)
+class ResolvedModelledSkin:
+    """A modelled skin as :meth:`~mjswan.scene.SceneHandle.add_skin` resolved it against
+    its file and the scene's model: what the build writes."""
+
+    config: ModelledSkinConfig
+    """With ``source`` a local file, ``name`` and ``id`` set."""
+    file: SkinFile
+    bones: dict[str, str]
+    """Joint -> the body it follows, by the model's full name."""
+    nodes: dict[str, int]
+    """Joint -> node index."""
+    align: tuple[float, float, float]
+    """Added to the file to put it on the robot: MuJoCo's frame, metres."""
+    rest_qpos: list[float] | None
+    """The model's ``qpos`` at ``rest_pose``; None for the zero pose."""
+    rig: Literal["modelled"] = "modelled"
+    """Tells it from a :class:`ResolvedSkin` where the object model is not imported."""
+
+    @property
+    def path(self) -> str:
+        """Where the build puts the file, relative to the scene directory."""
+        return f"assets/{self.config.id}.glb"
+
+
+def resolve_skin(
+    config: SkinConfig | ModelledSkinConfig, model: mujoco.MjModel | None
+) -> ResolvedSkin | ResolvedModelledSkin:
     """*config* resolved: its file read and checked, its bones found, and, given the
-    scene's *model*, its rest pose and hips measured against the robot.
+    scene's *model*, its rest pose and hips measured against the robot, or a modelled
+    skin's joints matched to the bodies they rest on.
 
     Raises :class:`FileNotFoundError` for a missing file, ``urllib.error.URLError`` for
     a URL that does not download, and :class:`ValueError` for a file or a map that does
     not fit.
     """
+    if isinstance(config, ModelledSkinConfig):
+        return _resolve_modelled(config, model)
     file, reparent = _reparented(config, read_skin_file(_local_source(config)))
     rig, nodes, root = _bones(config, file)
     springs = [_spring(chain, file) for chain in config.springs]
@@ -337,6 +464,94 @@ def resolve_skin(config: SkinConfig, model: mujoco.MjModel | None) -> ResolvedSk
     )
 
 
+def _resolve_modelled(
+    config: ModelledSkinConfig, model: mujoco.MjModel | None
+) -> ResolvedModelledSkin:
+    file = read_skin_file(_local_source(config))
+    name = file.path.name
+    if file.format == "vrm":
+        raise ValueError(
+            f"{name} is a VRM, a character with a humanoid of its own: give it to "
+            "SkinConfig, which fits it to the robot."
+        )
+    if not file.joints:
+        raise ValueError(f"{name} has no skin: no joints to fix its meshes to.")
+    if model is None:
+        raise ValueError(
+            "A modelled skin follows the robot's bodies, so it needs the scene's model."
+        )
+    rest = pose_at_rest(model, config.rest_pose)
+    joints = sorted(file.joints)
+    shift = np.zeros(3)
+    match = config.bones
+    if isinstance(match, MatchByPosition):
+        # glTF's y up to MuJoCo's z up.
+        x, y, z = (file.rest[joints] * config.scale).T
+        found, shift = match_by_position(
+            model, rest, np.stack([x, -z, y], axis=1), match.tolerance, match.align
+        )
+        bodies = {j: b for j, b in zip(joints, found) if b is not None}
+        if 2 * len(bodies) <= len(joints):
+            raise ValueError(
+                f"{name}: {len(bodies) or 'none'} of its {len(joints)} joints rest on "
+                f"the robot (within {match.tolerance * 1000:g} mm of a body origin or a "
+                "geom centre at rest_pose), too few to place it. Is it modelled on "
+                "another robot, or at another rest_pose? A character goes in "
+                "SkinConfig, which fits it to the robot."
+            )
+        # A name the file leaves empty or repeats keys no joint alone.
+        count = Counter(file.names)
+        keys = {j: file.names[j] for j in bodies}
+        keys = {j: k if k and count[k] == 1 else f"{k}#{j}" for j, k in keys.items()}
+    else:
+        keys, bodies = {}, {}
+        for node_name, body_name in match.items():
+            node = file.node(node_name)
+            if node not in file.joints:
+                raise ValueError(f"{name}'s node {node_name!r} is not a joint.")
+            keys[node] = node_name
+            bodies[node] = mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_BODY, resolve_body(model, body_name) or ""
+            )
+        missing = sorted({match[keys[j]] for j, b in bodies.items() if b < 0})
+        if missing:
+            raise ValueError(f"The scene's model has no body named {missing}.")
+
+    trees = sorted({int(model.body_rootid[b]) for b in bodies.values()})
+    if len(trees) > 1:
+        warnings.warn(
+            f"{name}'s joints rest on {len(trees)} trees of bodies "
+            f"({', '.join(model.body(t).name for t in trees)}): is something else at "
+            "the robot's joints at rest_pose?",
+            stacklevel=4,
+        )
+    lost = [file.names[j] for j in joints if j not in bodies]
+    if lost:
+        shown = ", ".join(lost[:5]) + (", ..." if len(lost) > 5 else "")
+        warnings.warn(
+            f"{name}: {len(lost)} of its {len(joints)} joints follow no body ({shown}); "
+            "the meshes they move are not drawn.",
+            stacklevel=4,
+        )
+    if config.material is None and (file.without_material or file.without_normals):
+        warnings.warn(
+            f"{name}: {file.without_material} of its meshes have no material and "
+            f"{file.without_normals} no normals, which the viewer draws metallic and "
+            "faceted. material=SolidShading(color=...) draws them in one colour, smooth.",
+            stacklevel=4,
+        )
+    # + 0.0 so a -0.0 is written as 0.0.
+    ax, ay, az = (round(float(a), 6) + 0.0 for a in shift)
+    return ResolvedModelledSkin(
+        config=replace(config, source=str(file.path)),
+        file=file,
+        bones={keys[j]: model.body(b).name for j, b in bodies.items()},
+        nodes={keys[j]: j for j in bodies},
+        align=(ax, ay, az),
+        rest_qpos=None if config.rest_pose is None else rest.qpos.tolist(),
+    )
+
+
 def _reparented(
     config: SkinConfig, file: SkinFile
 ) -> tuple[SkinFile, list[tuple[int, int]]]:
@@ -363,7 +578,7 @@ def _reparented(
     return replace(file, parents=tuple(parents)), moves
 
 
-def _local_source(config: SkinConfig) -> Path:
+def _local_source(config: SkinConfig | ModelledSkinConfig) -> Path:
     if config.source is None:
         raise ValueError(
             "SkinConfig.source is not set: give the .vrm's or .glb's path or URL."
@@ -582,12 +797,14 @@ def _spring(chain: SpringChain, file: SkinFile) -> dict[str, Any]:
 class SkinHandle:
     """A skin added to a scene. Its config is frozen; build a new one to change it."""
 
-    def __init__(self, skin: ResolvedSkin, scene: SceneHandle) -> None:
+    def __init__(
+        self, skin: ResolvedSkin | ResolvedModelledSkin, scene: SceneHandle
+    ) -> None:
         self._skin = skin
         self._scene = scene
 
     @property
-    def config(self) -> SkinConfig:
+    def config(self) -> SkinConfig | ModelledSkinConfig:
         return self._skin.config
 
     @property
@@ -611,9 +828,13 @@ class SkinHandle:
 __all__ = [
     "HUMANOID_PRESETS",
     "VRM_HUMAN_BONES",
+    "MatchByPosition",
+    "ModelledSkinConfig",
+    "ResolvedModelledSkin",
     "ResolvedSkin",
     "SkinConfig",
     "SkinHandle",
+    "SolidShading",
     "SpringChain",
     "SpringCollider",
     "ToonShading",

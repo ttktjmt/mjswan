@@ -59,6 +59,10 @@ class SkinFile:
     """Its skeleton: the nodes its skins deform the meshes by."""
     json_bytes: int = 0
     """The length of its JSON chunk, which mjswan Cloud bounds."""
+    without_material: int = 0
+    """Its mesh primitives with no material, which three.js draws metallic."""
+    without_normals: int = 0
+    """Its mesh primitives with no normals, which three.js draws faceted."""
 
     def node(self, name: str) -> int:
         """The one node called *name*; the error names the closest ones."""
@@ -171,6 +175,9 @@ def _skin_file(path: Path, gltf: dict[str, Any], json_bytes: int) -> SkinFile:
     joints = frozenset(
         j for skin in gltf.get("skins", []) for j in skin.get("joints", [])
     )
+    primitives = [p for m in gltf.get("meshes", []) for p in m.get("primitives", [])]
+    without_material = sum("material" not in p for p in primitives)
+    without_normals = sum("NORMAL" not in p.get("attributes", {}) for p in primitives)
 
     extensions = gltf.get("extensions", {})
     version: Literal["0", "1"]
@@ -196,6 +203,8 @@ def _skin_file(path: Path, gltf: dict[str, Any], json_bytes: int) -> SkinFile:
             rest,
             joints=joints,
             json_bytes=json_bytes,
+            without_material=without_material,
+            without_normals=without_normals,
         )
     absent = sorted(bone for bone, node in bones.items() if not 0 <= node < len(nodes))
     if absent:
@@ -214,6 +223,8 @@ def _skin_file(path: Path, gltf: dict[str, Any], json_bytes: int) -> SkinFile:
         meta if isinstance(meta, dict) else {},
         joints,
         json_bytes=json_bytes,
+        without_material=without_material,
+        without_normals=without_normals,
     )
 
 

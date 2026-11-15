@@ -1,6 +1,7 @@
 """A skin measured against its robot: the turns and heights that make the avatar's rest
-pose the robot's ``rest_pose``, where its hips sit, and how far its limbs are from the
-robot's lengths. Everything here runs once, when the skin is added.
+pose the robot's ``rest_pose``, where its hips sit, how far its limbs are from the
+robot's lengths, and which body each joint of a skin modelled on the robot rests on.
+Everything here runs once, when the skin is added.
 """
 
 from __future__ import annotations
@@ -10,6 +11,11 @@ from collections.abc import Mapping, Sequence
 
 import mujoco
 import numpy as np
+
+#: The grid, in metres, the shift of a file off its robot is voted on.
+_VOTE_GRID = 0.001
+#: The share of joints that, landing on the robot as they are, says the file is not off it.
+_ON_ROBOT = 0.8
 
 
 def resolve_body(model: mujoco.MjModel, name: str) -> str | None:
@@ -160,6 +166,53 @@ def limb_ratios(
     return out
 
 
+def match_by_position(
+    model: mujoco.MjModel,
+    rest: mujoco.MjData,
+    joints: np.ndarray,
+    tolerance: float,
+    align: bool = True,
+) -> tuple[list[int | None], np.ndarray]:
+    """Each of *joints* (``(n, 3)``, MuJoCo's frame, metres) -> the body whose origin, or
+    one of whose geoms' centres, lies nearest it in *rest* within *tolerance*, or None;
+    and the shift added to the joints first. With *align*, unless most joints land as they
+    are, the shift is the joint-to-point difference most pairs agree on to the millimetre,
+    then the mean over the pairs it matches: a file the scene's robot stands off."""
+    geoms = np.flatnonzero(model.geom_bodyid > 0)
+    points = np.concatenate([rest.xpos[1:], rest.geom_xpos[geoms]])
+    owners = np.concatenate([np.arange(1, model.nbody), model.geom_bodyid[geoms]])
+    shift = np.zeros(3)
+    if not len(points):
+        return [None] * len(joints), shift
+
+    def nearest(shift: np.ndarray) -> np.ndarray:
+        """Each joint's nearest point within *tolerance*, -1 where none is."""
+        found = np.full(len(joints), -1)
+        for i, joint in enumerate(joints + shift):
+            distance = np.linalg.norm(points - joint, axis=1)
+            if distance.min() <= tolerance:
+                found[i] = distance.argmin()
+        return found
+
+    hits = nearest(shift)
+    if align and np.mean(hits >= 0) < _ON_ROBOT:
+        pairs = (points[None] - joints[:, None]).reshape(-1, 3)
+        cells, votes = np.unique(
+            np.round(pairs / _VOTE_GRID), axis=0, return_counts=True
+        )
+        moved = cells[votes.argmax()] * _VOTE_GRID
+        for _ in range(2):
+            found = nearest(moved)
+            matched = found >= 0
+            if not matched.any():
+                break
+            moved = (points[found[matched]] - joints[matched]).mean(axis=0)
+        found = nearest(moved)
+        if np.sum(found >= 0) > np.sum(hits >= 0):
+            shift, hits = moved, found
+    return [int(owners[k]) if k >= 0 else None for k in hits], shift
+
+
 def euler_to_quat(degrees: Sequence[float]) -> list[float]:
     """Turns about the fixed x, then y, then z axis, as ``[x, y, z, w]``."""
     q = [0.0, 0.0, 0.0, 1.0]
@@ -248,6 +301,7 @@ __all__ = [
     "hips_offset",
     "limb_ratios",
     "limb_root",
+    "match_by_position",
     "pose_at_rest",
     "quat_mul",
     "resolve_body",

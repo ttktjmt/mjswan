@@ -7,17 +7,40 @@ from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ..skin import ResolvedSkin
+    from ..skin import (
+        ModelledSkinConfig,
+        ResolvedModelledSkin,
+        ResolvedSkin,
+        SkinConfig,
+        SolidShading,
+        ToonShading,
+    )
 
 
-def skin_entry(skin: ResolvedSkin) -> dict[str, Any]:
+def skin_entry(skin: ResolvedSkin | ResolvedModelledSkin) -> dict[str, Any]:
     """One entry of a scene's ``skins``; a key is left out when it holds the default."""
-    config = skin.config
-    return {
-        "id": config.id,
-        "name": config.name,
+    head = {
+        "id": skin.config.id,
+        "name": skin.config.name,
         "format": skin.file.format,
         "path": skin.path,
+    }
+    if skin.rig == "modelled":
+        config = skin.config
+        return {
+            **head,
+            "fit": "modelled",
+            "bones": skin.bones,
+            "nodes": skin.nodes,
+            **({"align": list(skin.align)} if any(skin.align) else {}),
+            **({"rest_qpos": skin.rest_qpos} if skin.rest_qpos is not None else {}),
+            **({"scale": config.scale} if config.scale != 1 else {}),
+            **_material(config.material),
+            **_hidden(config),
+        }
+    config = skin.config
+    return {
+        **head,
         "bones": dict(config.bones),
         **({"nodes": skin.nodes} if skin.nodes else {}),
         **({"limbs": [list(limb) for limb in skin.limbs]} if skin.limbs else {}),
@@ -25,16 +48,33 @@ def skin_entry(skin: ResolvedSkin) -> dict[str, Any]:
         **({"scale": config.scale} if config.scale != 1 else {}),
         **({"facing": config.facing} if config.facing != "+z" else {}),
         **({"springs": skin.springs} if skin.springs else {}),
-        **({"material": {"toon": asdict(config.material)}} if config.material else {}),
+        **_material(config.material),
         **({"rest_offsets": skin.rest_offsets} if skin.rest_offsets else {}),
         **({"root_height": skin.root_height} if skin.root_height else {}),
         **({"height_ratio": config.height_ratio} if config.height_ratio else {}),
         **({"offset": list(config.offset)} if any(config.offset) else {}),
         **({"hips_offset": list(skin.hips_offset)} if any(skin.hips_offset) else {}),
-        **({} if config.hide_robot else {"hide_robot": False}),
+        **_hidden(config),
         **({"brightness": config.brightness} if config.brightness != 1.0 else {}),
         **({"mujoco_springs": True} if config.mujoco_springs else {}),
         **({"retarget": config.retarget} if config.retarget != "hybrid" else {}),
+    }
+
+
+def _material(material: ToonShading | SolidShading | None) -> dict[str, Any]:
+    if material is None:
+        return {}
+    kind = "solid" if hasattr(material, "color") else "toon"
+    return {"material": {kind: asdict(material)}}
+
+
+def _hidden(config: SkinConfig | ModelledSkinConfig) -> dict[str, Any]:
+    """``hide_robot`` and ``hide_tendons`` where they are not what the browser assumes:
+    the robot hidden, and its tendons with it."""
+    tendons = config.hide_robot if config.hide_tendons is None else config.hide_tendons
+    return {
+        **({} if config.hide_robot else {"hide_robot": False}),
+        **({"hide_tendons": tendons} if tendons != config.hide_robot else {}),
     }
 
 

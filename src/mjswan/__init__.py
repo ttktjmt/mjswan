@@ -44,7 +44,16 @@ from .motion import MotionConfig, MotionHandle
 from .policy import PolicyConfig, PolicyHandle
 from .project import ProjectConfig, ProjectHandle
 from .scene import SceneConfig, SceneHandle
-from .skin import SkinConfig, SkinHandle, SpringChain, SpringCollider, ToonShading
+from .skin import (
+    MatchByPosition,
+    ModelledSkinConfig,
+    SkinConfig,
+    SkinHandle,
+    SolidShading,
+    SpringChain,
+    SpringCollider,
+    ToonShading,
+)
 from .splat import SplatConfig, SplatHandle
 from .viewer import ViewerConfig
 
@@ -64,9 +73,12 @@ __all__ = [
     "SceneConfig",
     "ViewerConfig",
     "SkinConfig",
+    "ModelledSkinConfig",
+    "MatchByPosition",
     "SpringChain",
     "SpringCollider",
     "ToonShading",
+    "SolidShading",
     "SplatConfig",
     "PolicyConfig",
     "MdpConfig",
