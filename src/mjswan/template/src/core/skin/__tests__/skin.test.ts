@@ -923,19 +923,43 @@ describe('a skin modelled on the robot', () => {
     expect((await posed(bodiesAt(), { hide_robot: true })).hiddenBodies).toEqual([1, 2]);
   });
 
+  /** The skinned meshes it draws. */
+  const drawnMeshes = (skin: Skin) => {
+    const out: THREE.SkinnedMesh[] = [];
+    skin.root.traverse((object) => {
+      if ((object as THREE.SkinnedMesh).isSkinnedMesh && object.visible) out.push(object as THREE.SkinnedMesh);
+    });
+    return out;
+  };
+  const solid = (color: [number, number, number], opacity = 1, smooth = true) => ({ material: { solid: { color, opacity, smooth } } });
+
   it('draws a solid colour as stored, not metallic, smooth where the file has no normals', async () => {
-    const material = (skin: Skin) => (skin.root.getObjectByName('torso') as THREE.Mesh).material as THREE.MeshStandardMaterial;
-    const normals = (skin: Skin) => (skin.root.getObjectByName('torso') as THREE.Mesh).geometry.getAttribute('normal');
     // As three.js loads a mesh with no material or normals: metallic and faceted.
-    const bare = await posed(bodiesAt());
-    expect([material(bare).metalness, material(bare).flatShading]).toEqual([1, true]);
-    const solid = await posed(bodiesAt(), { material: { solid: { color: [0.42, 0.11, 0.1], opacity: 0.5, smooth: true } } });
-    expect(material(solid).color.toArray()).toEqual([0.42, 0.11, 0.1].map((c) => expect.closeTo(c, 6)));
-    expect([material(solid).metalness, material(solid).flatShading]).toEqual([0, false]);
-    expect([material(solid).opacity, material(solid).transparent]).toEqual([0.5, true]);
-    expect(normals(solid)).toBeDefined();
-    const faceted = await posed(bodiesAt(), { material: { solid: { color: [1, 1, 1], opacity: 1, smooth: false } } });
-    expect([material(faceted).flatShading, material(faceted).transparent, normals(faceted)]).toEqual([true, false, undefined]);
+    const bare = drawnMeshes(await posed(bodiesAt()));
+    expect(bare).toHaveLength(3);
+    const loaded = bare[0].material as THREE.MeshStandardMaterial;
+    expect([loaded.metalness, loaded.flatShading]).toEqual([1, true]);
+    const [painted] = drawnMeshes(await posed(bodiesAt(), solid([0.42, 0.11, 0.1], 0.5)));
+    const material = painted.material as THREE.MeshStandardMaterial;
+    expect(material.color.toArray()).toEqual([0.42, 0.11, 0.1].map((c) => expect.closeTo(c, 6)));
+    expect([material.metalness, material.flatShading, material.opacity, material.transparent]).toEqual([0, false, 0.5, true]);
+    expect(painted.geometry.getAttribute('normal')).toBeDefined();
+    const [faceted] = drawnMeshes(await posed(bodiesAt(), solid([1, 1, 1], 1, false)));
+    expect((faceted.material as THREE.MeshStandardMaterial).flatShading).toBe(true);
+    expect(faceted.geometry.getAttribute('normal')).toBeUndefined();
+  });
+
+  it('draws a solid skin as one mesh, posed as its meshes were, the undrawn one left out', async () => {
+    for (const pose of [bodiesAt(), bodiesAt(0)]) {
+      const separate = await posed(pose);
+      const [merged, ...more] = drawnMeshes(await posed(pose, solid([1, 1, 1])));
+      expect(more).toHaveLength(0);
+      const count = merged.geometry.getAttribute('position').count;
+      const corners = Array.from({ length: count }, (_, i) =>
+        merged.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(merged.matrixWorld),
+      );
+      expectAt(corners, ['torso', 'sleeve', 'elbow'].flatMap((name) => drawn(separate, name)));
+    }
   });
 });
 

@@ -8,6 +8,7 @@
  * from bytes the app already holds; nothing is fetched and nothing is evaluated.
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 import { lightBudget } from '../scene/lights';
 import { threeToMjcCoordinate } from '../scene/coordinate';
@@ -407,6 +408,47 @@ export class Skin {
       for (let b = 1; b < mjModel.nbody; b++) if (trees.has(mjModel.body_rootid[b])) this.hiddenBodies.push(b);
     }
     this.hideUnposed();
+    if (this.config.material?.solid) this.mergeDrawn();
+  }
+
+  /**
+   * Every drawn skinned mesh as one, when they share a material, a skeleton and the same
+   * attributes, as a solid material's meshes do: one draw call instead of one per mesh.
+   */
+  private mergeDrawn(): void {
+    const meshes: THREE.SkinnedMesh[] = [];
+    this.model.scene.traverse((object) => {
+      const mesh = object as THREE.SkinnedMesh;
+      if (mesh.isSkinnedMesh && mesh.visible) meshes.push(mesh);
+    });
+    // What mergeGeometries needs alike, checked first so a mismatch merges nothing quietly.
+    const layout = ({ material, skeleton, bindMatrix, geometry }: THREE.SkinnedMesh) => [
+      material,
+      skeleton,
+      bindMatrix.elements.join(),
+      !!geometry.index,
+      Object.keys(geometry.morphAttributes).length,
+      ...Object.entries(geometry.attributes)
+        .map(([name, a]) => `${name}:${a.array.constructor.name}:${a.itemSize}:${a.normalized}`)
+        .sort(),
+    ];
+    if (meshes.length < 2) return;
+    const first = layout(meshes[0]);
+    const alike = (mesh: THREE.SkinnedMesh) => {
+      const each = layout(mesh);
+      return each.length === first.length && each.every((value, i) => value === first[i]);
+    };
+    const geometry = meshes.every(alike) && mergeGeometries(meshes.map((mesh) => mesh.geometry));
+    if (!geometry) return;
+    const merged = new THREE.SkinnedMesh(geometry, meshes[0].material);
+    Object.assign(merged, { frustumCulled: false, castShadow: true, raycast: () => {} });
+    // Bound as attached, as glTF's are: where it hangs does not move its vertices.
+    meshes[0].parent!.add(merged);
+    merged.bind(meshes[0].skeleton, meshes[0].bindMatrix);
+    for (const mesh of meshes) {
+      mesh.removeFromParent();
+      mesh.geometry.dispose();
+    }
   }
 
   /** Each skinned mesh drawn only if every joint that moves it is fixed to a body: one that is not would stay behind. */
