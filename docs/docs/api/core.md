@@ -519,6 +519,16 @@ Set the camera, tracking mode, and rendering options for the scene. See [`Viewer
 
 Returns `self` for chaining.
 
+### SceneHandle.set_muscles
+
+```python
+def set_muscles(config: MuscleConfig) -> SceneHandle
+```
+
+Draw the scene's muscles as MyoSuite does (ADR 0012): the muscle actuators on a spatial tendon that starts at a site, as volume-preserving tubes or their coloured paths. This is only how the scene starts: the panel's **Muscles** menu, `?muscles=` and `engine.muscles` change it, and a scene without it draws its muscles as every other tendon. See [`MuscleConfig`](#muscleconfig).
+
+Returns `self` for chaining.
+
 ### SceneHandle.add_skin
 
 ```python
@@ -931,6 +941,29 @@ def from_position(
 ```
 
 Build a `ViewerConfig` from explicit Cartesian viewer/target positions — `lookat`, `distance`, `elevation`, and `azimuth` are computed.
+
+## MuscleConfig
+
+```python
+@dataclass(frozen=True)
+class mjswan.MuscleConfig(
+    style: Literal["volumetric", "paths"] = "volumetric",
+    color: Literal["activation", "uniform"] = "activation",
+    scale: float = 1.0,
+    detail: Literal["full", "light"] = "full",
+)
+```
+
+How a scene draws its muscles until the viewer changes it, applied via `SceneHandle.set_muscles()`. The fields take the names of MyoSuite's `RenderConfig`; anything else raises `ValueError`.
+
+| Field | MyoSuite | Description |
+|---|---|---|
+| `style` | `muscles` | `volumetric`: a tube along each tendon path, a fusiform belly that keeps its volume as the path shortens, a tube per pulley branch. `paths`: the path itself, coloured. |
+| `color` | `muscle_color` | `activation`: a tube from pale to deep red, a path from dark grey to red. `uniform`: one anatomical red. |
+| `scale` | `muscle_scale` | Multiplies every tube's radius. |
+| `detail` | (none) | Points per tube ring: `full` 12, as MyoSuite; `light` 6, half the vertices, for a slower device. |
+
+---
 
 ## SkinConfig
 

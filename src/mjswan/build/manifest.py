@@ -9,6 +9,7 @@ for the top-level ``plugins`` (manifest rules 1 and 2).
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import json
 import warnings
 from collections.abc import Callable, Iterator, Mapping
@@ -398,6 +399,7 @@ def scene_entry(
         **(
             {"skins": [skin_entry(skin) for skin in scene.skins]} if scene.skins else {}
         ),
+        **({"muscles": dataclasses.asdict(scene.muscles)} if scene.muscles else {}),
         **({"credits": credits} if (credits := scene_credits(scene, licenses)) else {}),
         "mdps": mdps,
         "policies": policies,

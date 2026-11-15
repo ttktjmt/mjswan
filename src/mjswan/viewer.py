@@ -1,11 +1,11 @@
-"""Viewer configuration for mjswan scenes."""
+"""Viewer configuration for mjswan scenes: the camera, and how muscles are drawn."""
 
 from __future__ import annotations
 
 import enum
 import math
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 
 @dataclass
@@ -135,4 +135,41 @@ class ViewerConfig:
         )
 
 
-__all__ = ["ViewerConfig"]
+@dataclass(frozen=True)
+class MuscleConfig:
+    """How a scene draws its muscles until the viewer changes it, named after MyoSuite's
+    ``RenderConfig`` (ADR 0012).
+
+    The muscles are those MyoSuite draws: muscle actuators on a spatial tendon that starts
+    at a site. They are drawn only, never simulated.
+    """
+
+    style: Literal["volumetric", "paths"] = "volumetric"
+    """MyoSuite's ``muscles``: a tube along each tendon path, a fusiform belly that keeps
+    its volume as the path shortens, or the path itself, coloured."""
+
+    color: Literal["activation", "uniform"] = "activation"
+    """MyoSuite's ``muscle_color``: by activation, or one anatomical red."""
+
+    scale: float = 1.0
+    """MyoSuite's ``muscle_scale``: multiplies every tube's radius."""
+
+    detail: Literal["full", "light"] = "full"
+    """Points per tube ring: ``full`` 12, as MyoSuite; ``light`` 6, half the vertices, for
+    a slower device."""
+
+    def __post_init__(self) -> None:
+        for name, allowed in (
+            ("style", ("volumetric", "paths")),
+            ("color", ("activation", "uniform")),
+            ("detail", ("full", "light")),
+        ):
+            if getattr(self, name) not in allowed:
+                raise ValueError(
+                    f"MuscleConfig.{name} must be one of {allowed}, not {getattr(self, name)!r}"
+                )
+        if not (math.isfinite(self.scale) and self.scale > 0):
+            raise ValueError(f"MuscleConfig.scale must be positive, not {self.scale!r}")
+
+
+__all__ = ["MuscleConfig", "ViewerConfig"]

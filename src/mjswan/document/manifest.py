@@ -44,7 +44,10 @@ MANIFEST_NAME = "manifest.json"
 #: 9: a graph's ``sensors`` may describe a camera (``kind: "camera"``), whose ``rgb`` the
 #: engine renders, and an observation group may feed a policy input of more than two
 #: dimensions (an image). An older engine would read the camera as a raycast sensor.
-DOCUMENT_FORMAT = 9
+#:
+#: 10: a scene may carry ``muscles``, how it draws its muscles until the viewer changes
+#: it. An older engine would draw them as every other tendon.
+DOCUMENT_FORMAT = 10
 
 #: Input slots the runtime fills itself rather than from an observation group: the
 #: recurrent carry (``is_init``, ``adapt_hx``) and the step counter (``time_step``).

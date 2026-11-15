@@ -46,7 +46,7 @@ from .project import ProjectConfig, ProjectHandle
 from .scene import SceneConfig, SceneHandle
 from .skin import SkinConfig, SkinHandle, SpringChain, SpringCollider, ToonShading
 from .splat import SplatConfig, SplatHandle
-from .viewer import ViewerConfig
+from .viewer import MuscleConfig, ViewerConfig
 
 __all__ = [
     # Builder and App
@@ -63,6 +63,7 @@ __all__ = [
     "ProjectConfig",
     "SceneConfig",
     "ViewerConfig",
+    "MuscleConfig",
     "SkinConfig",
     "SpringChain",
     "SpringCollider",

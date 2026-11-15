@@ -14,7 +14,7 @@ import type { EventConfig, TerrainData } from '../core/event/EventBase';
 import type { SplatTransform } from '../core/scene/splat';
 import type { SkinConfig } from '../core/skin/config';
 import { policyGraphRefs } from '../core/onnx/graphRefs';
-import type { PolicyInput, SceneInput, SkinInput, SplatInput } from '../engine/types';
+import type { MuscleView, PolicyInput, SceneInput, SkinInput, SplatInput } from '../engine/types';
 
 /** Maps a document-relative path (e.g. `demo/humanoid/scene.mjz`) to bytes. */
 export type ByteSource = (relPath: string) => Bytes;
@@ -131,6 +131,8 @@ export interface ManifestScene {
   splat_section?: boolean;
   splats?: ManifestSplat[];
   skins?: ManifestSkin[];
+  /** How the scene draws its muscles until the viewer changes it (`set_muscles`). */
+  muscles?: Partial<MuscleView>;
   credits?: ManifestCredit[];
   mdps: ManifestMdp[];
   policies: ManifestPolicy[];
@@ -275,9 +277,9 @@ export function sanitizeName(name: string): string {
  * `root_velocity_b` write; 6 an action term's traced `process` and `reset` graphs, its
  * `interpolate`, `hold_s` and `delay`, the `joint_position_relative` type, and the
  * `action_term` input slot (ADR 0009); 7 a scene's `skins`; 8 a motion's `frame_fields`;
- * 9 a camera sensor's descriptor and an image-shaped policy input.
+ * 9 a camera sensor's descriptor and an image-shaped policy input; 10 a scene's `muscles`.
  */
-export const MAX_DOCUMENT_FORMAT = 9;
+export const MAX_DOCUMENT_FORMAT = 10;
 
 /**
  * Refuse a document this reader cannot read: one without a `format`, or one newer than it
@@ -497,6 +499,7 @@ function toSceneEntry(
         policy: policy ? buildPolicy(dir, scene, policy, source) : null,
         splat: splat ? buildSplat(dir, splat, source) : null,
         skin: skin ? buildSkin(skin) : null,
+        muscles: scene.muscles ?? null,
         viewer: toViewerConfig(scene.camera, format),
         terrainData: scene.terrain_data,
         controlDt: scene.control_dt,

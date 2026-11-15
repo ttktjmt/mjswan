@@ -600,6 +600,33 @@ class TestSaveConfigJson:
         assert isinstance(config["projects"], list)
         assert len(config["projects"]) == 1
 
+    def test_scene_carries_its_muscle_view_only_when_set(
+        self, tmp_path, minimal_model, build_manifest
+    ):
+        builder = Builder()
+        project = builder.add_project(name="P")
+        project.add_scene(control_dt=0.02, name="Plain", model=minimal_model)
+        project.add_scene(
+            control_dt=0.02, name="Muscles", model=minimal_model
+        ).set_muscles(mjswan.MuscleConfig(style="paths", detail="light"))
+        build_manifest(builder, tmp_path / "out")
+        plain, muscles = self._read_config(tmp_path)["projects"][0]["scenes"]
+        assert "muscles" not in plain
+        assert muscles["muscles"] == {
+            "style": "paths",
+            "color": "activation",
+            "scale": 1.0,
+            "detail": "light",
+        }
+
+    @pytest.mark.parametrize(
+        "field",
+        [{"style": "tubes"}, {"color": "red"}, {"detail": "low"}, {"scale": 0.0}],
+    )
+    def test_muscle_config_refuses_what_the_engine_cannot_draw(self, field):
+        with pytest.raises(ValueError, match="MuscleConfig"):
+            mjswan.MuscleConfig(**field)
+
     def test_project_name_and_id_in_config(
         self, tmp_path, minimal_model, build_manifest
     ):

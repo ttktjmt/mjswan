@@ -52,7 +52,7 @@ from .policy import (
 )
 from .skin import ResolvedSkin, SkinConfig, SkinHandle, resolve_skin
 from .splat import SplatConfig, SplatHandle
-from .viewer import ViewerConfig
+from .viewer import MuscleConfig, ViewerConfig
 
 if TYPE_CHECKING:
     import onnx
@@ -381,6 +381,10 @@ class SceneConfig:
 
     viewer: ViewerConfig | None = None
     """Optional viewer configuration for this scene."""
+
+    muscles: MuscleConfig | None = None
+    """How the scene draws its muscles until the viewer changes it; None draws them as
+    every other tendon."""
 
     skins: list[ResolvedSkin] = field(default_factory=list)
     """Skins, resolved against their files and the model when added; the viewer shows one
@@ -1677,6 +1681,22 @@ class SceneHandle:
             ))
         """
         self._config.viewer = config
+        return self
+
+    def set_muscles(self, config: MuscleConfig) -> SceneHandle:
+        """Draw the scene's muscles as MyoSuite does, until the viewer changes it.
+
+        Args:
+            config: A :class:`MuscleConfig`: tubes or paths, their colour, scale and detail.
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            scene.set_muscles(mjswan.MuscleConfig())  # MyoSuite's volumetric tubes
+        """
+        self._config.muscles = config
         return self
 
     def add_skin(self, name: str, config: SkinConfig) -> SkinHandle:

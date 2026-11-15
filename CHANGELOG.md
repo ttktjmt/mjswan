@@ -21,8 +21,9 @@ shortcuts.
   activation or in one anatomical red. The tubes match MyoSuite's to 1e-9 m. The
   panel's **Muscles** menu and `?muscles=` switch between those and the plain tendons,
   and **Light tubes** halves the vertices; `engine.muscles.set(partial)` and `reset()`
-  do it for a host, the state's `muscles` reports the view and the count, and
-  `SceneInput.muscles` sets a scene's own view.
+  do it for a host, and the state's `muscles` reports the view and the count. A scene
+  starts as `scene.set_muscles(MuscleConfig(...))` says (ADR 0012, **document format
+  10**), and as every tendon without it.
 
 - **Camera observations: a policy can read an mjlab `CameraSensor`'s `rgb`** (**document
   format 9**). A term such as mjlab's `camera_rgb` traces like any other, and the

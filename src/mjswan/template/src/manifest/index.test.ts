@@ -41,6 +41,7 @@ const MANIFEST: Manifest = {
             },
             { id: 'fox', name: 'Fox', format: 'gltf', path: 'assets/fox.glb', bones: { hips: 'trunk' }, nodes: { hips: 4 } },
           ],
+          muscles: { style: 'paths', color: 'uniform', scale: 1, detail: 'full' },
           mdps: [
             {
               id: 'mdp_0',
@@ -93,6 +94,11 @@ describe('parseManifest', () => {
       ['sample_a', 'Sample A'],
       ['fox', 'Fox'],
     ]);
+  });
+
+  it("hands the scene's muscle view to the engine", async () => {
+    const scene = parseManifest(MANIFEST, fakeSource().source).projects[0].scenes[0];
+    expect((await scene.buildScene()).muscles).toEqual({ style: 'paths', color: 'uniform', scale: 1, detail: 'full' });
   });
 
   it('builds the skin asked for, by id, and none when none is', async () => {
