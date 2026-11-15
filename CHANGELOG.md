@@ -1554,6 +1554,15 @@ shortcuts.
   limit either. Expressions are now settled once at load (mjswan sets none), and a skin
   past fixed limits on constraints, spring joints, collider tests or spring depth is not
   loaded; the scene runs without it.
+- **Each model an engine loads starts from an empty file area.** The engine unpacked every
+  `.mjz` into one MuJoCo file area that it never emptied, so a later model could compile an
+  earlier one's include or mesh, fail on a name the earlier one had used for a folder, or,
+  within the same second, get the earlier one's mesh from MuJoCo's cache, which keys a mesh
+  by path and modification time in whole seconds. The files also stayed in memory for the
+  engine's life. `loadScene` now empties the area first and dates the new files a second
+  past the last model's, and a failed load leaves nothing for an XR rebuild to recompile.
+  This crossed a boundary only for a host that loads documents of different authors into
+  one engine; mjswan's own app and mjswan Cloud give each document its own.
 - **A release publishes the commit its release job tagged.** The PyPI and npm jobs
   resolved `v<version>` again, so a tag made beforehand or moved mid-run, or a branch of
   that name, chose what was published. They now check out the tagged commit by SHA; the
