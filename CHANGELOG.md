@@ -14,6 +14,23 @@ shortcuts.
 
 ### Added
 
+- **Skins modelled on the robot: `ModelledSkinConfig`** (**document format 10**). A `.glb`
+  made over the robot at its rest pose, in its world frame, as MyoSuite's muscle atlas
+  (its renderer's `--muscle-mesh atlas` and `atlas-hd`) is over its full body, is drawn as
+  it is, with no fit and nothing measured. `MatchByPosition`, the default `bones`, matches
+  each skin joint to the body whose origin or geom centre it rests on at `rest_pose`
+  (within 5 mm), so a model with its geoms renumbered matches alike, after first finding
+  how far the scene stands the robot off the file. The browser fixes each joint to its
+  body from the skin's inverse bind matrices: every vertex lands where the file has it at
+  rest and moves with the bodies it is weighted to. `add_skin` warns for joints on no
+  body (the viewer leaves the meshes they move undrawn) and for meshes with no material or
+  normals, and refuses a VRM and a file whose joints mostly miss the robot.
+  `SolidShading(color, opacity, smooth)` draws such meshes in one colour, stored as
+  MuJoCo's `rgba` is, smooth, and as one mesh: MyoSuite's light atlas costs one draw call
+  instead of 416. `hide_tendons` stops the model's tendons drawing under a skin.
+  `mjswan skin map --robot` drafts a `ModelledSkinConfig` for a file most of whose joints
+  rest on the robot.
+
 - **Camera observations: a policy can read an mjlab `CameraSensor`'s `rgb`** (**document
   format 9**). A term such as mjlab's `camera_rgb` traces like any other, and the
   browser renders the model's camera at the sensor's size into its slot, drawing the
@@ -442,6 +459,11 @@ shortcuts.
   dialog it opens.
 
 ### Changed
+
+- **Builds are document format 10.** Every build says so, with a modelled skin or
+  without, so an engine that reads up to format 9 (an older npm `mjswan`, a host's pinned
+  engine) refuses it and asks to be updated, rather than drawing a modelled skin off the
+  robot as a character.
 
 - **A policy slower than the screen no longer moves the robot in jumps.** The engine ran
   a control step's physics at once and drew only its end, so a 10 Hz policy (the SO-101
@@ -978,6 +1000,11 @@ shortcuts.
   3.11, so a 3.10 install could only resolve the vulnerable releases.
 
 ### Fixed
+
+- **`hide_robot=True` hides the robot's tendons too.** A character drawn in the robot's
+  place stayed wrapped in its tendon lines, which no setting hid. A skin now stops the
+  model's tendons drawing while it is shown, as its `hide_tendons` says, which unset
+  follows `hide_robot`; hidden tendons are not posed each frame.
 
 - **Tendons are posed once per drawn frame.** They were rebuilt each time the loop
   stepped, about four times a frame, and for a MyoSuite model a rebuild cost more than the

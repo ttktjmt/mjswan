@@ -18,7 +18,7 @@ mjswan --help
 | [`mjswan demo`](#mjswan-demo) | List the built-in demos, or run one |
 | [`mjswan info`](#mjswan-info) | Show a tree of projects / scenes / MDPs / policies and asset sizes, for a `dist/` or a `.swn` |
 | [`mjswan publish`](#mjswan-publish) | Upload a built `dist/` or a `.swn` to mjswan Cloud |
-| [`mjswan skin map`](#mjswan-skin-map) | Draft a skin's bone maps against a robot, as a `SkinConfig` to check |
+| [`mjswan skin map`](#mjswan-skin-map) | Draft a skin's bone maps against a robot, as a `SkinConfig` (or a `ModelledSkinConfig`) to check |
 | [`mjswan login`](#mjswan-login-whoami-logout) | Sign in to mjswan Cloud via GitHub |
 | [`mjswan whoami`](#mjswan-login-whoami-logout) | Show the signed-in account |
 | [`mjswan logout`](#mjswan-login-whoami-logout) | Remove the stored session |
@@ -177,6 +177,12 @@ a solved T-pose comes out degrees wrong. The command lists the keyframes and eac
 joint with its axis, offers a four-legged robot's first keyframe, and writes the T-pose
 of the robots checked by hand (mjlab's Unitree G1). `-o` writes the draft as a script
 defining `SKIN`.
+
+With `--robot`, a `.glb` modelled on the robot itself, more than half its joints resting
+on the robot's bodies at the zero pose as `MatchByPosition` finds them, is drafted as a
+[`ModelledSkinConfig`](../api/core.md#modelledskinconfig) instead. The command prints how
+many joints matched, how far the file stands off the robot, the joints on no body, and
+the meshes with no material or normals, for which the draft adds `SolidShading`.
 
 ## `mjswan login` / `whoami` / `logout`
 

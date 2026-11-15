@@ -75,7 +75,7 @@ A skin is uploaded as it was bundled, and checked the way Cloud checks it at com
   stops before any upload. The page then shows that the uploader confirmed they are.
 - A VRM for non-commercial use only earns a warning, and its page says so.
 
-A `.glb` carries its license as any other component does: `SkinConfig.license` and
+A `.glb` carries its license as any other component does: its config's `license` and
 `notice` become `LICENSE.skin-<id>` and `NOTICE.skin-<id>` in the project's `licenses/`,
 checked like the files above. From Python, `publish_dist(..., attest=...)` is asked the same question,
 once per such VRM, with the file and its terms.

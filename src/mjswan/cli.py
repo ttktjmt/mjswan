@@ -593,7 +593,7 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
 
 skin_app = typer.Typer(
     name="skin",
-    help="Skins: rigged characters drawn over a robot.",
+    help="Skins drawn over a robot: rigged characters, or files modelled on it.",
     no_args_is_help=True,
 )
 app.add_typer(skin_app)
