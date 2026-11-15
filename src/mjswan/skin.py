@@ -28,6 +28,7 @@ from .rig.humanoid import (
     resolve_humanoid,
 )
 from .rig.pose import (
+    MATCH_TOLERANCE,
     euler_to_quat,
     hips_offset,
     limb_ratios,
@@ -110,7 +111,7 @@ class MatchByPosition:
     centres, lies nearest it with the robot at ``rest_pose``, within ``tolerance``
     metres."""
 
-    tolerance: float = 0.005
+    tolerance: float = MATCH_TOLERANCE
     align: bool = True
     """First move the file onto the robot, by the translation most joints agree on: for
     a scene that stands the robot elsewhere than the file has it."""
@@ -485,10 +486,12 @@ def _resolve_modelled(
     shift = np.zeros(3)
     match = config.bones
     if isinstance(match, MatchByPosition):
-        # glTF's y up to MuJoCo's z up.
-        x, y, z = (file.rest[joints] * config.scale).T
         found, shift = match_by_position(
-            model, rest, np.stack([x, -z, y], axis=1), match.tolerance, match.align
+            model,
+            rest,
+            file.mujoco_positions(config.scale)[joints],
+            match.tolerance,
+            match.align,
         )
         bodies = {j: b for j, b in zip(joints, found) if b is not None}
         if 2 * len(bodies) <= len(joints):

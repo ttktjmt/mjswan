@@ -27,6 +27,7 @@ from mjswan.rig.guess import (
     draft_source,
     guess_bones,
     guess_humanoid,
+    guess_modelled,
     guess_scale,
     known_rest_pose,
 )
@@ -341,3 +342,47 @@ class TestDraft:
         result = CliRunner().invoke(app, ["skin", "map", str(bad)])
         assert result.exit_code == 1
         assert "glTF Binary" in result.output
+
+
+class TestModelled:
+    """A .glb modelled on the robot is drafted as a ModelledSkinConfig."""
+
+    def _map(self, tmp_path, glb: Path, xml: str):
+        robot = tmp_path / "robot.xml"
+        robot.write_text(xml)
+        out = tmp_path / "skin.py"
+        result = CliRunner().invoke(
+            app, ["skin", "map", str(glb), "--robot", str(robot), "-o", str(out)]
+        )
+        assert result.exit_code == 0, result.output
+        return " ".join(result.output.split()), runpy.run_path(str(out))["SKIN"]
+
+    def test_its_joints_on_the_robot_draft_a_modelled_skin(self, tmp_path):
+        model = mujoco.MjModel.from_xml_string(fx.robot_xml())
+        stray = {"stray": (1.0, 1.0, 1.0)}
+        glb = fx.write_glb(
+            tmp_path / "atlas.glb", fx.modelled_gltf(model, extra=stray, bare=True)
+        )
+        output, config = self._map(tmp_path, glb, fx.robot_xml())
+        assert "modelled on the robot, 8 of its 9 joints on its bodies" in output
+        assert "off the robot" not in output
+        assert "on no body: stray" in output and "1 meshes without a material" in output
+        assert type(config).__name__ == "ModelledSkinConfig"
+        assert config.material is not None and config.source == str(glb)
+        with pytest.warns(UserWarning, match="1 of its 9 joints follow no body"):
+            skin = resolve_skin(config, model)
+        assert len(skin.bones) == 8
+
+    def test_a_robot_standing_elsewhere_is_still_found(self, tmp_path):
+        model = mujoco.MjModel.from_xml_string(fx.robot_xml())
+        glb = fx.write_glb(tmp_path / "atlas.glb", fx.modelled_gltf(model))
+        moved = fx.robot_xml().replace('pos="0 0 0.9"', 'pos="0.3 0 0.9"', 1)
+        output, config = self._map(tmp_path, glb, moved)
+        assert "30.0 cm off the robot (0.3, 0.0, 0.0)" in output
+        assert config.material is None
+        skin = resolve_skin(config, mujoco.MjModel.from_xml_string(moved))
+        assert skin.align == pytest.approx((0.3, 0.0, 0.0), abs=1e-6)
+
+    def test_a_character_is_not_taken_for_one(self, fox_glb):
+        robot = mujoco.MjModel.from_xml_string(fx.QUADRUPED_XML)
+        assert guess_modelled(read_skin_file(fox_glb), robot) is None

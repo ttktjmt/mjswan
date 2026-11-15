@@ -1,7 +1,8 @@
 """A first draft of a skin's maps, for its author to check; never used by a build.
 
-The skin's side is read from the skeleton's shape: the hips are the joint two mirrored
-chains reaching the floor hang from, the spine its chain toward the head, the arms the
+A file modelled on the robot itself, most of its joints resting on the robot's bodies, is
+drafted as one. Any other skin's side is read from the skeleton's shape: the hips are the
+joint two mirrored chains reaching the floor hang from, the spine its chain toward the head, the arms the
 mirrored pair reaching farthest to the side on the way (a four-legged animal's front
 legs). The robot's side is read from its bodies' names. ``rest_pose`` is not guessed (a
 robot's link origins sit off the joints they look like, so a solved T-pose comes out
@@ -24,7 +25,9 @@ import numpy as np
 from ..document.skin import SkinFile
 from .humanoid import VRM_PARENTS
 from .pose import (
+    MATCH_TOLERANCE,
     limb_root,
+    match_by_position,
     pose_at_rest,
     resolve_body,
     resolve_joint,
@@ -60,6 +63,37 @@ class SkinGuess:
     """For any other skeleton: chains of three nodes down to the floor."""
     why: dict[str, str] = field(default_factory=dict)
     """Bone -> how it was found, where that is worth saying."""
+
+
+@dataclass(frozen=True)
+class ModelledGuess:
+    """A .glb whose joints rest on the robot's bodies at its zero pose."""
+
+    bodies: dict[int, int]
+    """Joint node -> the body it rests on."""
+    joints: int
+    """How many joints its skin has."""
+    align: tuple[float, float, float]
+    """The shift that puts it on the robot: MuJoCo's frame, metres."""
+
+
+def guess_modelled(file: SkinFile, model: mujoco.MjModel) -> ModelledGuess | None:
+    """*file* as modelled on *model*'s robot, if more than half its joints rest on the
+    robot's bodies at the zero pose as ``MatchByPosition`` finds them; else None."""
+    if file.format != "gltf" or not file.joints:
+        return None
+    joints = sorted(file.joints)
+    found, shift = match_by_position(
+        model,
+        pose_at_rest(model, None),
+        file.mujoco_positions()[joints],
+        MATCH_TOLERANCE,
+    )
+    bodies = {j: b for j, b in zip(joints, found) if b is not None}
+    if 2 * len(bodies) <= len(joints):
+        return None
+    x, y, z = (float(a) for a in shift)
+    return ModelledGuess(bodies, len(joints), (x, y, z))
 
 
 class _Skeleton:
@@ -595,6 +629,31 @@ def draft_source(
     return "\n".join(lines)
 
 
+def draft_modelled_source(
+    command: str, *, source: str, file: SkinFile, guess: ModelledGuess
+) -> str:
+    """A script defining ``SKIN``, the drafted :class:`~mjswan.ModelledSkinConfig`, for its
+    author to check and paste."""
+    doc = (
+        f"A skin drafted by `{command}`.\n\nIt is modelled on the robot: "
+        f"{len(guess.bodies)} of its {guess.joints} joints rest on its bodies. Check it "
+        "against the file and the robot."
+    )
+    lines = [
+        f"{_py(doc)}\n",
+        "import mjswan\n",
+        "SKIN = mjswan.ModelledSkinConfig(",
+        f"    source={_py(source)},",
+    ]
+    if file.without_material or file.without_normals:
+        lines += [
+            "    # Meshes with no material or normals, drawn in one colour, smooth.",
+            "    material=mjswan.SolidShading(color=(0.8, 0.8, 0.8)),",
+        ]
+    lines.append(")\n")
+    return "\n".join(lines)
+
+
 def _py(value: object) -> str:
     """*value* as Python source, a string double-quoted."""
     return json.dumps(value) if isinstance(value, str) else repr(value)
@@ -608,12 +667,15 @@ def in_vrm_order(entries: Mapping[str, T]) -> dict[str, T]:
 
 __all__ = [
     "KNOWN_REST_POSES",
+    "ModelledGuess",
     "SkinGuess",
     "arm_joints",
     "close_bodies",
+    "draft_modelled_source",
     "draft_source",
     "guess_bones",
     "guess_humanoid",
+    "guess_modelled",
     "guess_scale",
     "in_vrm_order",
     "known_rest_pose",

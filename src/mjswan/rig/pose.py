@@ -12,6 +12,8 @@ from collections.abc import Mapping, Sequence
 import mujoco
 import numpy as np
 
+#: How far, in metres, a modelled skin's joint may rest from the body point it matches.
+MATCH_TOLERANCE = 0.005
 #: The grid, in metres, the shift of a file off its robot is voted on.
 _VOTE_GRID = 0.001
 #: The share of joints that, landing on the robot as they are, says the file is not off it.
@@ -297,6 +299,7 @@ def _farthest_geom(model: mujoco.MjModel, data: mujoco.MjData, body: int) -> np.
 
 
 __all__ = [
+    "MATCH_TOLERANCE",
     "euler_to_quat",
     "hips_offset",
     "limb_ratios",

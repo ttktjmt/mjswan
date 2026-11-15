@@ -103,6 +103,12 @@ class SkinFile:
         x, y, z = (self.rest * scale).T
         return np.stack([x * c - z * s, y, x * s + z * c], axis=1)
 
+    def mujoco_positions(self, scale: float = 1.0) -> np.ndarray:
+        """Every node at rest in MuJoCo's frame (z up) for a file modelled in it, in
+        metres: glTF's y up turned to MuJoCo's z up, the axes kept otherwise."""
+        x, y, z = (self.rest * scale).T
+        return np.stack([x, -z, y], axis=1)
+
 
 def read_skin_file(path: Path) -> SkinFile:
     """*path*'s format, nodes and, for a VRM, its humanoid and meta.
