@@ -46,9 +46,15 @@ import type {
   HandTrackingDescriptor,
   InteractionModeDescriptor,
   InteractionModeId,
+  MuscleView,
   XrSessionDescriptor,
   XrSessionId,
 } from '../engine';
+
+const MUSCLE_STYLES = [
+  { value: 'off', label: 'Off' },
+  { value: 'paths', label: 'Paths' },
+];
 
 export interface SelectOption {
   value: string;
@@ -84,6 +90,10 @@ interface ControlPanelProps {
   skins: SelectOption[];
   skinValue: string | null;
   onSkinChange: (value: string | null) => void;
+  /** How muscles are drawn, from the engine state snapshot; the menu shows only when there are some. */
+  muscles?: { view: MuscleView | null; count: number };
+  /** Change how muscles are drawn (engine.muscles.set). */
+  onMusclesChange?: (view: Partial<MuscleView> | null) => void;
   /** Whether command controls are enabled */
   commandsEnabled?: boolean;
   /** Command descriptors from the engine state snapshot. */
@@ -276,6 +286,8 @@ function ControlPanel(props: ControlPanelProps) {
     skins,
     skinValue,
     onSkinChange,
+    muscles,
+    onMusclesChange,
     commandsEnabled = false,
     commands,
     commandValues,
@@ -704,6 +716,27 @@ function ControlPanel(props: ControlPanelProps) {
                 radius="xs"
                 searchable
                 clearable
+                styles={{
+                  input: { minHeight: '1.625rem', height: '1.625rem', padding: '0.5em' },
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+              />
+            </LabeledInput>
+          )}
+
+          {muscles && muscles.count > 0 && (
+            <LabeledInput id="muscles-select" label="Muscles">
+              <Select
+                id="muscles-select"
+                data={MUSCLE_STYLES}
+                value={muscles.view?.style ?? 'off'}
+                onChange={(value) => {
+                  if (value === 'paths') onMusclesChange?.({ style: value });
+                  else onMusclesChange?.(null);
+                }}
+                size="xs"
+                radius="xs"
+                allowDeselect={false}
                 styles={{
                   input: { minHeight: '1.625rem', height: '1.625rem', padding: '0.5em' },
                 }}

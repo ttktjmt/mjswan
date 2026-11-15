@@ -18,6 +18,7 @@ import { loadCollider, disposeCollider } from '../scene/collider';
 import { SeeThrough } from '../scene/seeThrough';
 import type { Skin } from '../skin/skin';
 import type { SkinConfig } from '../skin/config';
+import { DEFAULT_MUSCLE_VIEW, mergeMuscleView, Muscles, type MuscleView } from '../muscle/muscles';
 import { InteractionManager, type InteractionSim } from '../interaction/InteractionManager';
 import { SurfacePicker, type PickHit } from '../interaction/pick';
 import { GeomPreview, type PreviewInput, type PreviewListener } from '../scene/preview';
@@ -220,6 +221,8 @@ export type ResolvedScene = {
   policy?: ResolvedPolicy | null;
   splat?: ResolvedSplat | null;
   skin?: ResolvedSkin | null;
+  /** The scene's own muscle view, the one `resetMuscleView` returns to; none draws tendons alike. */
+  muscles?: Partial<MuscleView> | null;
   viewer?: ViewerConfig | null;
   /** Spawn positions the event terms of any policy on this scene may draw from. */
   terrainData?: TerrainData | null;
@@ -389,6 +392,10 @@ export class mjswanRuntime {
   private currentSplatTransform: SplatTransform;
   /** The skin on show, posed from the robot's bodies; outside the model. */
   private skin: Skin | null = null;
+  private muscleDefault: MuscleView | null = null;
+  private muscleView: MuscleView | null = null;
+  /** The model's muscles, rebuilt with it; null when it has none to draw. */
+  private muscles: Muscles | null = null;
   /**
    * Draws the robot a skin hides through it, to see how the two line up. One switch for
    * every skin, so it holds when the menu picks another.
@@ -633,6 +640,8 @@ export class mjswanRuntime {
       this.colliderMesh = null;
     }
     this.disposeSkin();
+    this.muscleDefault = scene.muscles ? mergeMuscleView(DEFAULT_MUSCLE_VIEW, scene.muscles) : null;
+    this.muscleView = this.muscleDefault;
 
     // Initialize CommandManager with default velocity commands
     this.initializeCommands();
@@ -791,6 +800,9 @@ export class mjswanRuntime {
       this.decimation = decimationFor(this.controlDt ?? DEFAULT_VIEWER_CONTROL_DT, this.timestep);
       this.controlStep.restart();
 
+      this.muscles = Muscles.create(this.mujoco, this.mjModel);
+      this.muscles?.setView(this.muscleView);
+
       this.lastSimState.bodies.clear();
       this.updateCachedState();
 
@@ -805,6 +817,7 @@ export class mjswanRuntime {
 
   /** Frees the model on the WASM heap, which nothing else does. Call with the loop stopped. */
   private releaseModel(): void {
+    this.muscles = null;
     this.mjData?.delete();
     this.mjModel?.delete();
     this.mjData = null;
@@ -906,6 +919,27 @@ export class mjswanRuntime {
     if (splat.collider) {
       this.colliderMesh = await loadCollider(splat.collider, this.scene);
     }
+  }
+
+  /** `view` over the current one, or the scene's default, or MyoSuite's; null draws tendons alike. */
+  setMuscleView(view: Partial<MuscleView> | null): void {
+    const base = this.muscleView ?? this.muscleDefault ?? DEFAULT_MUSCLE_VIEW;
+    this.showMuscles(view && mergeMuscleView(base, view));
+  }
+
+  resetMuscleView(): void {
+    this.showMuscles(this.muscleDefault);
+  }
+
+  get muscleReport(): { view: MuscleView | null; count: number } {
+    return { view: this.muscleView, count: this.muscles?.count ?? 0 };
+  }
+
+  private showMuscles(view: MuscleView | null): void {
+    this.muscleView = view;
+    this.muscles?.setView(view);
+    // The loop redraws at its next step; a paused one has none.
+    if (!this.running) this.updateCachedState();
   }
 
   /** Show `skin` in place of the current one (or none); live, the model untouched. */
@@ -2261,6 +2295,7 @@ export class mjswanRuntime {
       }
     }
 
+    this.muscles?.update(this.mjData);
     if (this.mujocoRoot && this.mujocoRoot.cylinders) {
       updateTendonGeometry(
         this.mjModel,
@@ -2269,7 +2304,8 @@ export class mjswanRuntime {
           cylinders: this.mujocoRoot.cylinders,
           spheres: this.mujocoRoot.spheres!,
         },
-        this.lastSimState.tendons
+        this.lastSimState.tendons,
+        this.muscles?.paint
       );
     }
   }

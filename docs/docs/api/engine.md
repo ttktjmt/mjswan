@@ -92,6 +92,7 @@ that renders documents of different authors gives each document its own engine.
 | `commands` | `CommandControls` | `set(id, value)`, `trigger(id)`. |
 | `debugVis` | `DebugVisControls` | `set(id, enabled)` for one drawing, `setEnabled(enabled)` for mjlab's Debug Viz **Enabled** over all of them. See [Debug Viz](#debug-viz). |
 | `cameraFeeds` | `CameraFeedControls` | `attach(id, canvas)` draws a camera sensor's images into a canvas and returns the detach; `setFrustum(id, shown)` is mjlab's **Frustum** switch. See [Camera feeds](#camera-feeds). |
+| `muscles` | `MuscleControls` | `set(partial)` changes how muscles are drawn, `set(null)` draws them as every other tendon, `reset()` returns to the scene's own view. See [Muscles](#muscles). |
 | `events` | `EventControls` | `fire(name)` for a `manual` term, `setArmed(name, armed)` for an `interval` one. |
 | `interaction` | `InteractionControls` | `setMode(id)`, `getMode()`, `setParam(mode, name, value)`, `getParams(mode)`, `cancel()`. See [Pointer interaction](#pointer-interaction). |
 | `xr` | `XrControls` | `enter(id)`, `exit()`, `setHandTracking(enabled)`. See [WebXR](#webxr). |
@@ -122,6 +123,8 @@ interface MjswanEngineState {
   cameraFeeds: ReadonlyArray<CameraFeedDescriptor>;
   /** `camera.setTracking`'s switch, and the vertical FOV in degrees. */
   camera: { tracking: boolean; fovy: number };
+  /** How muscles are drawn (null: as every tendon), and how many the model has to draw. */
+  muscles: { view: MuscleView | null; count: number };
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
   /** Every pointer mode, with whether this scene can run it. */
@@ -160,6 +163,23 @@ checkbox reads, and whether it is `enabled`:
 `state.debugVisEnabled` is the folder's **Enabled**. mjlab's **All envs** has no
 counterpart: the browser runs one env. The bundled app draws the folder inside mjlab's
 **Scene** section, recorded from mjlab at build time (the manifest's `viewer_gui`).
+
+### Muscles
+
+The engine draws the muscles [MyoSuite](https://github.com/MyoHub/myosuite) draws: muscle
+actuators on a spatial tendon that starts at a site. `state.muscles.count` is how many the
+model has; the bundled app shows its **Muscles** menu only when there are some.
+A `MuscleView` takes the names of MyoSuite's `RenderConfig`:
+
+| Field | MyoSuite | Values |
+|---|---|---|
+| `style` | `muscles` | `paths`: the tendon path, coloured. |
+| `color` | `muscle_color` | `activation` (default): a path goes from dark grey to red with the activation's fourth root. `uniform`: one anatomical red. |
+
+`muscles.set(partial)` changes the fields it names and keeps the rest; on a scene
+drawing none, it starts from the scene's view or MyoSuite's defaults. The scene's view
+(`SceneInput.muscles`) holds until then and comes back with `reset()` or the next
+`loadScene`. Muscles are drawn only, never simulated.
 
 ### Camera feeds
 
@@ -352,6 +372,7 @@ The engine never fetches. Every asset arrives as `Bytes` — an `ArrayBuffer`, o
       policy?: PolicyInput | null;
       splat?: SplatInput | null;
       skin?: SkinInput | null;             // a skin posed from the robot; one that fails to load is skipped
+      muscles?: Partial<MuscleView> | null; // how muscles are drawn until engine.muscles changes it
       viewer?: ViewerConfig;
       terrainData?: TerrainData;           // spawn patches the policies' events may draw from
       controlDt?: number;                  // mjlab's timestep * decimation

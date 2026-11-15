@@ -7,6 +7,7 @@ const SELECTED: UrlState = {
   scene: 'humanoid',
   policy: 'walk',
   skin: null,
+  muscles: null,
   panel: true,
   debug: true,
   xray: false,
@@ -43,6 +44,11 @@ describe('applyUrlState', () => {
     );
     // A scene with no skins.
     expect(applyUrlState('?skin=fox', SELECTED)).toBe('project=demo_two&scene=humanoid&policy=walk');
+  });
+
+  it('writes the Muscles menu only for a model with muscles', () => {
+    expect(applyUrlState('', { ...SELECTED, muscles: 'off' })).toBe('project=demo_two&scene=humanoid&policy=walk&muscles=off');
+    expect(applyUrlState('?muscles=paths', SELECTED)).toBe('project=demo_two&scene=humanoid&policy=walk');
   });
 
   it('pins xray only when it is on', () => {

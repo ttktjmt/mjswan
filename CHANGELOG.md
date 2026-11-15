@@ -14,6 +14,13 @@ shortcuts.
 
 ### Added
 
+- **Muscles drawn as MyoSuite draws them.** A model's muscles (muscle actuators on a
+  spatial tendon that starts at a site, as MyoSuite selects them) can be drawn along
+  their tendon paths, coloured by activation, or in one anatomical red. The panel's
+  **Muscles** menu and `?muscles=` switch between that and the plain tendons;
+  `engine.muscles.set(partial)` and `reset()` do it for a host, the state's `muscles`
+  reports the view and the count, and `SceneInput.muscles` sets a scene's own view.
+
 - **Camera observations: a policy can read an mjlab `CameraSensor`'s `rgb`** (**document
   format 9**). A term such as mjlab's `camera_rgb` traces like any other, and the
   browser renders the model's camera at the sensor's size into its slot, drawing the

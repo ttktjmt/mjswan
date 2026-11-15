@@ -4,6 +4,7 @@ export const PROJECT_PARAM = 'project';
 export const SCENE_PARAM = 'scene';
 export const POLICY_PARAM = 'policy';
 export const SKIN_PARAM = 'skin';
+export const MUSCLES_PARAM = 'muscles';
 export const PANEL_PARAM = 'panel';
 export const DEBUG_PARAM = 'debug';
 export const XRAY_PARAM = 'xray';
@@ -16,6 +17,8 @@ export interface UrlState {
   policy: string | null;
   /** As above, or `''` while the Skin menu is set to None. */
   skin: string | null;
+  /** The Muscles menu, `off` or a style; null when the model has no muscles. */
+  muscles: string | null;
   panel: boolean;
   /** Debug Viz "Enabled". */
   debug: boolean;
@@ -32,6 +35,7 @@ export function applyUrlState(search: string, state: UrlState): string {
   set(SCENE_PARAM, state.scene);
   set(POLICY_PARAM, state.policy);
   set(SKIN_PARAM, state.skin);
+  set(MUSCLES_PARAM, state.muscles);
   // Booleans are written only off their default, so a default view keeps a bare URL.
   set(PANEL_PARAM, state.panel ? null : '0');
   set(DEBUG_PARAM, state.debug ? null : '0');

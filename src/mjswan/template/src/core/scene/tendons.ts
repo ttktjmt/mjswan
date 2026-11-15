@@ -7,14 +7,26 @@ export interface TendonMeshes {
   spheres: THREE.InstancedMesh;
 }
 
+/** Every tendon's colour unless painted, linear RGB. */
+export const TENDON_RGB = [0.8, 0.3, 0.3] as const;
+
+/** Per-tendon colours, for a model whose muscles are drawn their own way (`Muscles`). */
+export interface TendonPaint {
+  /** Linear RGB per tendon. */
+  rgb: Float32Array;
+  /** 1 for a tendon drawn elsewhere, as a muscle tube. */
+  hidden: Uint8Array;
+}
+
 export interface TendonState {
   numWraps: number;
   matrix: THREE.Matrix4;
+  color: THREE.Color;
 }
 
 export function createTendonMeshes(mujocoRoot: THREE.Group, mjModel: MjModel): TendonMeshes {
   const tendonMat = new THREE.MeshPhongMaterial();
-  tendonMat.color = new THREE.Color(0.8, 0.3, 0.3);
+  tendonMat.color.setRGB(...TENDON_RGB);
 
   // maxCylinders: safe upper bound (actual value is nwrap - number of spatial tendons or less)
   // maxSpheres   = total number of wrap points = nwrap (this is the official correct value)
@@ -47,7 +59,8 @@ export function updateTendonGeometry(
   mjModel: MjModel,
   mjData: MjData,
   tendonMeshes: TendonMeshes,
-  tendonState: TendonState
+  tendonState: TendonState,
+  paint?: TendonPaint | null
 ): void {
   if (!tendonMeshes.cylinders) {
     return;
@@ -55,8 +68,12 @@ export function updateTendonGeometry(
 
   let numWraps = 0;
   const mat = tendonState.matrix;
+  const color = tendonState.color;
+  if (paint) (tendonMeshes.cylinders.material as THREE.MeshPhongMaterial).color.setRGB(1, 1, 1);
 
   for (let t = 0; t < mjModel.ntendon; t++) {
+    if (paint?.hidden[t]) continue;
+    if (paint) color.fromArray(paint.rgb, 3 * t);
     const startW = mjData.ten_wrapadr[t];
     const r = mjModel.tendon_width[t];
 
@@ -73,6 +90,7 @@ export function updateTendonGeometry(
           numWraps,
           mat.compose(tendonStart, new THREE.Quaternion(), new THREE.Vector3(r, r, r))
         );
+        if (paint) tendonMeshes.spheres.setColorAt(numWraps, color);
       }
 
       if (validEnd) {
@@ -80,6 +98,7 @@ export function updateTendonGeometry(
           numWraps + 1,
           mat.compose(tendonEnd, new THREE.Quaternion(), new THREE.Vector3(r, r, r))
         );
+        if (paint) tendonMeshes.spheres.setColorAt(numWraps + 1, color);
       }
 
       if (validStart && validEnd) {
@@ -92,6 +111,7 @@ export function updateTendonGeometry(
           new THREE.Vector3(r, tendonStart.distanceTo(tendonEnd), r)
         );
         tendonMeshes.cylinders.setMatrixAt(numWraps, mat);
+        if (paint) tendonMeshes.cylinders.setColorAt(numWraps, color);
         numWraps++;
       }
     }
@@ -110,6 +130,8 @@ export function updateTendonRendering(tendonMeshes: TendonMeshes, tendonState: T
   tendonMeshes.spheres.count = numWraps > 0 ? numWraps + 1 : 0;
   tendonMeshes.cylinders.instanceMatrix.needsUpdate = true;
   tendonMeshes.spheres.instanceMatrix.needsUpdate = true;
+  if (tendonMeshes.cylinders.instanceColor) tendonMeshes.cylinders.instanceColor.needsUpdate = true;
+  if (tendonMeshes.spheres.instanceColor) tendonMeshes.spheres.instanceColor.needsUpdate = true;
 
   if (numWraps > 0) {
     tendonMeshes.cylinders.computeBoundingSphere();
@@ -121,5 +143,6 @@ export function createTendonState(): TendonState {
   return {
     numWraps: 0,
     matrix: new THREE.Matrix4(),
+    color: new THREE.Color(),
   };
 }

@@ -12,6 +12,7 @@ import {
   applyUrlState,
   DEBUG_PARAM,
   MANIFEST_PARAM,
+  MUSCLES_PARAM,
   PANEL_PARAM,
   pluginModuleUrl,
   POLICY_PARAM,
@@ -83,6 +84,8 @@ function AppContent() {
   const [panelVisible, setPanelVisible] = useState(() => paramFlag(PANEL_PARAM));
   const [xray, setXray] = useState(() => new URLSearchParams(window.location.search).get(XRAY_PARAM) === '1');
   const [engineState, setEngineState] = useState<MjswanEngineState | null>(null);
+  // Read before the address bar is first rewritten; it applies to the first scene only.
+  const musclesParam = useRef(new URLSearchParams(window.location.search).get(MUSCLES_PARAM));
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<MjswanEngine | null>(null);
@@ -175,6 +178,9 @@ function AppContent() {
           skin: sceneEntry.skins.find((s) => s.name === skinName)?.id ?? null,
         });
         await engine.loadScene(withPlugins(input));
+        const muscles = musclesParam.current;
+        if (muscles === 'off') engine.muscles.set(null);
+        else if (muscles === 'paths') engine.muscles.set({ style: muscles });
         if (motionName) await engine.setMotion(motionName);
         hideLoading();
         signalReady();
@@ -209,6 +215,7 @@ function AppContent() {
 
   // ── mirror the live selection into the address bar ────────────────────────
   // Not a write per call site: each one pins whatever its own closure still holds.
+  const musclesStyle = engineState?.muscles.count ? (engineState.muscles.view?.style ?? 'off') : null;
   useEffect(() => {
     if (!catalog) return;
     // URL values are ids, but the UI state holds display names, so look each one up.
@@ -221,13 +228,14 @@ function AppContent() {
       scene: scene?.id ?? null,
       policy: scene?.policies.find((p) => p.name === policyName)?.id ?? null,
       skin: skins.length ? (skins.find((s) => s.name === skinName)?.id ?? '') : null,
+      muscles: musclesStyle,
       panel: panelVisible,
       debug: debugVisEnabled,
       xray: xray && skins.length > 0,
     });
     const url = `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`;
     window.history.replaceState({}, '', url);
-  }, [catalog, projectName, sceneName, policyName, skinName, panelVisible, debugVisEnabled, xray]);
+  }, [catalog, projectName, sceneName, policyName, skinName, musclesStyle, panelVisible, debugVisEnabled, xray]);
 
   // The engine lists the switch only while a skin hides the robot: set it each time it
   // appears, so `?xray=1` holds from the first skin that has it.
@@ -414,6 +422,8 @@ function AppContent() {
             skins={options(sceneEntry.skins)}
             skinValue={skinName}
             onSkinChange={handleSkinChange}
+            muscles={engineState?.muscles}
+            onMusclesChange={(view) => engineRef.current?.muscles.set(view)}
             commandsEnabled={!!policyName}
             commands={engineState?.commands ? [...engineState.commands] : []}
             commandValues={engineState?.commandValues ?? {}}

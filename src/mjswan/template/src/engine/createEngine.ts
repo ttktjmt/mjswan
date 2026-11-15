@@ -29,6 +29,7 @@ import type {
   InteractionControls,
   MjswanEngine,
   InteractionModeId,
+  MuscleControls,
   MjswanEngineState,
   PickHit,
   PolicyInput,
@@ -118,6 +119,7 @@ class Engine implements MjswanEngine {
   readonly commands: CommandControls;
   readonly debugVis: DebugVisControls;
   readonly cameraFeeds: CameraFeedControls;
+  readonly muscles: MuscleControls;
   readonly events: EventControls;
   readonly interaction: InteractionControls;
   readonly xr: XrControls;
@@ -162,6 +164,16 @@ class Engine implements MjswanEngine {
       attach: (id, canvas) => this.runtime.cameraFeeds.attach(id, canvas),
       setFrustum: (id, shown) => {
         this.runtime.cameraFeeds.setFrustum(id, shown);
+        this.refresh();
+      },
+    };
+    this.muscles = {
+      set: (view) => {
+        this.runtime.setMuscleView(view);
+        this.refresh();
+      },
+      reset: () => {
+        this.runtime.resetMuscleView();
         this.refresh();
       },
     };
@@ -221,6 +233,7 @@ class Engine implements MjswanEngine {
       debugVisEnabled: this.runtime.debugViz.isShown(),
       cameraFeeds: this.runtime.cameraFeeds.list(),
       camera: { tracking: this.runtime.isCameraTracking, fovy: this.runtime.getCameraView().fovy },
+      muscles: this.runtime.muscleReport,
       events: this.runtime.eventControls(),
       interactions: this.runtime.interactionModes().map((mode) => ({
         ...mode,
@@ -282,6 +295,7 @@ class Engine implements MjswanEngine {
         policy: input.policy ? await resolvePolicy(input.policy) : null,
         splat: input.splat ? await resolveSplat(input.splat) : null,
         skin: input.skin ? await resolveSkin(input.skin) : null,
+        muscles: input.muscles ?? null,
         viewer: input.viewer ?? null,
         terrainData: input.terrainData ?? null,
         controlDt: input.controlDt ?? null,

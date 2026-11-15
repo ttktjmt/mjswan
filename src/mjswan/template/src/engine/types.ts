@@ -13,12 +13,13 @@ import type { SplatTransform } from '../core/scene/splat';
 import type { ModelFormat } from '../core/scene/scene';
 import type { EnginePlugins } from '../core/plugins';
 import type { SkinConfig } from '../core/skin/config';
+import type { MuscleView } from '../core/muscle/muscles';
 import type { PrimitiveType } from '../core/scene/primitive';
 import type { HandleKind, PreviewGeom, PreviewInput } from '../core/scene/preview';
 import type { GeomType, PickHit } from '../core/interaction/pick';
 
 // Bytes: asset bytes or a lazy loader. EnginePlugins: custom MDP terms, trusted-only.
-export type { Bytes, SplatTransform, ModelFormat, EnginePlugins, SkinConfig };
+export type { Bytes, SplatTransform, ModelFormat, EnginePlugins, SkinConfig, MuscleView };
 // What a host previews, where it would go, and what it edits (ADR 0011).
 export type { PrimitiveType, GeomType, PreviewInput, PreviewGeom, HandleKind, PickHit };
 
@@ -71,6 +72,11 @@ export interface SceneInput {
   splat?: SplatInput | null;
   /** A file that fails to load warns and leaves the scene without it. */
   skin?: SkinInput | null;
+  /**
+   * How the scene draws its muscles until {@link MuscleControls} changes it, over
+   * MyoSuite's defaults. None draws them as every other tendon.
+   */
+  muscles?: Partial<MuscleView> | null;
   viewer?: ViewerConfig;
   /**
    * Spawn positions (flat patches) any policy's event terms may draw from. The events
@@ -94,6 +100,13 @@ export interface CameraControls {
   frame(): void;
   /** mjviser's "Track camera": follow the viewer config's tracked body. On by default. */
   setTracking(enabled: boolean): void;
+}
+
+export interface MuscleControls {
+  /** Change how muscles are drawn: fields left out keep theirs; null draws them as every other tendon. */
+  set(view: Partial<MuscleView> | null): void;
+  /** Back to the scene's own view ({@link SceneInput.muscles}). */
+  reset(): void;
 }
 
 /** A policy command term surfaced for generic UI controls. */
@@ -308,6 +321,8 @@ export interface MjswanEngineState {
   cameraFeeds: ReadonlyArray<CameraFeedDescriptor>;
   /** {@link CameraControls.setTracking}'s switch, and the camera's vertical FOV in degrees. */
   camera: { tracking: boolean; fovy: number };
+  /** How muscles are drawn (null: as every tendon), and how many the model has to draw. */
+  muscles: { view: MuscleView | null; count: number };
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
   /** Every pointer mode, with whether this scene can run it. */
@@ -361,6 +376,7 @@ export interface MjswanEngine {
   readonly commands: CommandControls;
   readonly debugVis: DebugVisControls;
   readonly cameraFeeds: CameraFeedControls;
+  readonly muscles: MuscleControls;
   readonly events: EventControls;
   readonly interaction: InteractionControls;
   readonly xr: XrControls;

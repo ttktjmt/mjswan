@@ -1,3 +1,7 @@
 mjswan
 Copyright 2026 Tatsuki Tsujimoto
 https://github.com/ttktjmt/mjswan
+
+The muscle drawing (src/mjswan/template/src/core/muscle/tubes.ts) is ported from MyoSuite
+(https://github.com/MyoHub/myosuite), Copyright (c) MyoSuite Authors,
+licensed under the Apache License, Version 2.0.
