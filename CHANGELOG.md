@@ -979,6 +979,17 @@ shortcuts.
 
 ### Fixed
 
+- **Tendons are posed once per drawn frame.** They were rebuilt each time the loop
+  stepped, about four times a frame, and for a MyoSuite model a rebuild cost more than the
+  physics step. A step now only copies the tendon paths, and the frame poses the meshes
+  from the last copy: MyoSuite's full body spends a twelfth of the time on its tendons,
+  and a paused scene none.
+
+- **A tendon that wraps a geom keeps its end.** A wrapped geom puts two points on the
+  path, but the meshes held one per wrap object, so a tendon past that count lost its last
+  segments. A point within 1 cm of the world origin no longer passes for a pulley, and no
+  tendon's end sphere is overwritten by the next one's start.
+
 - **An event term written as a class traces.** Its constructor was handed the event's
   arguments. The trace now runs the instance mjlab built with the env, with the env and
   entities it keeps routed through the tracer, or builds one the same way when the env

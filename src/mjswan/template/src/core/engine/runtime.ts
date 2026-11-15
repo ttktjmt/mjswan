@@ -22,7 +22,7 @@ import { InteractionManager, type InteractionSim } from '../interaction/Interact
 import { SurfacePicker, type PickHit } from '../interaction/pick';
 import { GeomPreview, type PreviewInput, type PreviewListener } from '../scene/preview';
 import type { InteractionModeId } from '../interaction/params';
-import { createTendonState, updateTendonGeometry, updateTendonRendering } from '../scene/tendons';
+import { createTendonState, snapshotTendons, updateTendonRendering } from '../scene/tendons';
 import { lightSpecularRatio, updateHeadlightFromCamera, updateLightsFromData } from '../scene/lights';
 import { mjcToThreeCoordinate, threeToMjcCoordinate } from '../scene/coordinate';
 import { HandMocap, handWeldNames, injectHandMocapXml } from '../xr/handMocap';
@@ -2261,17 +2261,7 @@ export class mjswanRuntime {
       }
     }
 
-    if (this.mujocoRoot && this.mujocoRoot.cylinders) {
-      updateTendonGeometry(
-        this.mjModel,
-        this.mjData,
-        {
-          cylinders: this.mujocoRoot.cylinders,
-          spheres: this.mujocoRoot.spheres!,
-        },
-        this.lastSimState.tendons
-      );
-    }
+    snapshotTendons(this.mjData, this.lastSimState.tendons);
   }
 
   private applyViewerConfig(config: ViewerConfig | null): void {
@@ -2464,6 +2454,7 @@ export class mjswanRuntime {
 
       if (this.mujocoRoot && this.mujocoRoot.cylinders) {
         updateTendonRendering(
+          this.mjModel,
           {
             cylinders: this.mujocoRoot.cylinders,
             spheres: this.mujocoRoot.spheres!,

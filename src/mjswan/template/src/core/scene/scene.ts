@@ -700,7 +700,7 @@ function createHFieldGeometry(mjModel: MjModel, geomId: number): THREE.BufferGeo
 }
 
 export function getPosition(
-  buffer: Float32Array,
+  buffer: ArrayLike<number>,
   index: number,
   target: THREE.Vector3,
   swizzle = true
