@@ -91,7 +91,7 @@ and chrome you mean rather than the first thing in the build:
 | `scene` | Select a scene by id. |
 | `policy` | Select a policy by id. Defaults to the one marked `default=True`. |
 | `skin` | Select a skin by id. Defaults to the scene's first; `skin=` (empty) opens on none. |
-| `muscles` | How the first scene draws its muscles: `off` or `paths`. Defaults to the scene's own view. |
+| `muscles` | How the first scene draws its muscles: `off`, `paths` or `volumetric`. Defaults to the scene's own view. |
 | `panel` | `panel=0` starts with the control panel hidden. Useful in a small iframe. |
 | `debug` | `debug=0` starts with the panel's Debug Viz **Enabled** checkbox off, hiding every debug drawing (the motion-tracking ghost, velocity arrows, height-scan hits, the robot under a skin). A skin stays shown. |
 | `xray` | `xray=1` starts with Debug Viz's **Xray** switch on, drawing the robot see-through over its skin. |

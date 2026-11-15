@@ -800,7 +800,7 @@ export class mjswanRuntime {
       this.decimation = decimationFor(this.controlDt ?? DEFAULT_VIEWER_CONTROL_DT, this.timestep);
       this.controlStep.restart();
 
-      this.muscles = Muscles.create(this.mujoco, this.mjModel);
+      this.muscles = Muscles.create(this.mujoco, this.mjModel, this.mujocoRoot ?? this.scene);
       this.muscles?.setView(this.muscleView);
 
       this.lastSimState.bodies.clear();
@@ -817,6 +817,7 @@ export class mjswanRuntime {
 
   /** Frees the model on the WASM heap, which nothing else does. Call with the loop stopped. */
   private releaseModel(): void {
+    this.muscles?.dispose();
     this.muscles = null;
     this.mjData?.delete();
     this.mjModel?.delete();
@@ -2498,6 +2499,7 @@ export class mjswanRuntime {
       updateLightsFromData(this.mujoco, this.mjData, this.lights);
       this.cameraFeeds.pose(this.mjData);
 
+      this.muscles?.commit();
       if (this.mujocoRoot && this.mujocoRoot.cylinders) {
         updateTendonRendering(
           {

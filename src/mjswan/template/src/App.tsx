@@ -180,7 +180,7 @@ function AppContent() {
         await engine.loadScene(withPlugins(input));
         const muscles = musclesParam.current;
         if (muscles === 'off') engine.muscles.set(null);
-        else if (muscles === 'paths') engine.muscles.set({ style: muscles });
+        else if (muscles === 'paths' || muscles === 'volumetric') engine.muscles.set({ style: muscles });
         if (motionName) await engine.setMotion(motionName);
         hideLoading();
         signalReady();

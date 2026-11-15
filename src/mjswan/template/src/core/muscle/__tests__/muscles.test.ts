@@ -1,8 +1,10 @@
+import * as THREE from 'three';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TENDON_RGB } from '../../scene/tendons';
 import { DEFAULT_MUSCLE_VIEW, mergeMuscleView, Muscles } from '../muscles';
 import { MUSCLE_UNIFORM, PATH_ACTIVE, PATH_RELAXED } from '../tubes';
+import fixture from './fixtures/tubes.json';
 
 type MainModule = import('mujoco').MainModule;
 type MjModel = import('mujoco').MjModel;
@@ -45,16 +47,16 @@ const close = (actual: number[], expected: readonly number[]) =>
 describe('Muscles', () => {
   it("draws only MyoSuite's muscles, coloured by activation along their path", () => {
     const { model, data } = compile(ARM);
-    const muscles = Muscles.create(mujoco, model)!;
+    const muscles = Muscles.create(mujoco, model, new THREE.Group())!;
     expect(muscles.count).toBe(1);
 
-    muscles.setView({ style: 'paths', color: 'activation' });
+    muscles.setView({ ...DEFAULT_MUSCLE_VIEW, style: 'paths', color: 'activation' });
     data.act[model.actuator_actadr[0]] = 0.5;
     muscles.update(data);
     close(rgbOf(muscles, FLEXOR), PATH_RELAXED.map((r, c) => r + (PATH_ACTIVE[c] - r) * 0.5 ** 0.25));
     close(rgbOf(muscles, LIGAMENT), TENDON_RGB);
 
-    muscles.setView({ style: 'paths', color: 'uniform' });
+    muscles.setView({ ...DEFAULT_MUSCLE_VIEW, style: 'paths', color: 'uniform' });
     muscles.update(data);
     close(rgbOf(muscles, FLEXOR), MUSCLE_UNIFORM);
 
@@ -65,9 +67,41 @@ describe('Muscles', () => {
     data.delete();
   });
 
+  it('draws a tube per pulley branch in place of each muscle tendon', () => {
+    const { model, data } = compile(fixture.xml);
+    const root = new THREE.Group();
+    const muscles = Muscles.create(mujoco, model, root)!;
+    const tendons = fixture.actuators.map((a) => model.actuator_trnid[2 * a]);
+    const vertices = () => {
+      muscles.update(data);
+      muscles.commit();
+      const mesh = root.getObjectByProperty('type', 'Mesh') as THREE.Mesh;
+      return mesh.geometry.getAttribute('position');
+    };
+
+    muscles.setView(DEFAULT_MUSCLE_VIEW);
+    expect(tendons.every((t) => muscles.paint.hidden[t] === 1)).toBe(true);
+    // Six tubes: the extensor's three branches and one for each other muscle.
+    const full = vertices();
+    expect(full.count).toBe(6 * (32 * 12 + 2));
+    const nearest = Math.min(...Array.from({ length: full.count }, (_, v) => Math.hypot(full.getX(v), full.getY(v), full.getZ(v))));
+    expect(nearest).toBeGreaterThan(0.03);
+
+    muscles.setView({ ...DEFAULT_MUSCLE_VIEW, detail: 'light' });
+    expect(vertices().count).toBe(6 * (32 * 6 + 2));
+
+    muscles.setView(null);
+    expect(root.children.every((child) => !child.visible)).toBe(true);
+    expect(tendons.every((t) => muscles.paint.hidden[t] === 0)).toBe(true);
+    muscles.dispose();
+    expect(root.children).toHaveLength(0);
+    model.delete();
+    data.delete();
+  });
+
   it('is none for a model without a muscle to draw', () => {
     const { model, data } = compile('<mujoco><worldbody><geom size="0.1"/></worldbody></mujoco>');
-    expect(Muscles.create(mujoco, model)).toBeNull();
+    expect(Muscles.create(mujoco, model, new THREE.Group())).toBeNull();
     model.delete();
     data.delete();
   });
@@ -76,9 +110,11 @@ describe('Muscles', () => {
 describe('mergeMuscleView', () => {
   it('keeps the base where a value is left out or unknown', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const view = mergeMuscleView(DEFAULT_MUSCLE_VIEW, { color: 'uniform', style: 'tubes' as 'paths' });
+    const view = mergeMuscleView(DEFAULT_MUSCLE_VIEW, { color: 'uniform', style: 'tubes' as 'paths', scale: -1 });
     expect(view).toEqual({ ...DEFAULT_MUSCLE_VIEW, color: 'uniform' });
-    expect(warn).toHaveBeenCalledOnce();
+    // The state hands the view out: a host writing to it must not change the drawing.
+    expect(Object.isFrozen(view)).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
   });
 });

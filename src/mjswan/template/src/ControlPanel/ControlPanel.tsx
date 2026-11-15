@@ -54,6 +54,7 @@ import type {
 const MUSCLE_STYLES = [
   { value: 'off', label: 'Off' },
   { value: 'paths', label: 'Paths' },
+  { value: 'volumetric', label: 'Volumetric' },
 ];
 
 export interface SelectOption {
@@ -731,7 +732,7 @@ function ControlPanel(props: ControlPanelProps) {
                 data={MUSCLE_STYLES}
                 value={muscles.view?.style ?? 'off'}
                 onChange={(value) => {
-                  if (value === 'paths') onMusclesChange?.({ style: value });
+                  if (value === 'paths' || value === 'volumetric') onMusclesChange?.({ style: value });
                   else onMusclesChange?.(null);
                 }}
                 size="xs"
@@ -741,6 +742,16 @@ function ControlPanel(props: ControlPanelProps) {
                   input: { minHeight: '1.625rem', height: '1.625rem', padding: '0.5em' },
                 }}
                 comboboxProps={{ zIndex: 1000 }}
+              />
+            </LabeledInput>
+          )}
+          {muscles && muscles.count > 0 && muscles.view?.style === 'volumetric' && (
+            <LabeledInput id="muscles-light" label="Light tubes">
+              <Checkbox
+                id="muscles-light"
+                checked={muscles.view.detail === 'light'}
+                onChange={(event) => onMusclesChange?.({ detail: event.currentTarget.checked ? 'light' : 'full' })}
+                size="xs"
               />
             </LabeledInput>
           )}

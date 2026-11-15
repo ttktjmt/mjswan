@@ -173,8 +173,15 @@ A `MuscleView` takes the names of MyoSuite's `RenderConfig`:
 
 | Field | MyoSuite | Values |
 |---|---|---|
-| `style` | `muscles` | `paths`: the tendon path, coloured. |
-| `color` | `muscle_color` | `activation` (default): a path goes from dark grey to red with the activation's fourth root. `uniform`: one anatomical red. |
+| `style` | `muscles` | `volumetric` (default): a tube along the tendon path, a fusiform belly with thin tendons. `paths`: the path itself, coloured. |
+| `color` | `muscle_color` | `activation` (default): a tube goes from pale to deep red with the activation, a path from dark grey to red with its fourth root. `uniform`: one anatomical red. |
+| `scale` | `muscle_scale` | Multiplies every tube's radius. Default 1. |
+| `detail` | (none) | Points per tube ring: `full` (default) 12, as MyoSuite; `light` 6, half the vertices, for a slower device. |
+
+A tube keeps the volume MyoSuite gives its muscle, so it thickens as the path shortens;
+activation changes only its colour. The shape is fixed at keyframe 0 (`qpos0` without
+one), so it does not depend on the pose a scene or policy starts from. A tendon that runs
+over pulleys gets a tube per branch, the belly on the first, as MyoSuite draws it.
 
 `muscles.set(partial)` changes the fields it names and keeps the rest; on a scene
 drawing none, it starts from the scene's view or MyoSuite's defaults. The scene's view
