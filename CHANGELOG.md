@@ -25,9 +25,9 @@ shortcuts.
   rest and moves with the bodies it is weighted to. `add_skin` warns for joints on no
   body (the viewer leaves the meshes they move undrawn) and for meshes with no material or
   normals, and refuses a VRM and a file whose joints mostly miss the robot.
-  `SolidShading(color, opacity, smooth)` draws such meshes in one colour, stored as
-  MuJoCo's `rgba` is, smooth, and as one mesh: MyoSuite's light atlas costs one draw call
-  instead of 416. `hide_tendons` stops the model's tendons drawing under a skin.
+  `SolidShading` draws such meshes in one colour, stored as MuJoCo's `rgba` is, smooth,
+  matte or glossy (`roughness`, `clearcoat`), and as one mesh: MyoSuite's light atlas
+  costs one draw call instead of 416. `hide_tendons` stops the model's tendons drawing under a skin.
   `mjswan skin map --robot` drafts a `ModelledSkinConfig` for a file most of whose joints
   rest on the robot.
 

@@ -1010,6 +1010,8 @@ class TestModelled:
             (lambda: SolidShading(color=(1.0, 0.5)), "three values"),  # type: ignore[arg-type]
             (lambda: SolidShading(color=(1.0, 0.5, 2.0)), "three values"),
             (lambda: SolidShading(color=(1, 1, 1), opacity=0), "opacity"),
+            (lambda: SolidShading(color=(1, 1, 1), roughness=1.5), "roughness"),
+            (lambda: SolidShading(color=(1, 1, 1), clearcoat=-0.1), "clearcoat"),
         ],
     )
     def test_rejects(self, make, match):
@@ -1042,7 +1044,9 @@ class TestModelled:
             str(file),
             rest_pose="lifted",
             hide_tendons=True,
-            material=SolidShading(color=(0.42, 0.11, 0.1), opacity=0.5),
+            material=SolidShading(
+                color=(0.42, 0.11, 0.1), opacity=0.5, roughness=0.3, clearcoat=0.4
+            ),
             id="m",
             name="M",
         )
@@ -1050,7 +1054,14 @@ class TestModelled:
         assert entry["align"] == pytest.approx([0.0, 0.0, 0.1], abs=1e-6)
         assert entry["rest_qpos"] == pytest.approx(list(robot.key("lifted").qpos))
         assert entry["material"] == {
-            "solid": {"color": (0.42, 0.11, 0.1), "opacity": 0.5, "smooth": True}
+            "solid": {
+                "color": (0.42, 0.11, 0.1),
+                "opacity": 0.5,
+                "smooth": True,
+                "roughness": 0.3,
+                "clearcoat": 0.4,
+                "clearcoat_roughness": 0.0,
+            }
         }
         assert entry["hide_robot"] is False and entry["hide_tendons"] is True
 
@@ -1087,7 +1098,14 @@ class TestModelled:
             )
         )
         assert entry["material"] == {
-            "solid": {"color": (1.0, 1.0, 1.0), "opacity": 1.0, "smooth": True}
+            "solid": {
+                "color": (1.0, 1.0, 1.0),
+                "opacity": 1.0,
+                "smooth": True,
+                "roughness": 1.0,
+                "clearcoat": 0.0,
+                "clearcoat_roughness": 0.0,
+            }
         }
 
     def test_a_build_writes_format_10_and_bundles_the_file_with_its_credits(

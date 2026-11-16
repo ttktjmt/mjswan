@@ -92,17 +92,25 @@ class ToonShading:
 class SolidShading:
     """Every mesh in one colour, not metallic. ``color`` is drawn as stored, as MuJoCo's
     ``rgba`` is, not decoded from linear as a glTF's colours are. ``smooth`` gives a mesh
-    with no normals smooth ones, where three.js would draw it faceted."""
+    with no normals smooth ones, where three.js would draw it faceted. ``roughness`` 1 is
+    matte; ``clearcoat`` lays a glossy coat over it, as three.js's
+    ``MeshPhysicalMaterial`` does, ``clearcoat_roughness`` its own."""
 
     color: tuple[float, float, float]
     opacity: float = 1.0
     smooth: bool = True
+    roughness: float = 1.0
+    clearcoat: float = 0.0
+    clearcoat_roughness: float = 0.0
 
     def __post_init__(self) -> None:
         if len(self.color) != 3 or not all(0 <= c <= 1 for c in self.color):
             raise ValueError(f"color is three values from 0 to 1, got {self.color!r}.")
         if not 0 < self.opacity <= 1:
             raise ValueError(f"opacity must be over 0, at most 1; got {self.opacity}.")
+        for name in ("roughness", "clearcoat", "clearcoat_roughness"):
+            if not 0 <= getattr(self, name) <= 1:
+                raise ValueError(f"{name} is from 0 to 1, got {getattr(self, name)}.")
 
 
 @dataclass(frozen=True)

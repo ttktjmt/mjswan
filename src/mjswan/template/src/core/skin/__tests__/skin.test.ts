@@ -931,7 +931,9 @@ describe('a skin modelled on the robot', () => {
     });
     return out;
   };
-  const solid = (color: [number, number, number], opacity = 1, smooth = true) => ({ material: { solid: { color, opacity, smooth } } });
+  const solid = (color: [number, number, number], opacity = 1, smooth = true, roughness = 1, clearcoat = 0) => ({
+    material: { solid: { color, opacity, smooth, roughness, clearcoat, clearcoat_roughness: 0.1 } },
+  });
 
   it('draws a solid colour as stored, not metallic, smooth where the file has no normals', async () => {
     // As three.js loads a mesh with no material or normals: metallic and faceted.
@@ -939,10 +941,11 @@ describe('a skin modelled on the robot', () => {
     expect(bare).toHaveLength(3);
     const loaded = bare[0].material as THREE.MeshStandardMaterial;
     expect([loaded.metalness, loaded.flatShading]).toEqual([1, true]);
-    const [painted] = drawnMeshes(await posed(bodiesAt(), solid([0.42, 0.11, 0.1], 0.5)));
-    const material = painted.material as THREE.MeshStandardMaterial;
+    const [painted] = drawnMeshes(await posed(bodiesAt(), solid([0.42, 0.11, 0.1], 0.5, true, 0.3, 0.4)));
+    const material = painted.material as THREE.MeshPhysicalMaterial;
     expect(material.color.toArray()).toEqual([0.42, 0.11, 0.1].map((c) => expect.closeTo(c, 6)));
     expect([material.metalness, material.flatShading, material.opacity, material.transparent]).toEqual([0, false, 0.5, true]);
+    expect([material.roughness, material.clearcoat, material.clearcoatRoughness]).toEqual([0.3, 0.4, 0.1]);
     expect(painted.geometry.getAttribute('normal')).toBeDefined();
     const [faceted] = drawnMeshes(await posed(bodiesAt(), solid([1, 1, 1], 1, false)));
     expect((faceted.material as THREE.MeshStandardMaterial).flatShading).toBe(true);

@@ -94,4 +94,7 @@ export interface SolidConfig {
   opacity: number;
   /** A mesh with no normals given smooth ones, not drawn faceted. */
   smooth: boolean;
+  roughness: number;
+  clearcoat: number;
+  clearcoat_roughness: number;
 }

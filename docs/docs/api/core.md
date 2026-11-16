@@ -1038,10 +1038,13 @@ class mjswan.SolidShading(
     color: tuple[float, float, float],
     opacity: float = 1.0,
     smooth: bool = True,
+    roughness: float = 1.0,
+    clearcoat: float = 0.0,
+    clearcoat_roughness: float = 0.0,
 )
 ```
 
-Every mesh in one colour, not metallic. `color` is drawn as stored, as MuJoCo's `rgba` is, not decoded from linear as a glTF's colours are. `smooth` gives a mesh with no normals smooth ones, where three.js would draw it faceted. A modelled skin in one colour is drawn as one mesh, a draw call instead of one per mesh.
+Every mesh in one colour, not metallic. `color` is drawn as stored, as MuJoCo's `rgba` is, not decoded from linear as a glTF's colours are. `smooth` gives a mesh with no normals smooth ones, where three.js would draw it faceted. `roughness` 1 is matte, lower glossier; `clearcoat` lays a glossy coat over the colour, as three.js's `MeshPhysicalMaterial` does, and `clearcoat_roughness` is the coat's own. A modelled skin in one colour is drawn as one mesh, a draw call instead of one per mesh.
 
 The demo's Showcase (`examples/demo/main.py`) has two skins scenes, VRM avatars on the G1 and `.glb` animals on the Go1, their files in `skins/` of [`ttktjmt/mjswan`](https://huggingface.co/ttktjmt/mjswan) on the Hugging Face Hub, each with its license. `mjswan skin map` drafts a config for a new file; see the [CLI](../getting-started/cli.md).
 

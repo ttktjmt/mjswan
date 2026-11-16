@@ -252,8 +252,15 @@ function toon(scene: THREE.Object3D, style: ToonConfig): void {
  * Every mesh in one colour, not metallic, its colour drawn as stored. A mesh with no
  * normals, which three.js draws faceted, is given smooth ones unless `smooth` is off.
  */
-function solid(scene: THREE.Object3D, { color, opacity, smooth }: SolidConfig): void {
-  const material = new THREE.MeshStandardMaterial({ color: new THREE.Color(...color), opacity, transparent: opacity < 1 });
+function solid(scene: THREE.Object3D, { color, opacity, smooth, roughness, clearcoat, clearcoat_roughness }: SolidConfig): void {
+  const material = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(...color),
+    opacity,
+    transparent: opacity < 1,
+    roughness,
+    clearcoat,
+    clearcoatRoughness: clearcoat_roughness,
+  });
   const faceted = smooth ? material : Object.assign(material.clone(), { flatShading: true });
   const replaced = new Set<THREE.Material>();
   scene.traverse((object) => {
