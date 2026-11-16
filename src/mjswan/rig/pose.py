@@ -18,6 +18,12 @@ MATCH_TOLERANCE = 0.005
 _VOTE_GRID = 0.001
 #: The share of joints that, landing on the robot as they are, says the file is not off it.
 _ON_ROBOT = 0.8
+_QPOS_WIDTH = {
+    mujoco.mjtJoint.mjJNT_FREE: 7,
+    mujoco.mjtJoint.mjJNT_BALL: 4,
+    mujoco.mjtJoint.mjJNT_SLIDE: 1,
+    mujoco.mjtJoint.mjJNT_HINGE: 1,
+}
 
 
 def resolve_body(model: mujoco.MjModel, name: str) -> str | None:
@@ -42,10 +48,12 @@ def resolve_joint(model: mujoco.MjModel, name: str) -> int | None:
 
 
 def pose_at_rest(
-    model: mujoco.MjModel, rest_pose: str | Mapping[str, float] | None
+    model: mujoco.MjModel,
+    rest_pose: str | Mapping[str, float | Sequence[float]] | None,
 ) -> mujoco.MjData:
-    """The robot posed as the avatar rests: a keyframe by name, or hinge and slide joint
-    -> value (radians, metres) over the zero pose, which ``None`` is."""
+    """The robot posed as the avatar rests: a keyframe by name, or joint -> its ``qpos``
+    over the zero pose, which ``None`` is: radians or metres for a hinge or slide joint,
+    a quaternion for a ball joint, position then quaternion for a free one."""
     data = mujoco.MjData(model)
     if isinstance(rest_pose, str):
         key = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, rest_pose)
@@ -62,14 +70,14 @@ def pose_at_rest(
                 raise ValueError(
                     f"rest_pose names {name!r}, which is not a joint of the model."
                 )
-            if model.jnt_type[joint] not in (
-                mujoco.mjtJoint.mjJNT_HINGE,
-                mujoco.mjtJoint.mjJNT_SLIDE,
-            ):
+            width = _QPOS_WIDTH[mujoco.mjtJoint(model.jnt_type[joint])]
+            values = np.atleast_1d(np.asarray(value, dtype=float))
+            if values.shape != (width,):
                 raise ValueError(
-                    f"rest_pose sets hinge and slide joints; {name!r} is neither."
+                    f"rest_pose gives {name!r} {values.size} values; its qpos has {width}."
                 )
-            data.qpos[model.jnt_qposadr[joint]] = value
+            adr = model.jnt_qposadr[joint]
+            data.qpos[adr : adr + width] = values
     mujoco.mj_kinematics(model, data)
     return data
 

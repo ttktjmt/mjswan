@@ -1055,7 +1055,7 @@ The demo's Showcase (`examples/demo/main.py`) has two skins scenes, VRM avatars 
 class mjswan.ModelledSkinConfig(
     source: str,
     bones: Mapping[str, str] | MatchByPosition = MatchByPosition(),
-    rest_pose: str | Mapping[str, float] | None = None,
+    rest_pose: str | Mapping[str, float | Sequence[float]] | None = None,
     scale: float = 1.0,
     hide_robot: bool = False,
     hide_tendons: bool | None = None,
@@ -1071,7 +1071,7 @@ A `.glb` modelled on the robot itself: made over it at its rest pose, in its wor
 |---|---|
 | `source` | Local path or http(s) URL of the `.glb`, bundled byte for byte. |
 | `bones` | Joint (a node name) to robot body, a body name with or without its entity prefix; or [`MatchByPosition`](#matchbyposition), the default, which finds the body each joint rests on. A mesh moved by a joint with no body is not drawn. |
-| `rest_pose` | The robot's pose the file was modelled at: a keyframe's name, or joint to value (radians, metres) over the zero pose. `None`: the zero pose. |
+| `rest_pose` | The robot's pose the file was modelled at: a keyframe's name, or joint to value (radians, metres) over the zero pose, a free joint's being its position and quaternion, for a scene that stands the robot turned. `None`: the zero pose. |
 | `scale` | Metres per unit of the file. |
 | `hide_robot` | Stop drawing the robot the joints follow. The default draws both, the file over the robot. |
 | `hide_tendons` | Stop drawing the model's tendons while the skin is shown, as for meshes that draw the muscles themselves. `None`: as `hide_robot`. |

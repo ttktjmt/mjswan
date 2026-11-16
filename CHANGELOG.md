@@ -20,7 +20,9 @@ shortcuts.
   it is, with no fit and nothing measured. `MatchByPosition`, the default `bones`, matches
   each skin joint to the body whose origin or geom centre it rests on at `rest_pose`
   (within 5 mm), so a model with its geoms renumbered matches alike, after first finding
-  how far the scene stands the robot off the file. The browser fixes each joint to its
+  how far the scene stands the robot off the file; a scene that stands it turned gives
+  its free joint's position and quaternion in `rest_pose`, as upstream muscle-supermimic's
+  MyoFullBody needs, a quarter turn from MyoSuite's. The browser fixes each joint to its
   body from the skin's inverse bind matrices: every vertex lands where the file has it at
   rest and moves with the bodies it is weighted to. `add_skin` warns for joints on no
   body (the viewer leaves the meshes they move undrawn) and for meshes with no material or

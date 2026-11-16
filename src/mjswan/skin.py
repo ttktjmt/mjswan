@@ -302,9 +302,10 @@ class ModelledSkinConfig:
     likes; or :class:`MatchByPosition`, the body each joint rests on. The meshes a joint
     with no body moves go undrawn."""
 
-    rest_pose: str | Mapping[str, float] | None = None
+    rest_pose: str | Mapping[str, float | Sequence[float]] | None = None
     """The robot's pose the file was modelled at: a keyframe's name, or joint -> value
-    (radians, metres) over the zero pose. ``None``: the zero pose."""
+    (radians, metres) over the zero pose, a free joint's being its position and
+    quaternion, for a scene that stands the robot turned. ``None``: the zero pose."""
 
     scale: float = 1.0
     """Metres per unit of the file."""

@@ -208,7 +208,9 @@ class TestPose:
             pose_at_rest(robot, "stand")
         with pytest.raises(ValueError, match="'elbow', which is not a joint"):
             pose_at_rest(robot, {"elbow": 0.5})
-        with pytest.raises(ValueError, match="'root' is neither"):
+        turned = (0.1, 0.2, 1.0, 0.0, 0.0, 0.0, 1.0)
+        assert pose_at_rest(robot, {"root": turned}).qpos[:7] == pytest.approx(turned)
+        with pytest.raises(ValueError, match="'root' 1 values; its qpos has 7"):
             pose_at_rest(robot, {"root": 0.5})
 
     def test_standing_height_is_over_the_soles_not_the_floor(self, robot):
@@ -966,6 +968,17 @@ class TestModelled:
         skin = resolve_skin(ModelledSkinConfig(str(file), rest_pose="lifted"), robot)
         assert skin.align == (0.0, 0.0, 0.0)
         assert skin.rest_qpos == pytest.approx(list(robot.key("lifted").qpos))
+
+    def test_a_free_joint_rest_pose_stands_the_robot_turned(self, tmp_path, robot):
+        # Modelled on the robot bowed, which no shift reaches; its root's qpos does.
+        file = self._glb(tmp_path, robot, key="bow")
+        root = robot.key("bow").qpos[:7].tolist()
+        skin = resolve_skin(
+            ModelledSkinConfig(str(file), rest_pose={"root": root}), robot
+        )
+        assert len(skin.bones) == len(fx.MODELLED_JOINTS)
+        assert skin.align == (0.0, 0.0, 0.0)
+        assert skin.rest_qpos == pytest.approx(list(robot.key("bow").qpos))
 
     def test_a_named_map_takes_bodies_without_their_prefix(self, tmp_path, robot):
         file = self._glb(tmp_path, robot)
