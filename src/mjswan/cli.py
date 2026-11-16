@@ -593,7 +593,7 @@ def _describe_projects(tree, root: Path, manifest: dict) -> int:
 
 skin_app = typer.Typer(
     name="skin",
-    help="Skins: rigged characters drawn over a robot.",
+    help="Skins drawn over a robot: rigged characters, or files modelled on it.",
     no_args_is_help=True,
 )
 app.add_typer(skin_app)
@@ -614,7 +614,9 @@ def skin_map_cmd(
 ) -> None:
     """Draft a skin's maps: which node is which bone, and which robot body each follows.
 
-    The guesses are for you to check, line by line, before you use them.
+    A .glb modelled on the robot itself, most of its joints resting on the robot's bodies,
+    is drafted as a ModelledSkinConfig instead. The guesses are for you to check, line by
+    line, before you use them.
     """
     from rich.table import Table
 
@@ -627,6 +629,23 @@ def skin_map_cmd(
         console.print(f"[red]Error:[/red] {_inert(str(exc))}")
         raise typer.Exit(1)
     model = _load_robot(robot) if robot else None
+    command = " ".join(
+        ["mjswan skin map", file.name, *(["--robot", robot] if robot else [])]
+    )
+    modelled = g.guess_modelled(skin, model) if model is not None else None
+    if modelled is not None:
+        _print_modelled(skin, modelled)
+        if output:
+            output.write_text(
+                g.draft_modelled_source(
+                    command, source=str(file), file=skin, guess=modelled
+                )
+            )
+            console.print(
+                f"Wrote {_inert(str(output))}: a ModelledSkinConfig draft to check and "
+                "paste."
+            )
+        return
 
     guess = None if skin.format == "vrm" else g.guess_humanoid(skin)
     nodes = g.in_vrm_order(skin.human_bones if guess is None else guess.humanoid)
@@ -670,9 +689,7 @@ def skin_map_cmd(
     rest_pose = _rest_pose(model, guess, bones) if model is not None else None
     if output:
         draft = g.draft_source(
-            " ".join(
-                ["mjswan skin map", file.name, *(["--robot", robot] if robot else [])]
-            ),
+            command,
             source=str(file),
             guess=guess,
             names=skin.names,
@@ -683,6 +700,32 @@ def skin_map_cmd(
         output.write_text(draft)
         console.print(
             f"Wrote {_inert(str(output))}: a SkinConfig draft to check and paste."
+        )
+
+
+def _print_modelled(skin, guess) -> None:
+    """What ``guess_modelled`` found: how many joints rest on the robot, how far off the
+    file is, the joints on no body, and meshes the viewer would draw metallic."""
+    console.print(
+        f"[bold]{_inert(skin.path.name)}[/bold]: glTF, modelled on the robot, "
+        f"{len(guess.bodies)} of its {guess.joints} joints on its bodies"
+    )
+    off = sum(a * a for a in guess.align) ** 0.5
+    if off >= 1e-4:
+        at = tuple(round(a, 4) for a in guess.align)
+        console.print(
+            f"  {off * 100:.1f} cm off the robot {at}  [dim]matched there[/dim]"
+        )
+    lost = [skin.names[j] for j in sorted(skin.joints) if j not in guess.bodies]
+    if lost:
+        shown = ", ".join(lost[:5]) + (", ..." if len(lost) > 5 else "")
+        console.print(
+            f"  on no body: {_inert(shown)}  [dim]their meshes go undrawn[/dim]"
+        )
+    if skin.without_material or skin.without_normals:
+        console.print(
+            f"  {skin.without_material} meshes without a material, "
+            f"{skin.without_normals} without normals  [dim]for SolidShading[/dim]"
         )
 
 

@@ -522,12 +522,14 @@ Returns `self` for chaining.
 ### SceneHandle.add_skin
 
 ```python
-def add_skin(name: str, config: SkinConfig) -> SkinHandle
+def add_skin(name: str, config: SkinConfig | ModelledSkinConfig) -> SkinHandle
 ```
 
 Add a rigged character (a `.vrm`, or a `.glb`), posed every frame from the robot's bodies, to the scene's **Skin** menu (ADR 0010). The scene's physics, collision and policy are unchanged: the skin's spring bones (hair, a tail) swing by three-vrm, or with `mujoco_springs` in a MuJoCo model of their own, and the scene's model sees neither. A scene may carry several skins; the viewer shows one at a time, the first added by default, and the menu can clear it. `name` is shown in the menu; its id, `name2id(name)`, is unique within the scene (a clash is suffixed, with a warning) and is the `?skin=` value that opens the scene on it.
 
-The skin is resolved here, so a mistake surfaces at once: a URL `source` is downloaded, the file is checked, every bone is found in it and every body in the scene's model, and its rest offsets, root height and hips placement are measured against the robot at `rest_pose`. A missing file raises `FileNotFoundError`, a URL that does not download `urllib.error.URLError`, and anything that does not fit `ValueError`: a `.gltf` (export it as glTF Binary), a file pointing outside itself, a compressed one (Draco, meshopt, KTX2/Basis: export it again without compression), a bone, node, body, joint or keyframe that is not there. The build copies the file unmodified to `assets/<skin-id>.vrm` or `.glb`, so a VRM's embedded license ships as its author wrote it; a `.glb`'s `license` and `notice` are written to the project's `licenses/` as `LICENSE.skin-<skin-id>` and `NOTICE.skin-<skin-id>`. With `hide_robot`, Debug Viz lists an **Xray** switch that draws the robot see-through over the skin, and `?xray=1` opens with it on; Debug Viz's **Enabled** hides it, never the skin. See [`SkinConfig`](#skinconfig).
+The skin is resolved here, so a mistake surfaces at once: a URL `source` is downloaded, the file is checked, every bone is found in it and every body in the scene's model, and its rest offsets, root height and hips placement are measured against the robot at `rest_pose`. A missing file raises `FileNotFoundError`, a URL that does not download `urllib.error.URLError`, and anything that does not fit `ValueError`: a `.gltf` (export it as glTF Binary), a file pointing outside itself, a compressed one (Draco, meshopt, KTX2/Basis: export it again without compression), a bone, node, body, joint or keyframe that is not there. The build copies the file unmodified to `assets/<skin-id>.vrm` or `.glb`, so a VRM's embedded license ships as its author wrote it; a `.glb`'s `license` and `notice` are written to the project's `licenses/` as `LICENSE.skin-<skin-id>` and `NOTICE.skin-<skin-id>`. With `hide_robot`, Debug Viz lists an **Xray** switch that draws the robot see-through over the skin, and `?xray=1` opens with it on; Debug Viz's **Enabled** hides it, never the skin. While a skin with `hide_tendons` is on show, the model's tendons are not drawn. See [`SkinConfig`](#skinconfig).
+
+A [`ModelledSkinConfig`](#modelledskinconfig) is a `.glb` modelled on the robot itself, as MyoSuite's muscle atlas is: nothing is fitted or measured, each joint is matched to the body it rests on at `rest_pose`, and `add_skin` warns for joints on no body (the viewer leaves the meshes they move undrawn), for joints on more than one tree of bodies, and for meshes with no material or normals. Too few joints on the robot raise `ValueError`.
 
 **Returns:** `SkinHandle`
 
@@ -855,7 +857,7 @@ Returned by `SceneHandle.add_skin`. Its config is frozen; to change a skin, add 
 | `id` | `str` | `name2id(name)`, unique within the scene; the bundled file's stem. |
 | `source` | `str \| None` | The local file the build bundles (a URL source's download). |
 | `format` | `"vrm" \| "gltf"` | What the file is, read from its content. |
-| `config` | `SkinConfig` | The config as added, its `source` a local file. |
+| `config` | `SkinConfig \| ModelledSkinConfig` | The config as added, its `source` a local file. |
 
 ---
 
@@ -945,7 +947,7 @@ class mjswan.SkinConfig(
     scale: float = 1.0,
     facing: Literal["+z", "-z", "+x", "-x"] = "+z",
     springs: Sequence[SpringChain] = (),
-    material: ToonShading | None = None,
+    material: ToonShading | SolidShading | None = None,
     rest_pose: str | Mapping[str, float] | None = None,
     rest_offsets: Mapping[str, tuple[float, float, float]] = {},
     height_ratio: float | None = None,
@@ -957,6 +959,7 @@ class mjswan.SkinConfig(
     retarget: Literal["rotation", "position", "hybrid"] = "hybrid",
     license: str | None = None,
     notice: str | None = None,
+    hide_tendons: bool | None = None,
 )
 ```
 
@@ -972,13 +975,14 @@ Everything one skin needs. Frames: `offset` and `hips_offset` are MuJoCo's (x fo
 | `scale` | `.glb` only: metres per unit of the file. |
 | `facing` | `.glb` only: the axis the model faces (glTF's convention is `+z`). |
 | `springs` | `.glb` only: chains that swing as a VRM's spring bones do. See [`SpringChain`](#springchain). |
-| `material` | `.glb` only: draw its PBR materials as MToon, balanced against the scene's lights as a VRM's are. See [`ToonShading`](#toonshading). |
+| `material` | `.glb` only: draw its PBR materials as MToon, balanced against the scene's lights as a VRM's are ([`ToonShading`](#toonshading)), or every mesh in one colour ([`SolidShading`](#solidshading)). |
 | `rest_pose` | The robot's pose while the character holds its own rest pose: a keyframe's name, or joint to value (radians, metres) over the zero pose. Every VRM rests in a T-pose, so for a humanoid robot this holds its arms out straight (`examples/demo/main.py` has the G1's). `None`: the zero pose. |
 | `rest_offsets` | Bone to a turn, in degrees about the character's x, then y, then z axis, on top of `rest_pose`, for what the robot's joints cannot pose. |
 | `height_ratio` | Scale from the robot root's height to the character's root bone height, both above the ground under the robot (the first group-0 geom below it that is not the robot's). `None`: the root bone's height above the character's lowest point at rest, over the robot root's above its soles at `rest_pose`. |
 | `offset` | Added to the character's position, in metres: it moves where the robot moves, this far aside. `(0, 1, 0)` stands it 1 m to the robot's left. |
 | `hips_offset` | Where the root bone sits on its body, in that body's frame, metres. `None` centres the character's limbs over the robot's across the floor, as a fox's pelvis sits behind a Go1's mid-trunk origin. |
 | `hide_robot` | Stop drawing the robot, so the character is drawn in its place. A hidden robot is still simulated, collides and can be grabbed, and Debug Viz's **Xray** switch draws it through the skin. |
+| `hide_tendons` | Stop drawing the model's tendons while the skin is shown. `None`: as `hide_robot`, so a character in the robot's place hides its tendons too. |
 | `brightness` | Scales the toon (MToon) colours, which the viewer first divides by the scene's summed light when that exceeds 1: a toon shader takes every light it faces in full, so MuJoCo's several lights would clip it to white. |
 | `mujoco_springs` | Simulate the spring bones as MuJoCo bodies, in a model the robot never touches, every 1/240 s. `False`, the default, leaves them to three-vrm, which costs less per frame. |
 | `retarget` | `"hybrid"` turns each bone the way its body has turned since `rest_pose`, keeping the character's proportions, then bends each arm and leg (two-bone IK) so its hand or foot lands on the robot's, the whole character lowered as far as the feet it stands on need. `"rotation"` only turns the bones. `"position"` fixes every bone to its body, for a model made to the robot's proportions; on another the mesh stretches, and `add_skin` warns. |
@@ -1026,7 +1030,76 @@ class mjswan.ToonShading(shade: float = 0.6, toony: float = 0.5, shift: float = 
 
 A `.glb`'s PBR materials drawn as MToon: `shade` is the shaded side's share of the lit colour, `toony` how sharply the two meet (0 soft, 1 hard), `shift` where they meet.
 
+### SolidShading
+
+```python
+@dataclass(frozen=True)
+class mjswan.SolidShading(
+    color: tuple[float, float, float],
+    opacity: float = 1.0,
+    smooth: bool = True,
+    roughness: float = 1.0,
+    clearcoat: float = 0.0,
+    clearcoat_roughness: float = 0.0,
+)
+```
+
+Every mesh in one colour, not metallic. `color` is drawn as stored, as MuJoCo's `rgba` is, not decoded from linear as a glTF's colours are. `smooth` gives a mesh with no normals smooth ones, where three.js would draw it faceted. `roughness` 1 is matte, lower glossier; `clearcoat` lays a glossy coat over the colour, as three.js's `MeshPhysicalMaterial` does, and `clearcoat_roughness` is the coat's own. A modelled skin in one colour is drawn as one mesh, a draw call instead of one per mesh.
+
 The demo's Showcase (`examples/demo/main.py`) has two skins scenes, VRM avatars on the G1 and `.glb` animals on the Go1, their files in `skins/` of [`ttktjmt/mjswan`](https://huggingface.co/ttktjmt/mjswan) on the Hugging Face Hub, each with its license. `mjswan skin map` drafts a config for a new file; see the [CLI](../getting-started/cli.md).
+
+## ModelledSkinConfig
+
+```python
+@dataclass(frozen=True)
+class mjswan.ModelledSkinConfig(
+    source: str,
+    bones: Mapping[str, str] | MatchByPosition = MatchByPosition(),
+    rest_pose: str | Mapping[str, float | Sequence[float]] | None = None,
+    scale: float = 1.0,
+    hide_robot: bool = False,
+    hide_tendons: bool | None = None,
+    material: ToonShading | SolidShading | None = None,
+    license: str | None = None,
+    notice: str | None = None,
+)
+```
+
+A `.glb` modelled on the robot itself: made over it at its rest pose, in its world frame (glTF's y up standing for MuJoCo's z up), as MyoSuite's muscle atlas is over its full body. Nothing is fitted or measured. Each skin joint is fixed to the body it rests on, at the pose its inverse bind matrix gives, so with the robot at `rest_pose` every vertex is drawn where the file has it, and after that moves as the bodies it is weighted to do. A VRM is refused: a character goes in [`SkinConfig`](#skinconfig).
+
+| Field | Description |
+|---|---|
+| `source` | Local path or http(s) URL of the `.glb`, bundled byte for byte. |
+| `bones` | Joint (a node name) to robot body, a body name with or without its entity prefix; or [`MatchByPosition`](#matchbyposition), the default, which finds the body each joint rests on. A mesh moved by a joint with no body is not drawn. |
+| `rest_pose` | The robot's pose the file was modelled at: a keyframe's name, or joint to value (radians, metres) over the zero pose, a free joint's being its position and quaternion, for a scene that stands the robot turned. `None`: the zero pose. |
+| `scale` | Metres per unit of the file. |
+| `hide_robot` | Stop drawing the robot the joints follow. The default draws both, the file over the robot. |
+| `hide_tendons` | Stop drawing the model's tendons while the skin is shown, as for meshes that draw the muscles themselves. `None`: as `hide_robot`. |
+| `material` | Draw its PBR materials as MToon ([`ToonShading`](#toonshading)), or every mesh in one colour ([`SolidShading`](#solidshading)): for a file with no materials or normals, which three.js draws metallic and faceted. |
+| `license` | A path to its license text, or a generatable SPDX id (`"CC-BY-4.0"`), written as `LICENSE.skin-<id>`. |
+| `notice` | Its attribution, a path or the text itself, written as `NOTICE.skin-<id>`. |
+
+```python
+scene.add_skin(
+    "Muscles",
+    mjswan.ModelledSkinConfig(
+        "muscles.glb",
+        hide_tendons=True,
+        material=mjswan.SolidShading(color=(0.68, 0.37, 0.35)),
+        license="CC-BY-4.0",
+        notice="Muscles by ...",
+    ),
+)
+```
+
+### MatchByPosition
+
+```python
+@dataclass(frozen=True)
+class mjswan.MatchByPosition(tolerance: float = 0.005, align: bool = True)
+```
+
+Each skin joint on the body whose origin, or one of whose geoms' centres, lies nearest it with the robot at `rest_pose`, within `tolerance` metres. Names play no part, so a model rebuilt with its geoms renumbered matches alike. With `align`, a file the scene's robot stands off by a translation is moved onto it first, by the shift most joints agree on. Half or fewer of the joints on the robot is an error: the file is modelled on another robot, or at another pose.
 
 ---
 

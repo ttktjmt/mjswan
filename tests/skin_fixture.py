@@ -285,3 +285,65 @@ QUADRUPED_XML = f"""
   <keyframe><key name="stand" qpos="0 0 0.42 1 0 0 0 {"0 " * 12}"/></keyframe>
 </mujoco>
 """
+
+
+#: A modelled skin's joints, named as MyoSuite's atlas names them (ids that are not the
+#: model's), each resting on a body of :func:`robot_xml`'s robot: on its origin, or on
+#: the centre of its first geom.
+MODELLED_JOINTS: dict[str, tuple[str, str]] = {
+    "pelvis_id1_geom": ("pelvis", "origin"),
+    "torso_id4_geom": ("torso", "origin"),
+    "humerus_l_id7_geom": ("l_upper", "geom"),
+    "radius_l_id9_geom": ("l_fore", "geom"),
+    "humerus_r_id12_geom": ("r_upper", "geom"),
+    "radius_r_id14_geom": ("r_fore", "geom"),
+    "foot_l_id20_geom": ("l_foot", "geom"),
+    "foot_r_id24_geom": ("r_foot", "geom"),
+}
+
+
+def modelled_gltf(
+    model: Any,
+    *,
+    key: str | None = None,
+    extra: dict[str, tuple[float, float, float]] | None = None,
+    bare: bool = False,
+) -> dict[str, Any]:
+    """:data:`MODELLED_JOINTS` where *model*'s robot rests at keyframe *key* (else its zero
+    pose) as a glTF's skin joints, y up, under one rig node, with *extra* joints at the
+    given MuJoCo positions. Its one mesh has a material and normals unless *bare*."""
+    import mujoco
+
+    data = mujoco.MjData(model)
+    if key is not None:
+        mujoco.mj_resetDataKeyframe(model, data, model.key(key).id)
+    mujoco.mj_kinematics(model, data)
+
+    def rests_at(body: str, on: str) -> tuple[float, float, float]:
+        b = model.body(f"robot/{body}").id
+        if on == "origin":
+            x, y, z = data.xpos[b]
+        else:
+            x, y, z = data.geom_xpos[list(model.geom_bodyid).index(b)]
+        return float(x), float(y), float(z)
+
+    points = {name: rests_at(*spot) for name, spot in MODELLED_JOINTS.items()}
+    points.update(extra or {})
+    primitive: dict[str, Any] = {"attributes": {"POSITION": 0}}
+    if not bare:
+        primitive = {"attributes": {"POSITION": 0, "NORMAL": 1}, "material": 0}
+    return {
+        "asset": {"version": "2.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [
+            {"name": "Rig", "children": list(range(1, len(points) + 1))},
+            *(
+                {"name": n, "translation": [x, z, -y]}
+                for n, (x, y, z) in points.items()
+            ),
+        ],
+        "skins": [{"joints": list(range(1, len(points) + 1))}],
+        "meshes": [{"primitives": [primitive]}],
+        "materials": [{}],
+    }

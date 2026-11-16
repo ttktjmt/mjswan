@@ -59,6 +59,10 @@ class SkinFile:
     """Its skeleton: the nodes its skins deform the meshes by."""
     json_bytes: int = 0
     """The length of its JSON chunk, which mjswan Cloud bounds."""
+    without_material: int = 0
+    """How many of its mesh primitives have no material: three.js draws them metallic."""
+    without_normals: int = 0
+    """How many have no normals: three.js draws them faceted."""
 
     def node(self, name: str) -> int:
         """The one node called *name*; the error names the closest ones."""
@@ -98,6 +102,12 @@ class SkinFile:
         c, s = math.cos(turn), math.sin(turn)
         x, y, z = (self.rest * scale).T
         return np.stack([x * c - z * s, y, x * s + z * c], axis=1)
+
+    def mujoco_positions(self, scale: float = 1.0) -> np.ndarray:
+        """Every node at rest in MuJoCo's frame (z up) for a file modelled in it, in
+        metres: glTF's y up turned to MuJoCo's z up, the axes kept otherwise."""
+        x, y, z = (self.rest * scale).T
+        return np.stack([x, -z, y], axis=1)
 
 
 def read_skin_file(path: Path) -> SkinFile:
@@ -171,6 +181,9 @@ def _skin_file(path: Path, gltf: dict[str, Any], json_bytes: int) -> SkinFile:
     joints = frozenset(
         j for skin in gltf.get("skins", []) for j in skin.get("joints", [])
     )
+    primitives = [p for m in gltf.get("meshes", []) for p in m.get("primitives", [])]
+    without_material = sum("material" not in p for p in primitives)
+    without_normals = sum("NORMAL" not in p.get("attributes", {}) for p in primitives)
 
     extensions = gltf.get("extensions", {})
     version: Literal["0", "1"]
@@ -196,6 +209,8 @@ def _skin_file(path: Path, gltf: dict[str, Any], json_bytes: int) -> SkinFile:
             rest,
             joints=joints,
             json_bytes=json_bytes,
+            without_material=without_material,
+            without_normals=without_normals,
         )
     absent = sorted(bone for bone, node in bones.items() if not 0 <= node < len(nodes))
     if absent:
@@ -214,6 +229,8 @@ def _skin_file(path: Path, gltf: dict[str, Any], json_bytes: int) -> SkinFile:
         meta if isinstance(meta, dict) else {},
         joints,
         json_bytes=json_bytes,
+        without_material=without_material,
+        without_normals=without_normals,
     )
 
 

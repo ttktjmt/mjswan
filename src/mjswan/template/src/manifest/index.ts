@@ -275,7 +275,9 @@ export function sanitizeName(name: string): string {
  * `root_velocity_b` write; 6 an action term's traced `process` and `reset` graphs, its
  * `interpolate`, `hold_s` and `delay`, the `joint_position_relative` type, and the
  * `action_term` input slot (ADR 0009); 7 a scene's `skins`; 8 a motion's `frame_fields`;
- * 9 a camera sensor's descriptor and an image-shaped policy input.
+ * 9 a camera sensor's descriptor, an image-shaped policy input, and a skin modelled on
+ * the robot (`fit: 'modelled'`), with `align`, `rest_qpos`, a solid material and
+ * `hide_tendons`.
  */
 export const MAX_DOCUMENT_FORMAT = 9;
 

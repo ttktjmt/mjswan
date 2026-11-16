@@ -9,6 +9,7 @@ from __future__ import annotations
 import io
 import json
 import math
+import warnings
 from dataclasses import replace
 from pathlib import Path
 
@@ -17,7 +18,13 @@ import numpy as np
 import pytest
 import skin_fixture as fx
 
-from mjswan import Builder, SkinConfig
+from mjswan import (
+    Builder,
+    MatchByPosition,
+    ModelledSkinConfig,
+    SkinConfig,
+    SolidShading,
+)
 from mjswan.document.skin import read_skin_file
 from mjswan.license.vrm import describe, vrm_license
 from mjswan.rig.humanoid import VRM_PARENTS, resolve_humanoid
@@ -201,7 +208,9 @@ class TestPose:
             pose_at_rest(robot, "stand")
         with pytest.raises(ValueError, match="'elbow', which is not a joint"):
             pose_at_rest(robot, {"elbow": 0.5})
-        with pytest.raises(ValueError, match="'root' is neither"):
+        turned = (0.1, 0.2, 1.0, 0.0, 0.0, 0.0, 1.0)
+        assert pose_at_rest(robot, {"root": turned}).qpos[:7] == pytest.approx(turned)
+        with pytest.raises(ValueError, match="'root' 1 values; its qpos has 7"):
             pose_at_rest(robot, {"root": 0.5})
 
     def test_standing_height_is_over_the_soles_not_the_floor(self, robot):
@@ -885,3 +894,256 @@ class TestBuild:
         out = tmp_path / "out"
         build_manifest(builder, out)
         assert "skins" not in self._scene(out)
+
+
+class TestModelled:
+    """A .glb modelled on the robot: each joint fixed to the body it rests on."""
+
+    def _glb(self, tmp_path, model, name="atlas.glb", **kw) -> Path:
+        return fx.write_glb(tmp_path / name, fx.modelled_gltf(model, **kw))
+
+    def test_each_joint_on_the_body_it_rests_on_whatever_its_name(
+        self, tmp_path, robot
+    ):
+        renamed = fx.modelled_gltf(robot)
+        for node in renamed["nodes"][1:]:
+            node["name"] = node["name"].replace("_id", "_id9")
+        skins = [
+            resolve_skin(ModelledSkinConfig(str(path)), robot)
+            for path in (
+                self._glb(tmp_path, robot),
+                fx.write_glb(tmp_path / "renamed.glb", renamed),
+            )
+        ]
+        expected = [f"robot/{body}" for body, _ in fx.MODELLED_JOINTS.values()]
+        for skin in skins:
+            assert list(skin.bones.values()) == expected
+            assert skin.align == (0.0, 0.0, 0.0) and skin.rest_qpos is None
+        assert list(skins[0].bones) == list(fx.MODELLED_JOINTS)
+        assert skins[0].nodes == {n: i + 1 for i, n in enumerate(fx.MODELLED_JOINTS)}
+
+    def test_a_robot_standing_elsewhere_is_found_by_the_shift(self, tmp_path, robot):
+        moved = mujoco.MjModel.from_xml_string(
+            fx.robot_xml().replace('pos="0 0 0.9"', 'pos="0.3 -0.2 0.95"', 1)
+        )
+        file = self._glb(tmp_path, robot)
+        skin = resolve_skin(ModelledSkinConfig(str(file)), moved)
+        assert len(skin.bones) == len(fx.MODELLED_JOINTS)
+        assert skin.align == pytest.approx((0.3, -0.2, 0.05), abs=1e-6)
+        with pytest.raises(ValueError, match="none of its 8 joints"):
+            resolve_skin(
+                ModelledSkinConfig(str(file), bones=MatchByPosition(align=False)), moved
+            )
+
+    def test_a_skin_for_another_robot_is_refused(self, tmp_path, robot):
+        file = self._glb(tmp_path, robot)
+        with pytest.raises(ValueError, match="too few.*SkinConfig"):
+            resolve_skin(ModelledSkinConfig(str(file), scale=2.0), robot)
+
+    def test_joints_on_no_body_are_named_and_their_meshes_go_undrawn(
+        self, tmp_path, robot
+    ):
+        stray = {"stray_a": (1.0, 1.0, 1.0), "stray_b": (2.0, 2.0, 2.0)}
+        file = self._glb(tmp_path, robot, extra=stray)
+        with pytest.warns(UserWarning, match=r"2 of its 10 joints .*stray_a, stray_b"):
+            skin = resolve_skin(ModelledSkinConfig(str(file)), robot)
+        assert "stray_a" not in skin.bones and len(skin.bones) == 8
+
+    def test_joints_on_two_trees_warn(self, tmp_path):
+        xml = fx.robot_xml().replace(
+            "</worldbody>",
+            '<body name="box" pos="1 1 0.1"><geom type="box" size="0.1 0.1 0.1"/>'
+            "</body></worldbody>",
+        )
+        model = mujoco.MjModel.from_xml_string(xml)
+        file = self._glb(tmp_path, model, extra={"lid": (1.0, 1.0, 0.1)})
+        with pytest.warns(
+            UserWarning, match=r"2 trees of bodies \(robot/pelvis, box\)"
+        ):
+            skin = resolve_skin(ModelledSkinConfig(str(file)), model)
+        assert skin.bones["lid"] == "box"
+
+    def test_a_keyframe_rest_pose_is_matched_at_and_written(self, tmp_path, robot):
+        file = self._glb(tmp_path, robot, key="lifted")
+        skin = resolve_skin(ModelledSkinConfig(str(file), rest_pose="lifted"), robot)
+        assert skin.align == (0.0, 0.0, 0.0)
+        assert skin.rest_qpos == pytest.approx(list(robot.key("lifted").qpos))
+
+    def test_a_free_joint_rest_pose_stands_the_robot_turned(self, tmp_path, robot):
+        # Modelled on the robot bowed, which no shift reaches; its root's qpos does.
+        file = self._glb(tmp_path, robot, key="bow")
+        root = robot.key("bow").qpos[:7].tolist()
+        skin = resolve_skin(
+            ModelledSkinConfig(str(file), rest_pose={"root": root}), robot
+        )
+        assert len(skin.bones) == len(fx.MODELLED_JOINTS)
+        assert skin.align == (0.0, 0.0, 0.0)
+        assert skin.rest_qpos == pytest.approx(list(robot.key("bow").qpos))
+
+    def test_a_named_map_takes_bodies_without_their_prefix(self, tmp_path, robot):
+        file = self._glb(tmp_path, robot)
+        bones = {"humerus_l_id7_geom": "l_upper", "radius_l_id9_geom": "l_fore"}
+        with pytest.warns(UserWarning, match="6 of its 8 joints follow no body"):
+            skin = resolve_skin(ModelledSkinConfig(str(file), bones=bones), robot)
+        assert skin.bones == {
+            "humerus_l_id7_geom": "robot/l_upper",
+            "radius_l_id9_geom": "robot/l_fore",
+        }
+        with pytest.raises(ValueError, match="no body named"):
+            resolve_skin(
+                ModelledSkinConfig(str(file), bones={"pelvis_id1_geom": "hips"}), robot
+            )
+        with pytest.raises(ValueError, match="is not a joint"):
+            resolve_skin(ModelledSkinConfig(str(file), bones={"Rig": "pelvis"}), robot)
+
+    def test_a_vrm_or_a_file_without_a_skin_is_refused(self, tmp_path, robot, vrm):
+        with pytest.raises(ValueError, match="is a VRM.*SkinConfig"):
+            resolve_skin(ModelledSkinConfig(str(vrm)), robot)
+        rigid = fx.write_glb(tmp_path / "rigid.glb", fx.skeleton_gltf())
+        with pytest.raises(ValueError, match="has no skin"):
+            resolve_skin(ModelledSkinConfig(str(rigid)), robot)
+
+    def test_meshes_without_materials_or_normals_ask_for_solid_shading(
+        self, tmp_path, robot
+    ):
+        file = self._glb(tmp_path, robot, bare=True)
+        with pytest.warns(UserWarning, match="1 of its meshes have no material.*Solid"):
+            resolve_skin(ModelledSkinConfig(str(file)), robot)
+        solid = SolidShading(color=(0.42, 0.11, 0.1))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            resolve_skin(ModelledSkinConfig(str(file), material=solid), robot)
+
+    @pytest.mark.parametrize(
+        ("make", "match"),
+        [
+            (lambda: ModelledSkinConfig("a.glb", bones={}), "empty"),
+            (lambda: ModelledSkinConfig("a.glb", scale=0.0), "scale"),
+            (lambda: MatchByPosition(tolerance=0), "tolerance"),
+            (lambda: SolidShading(color=(1.0, 0.5)), "three values"),  # type: ignore[arg-type]
+            (lambda: SolidShading(color=(1.0, 0.5, 2.0)), "three values"),
+            (lambda: SolidShading(color=(1, 1, 1), opacity=0), "opacity"),
+            (lambda: SolidShading(color=(1, 1, 1), roughness=1.5), "roughness"),
+            (lambda: SolidShading(color=(1, 1, 1), clearcoat=-0.1), "clearcoat"),
+        ],
+    )
+    def test_rejects(self, make, match):
+        with pytest.raises(ValueError, match=match):
+            make()
+
+    def test_an_entry_says_it_is_modelled_and_leaves_out_defaults(
+        self, tmp_path, robot
+    ):
+        from mjswan.build.skin import skin_entry
+
+        file = self._glb(tmp_path, robot)
+        entry = skin_entry(
+            resolve_skin(ModelledSkinConfig(str(file), id="m", name="M"), robot)
+        )
+        assert entry == {
+            "id": "m",
+            "name": "M",
+            "format": "gltf",
+            "path": "assets/m.glb",
+            "fit": "modelled",
+            "bones": {
+                n: f"robot/{body}" for n, (body, _) in fx.MODELLED_JOINTS.items()
+            },
+            "nodes": {n: i + 1 for i, n in enumerate(fx.MODELLED_JOINTS)},
+            "hide_robot": False,
+        }
+        # Modelled at the zero pose, its robot resting 0.1 m higher.
+        styled = ModelledSkinConfig(
+            str(file),
+            rest_pose="lifted",
+            hide_tendons=True,
+            material=SolidShading(
+                color=(0.42, 0.11, 0.1), opacity=0.5, roughness=0.3, clearcoat=0.4
+            ),
+            id="m",
+            name="M",
+        )
+        entry = skin_entry(resolve_skin(styled, robot))
+        assert entry["align"] == pytest.approx([0.0, 0.0, 0.1], abs=1e-6)
+        assert entry["rest_qpos"] == pytest.approx(list(robot.key("lifted").qpos))
+        assert entry["material"] == {
+            "solid": {
+                "color": (0.42, 0.11, 0.1),
+                "opacity": 0.5,
+                "smooth": True,
+                "roughness": 0.3,
+                "clearcoat": 0.4,
+                "clearcoat_roughness": 0.0,
+            }
+        }
+        assert entry["hide_robot"] is False and entry["hide_tendons"] is True
+
+    def test_hide_tendons_is_written_only_against_hide_robot(self, robot, glb):
+        from mjswan.build.skin import skin_entry
+
+        def keys(**kw):
+            config = SkinConfig(
+                bones={"hips": "pelvis"},
+                source=str(glb),
+                humanoid={"hips": "hips"},
+                **kw,
+            )
+            entry = skin_entry(resolve_skin(config, robot))
+            return {k: entry[k] for k in ("hide_robot", "hide_tendons") if k in entry}
+
+        assert keys() == {}
+        assert keys(hide_tendons=True) == {}
+        assert keys(hide_tendons=False) == {"hide_tendons": False}
+        assert keys(hide_robot=False) == {"hide_robot": False}
+        assert keys(hide_robot=False, hide_tendons=True) == {
+            "hide_robot": False,
+            "hide_tendons": True,
+        }
+        entry = skin_entry(
+            resolve_skin(
+                SkinConfig(
+                    bones={"hips": "pelvis"},
+                    source=str(glb),
+                    humanoid={"hips": "hips"},
+                    material=SolidShading(color=(1.0, 1.0, 1.0)),
+                ),
+                robot,
+            )
+        )
+        assert entry["material"] == {
+            "solid": {
+                "color": (1.0, 1.0, 1.0),
+                "opacity": 1.0,
+                "smooth": True,
+                "roughness": 1.0,
+                "clearcoat": 0.0,
+                "clearcoat_roughness": 0.0,
+            }
+        }
+
+    def test_a_build_writes_format_9_and_bundles_the_file_with_its_credits(
+        self, tmp_path, robot, build_manifest
+    ):
+        file = self._glb(tmp_path, robot)
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=robot)
+        handle = scene.add_skin(
+            "Muscles",
+            ModelledSkinConfig(
+                str(file), license="CC-BY-4.0", notice="Muscles by someone."
+            ),
+        )
+        assert handle.id == "muscles" and handle.format == "gltf"
+        out = tmp_path / "out"
+        manifest = build_manifest(builder, out)
+        assert manifest["format"] >= 9
+        [entry] = manifest["projects"][0]["scenes"][0]["skins"]
+        assert entry["fit"] == "modelled" and entry["path"] == "assets/muscles.glb"
+        assert (out / "p" / "s" / "assets" / "muscles.glb").read_bytes() == (
+            file.read_bytes()
+        )
+        licenses = out / "p" / "licenses"
+        assert "Attribution 4.0" in (licenses / "LICENSE.skin-muscles").read_text()
+        assert (licenses / "NOTICE.skin-muscles").read_text().strip() == (
+            "Muscles by someone."
+        )
