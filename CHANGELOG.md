@@ -14,7 +14,7 @@ shortcuts.
 
 ### Added
 
-- **Skins modelled on the robot: `ModelledSkinConfig`** (**document format 10**). A `.glb`
+- **Skins modelled on the robot: `ModelledSkinConfig`** (**document format 9**). A `.glb`
   made over the robot at its rest pose, in its world frame, as MyoSuite's muscle atlas
   (its renderer's `--muscle-mesh atlas` and `atlas-hd`) is over its full body, is drawn as
   it is, with no fit and nothing measured. `MatchByPosition`, the default `bones`, matches
@@ -461,11 +461,6 @@ shortcuts.
   dialog it opens.
 
 ### Changed
-
-- **Builds are document format 10.** Every build says so, with a modelled skin or
-  without, so an engine that reads up to format 9 (an older npm `mjswan`, a host's pinned
-  engine) refuses it and asks to be updated, rather than drawing a modelled skin off the
-  robot as a character.
 
 - **A policy slower than the screen no longer moves the robot in jumps.** The engine ran
   a control step's physics at once and drew only its end, so a 10 Hz policy (the SO-101

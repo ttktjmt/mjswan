@@ -1121,7 +1121,7 @@ class TestModelled:
             }
         }
 
-    def test_a_build_writes_format_10_and_bundles_the_file_with_its_credits(
+    def test_a_build_writes_format_9_and_bundles_the_file_with_its_credits(
         self, tmp_path, robot, build_manifest
     ):
         file = self._glb(tmp_path, robot)
@@ -1136,7 +1136,7 @@ class TestModelled:
         assert handle.id == "muscles" and handle.format == "gltf"
         out = tmp_path / "out"
         manifest = build_manifest(builder, out)
-        assert manifest["format"] >= 10
+        assert manifest["format"] >= 9
         [entry] = manifest["projects"][0]["scenes"][0]["skins"]
         assert entry["fit"] == "modelled" and entry["path"] == "assets/muscles.glb"
         assert (out / "p" / "s" / "assets" / "muscles.glb").read_bytes() == (

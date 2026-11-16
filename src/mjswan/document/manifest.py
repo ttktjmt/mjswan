@@ -43,13 +43,11 @@ MANIFEST_NAME = "manifest.json"
 #:
 #: 9: a graph's ``sensors`` may describe a camera (``kind: "camera"``), whose ``rgb`` the
 #: engine renders, and an observation group may feed a policy input of more than two
-#: dimensions (an image). An older engine would read the camera as a raycast sensor.
-#:
-#: 10: a skin may be modelled on the robot (``fit: "modelled"``), each of its joints fixed
-#: to the body it rests on, and may carry ``align``, ``rest_qpos``, a solid ``material``
-#: and ``hide_tendons``. An older engine would retarget it as a character and draw it off
-#: the robot.
-DOCUMENT_FORMAT = 10
+#: dimensions (an image). A skin may be modelled on the robot (``fit: "modelled"``), each
+#: of its joints fixed to the body it rests on, and may carry ``align``, ``rest_qpos``, a
+#: solid ``material`` and ``hide_tendons``. An older engine would read the camera as a
+#: raycast sensor, and retarget the skin as a character, drawing it off the robot.
+DOCUMENT_FORMAT = 9
 
 #: Input slots the runtime fills itself rather than from an observation group: the
 #: recurrent carry (``is_init``, ``adapt_hx``) and the step counter (``time_step``).
