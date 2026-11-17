@@ -946,7 +946,7 @@ Camera and graphics configuration applied to a scene via `SceneHandle.set_viewer
 | `tone_mapping` | Filament only. Every operator three.js has (`"none"`, `"linear"`, `"reinhard"`, `"cineon"`, `"aces_filmic"`, `"agx"`, `"neutral"`) and MuJoCo's names with their meaning: `"pbr_neutral"` is `"neutral"`, `"aces_legacy"` is `"aces_filmic"`, `"aces"` is `"aces_filmic"` at 0.6 of the exposure, `"filmic"` Narkowicz's curve. |
 | `exposure` | Filament only, in stops, before tone mapping. |
 | `output_color_space` | Filament only: `"srgb"` encodes the output, `"linear"` leaves it. |
-| `base_color_type` | Filament only: `"srgb"` decodes an `rgba` (and a `SolidShading` colour), `"linear"` takes it as written. |
+| `base_color_type` | Filament only: `"srgb"` decodes an `rgba` (and a `SolidShading` colour, and the viewer's own: tendons, debug drawings, frustums), `"linear"` takes it as written. |
 
 The four Filament settings raise `ValueError` with `renderer="classic"`, which would ignore them. Left unset, the build reads them from the model's `<custom>` flags, under MuJoCo 4.0's names (`filament.cg.tone_mapping`, `filament.cg.exposure`, `filament.cg.output_color_space`, `filament.material.base_color_type`), then takes MuJoCo's defaults (`"pbr_neutral"`, 0, `"srgb"`, `"srgb"`); a flag value MuJoCo does not know warns and takes the default. Every scene gets them, so the viewer can switch a classic one to Filament. Camera sensors are drawn as mujoco_warp draws them, whatever the settings: `rgba` as written, textures as stored, no reflection or haze, shadows by the sensor's `use_shadows`.
 

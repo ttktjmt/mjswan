@@ -29,7 +29,8 @@ shortcuts.
   not encoded; a cube or skybox as stored), infinite planes lit, shadowed and following
   the viewer, haze where the first infinite plane meets the skybox, and a reflection on
   the first opaque plane or box top with a `reflectance`. Filament decodes `rgba` and sRGB
-  textures, the sky included, encodes the output, and tone maps and exposes it; skins keep
+  textures, the sky included, encodes the output, and tone maps and exposes it; the
+  viewer's own colours (tendons, debug drawings, frustums, handles) follow `rgba`; skins keep
   glTF's and VRM's own colour management there, and a `SolidShading` colour follows
   `base_color_type`. Camera sensors are drawn as mujoco_warp draws them, whatever the
   settings. `engine.graphics.set()` / `reset()` and the state's `graphics` let a host
@@ -491,8 +492,9 @@ shortcuts.
   such as menagerie's takes the robot's shadow and, with a `reflectance`, mirrors it; a
   skybox hazes the horizon; a finite plane places its texture as MuJoCo does (`texrepeat`
   over the plane, per metre with `texuniform`). A camera sensor's image changes with it,
-  as mujoco_warp draws one: the floor lit, and shadowed with `use_shadows`. A document is
-  drawn by the engine that opens it, so published scenes change too.
+  as mujoco_warp draws one: the floor lit, and shadowed with `use_shadows`. A camera
+  frustum and the pull arrow are drawn in the colours they are given, lighter than before.
+  A document is drawn by the engine that opens it, so published scenes change too.
 
 - **A policy slower than the screen no longer moves the robot in jumps.** The engine ran
   a control step's physics at once and drew only its end, so a 10 Hz policy (the SO-101

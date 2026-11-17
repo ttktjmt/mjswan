@@ -4,12 +4,14 @@
  * WASM.
  */
 import * as THREE from 'three';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_GRAPHICS,
   SceneGraphics,
   applyToRenderer,
+  colorAsRgba,
   mergeGraphics,
   toneMappingNamed,
   type GraphicsSettings,
@@ -52,6 +54,27 @@ describe('graphics settings', () => {
     applyToRenderer(renderer, { ...FILAMENT, toneMapping: 'aces', outputColorSpace: 'linear' });
     expect([renderer.toneMappingExposure, renderer.outputColorSpace]).toEqual([0.6, THREE.LinearSRGBColorSpace]);
     expect(THREE.ShaderChunk.tonemapping_pars_fragment).toContain('2.51 * color + 0.03');
+  });
+
+  it("reads the viewer's own colours as it reads a model's rgba", () => {
+    const renderer = {} as THREE.WebGLRenderer;
+    const shaders = [THREE.ShaderLib.basic, THREE.ShaderLib.phong, THREE.ShaderLib.standard, new LineMaterial()];
+    const compiled = shaders.map(({ fragmentShader }) => {
+      const shader = { uniforms: {}, fragmentShader } as THREE.WebGLProgramParametersWithUniforms;
+      colorAsRgba(new THREE.MeshBasicMaterial()).onBeforeCompile(shader, renderer);
+      return shader;
+    });
+    for (const { fragmentShader } of compiled) {
+      expect(fragmentShader).toContain('uniform bool mjDecodeRgba;');
+      expect(fragmentShader).toContain('if ( mjDecodeRgba ) diffuseColor = sRGBTransferEOTF( diffuseColor );');
+    }
+    const decodes = () => compiled.map((shader) => shader.uniforms.mjDecodeRgba.value);
+    applyToRenderer(renderer, FILAMENT);
+    expect(decodes()).toEqual([true, true, true, true]);
+    applyToRenderer(renderer, { ...FILAMENT, baseColorType: 'linear' });
+    expect(decodes()).toEqual([false, false, false, false]);
+    applyToRenderer(renderer, { ...DEFAULT_GRAPHICS, baseColorType: 'srgb' });
+    expect(decodes()).toEqual([false, false, false, false]);
   });
 });
 

@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 
-type Hook = (shader: THREE.WebGLProgramParametersWithUniforms) => void;
+type Hook = (shader: THREE.WebGLProgramParametersWithUniforms, renderer: THREE.WebGLRenderer) => void;
 
 const hooks = new WeakMap<THREE.Material, Array<{ key: string; hook: Hook }>>();
 
@@ -14,8 +14,8 @@ export function addShaderHook(material: THREE.Material, key: string, hook: Hook)
   if (!list) {
     const own: Array<{ key: string; hook: Hook }> = [];
     hooks.set(material, own);
-    material.onBeforeCompile = (shader) => {
-      for (const each of own) each.hook(shader);
+    material.onBeforeCompile = (shader, renderer) => {
+      for (const each of own) each.hook(shader, renderer);
     };
     material.customProgramCacheKey = () => own.map((each) => each.key).join('|');
     list = own;

@@ -10,6 +10,7 @@ import { createHaze, placeHaze } from './haze';
 import { VIEWER_GEOM_GROUPS } from './layers';
 import { Mirror } from './mirror';
 import { modelZfar, recentrePlane } from './plane';
+import { addShaderHook } from './shaderHook';
 import { linearCube } from './textures';
 import {
   DEFAULT_GRAPHICS,
@@ -49,6 +50,32 @@ export function applyToRenderer(renderer: THREE.WebGLRenderer, settings: Graphic
   renderer.toneMappingExposure = 2 ** settings.exposure * (settings.toneMapping === 'aces' ? 0.6 : 1);
   renderer.outputColorSpace =
     filament && settings.outputColorSpace === 'srgb' ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
+  decodesRgba(renderer).value = decodesBaseColor(settings);
+}
+
+const rgbaDecoding = new WeakMap<THREE.WebGLRenderer, { value: boolean }>();
+
+function decodesRgba(renderer: THREE.WebGLRenderer): { value: boolean } {
+  let uniform = rgbaDecoding.get(renderer);
+  if (!uniform) rgbaDecoding.set(renderer, (uniform = { value: false }));
+  return uniform;
+}
+
+/**
+ * Have the renderer read `material`'s colour (its own, its vertices' or its instances') as
+ * it reads a model's `rgba`: for the viewer's own drawings, whose colours are fixed.
+ */
+export function colorAsRgba<T extends THREE.Material>(material: T): T {
+  addShaderHook(material, 'mjRgba', (shader, renderer) => {
+    shader.uniforms.mjDecodeRgba = decodesRgba(renderer);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform bool mjDecodeRgba;')
+      .replace(
+        '#include <color_fragment>',
+        '#include <color_fragment>\nif ( mjDecodeRgba ) diffuseColor = sRGBTransferEOTF( diffuseColor );',
+      );
+  });
+  return material;
 }
 
 /** Colour a material from the `rgba` it was made with (`userData.rgba`), decoded or as written. */
@@ -132,6 +159,7 @@ export class SceneGraphics {
     if (hazePlane && skybox) {
       const vis = mjModel.vis;
       const mesh = createHaze(vis.quality.numslices, vis.map.haze, vis.rgba.haze);
+      colorAsRgba(mesh.material as THREE.Material);
       root.add(mesh);
       // MuJoCo's skybox and haze stand at 0.7 of its far plane.
       this.haze = { mesh, plane: hazePlane, distance: 0.7 * modelZfar(mjModel) };

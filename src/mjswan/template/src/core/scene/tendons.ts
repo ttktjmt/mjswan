@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { MjData, MjModel } from 'mujoco';
+import { colorAsRgba } from './graphics';
 import { getPosition } from './scene';
 
 export interface TendonMeshes {
@@ -30,8 +31,7 @@ const rotation = new THREE.Quaternion();
 const matrix = new THREE.Matrix4();
 
 export function createTendonMeshes(mujocoRoot: THREE.Group, mjModel: MjModel): TendonMeshes {
-  const tendonMat = new THREE.MeshPhongMaterial();
-  tendonMat.color = new THREE.Color(0.8, 0.3, 0.3);
+  const tendonMat = colorAsRgba(new THREE.MeshPhongMaterial({ color: new THREE.Color(0.8, 0.3, 0.3) }));
 
   // A geom a tendon wraps puts two points on its path, so the paths hold up to 2 * nwrap.
   const capacity = 2 * mjModel.nwrap;

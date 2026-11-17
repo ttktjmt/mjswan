@@ -5,7 +5,9 @@
  */
 import * as THREE from 'three';
 
-const GIZMO_COLOR = 0xff6347;
+import { colorAsRgba } from '../scene/graphics';
+
+const GIZMO_COLOR = new THREE.Color().setHex(0xff6347, THREE.LinearSRGBColorSpace);
 
 function tag(object: THREE.Object3D): void {
   object.userData.interactionGizmo = true;
@@ -31,13 +33,15 @@ export class DragArrow {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
-    this.material = new THREE.MeshStandardMaterial({
-      color: GIZMO_COLOR,
-      transparent: true,
-      opacity: 0.5,
-      metalness: 0,
-      roughness: 0.2,
-    });
+    this.material = colorAsRgba(
+      new THREE.MeshStandardMaterial({
+        color: GIZMO_COLOR,
+        transparent: true,
+        opacity: 0.5,
+        metalness: 0,
+        roughness: 0.2,
+      }),
+    );
     // Unit shapes, sized by their scale every frame.
     this.shaft = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1), this.material);
     this.head = new THREE.Mesh(new THREE.ConeGeometry(1, 1), this.material);
@@ -98,13 +102,15 @@ export class PushRing {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
-    this.material = new THREE.MeshBasicMaterial({
-      color: GIZMO_COLOR,
-      transparent: true,
-      opacity: 0,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
+    this.material = colorAsRgba(
+      new THREE.MeshBasicMaterial({
+        color: GIZMO_COLOR,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
     this.mesh = new THREE.Mesh(new THREE.RingGeometry(0.75, 1, 32), this.material);
     this.mesh.visible = false;
     tag(this.mesh);

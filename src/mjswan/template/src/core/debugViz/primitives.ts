@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 
 import { mjcToThreeCoordinate } from '../scene/coordinate';
+import { colorAsRgba } from '../scene/graphics';
 
 export type Vec3 = ArrayLike<number>;
 export type Rgba = readonly [number, number, number, number];
@@ -21,11 +22,13 @@ export function viserMaterial(
   rgb: readonly number[] = [1, 1, 1],
   opacity = 1,
 ): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
-    color: new THREE.Color(rgb[0], rgb[1], rgb[2]),
-    transparent: true,
-    opacity,
-  });
+  return colorAsRgba(
+    new THREE.MeshStandardMaterial({
+      color: new THREE.Color(rgb[0], rgb[1], rgb[2]),
+      transparent: true,
+      opacity,
+    }),
+  );
 }
 
 /** trimesh's `cylinder(radius=1, height=1)`, base at the origin along +y. */

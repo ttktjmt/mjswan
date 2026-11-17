@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 
 import { mjcToThreeCoordinate } from './coordinate';
+import { colorAsRgba } from './graphics';
 import type { PrimitiveType } from './primitive';
 
 /** One primitive geom in MuJoCo's world axes and units: what a drag on a handle changes. */
@@ -213,13 +214,15 @@ export class PreviewHandles {
     // Its own material per mesh: one is lit at a time.
     const materials = shapes.map(
       () =>
-        new THREE.MeshBasicMaterial({
-          color: new THREE.Color().setRGB(r, g, b),
-          transparent: true,
-          opacity: REST_OPACITY,
-          depthTest: false,
-          depthWrite: false,
-        })
+        colorAsRgba(
+          new THREE.MeshBasicMaterial({
+            color: new THREE.Color().setRGB(r, g, b),
+            transparent: true,
+            opacity: REST_OPACITY,
+            depthTest: false,
+            depthWrite: false,
+          }),
+        )
     );
     shapes.forEach((shape, i) => {
       const mesh = new THREE.Mesh(shape, materials[i]);
