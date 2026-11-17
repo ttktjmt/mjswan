@@ -45,4 +45,15 @@ describe('SeeThrough', () => {
     seeThrough.restore();
     expect(mesh.material).toEqual([shared, shared]);
   });
+
+  it("hands a camera sensor's pass the robot as it is, then draws it see-through again", () => {
+    const { group, mesh, shared } = body();
+    const seeThrough = new SeeThrough();
+    seeThrough.apply([group]);
+    const through = mesh.material;
+    const seen = seeThrough.asOwn(() => ({ material: mesh.material, castShadow: mesh.castShadow, renderOrder: mesh.renderOrder }));
+    expect(seen).toEqual({ material: [shared, shared], castShadow: true, renderOrder: 0 });
+    expect(mesh.material).toBe(through);
+    expect(mesh.castShadow).toBe(false);
+  });
 });

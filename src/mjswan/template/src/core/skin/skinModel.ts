@@ -48,23 +48,30 @@ export async function loadSkinModel(data: ArrayBuffer, config: SkinConfig): Prom
     loader.register((parser) => new VRMLoaderPlugin(parser, { springBonePlugin: new BoundedSpringBones(parser) }));
   }
   const gltf = await loader.parseAsync(data, '');
-  asPainted(gltf.scene);
   return config.format === 'vrm' ? fromVrm(gltf) : fromGltf(gltf, config);
 }
 
 /**
- * mjswan draws to a linear target unencoded, as MuJoCo does, so a colour reaches the
- * screen as stored. glTF stores its colours linear and three.js decodes sRGB textures:
- * left so, a skin is drawn darker than it was painted.
+ * The switch between a skin drawn as painted and as its file says. The classic renderer
+ * draws to a linear target unencoded, as MuJoCo does, so a colour reaches the screen as
+ * stored; glTF stores its colours linear and three.js decodes sRGB textures, so left so a
+ * skin is drawn darker than it was painted: painted, its sRGB textures read raw and its
+ * colours encoded. Filament encodes the output, so it draws the file's own. A material
+ * coloured from an `rgba` (`SolidShading`) is the scene's graphics settings' to read.
  */
-export function asPainted(scene: THREE.Object3D): void {
+export function paintable(scene: THREE.Object3D): (painted: boolean) => void {
   const materials = new Set<THREE.Material>();
   const geometries = new Set<THREE.BufferGeometry>();
   scene.traverse((object) => {
     const { material, geometry } = object as THREE.Mesh;
-    for (const each of material ? [material].flat() : []) materials.add(each);
+    for (const each of material ? [material].flat() : []) {
+      if (!each.userData.rgba) materials.add(each);
+    }
     if (geometry) geometries.add(geometry);
   });
+  const textures = new Set<THREE.Texture>();
+  // Each colour, and what the file has it as.
+  const colours = new Map<THREE.Color, THREE.Color>();
   for (const material of materials) {
     // MToon keeps its colours and textures in uniforms, behind getters.
     const { uniforms } = material as THREE.ShaderMaterial;
@@ -72,25 +79,41 @@ export function asPainted(scene: THREE.Object3D): void {
     for (const value of values) {
       const texture = value as THREE.Texture | null;
       const colour = value as THREE.Color | null;
-      if (texture?.isTexture && texture.colorSpace === THREE.SRGBColorSpace) {
-        texture.colorSpace = THREE.NoColorSpace;
-        texture.needsUpdate = true;
-      } else if (colour?.isColor) {
-        colour.convertLinearToSRGB();
-      }
+      if (texture?.isTexture && texture.colorSpace === THREE.SRGBColorSpace) textures.add(texture);
+      else if (colour?.isColor) colours.set(colour, colour.clone());
     }
   }
   // Vertex colours are stored linear too.
-  const colour = new THREE.Color();
+  const vertexColours = new Map<THREE.BufferAttribute | THREE.InterleavedBufferAttribute, number[]>();
   for (const geometry of geometries) {
-    const colours = geometry.getAttribute('color');
-    if (!colours) continue;
-    for (let i = 0; i < colours.count; i++) {
-      colour.setRGB(colours.getX(i), colours.getY(i), colours.getZ(i)).convertLinearToSRGB();
-      colours.setXYZ(i, colour.r, colour.g, colour.b);
-    }
-    colours.needsUpdate = true;
+    const attribute = geometry.getAttribute('color');
+    if (!attribute) continue;
+    const file: number[] = [];
+    for (let i = 0; i < attribute.count; i++) file.push(attribute.getX(i), attribute.getY(i), attribute.getZ(i));
+    vertexColours.set(attribute, file);
   }
+  const colour = new THREE.Color();
+  return (painted) => {
+    const space = painted ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+    for (const texture of textures) {
+      if (texture.colorSpace === space) continue;
+      texture.colorSpace = space;
+      texture.needsUpdate = true;
+    }
+    // Every time, so a colour scaled since (a toon's, by the light) starts again from the file.
+    for (const [each, file] of colours) {
+      each.copy(file);
+      if (painted) each.convertLinearToSRGB();
+    }
+    for (const [attribute, file] of vertexColours) {
+      for (let i = 0; i < attribute.count; i++) {
+        colour.setRGB(file[i * 3], file[i * 3 + 1], file[i * 3 + 2]);
+        if (painted) colour.convertLinearToSRGB();
+        attribute.setXYZ(i, colour.r, colour.g, colour.b);
+      }
+      (attribute as THREE.BufferAttribute).needsUpdate = true;
+    }
+  };
 }
 
 function fromVrm(gltf: GLTF): SkinModel {
@@ -227,7 +250,8 @@ function toon(scene: THREE.Object3D, style: ToonConfig): void {
       out = new MToonMaterial({
         color: pbr.color.clone(),
         map: pbr.map ?? undefined,
-        shadeColorFactor: pbr.color.clone().multiplyScalar(style.shade),
+        // A share of the colour as painted, so the shade is as dark under either renderer.
+        shadeColorFactor: pbr.color.clone().convertLinearToSRGB().multiplyScalar(style.shade).convertSRGBToLinear(),
         shadeMultiplyTexture: pbr.map ?? undefined,
         shadingToonyFactor: style.toony,
         shadingShiftFactor: style.shift,
@@ -249,8 +273,8 @@ function toon(scene: THREE.Object3D, style: ToonConfig): void {
 }
 
 /**
- * Every mesh in one colour, not metallic, its colour drawn as stored. A mesh with no
- * normals, which three.js draws faceted, is given smooth ones unless `smooth` is off.
+ * Every mesh in one colour, not metallic. A mesh with no normals, which three.js draws
+ * faceted, is given smooth ones unless `smooth` is off.
  */
 function solid(scene: THREE.Object3D, { color, opacity, smooth, roughness, clearcoat, clearcoat_roughness }: SolidConfig): void {
   const material = new THREE.MeshPhysicalMaterial({
@@ -261,6 +285,8 @@ function solid(scene: THREE.Object3D, { color, opacity, smooth, roughness, clear
     clearcoat,
     clearcoatRoughness: clearcoat_roughness,
   });
+  // Stored as MuJoCo's `rgba` is, so read as the scene reads a geom's (`setBaseColor`).
+  material.userData.rgba = [...color];
   const faceted = smooth ? material : Object.assign(material.clone(), { flatShading: true });
   const replaced = new Set<THREE.Material>();
   scene.traverse((object) => {

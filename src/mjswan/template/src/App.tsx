@@ -433,6 +433,10 @@ function AppContent() {
             camera={engineState?.camera}
             onCameraTrackingChange={(enabled) => engineRef.current?.camera.setTracking(enabled)}
             onCameraFovyChange={(fovy) => engineRef.current?.camera.set({ fovy })}
+            graphics={engineState?.graphics}
+            sceneGraphics={sceneEntry.graphics}
+            onGraphicsChange={(input) => engineRef.current?.graphics.set(input)}
+            onGraphicsReset={() => engineRef.current?.graphics.reset()}
             interactions={engineState?.interactions ? [...engineState.interactions] : []}
             interactionMode={engineState?.interactionMode ?? 'pull'}
             interactionParams={engineState?.interactionParams ?? {}}

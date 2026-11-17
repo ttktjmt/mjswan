@@ -9,7 +9,7 @@ import { MToonMaterial, VRMExpressionManager } from '@pixiv/three-vrm';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 import { Skin, geomBottom, type SkinConfig } from '../skin';
 import { checkSpringChains } from '../budget';
-import { asPainted, loadSkinModel } from '../skinModel';
+import { loadSkinModel, paintable } from '../skinModel';
 import { fromMujoco } from '../retarget';
 
 /** Bone, parent, offset from the parent in VRM 1.0's frame (facing +z, left at +x). */
@@ -361,7 +361,8 @@ describe('Skin', () => {
     expect(toon.isMToonMaterial).toBe(true);
     // The test robot has no lights: nothing to divide by.
     expect(toon.color.toArray()).toEqual(painted(1, 0.8, 0.6).map((c) => expect.closeTo(c, 6)));
-    expect(toon.shadeColorFactor.toArray()).toEqual(painted(1, 0.8, 0.6).map((c) => expect.closeTo(c / 2, 6)));
+    // Stored decoded and painted again: three.js's rounded sRGB constants are good to 1e-5.
+    expect(toon.shadeColorFactor.toArray()).toEqual(painted(1, 0.8, 0.6).map((c) => expect.closeTo(c / 2, 4)));
     expect(toon.shadingToonyFactor).toBeCloseTo(0.7, 6);
   });
 
@@ -398,7 +399,7 @@ describe('Skin', () => {
     near((await colours(lit(0.1)))[0], front);
   });
 
-  it('stores a skin as painted: its sRGB textures read raw, its linear colours encoded', () => {
+  it('stores a skin as painted under classic: its sRGB textures read raw, its linear colours encoded', () => {
     const texture = () => Object.assign(new THREE.Texture(), { colorSpace: THREE.SRGBColorSpace });
     const grey = () => new THREE.Color(0.2, 0.2, 0.2);
     const toon = new MToonMaterial({ map: texture(), color: grey(), shadeColorFactor: grey() });
@@ -411,7 +412,8 @@ describe('Skin', () => {
       new THREE.Mesh(coloured, standard),
       new THREE.Mesh(coloured, [standard, standard]),
     );
-    asPainted(scene);
+    const paint = paintable(scene);
+    paint(true);
     const [encoded] = painted(0.2, 0.2, 0.2);
     for (const material of [toon, standard]) {
       expect(material.map!.colorSpace).toBe(THREE.NoColorSpace);
@@ -419,6 +421,14 @@ describe('Skin', () => {
     }
     expect(toon.shadeColorFactor.r).toBeCloseTo(encoded, 6);
     expect(coloured.getAttribute('color').getX(0)).toBeCloseTo(encoded, 6);
+    // Under Filament, the file's own: colours linear, textures decoded, however often switched.
+    paint(true);
+    paint(false);
+    for (const material of [toon, standard]) {
+      expect(material.map!.colorSpace).toBe(THREE.SRGBColorSpace);
+      expect(material.color.r).toBeCloseTo(0.2, 6);
+    }
+    expect(coloured.getAttribute('color').getX(0)).toBeCloseTo(0.2, 6);
   });
 
   it('sits the hips at hips_offset in the body frame, turning with the robot', async () => {

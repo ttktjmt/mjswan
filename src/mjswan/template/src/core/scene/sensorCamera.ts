@@ -1,8 +1,9 @@
 /**
  * Renders a MuJoCo camera into an image the size a camera sensor asks for, with the
  * scene the viewer draws, so a traced observation can read it as mjlab reads its
- * `CameraSensor`. It is three.js drawing, not mujoco_warp's ray tracer: shading differs,
- * so a policy keyed to it may act differently than in mjlab.
+ * `CameraSensor`. Colours, textures and shadows are read as mujoco_warp reads them,
+ * whatever the viewer's graphics settings, but it is three.js drawing, not mujoco_warp's
+ * ray tracer: shading differs, so a policy keyed to it may act differently than in mjlab.
  */
 
 import * as THREE from 'three';
@@ -70,6 +71,12 @@ export function rgbFromPixels(pixels: Uint8Array, width: number, height: number)
   return rgb;
 }
 
+/**
+ * Draws `draw` as a camera sensor sees the scene: the scene's own pass (`SceneGraphics.asSensor`),
+ * shadows by the sensor's `use_shadows` included.
+ */
+export type SensorPass = <T>(useShadows: boolean, draw: () => T) => T;
+
 export class SensorCameraRenderer {
   private readonly camera = new THREE.PerspectiveCamera();
   private readonly targets = new Map<string, THREE.WebGLRenderTarget>();
@@ -79,6 +86,7 @@ export class SensorCameraRenderer {
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
     private readonly scene: THREE.Scene,
+    private readonly pass: SensorPass,
   ) {
     this.camera.matrixAutoUpdate = false;
   }
@@ -109,20 +117,17 @@ export class SensorCameraRenderer {
     const renderer = this.renderer;
     const previousTarget = renderer.getRenderTarget();
     const xrEnabled = renderer.xr.enabled;
-    const shadows = renderer.shadowMap.enabled;
     // In an XR session the renderer would draw the headset's view instead.
     renderer.xr.enabled = false;
-    renderer.shadowMap.enabled = view.useShadows && shadows;
     try {
       renderer.setRenderTarget(target);
-      renderer.render(this.scene, camera);
+      this.pass(view.useShadows, () => renderer.render(this.scene, camera));
       const pixels = new Uint8Array(width * height * 4);
       renderer.readRenderTargetPixels(target, 0, 0, width, height, pixels);
       return pixels;
     } finally {
       renderer.setRenderTarget(previousTarget);
       renderer.xr.enabled = xrEnabled;
-      renderer.shadowMap.enabled = shadows;
     }
   }
 

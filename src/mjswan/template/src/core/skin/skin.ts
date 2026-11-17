@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 import { lightBudget } from '../scene/lights';
+import { DEFAULT_GRAPHICS, decodesBaseColor, setBaseColor, type GraphicsSettings } from '../scene/graphics';
 import { threeToMjcCoordinate } from '../scene/coordinate';
 import { TERRAIN_GROUP } from '../xr/grounding';
 import { SpringPhysics } from './springs';
@@ -25,7 +26,7 @@ import {
   zeroPoseRotations,
   type RetargetRig,
 } from './retarget';
-import { loadSkinModel, type SkinModel } from './skinModel';
+import { loadSkinModel, paintable, type SkinModel } from './skinModel';
 import type { SkinConfig } from './config';
 
 export type { SkinConfig } from './config';
@@ -178,8 +179,13 @@ export class Skin {
   private groundFrom = 0;
   private groundTo = 0;
   private lastTime: number | null = null;
-  /** Every MToon material, with the colours it came with. */
-  private readonly toon: Array<{ material: ToonMaterial; lit: THREE.Color; shade: THREE.Color }> = [];
+  /** Every MToon material, and what its colours are scaled by for the scene's light. */
+  private readonly toon: ToonMaterial[] = [];
+  private toonScale = 1;
+  /** Materials coloured from an `rgba` (`SolidShading`). */
+  private readonly solids: THREE.Material[] = [];
+  private readonly paint: (painted: boolean) => void;
+  private graphics: GraphicsSettings = DEFAULT_GRAPHICS;
   private springs: SpringPhysics | null = null;
   private springsBuilt = false;
   /** With `retarget: 'position'`, every mapped bone, ancestors first; else empty. */
@@ -204,12 +210,27 @@ export class Skin {
       for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) materials.add(material);
     });
     for (const material of materials) {
-      const toon = material as ToonMaterial;
-      if (toon.isMToonMaterial) {
-        this.toon.push({ material: toon, lit: toon.color.clone(), shade: toon.shadeColorFactor.clone() });
-      }
+      if ((material as ToonMaterial).isMToonMaterial) this.toon.push(material as ToonMaterial);
+      if (material.userData.rgba) this.solids.push(material);
     }
+    this.paint = paintable(model.scene);
+    this.setGraphics(this.graphics);
     this.root.updateMatrixWorld(true);
+  }
+
+  /**
+   * Draw as the scene's graphics settings say: painted under classic, with the file's own
+   * colour management under Filament, tone mapped and exposed with the scene.
+   */
+  setGraphics(settings: GraphicsSettings): void {
+    this.graphics = settings;
+    this.paint(settings.renderer === 'classic');
+    const decode = decodesBaseColor(settings);
+    for (const material of this.solids) setBaseColor(material, decode);
+    for (const material of this.toon) {
+      material.color.multiplyScalar(this.toonScale);
+      material.shadeColorFactor.multiplyScalar(this.toonScale);
+    }
   }
 
   static async load(data: ArrayBuffer, config: SkinConfig): Promise<Skin> {
@@ -524,11 +545,8 @@ export class Skin {
    * by that sum, never brightening, leaves the scene's own materials as they are.
    */
   private normalizeToon(mjModel: MjModel): void {
-    const scale = (this.config.brightness ?? 1) / Math.max(lightBudget(mjModel), 1);
-    for (const { material, lit, shade } of this.toon) {
-      material.color.copy(lit).multiplyScalar(scale);
-      material.shadeColorFactor.copy(shade).multiplyScalar(scale);
-    }
+    this.toonScale = (this.config.brightness ?? 1) / Math.max(lightBudget(mjModel), 1);
+    this.setGraphics(this.graphics);
   }
 
   /**

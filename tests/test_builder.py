@@ -15,6 +15,7 @@ import json
 import subprocess
 import sys
 import warnings
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -288,6 +289,33 @@ class TestSceneCamera:
 
         camera = manifest["projects"][0]["scenes"][0]["camera"]
         assert (camera["distance"], camera["fovy"]) == (9.0, 60.0)
+
+    def test_graphics_sit_beside_the_camera(
+        self, tmp_path, minimal_model, build_manifest
+    ):
+        project = Builder().add_project(name="P")
+        scene = project.add_scene(name="S", model=minimal_model)
+        scene.set_viewer(ViewerConfig(distance=9.0))
+        # The handle hands the config back, so a replace keeps the camera.
+        scene.set_viewer(
+            replace(scene.viewer, renderer="filament", enable_shadows=False)
+        )
+        manifest = build_manifest(project._builder, tmp_path / "out")
+
+        entry = manifest["projects"][0]["scenes"][0]
+        assert entry["camera"]["distance"] == 9.0
+        # The switches are in `graphics`, not the camera.
+        assert "enable_shadows" not in entry["camera"]
+        assert entry["graphics"] == {
+            "renderer": "filament",
+            "tone_mapping": "pbr_neutral",
+            "exposure": 0.0,
+            "output_color_space": "srgb",
+            "base_color_type": "srgb",
+            "enable_shadows": False,
+            "enable_reflections": True,
+            "enable_haze": True,
+        }
 
 
 class TestBuilderGtmId:

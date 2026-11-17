@@ -14,6 +14,29 @@ shortcuts.
 
 ### Added
 
+- **Graphics settings: a scene drawn as MuJoCo's classic renderer draws it, or with its
+  Filament renderer's look** (**document format 9**, #232). `ViewerConfig` takes
+  `renderer` (`"classic"`, the default, or `"filament"`) and, for Filament,
+  `tone_mapping` (every three.js operator, `"agx"` among them, and MuJoCo's names),
+  `exposure` in stops, `output_color_space` and `base_color_type`; `enable_shadows`,
+  `enable_reflections` and the new `enable_haze` are MuJoCo's `mjRND_SHADOW`,
+  `mjRND_REFLECTION` and `mjRND_HAZE`. Unset Filament settings come from the model's
+  `filament.*` `<custom>` flags (MuJoCo 4.0's names), then MuJoCo's defaults; the build
+  writes them all as the scene's `graphics`, beside `camera`, and setting one on a classic
+  scene raises. `SceneHandle.viewer` returns the scene's config, so
+  `scene.set_viewer(replace(scene.viewer, renderer="filament"))` keeps a task's camera.
+  Classic draws textures as MuJoCo uploads them (an sRGB 2D texture decoded and the output
+  not encoded; a cube or skybox as stored), infinite planes lit, shadowed and following
+  the viewer, haze where the first infinite plane meets the skybox, and a reflection on
+  the first opaque plane or box top with a `reflectance`. Filament decodes `rgba` and sRGB
+  textures, the sky included, encodes the output, and tone maps and exposes it; skins keep
+  glTF's and VRM's own colour management there, and a `SolidShading` colour follows
+  `base_color_type`. Camera sensors are drawn as mujoco_warp draws them, whatever the
+  settings. `engine.graphics.set()` / `reset()` and the state's `graphics` let a host
+  change them for the session; the panel's **Graphics** section, below Camera Feeds and
+  collapsed at first, has the renderer, tone mapping, exposure, the three switches,
+  **Reset** and **Copy as Python**.
+
 - **Skins modelled on the robot: `ModelledSkinConfig`** (**document format 9**). A `.glb`
   made over the robot at its rest pose, in its world frame, as MyoSuite's muscle atlas
   (its renderer's `--muscle-mesh atlas` and `atlas-hd`) is over its full body, is drawn as
@@ -461,6 +484,15 @@ shortcuts.
   dialog it opens.
 
 ### Changed
+
+- **Every scene now looks as MuJoCo draws it, published ones included.** Under the
+  default classic renderer an sRGB 2D texture (a PNG that says so, or `colorspace="sRGB"`)
+  is darker, as in MuJoCo; set its `colorspace` to `linear` to keep it as stored. A floor
+  such as menagerie's takes the robot's shadow and, with a `reflectance`, mirrors it; a
+  skybox hazes the horizon; a finite plane places its texture as MuJoCo does (`texrepeat`
+  over the plane, per metre with `texuniform`). A camera sensor's image changes with it,
+  as mujoco_warp draws one: the floor lit, and shadowed with `use_shadows`. A document is
+  drawn by the engine that opens it, so published scenes change too.
 
 - **A policy slower than the screen no longer moves the robot in jumps.** The engine ran
   a control step's physics at once and drew only its end, so a 10 Hz policy (the SO-101
@@ -997,6 +1029,18 @@ shortcuts.
   3.11, so a 3.10 install could only resolve the vulnerable releases.
 
 ### Fixed
+
+- **Shadows fall where MuJoCo casts them.** A directional light's shadow map covered the
+  space behind the light, so nothing under it was shadowed; it now has MuJoCo's frustum
+  (from the light, `shadowclip` times the extent to each side), a spot light's cone is
+  widened by `shadowscale`, and a point light casts none. A camera sensor's `use_shadows`
+  now takes effect. The viewer's bodies parked 100 m up no longer stretch the model's
+  extent, nor what it sizes, a camera sensor's far plane (10 km) included.
+
+- **A camera sensor sees the whole model, whatever the viewer hides.** Under a
+  `hide_robot` skin a wrist camera lost its gripper, and with Xray on saw the robot
+  see-through; it now sees the robot as it is, the floor an AR session hides and a geom a
+  host's preview replaces.
 
 - **`hide_robot=True` hides the robot's tendons too.** A character drawn in the robot's
   place stayed wrapped in its tendon lines, which no setting hid. A skin now stops the

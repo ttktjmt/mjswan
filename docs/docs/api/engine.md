@@ -89,6 +89,7 @@ that renders documents of different authors gives each document its own engine.
 | `calibrateSplat` | `(transform: SplatTransform) => void` | Live splat placement, for a calibration UI. |
 | `play` / `pause` / `reset` | `() => void` | Playback. `reset` runs at the next step boundary, as mjlab's viewer calls `env.reset()` (at once while paused): keyframe 0, the reset events, and every manager's reset, terminations included. |
 | `camera` | `CameraControls` | `set(partial)`, `get()`, `frame()`, and `setTracking(enabled)`, mjlab's **Track camera** (follow the tracked body). A `CameraView`'s `azimuth` and `elevation` are MuJoCo's: the direction the camera looks. |
+| `graphics` | `GraphicsControls` | `set(partial)` and `reset()`: how the scene is drawn, live. See [Graphics](#graphics). |
 | `commands` | `CommandControls` | `set(id, value)`, `trigger(id)`. |
 | `debugVis` | `DebugVisControls` | `set(id, enabled)` for one drawing, `setEnabled(enabled)` for mjlab's Debug Viz **Enabled** over all of them. See [Debug Viz](#debug-viz). |
 | `cameraFeeds` | `CameraFeedControls` | `attach(id, canvas)` draws a camera sensor's images into a canvas and returns the detach; `setFrustum(id, shown)` is mjlab's **Frustum** switch. See [Camera feeds](#camera-feeds). |
@@ -122,6 +123,8 @@ interface MjswanEngineState {
   cameraFeeds: ReadonlyArray<CameraFeedDescriptor>;
   /** `camera.setTracking`'s switch, and the vertical FOV in degrees. */
   camera: { tracking: boolean; fovy: number };
+  /** The graphics settings drawn now, every one resolved. */
+  graphics: GraphicsSettings;
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
   /** Every pointer mode, with whether this scene can run it. */
@@ -143,6 +146,47 @@ an `id` (`"group:name"`), a `type` of `'slider' | 'checkbox' | 'button'`, a `lab
 for a slider — `min` / `max` / `step`, an optional `enabledWhen` naming a gating checkbox,
 and an optional `adjustableRange` companion. Render them however you like and drive them
 through `engine.commands`.
+
+### Graphics
+
+How a scene is drawn: the manifest's `graphics`, which `buildScene` passes as `SceneInput.graphics`.
+
+```ts
+interface GraphicsSettings {
+  renderer: 'classic' | 'filament';
+  toneMapping: ToneMapping;            // Filament only
+  exposure: number;                    // Filament only, in stops
+  outputColorSpace: 'srgb' | 'linear'; // Filament only
+  baseColorType: 'srgb' | 'linear';    // Filament only: how an rgba is read
+  shadows: boolean;
+  reflections: boolean;
+  haze: boolean;                       // drawn only with a skybox
+}
+```
+
+`classic` draws as MuJoCo's classic renderer: `rgba` as written, an sRGB 2D texture
+decoded and the output not encoded, a cube or skybox as stored, no tone mapping.
+`filament` draws as its Filament renderer: colour managed, tone mapped and exposed.
+`ToneMapping` is every operator three.js has
+(`none`, `linear`, `reinhard`, `cineon`, `aces_filmic`, `agx`, `neutral`) and MuJoCo's
+`aces` (three's `aces_filmic` at 0.6 of the exposure) and `filmic` (Narkowicz's curve);
+`graphics.set` also takes MuJoCo's `pbr_neutral` and `aces_legacy`, which the state reports
+as `neutral` and `aces_filmic`. Shadows, reflections and haze are MuJoCo's `mjRND_SHADOW`,
+`mjRND_REFLECTION` and `mjRND_HAZE`, on by default.
+
+`graphics.set(partial)` changes some settings, ignoring with a warning a value the engine
+cannot draw; `graphics.reset()` returns to the scene's own. A change lasts until the next
+`loadScene`. A scene loaded with no `graphics` (format 8 and below, or a hand-written
+manifest) is drawn with MuJoCo's defaults, `DEFAULT_GRAPHICS`; `TONE_MAPPINGS` lists the
+operators for a host's menu. Camera sensors are drawn as mujoco_warp draws them, whatever
+the settings: `rgba` as written, textures as stored, no reflection or haze, shadows by the
+sensor's `use_shadows`, and the robot a skin hides included. A splat is drawn as captured,
+so exposure does not change it.
+
+The bundled app's panel has a **Graphics** section, below Camera Feeds and collapsed at
+first: the renderer, tone mapping and exposure under Filament, the three switches,
+**Reset**, and **Copy as Python**, which copies the `set_viewer` call for the settings
+changed there.
 
 ### Debug Viz
 
@@ -353,6 +397,7 @@ The engine never fetches. Every asset arrives as `Bytes` — an `ArrayBuffer`, o
       splat?: SplatInput | null;
       skin?: SkinInput | null;             // a skin posed from the robot; one that fails to load is skipped
       viewer?: ViewerConfig;
+      graphics?: GraphicsInput;            // how it is drawn; absent, classic with MuJoCo's defaults
       terrainData?: TerrainData;           // spawn patches the policies' events may draw from
       controlDt?: number;                  // mjlab's timestep * decimation
       plugins?: EnginePlugins;             // scene-scoped custom terms
@@ -440,7 +485,7 @@ only when named.
 |---|---|
 | `Catalog` | `{ projects: ProjectCatalog[], pluginsPath?: string }` |
 | `ProjectCatalog` | `{ id, name, default, work?, scenes }` |
-| `SceneEntry` | `{ id, name, camera?, splatSection, policies, splats, skins, credits, buildScene(opts?) }` |
+| `SceneEntry` | `{ id, name, camera?, graphics, splatSection, policies, splats, skins, credits, buildScene(opts?) }` |
 | `PolicyEntry` | `{ id, name, default, motions, build() }` |
 | `SplatEntry` | `{ id, name, control, transform, build() }` |
 | `SkinEntry` | `{ id, name, build() }` |

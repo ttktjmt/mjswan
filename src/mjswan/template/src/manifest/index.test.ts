@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MAX_DOCUMENT_FORMAT, parseManifest, sanitizeName, type Manifest, type ByteSource } from './index';
 import NAME2ID_CASES from './name2id_cases.json';
+import { DEFAULT_GRAPHICS } from '../core/scene/graphicsSettings';
 
 /** Records every requested path; returns tagged bytes for each. */
 function fakeSource(): { source: ByteSource; requested: string[] } {
@@ -181,6 +182,33 @@ describe('parseManifest', () => {
     const catalog = parseManifest(MANIFEST, fakeSource().source);
     const input = await catalog.projects[0].scenes[0].buildScene();
     expect(input.viewer).toEqual({ distance: 5, originType: 'ASSET_BODY', bodyName: 'torso' });
+  });
+
+  it('draws a scene as its graphics say, and one without as MuJoCo would by default', async () => {
+    const graphics = {
+      renderer: 'filament',
+      tone_mapping: 'pbr_neutral',
+      exposure: 0.5,
+      output_color_space: 'srgb',
+      base_color_type: 'linear',
+      enable_shadows: false,
+      enable_reflections: true,
+      enable_haze: true,
+    } as const;
+    const withGraphics = { ...MANIFEST.projects[0].scenes[0], graphics };
+    const manifest = { ...MANIFEST, format: 9, projects: [{ ...MANIFEST.projects[0], scenes: [withGraphics] }] };
+    const [scene] = parseManifest(manifest, fakeSource().source).projects[0].scenes;
+    // MuJoCo's name for three.js's operator is the operator.
+    const expected = { renderer: 'filament', toneMapping: 'neutral', exposure: 0.5, outputColorSpace: 'srgb', baseColorType: 'linear', shadows: false, reflections: true, haze: true };
+    expect(scene.graphics).toEqual(expected);
+    expect((await scene.buildScene()).graphics).toEqual(expected);
+
+    // Format 8 and below carry the switch in the camera, unread.
+    const older = { ...MANIFEST.projects[0].scenes[0], camera: { enable_shadows: false } as never };
+    const [old] = parseManifest({ ...MANIFEST, projects: [{ ...MANIFEST.projects[0], scenes: [older] }] }, fakeSource().source)
+      .projects[0].scenes;
+    expect(old.graphics).toEqual(DEFAULT_GRAPHICS);
+    expect(old.camera).toEqual({});
   });
 
   it('turns an azimuth from before format 3, which pointed at the camera, to keep its view', () => {

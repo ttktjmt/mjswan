@@ -14,6 +14,14 @@ import type { EventConfig, TerrainData } from '../core/event/EventBase';
 import type { SplatTransform } from '../core/scene/splat';
 import type { SkinConfig } from '../core/skin/config';
 import { policyGraphRefs } from '../core/onnx/graphRefs';
+import {
+  DEFAULT_GRAPHICS,
+  mergeGraphics,
+  type ColorSpaceName,
+  type GraphicsSettings,
+  type Renderer,
+  type ToneMappingName,
+} from '../core/scene/graphicsSettings';
 import type { PolicyInput, SceneInput, SkinInput, SplatInput } from '../engine/types';
 
 /** Maps a document-relative path (e.g. `demo/humanoid/scene.mjz`) to bytes. */
@@ -29,10 +37,20 @@ export interface ManifestCamera {
   origin_type?: 'AUTO' | 'WORLD' | 'ASSET_ROOT' | 'ASSET_BODY';
   entity_name?: string;
   body_name?: string;
-  enable_reflections?: boolean;
-  enable_shadows?: boolean;
   height?: number;
   width?: number;
+}
+/** How a scene is drawn (format 9): `ViewerConfig`'s graphics settings, resolved at build time. */
+export interface ManifestGraphics {
+  renderer?: Renderer;
+  tone_mapping?: ToneMappingName;
+  /** In stops. */
+  exposure?: number;
+  output_color_space?: ColorSpaceName;
+  base_color_type?: ColorSpaceName;
+  enable_shadows?: boolean;
+  enable_reflections?: boolean;
+  enable_haze?: boolean;
 }
 export interface ManifestSplat {
   id: string;
@@ -127,6 +145,8 @@ export interface ManifestScene {
   /** Seconds per control step, from the task (mjlab's `timestep * decimation`). */
   control_dt?: number;
   camera?: ManifestCamera;
+  /** Absent before format 9: drawn as MuJoCo's classic renderer with its defaults. */
+  graphics?: ManifestGraphics;
   terrain_data?: TerrainData;
   splat_section?: boolean;
   splats?: ManifestSplat[];
@@ -216,6 +236,8 @@ export interface SceneEntry {
   id: string;
   name: string;
   camera?: ViewerConfig;
+  /** The scene's own graphics settings, every one resolved: what `graphics.reset()` returns to. */
+  graphics: GraphicsSettings;
   splatSection: boolean;
   policies: PolicyEntry[];
   splats: SplatEntry[];
@@ -275,9 +297,9 @@ export function sanitizeName(name: string): string {
  * `root_velocity_b` write; 6 an action term's traced `process` and `reset` graphs, its
  * `interpolate`, `hold_s` and `delay`, the `joint_position_relative` type, and the
  * `action_term` input slot (ADR 0009); 7 a scene's `skins`; 8 a motion's `frame_fields`;
- * 9 a camera sensor's descriptor, an image-shaped policy input, and a skin modelled on
+ * 9 a camera sensor's descriptor, an image-shaped policy input, a skin modelled on
  * the robot (`fit: 'modelled'`), with `align`, `rest_qpos`, a solid material and
- * `hide_tendons`.
+ * `hide_tendons`, and a scene's `graphics`.
  */
 export const MAX_DOCUMENT_FORMAT = 9;
 
@@ -360,11 +382,23 @@ function toViewerConfig(camera: ManifestCamera | undefined, format: number): Vie
   if (camera.origin_type !== undefined) view.originType = camera.origin_type;
   if (camera.entity_name !== undefined) view.entityName = camera.entity_name;
   if (camera.body_name !== undefined) view.bodyName = camera.body_name;
-  if (camera.enable_reflections !== undefined) view.enableReflections = camera.enable_reflections;
-  if (camera.enable_shadows !== undefined) view.enableShadows = camera.enable_shadows;
   if (camera.height !== undefined) view.height = camera.height;
   if (camera.width !== undefined) view.width = camera.width;
   return view;
+}
+
+/** The manifest's snake_case `graphics` as the engine's settings; without it (format 8 and below), MuJoCo's defaults. */
+function toGraphics(graphics: ManifestGraphics | undefined): GraphicsSettings {
+  return mergeGraphics(DEFAULT_GRAPHICS, graphics && {
+    renderer: graphics.renderer,
+    toneMapping: graphics.tone_mapping,
+    exposure: graphics.exposure,
+    outputColorSpace: graphics.output_color_space,
+    baseColorType: graphics.base_color_type,
+    shadows: graphics.enable_shadows,
+    reflections: graphics.enable_reflections,
+    haze: graphics.enable_haze,
+  });
 }
 
 function splatTransform(splat: ManifestSplat): SplatTransform {
@@ -472,10 +506,12 @@ function toSceneEntry(
     build: async () => buildSkin(s),
   }));
 
+  const graphics = toGraphics(scene.graphics);
   return {
     id: scene.id,
     name: scene.name,
     camera: toViewerConfig(scene.camera, format),
+    graphics,
     splatSection: scene.splat_section ?? false,
     policies,
     splats,
@@ -500,6 +536,7 @@ function toSceneEntry(
         splat: splat ? buildSplat(dir, splat, source) : null,
         skin: skin ? buildSkin(skin) : null,
         viewer: toViewerConfig(scene.camera, format),
+        graphics,
         terrainData: scene.terrain_data,
         controlDt: scene.control_dt,
       };

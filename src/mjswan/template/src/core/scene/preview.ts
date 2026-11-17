@@ -21,6 +21,7 @@ import {
   type PreviewGeom,
 } from './previewHandles';
 import { getQuaternion, reflectanceParams } from './scene';
+import { setBaseColor } from './graphics';
 
 export type { PreviewGeom, HandleKind };
 
@@ -66,6 +67,8 @@ export class GeomPreview {
   private readonly listeners = new Set<PreviewListener>();
   private readonly raycaster = new THREE.Raycaster();
   private readonly window: Window;
+  /** Whether its `rgba` is decoded, as the scene's geoms' are (`decodesBaseColor`). */
+  private decode = false;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -99,6 +102,12 @@ export class GeomPreview {
     this.setHandles(input.handles);
     this.replace(input.replaces);
     this.update();
+  }
+
+  /** Read its `rgba` as the scene's graphics settings read a geom's. */
+  setBaseColorDecoded(decode: boolean): void {
+    this.decode = decode;
+    if (this.mesh) setBaseColor(this.mesh.material, decode);
   }
 
   hide(): void {
@@ -165,7 +174,8 @@ export class GeomPreview {
     }
     const [r, g, b, a] = geom.rgba;
     const material = mesh.material;
-    material.color.setRGB(r, g, b);
+    material.userData.rgba = [r, g, b];
+    setBaseColor(material, this.decode);
     material.opacity = a;
     if (material.transparent !== a < 1) {
       material.transparent = a < 1;

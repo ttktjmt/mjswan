@@ -20,10 +20,6 @@ export type ViewerConfig = {
   entityName?: string;
   /** Body name to track when originType is ASSET_BODY. */
   bodyName?: string;
-  /** Whether to enable reflections. */
-  enableReflections?: boolean;
-  /** Whether to enable shadows. */
-  enableShadows?: boolean;
   /** Viewer canvas height in pixels. */
   height?: number;
   /** Viewer canvas width in pixels. */

@@ -13,7 +13,9 @@ import json
 import warnings
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, get_args
+
+import mujoco
 
 from .._version import __version__
 from ..document import DOCUMENT_FORMAT
@@ -22,7 +24,7 @@ from ..envs.mdp.actions import TracedActionCfg
 from ..envs.mdp.commands import TRACKING_STATE_FIELDS
 from ..mjlab.env import mdp_commands, policy_actions
 from ..mjlab.gui import record_scene_gui
-from ..viewer import ViewerConfig
+from ..viewer import ColorSpace, ViewerConfig
 from .asset import motion_key
 from .credit import LicenseNames, scene_credits, work_entry
 from .frontend import uses_custom_js
@@ -383,15 +385,18 @@ def scene_entry(
     mdps: list[dict[str, Any]],
     policies: list[dict[str, Any]],
     licenses: LicenseNames,
+    graphics: dict[str, Any],
 ) -> dict[str, Any]:
     """A scene's manifest entry; its paths resolve against the scene directory.
-    ``licenses`` names the project's license files (:func:`.credit.license_names`)."""
+    ``licenses`` names the project's license files (:func:`.credit.license_names`), and
+    ``graphics`` is :func:`graphics_entry`'s, read while the scene still has its model."""
     return {
         "id": scene.id,
         "name": scene.name,
         "scene": scene.scene_filename,
         **({"control_dt": _require_control_dt(scene)} if scene.policies else {}),
         "camera": (scene.viewer or ViewerConfig()).to_dict(),
+        "graphics": graphics,
         **({"terrain_data": scene.terrain_data} if scene.terrain_data else {}),
         **({"splat_section": True} if scene.splat_section and not scene.splats else {}),
         **({"splats": [splat_entry(s) for s in scene.splats]} if scene.splats else {}),
@@ -402,6 +407,89 @@ def scene_entry(
         "mdps": mdps,
         "policies": policies,
     }
+
+
+#: MuJoCo's Filament renderer's own values for the flags the build reads, and the one it
+#: falls back to on a value it does not know (`scene_view.cc`, MuJoCo 4.0).
+_FILAMENT_TEXTS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "tone_mapping": (
+        "filament.cg.tone_mapping",
+        ("pbr_neutral", "aces", "aces_legacy", "filmic", "linear"),
+    ),
+    "output_color_space": ("filament.cg.output_color_space", get_args(ColorSpace)),
+    "base_color_type": ("filament.material.base_color_type", get_args(ColorSpace)),
+}
+
+
+def graphics_entry(
+    viewer: ViewerConfig | None, model: mujoco.MjSpec | mujoco.MjModel
+) -> dict[str, Any]:
+    """A scene's ``graphics``, complete: the viewer's settings, what it leaves unset from
+    the model's ``filament.*`` (MuJoCo's Filament renderer's flags, read under MuJoCo
+    4.0's names), then MuJoCo's defaults. Every scene gets the Filament ones, so the
+    viewer can switch a classic scene to Filament and see what MuJoCo would draw."""
+    viewer = viewer or ViewerConfig()
+    texts = {
+        field: _filament_text(model, name, known, getattr(viewer, field))
+        for field, (name, known) in _FILAMENT_TEXTS.items()
+    }
+    exposure = viewer.exposure
+    if exposure is None:
+        exposure = _custom_number(model, "filament.cg.exposure")
+    return {
+        "renderer": viewer.renderer,
+        "tone_mapping": texts["tone_mapping"],
+        "exposure": float(exposure) if exposure is not None else 0.0,
+        "output_color_space": texts["output_color_space"],
+        "base_color_type": texts["base_color_type"],
+        # The browser takes a switch as a boolean alone, and keeps its default otherwise.
+        "enable_shadows": bool(viewer.enable_shadows),
+        "enable_reflections": bool(viewer.enable_reflections),
+        "enable_haze": bool(viewer.enable_haze),
+    }
+
+
+def _filament_text(
+    model: mujoco.MjSpec | mujoco.MjModel,
+    name: str,
+    known: tuple[str, ...],
+    value: str | None,
+) -> str:
+    """The viewer's value, else the model's flag as MuJoCo reads it, else MuJoCo's default."""
+    if value is not None:
+        return value
+    value = _custom_text(model, name)
+    if value is None:
+        return known[0]
+    if value not in known:
+        warnings.warn(
+            f"The model's {name} is {value!r}, which MuJoCo's Filament renderer does not "
+            f"know ({', '.join(known)}); it draws {known[0]!r}, and so does the viewer.",
+            category=RuntimeWarning,
+            stacklevel=3,
+        )
+        return known[0]
+    return value
+
+
+def _custom_text(model: mujoco.MjSpec | mujoco.MjModel, name: str) -> str | None:
+    """A ``<custom><text>``'s data, looked up by its full name as MuJoCo's renderer does."""
+    if isinstance(model, mujoco.MjSpec):
+        return next((t.data for t in model.texts if t.name == name), None)
+    i = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_TEXT, name)
+    if i < 0:
+        return None
+    start = model.text_adr[i]
+    return bytes(model.text_data[start : start + model.text_size[i] - 1]).decode()
+
+
+def _custom_number(model: mujoco.MjSpec | mujoco.MjModel, name: str) -> float | None:
+    """A ``<custom><numeric>``'s first value."""
+    if isinstance(model, mujoco.MjSpec):
+        data = next((list(n.data) for n in model.numerics if n.name == name), None)
+        return data[0] if data else None
+    i = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_NUMERIC, name)
+    return float(model.numeric_data[model.numeric_adr[i]]) if i >= 0 else None
 
 
 def _require_control_dt(scene: SceneConfig) -> float:

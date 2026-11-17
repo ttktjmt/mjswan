@@ -16,6 +16,17 @@ import type { SkinConfig } from '../core/skin/config';
 import type { PrimitiveType } from '../core/scene/primitive';
 import type { HandleKind, PreviewGeom, PreviewInput } from '../core/scene/preview';
 import type { GeomType, PickHit } from '../core/interaction/pick';
+import type {
+  ColorSpaceName,
+  GraphicsInput,
+  GraphicsSettings,
+  Renderer,
+  ToneMapping,
+  ToneMappingName,
+} from '../core/scene/graphicsSettings';
+
+// How a scene is drawn (its manifest's `graphics`).
+export type { ColorSpaceName, GraphicsInput, GraphicsSettings, Renderer, ToneMapping, ToneMappingName };
 
 // Bytes: asset bytes or a lazy loader. EnginePlugins: custom MDP terms, trusted-only.
 export type { Bytes, SplatTransform, ModelFormat, EnginePlugins, SkinConfig };
@@ -73,6 +84,12 @@ export interface SceneInput {
   skin?: SkinInput | null;
   viewer?: ViewerConfig;
   /**
+   * How the scene is drawn: MuJoCo's classic renderer or its Filament renderer's colour
+   * management, tone mapping and exposure, and the shadow, reflection and haze switches.
+   * Absent, or for a setting left out, MuJoCo's defaults: classic, all three on.
+   */
+  graphics?: GraphicsInput;
+  /**
    * Spawn positions (flat patches) any policy's event terms may draw from. The events
    * themselves travel with the policy (ADR 0006 §3).
    */
@@ -94,6 +111,17 @@ export interface CameraControls {
   frame(): void;
   /** mjviser's "Track camera": follow the viewer config's tracked body. On by default. */
   setTracking(enabled: boolean): void;
+}
+
+/**
+ * The scene's graphics settings, live: a host's override lasts until the next
+ * `loadScene`, which draws that scene as it says.
+ */
+export interface GraphicsControls {
+  /** Change some settings; a value the engine cannot draw is ignored with a warning. */
+  set(input: GraphicsInput): void;
+  /** Back to the loaded scene's own settings. */
+  reset(): void;
 }
 
 /** A policy command term surfaced for generic UI controls. */
@@ -308,6 +336,8 @@ export interface MjswanEngineState {
   cameraFeeds: ReadonlyArray<CameraFeedDescriptor>;
   /** {@link CameraControls.setTracking}'s switch, and the camera's vertical FOV in degrees. */
   camera: { tracking: boolean; fovy: number };
+  /** The graphics settings drawn now, every one resolved; see {@link GraphicsControls}. */
+  graphics: GraphicsSettings;
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
   /** Every pointer mode, with whether this scene can run it. */
@@ -358,6 +388,7 @@ export interface MjswanEngine {
 
   // subsystems
   readonly camera: CameraControls;
+  readonly graphics: GraphicsControls;
   readonly commands: CommandControls;
   readonly debugVis: DebugVisControls;
   readonly cameraFeeds: CameraFeedControls;
