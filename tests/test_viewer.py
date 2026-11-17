@@ -63,18 +63,18 @@ _FILAMENT_XML = """<mujoco><custom>
 
 def test_a_filament_setting_on_a_classic_scene_is_refused():
     # Classic draws with no tone mapping or colour management: the setting would do nothing.
-    with pytest.raises(ValueError, match="renderer='filament'"):
+    with pytest.raises(ValueError, match="color_management=.filament."):
         ViewerConfig(tone_mapping="agx")
-    ViewerConfig(renderer="filament", tone_mapping="agx", exposure=0.5)
+    ViewerConfig(color_management="filament", tone_mapping="agx", exposure=0.5)
 
 
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"renderer": "pbr"},
-        {"renderer": "filament", "tone_mapping": "acesfilmic"},
-        {"renderer": "filament", "output_color_space": "rec709"},
-        {"renderer": "filament", "exposure": float("inf")},
+        {"color_management": "pbr"},
+        {"color_management": "filament", "tone_mapping": "acesfilmic"},
+        {"color_management": "filament", "output_color_space": "rec709"},
+        {"color_management": "filament", "exposure": float("inf")},
     ],
 )
 def test_an_unknown_value_is_refused(kwargs):
@@ -100,9 +100,9 @@ def test_a_switch_reaches_the_document_as_a_boolean():
 def test_graphics_fall_back_on_the_models_filament_flags(model):
     from mjswan.build.manifest import graphics_entry
 
-    viewer = ViewerConfig(renderer="filament", exposure=-1.0, enable_haze=False)
+    viewer = ViewerConfig(color_management="filament", exposure=-1.0, enable_haze=False)
     assert graphics_entry(viewer, model) == {
-        "renderer": "filament",
+        "color_management": "filament",
         "tone_mapping": "aces",
         "exposure": -1.0,
         "output_color_space": "linear",
@@ -117,7 +117,7 @@ def test_graphics_take_mujocos_defaults_and_its_fallback():
     from mjswan.build.manifest import graphics_entry
 
     entry = graphics_entry(None, _MODEL)
-    assert (entry["renderer"], entry["tone_mapping"], entry["exposure"]) == (
+    assert (entry["color_management"], entry["tone_mapping"], entry["exposure"]) == (
         "classic",
         "pbr_neutral",
         0.0,
@@ -137,4 +137,4 @@ def test_an_mjlab_viewer_config_brings_its_shadow_and_reflection_switches():
     )
     assert adapted is not None
     assert (adapted.enable_shadows, adapted.enable_reflections) == (False, False)
-    assert adapted.renderer == "classic"
+    assert adapted.color_management == "classic"

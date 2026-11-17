@@ -8,17 +8,17 @@ const call = (args: string) => `from dataclasses import replace\n\nscene.set_vie
 
 describe('graphicsAsPython', () => {
   it("names only what differs from the scene's own settings", () => {
-    const current: GraphicsSettings = { ...DEFAULT_GRAPHICS, renderer: 'filament', toneMapping: 'agx', exposure: 0.30000000000000004, haze: false };
+    const current: GraphicsSettings = { ...DEFAULT_GRAPHICS, colorManagement: 'filament', toneMapping: 'agx', exposure: 0.30000000000000004, haze: false };
     expect(graphicsAsPython(current, DEFAULT_GRAPHICS)).toBe(
-      call(', renderer="filament", tone_mapping="agx", exposure=0.3, enable_haze=False'),
+      call(', color_management="filament", tone_mapping="agx", exposure=0.3, enable_haze=False'),
     );
     expect(graphicsAsPython(DEFAULT_GRAPHICS, DEFAULT_GRAPHICS)).toBe(call(''));
   });
 
   it('clears the Filament settings on the way back to classic, which refuses them', () => {
-    const scene: GraphicsSettings = { ...DEFAULT_GRAPHICS, renderer: 'filament', toneMapping: 'agx' };
+    const scene: GraphicsSettings = { ...DEFAULT_GRAPHICS, colorManagement: 'filament', toneMapping: 'agx' };
     expect(graphicsAsPython(DEFAULT_GRAPHICS, scene)).toBe(
-      call(', renderer="classic", tone_mapping=None, exposure=None, output_color_space=None, base_color_type=None'),
+      call(', color_management="classic", tone_mapping=None, exposure=None, output_color_space=None, base_color_type=None'),
     );
   });
 });

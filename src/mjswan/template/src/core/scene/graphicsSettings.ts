@@ -3,7 +3,7 @@
  * manifest parser and a host share with the engine, with nothing of three.js in it.
  */
 
-export type Renderer = 'classic' | 'filament';
+export type ColorManagement = 'classic' | 'filament';
 /** three.js's operators, and MuJoCo's two that three.js has no name for. */
 export type ToneMapping =
   | 'none'
@@ -20,7 +20,8 @@ export type ToneMappingName = ToneMapping | 'pbr_neutral' | 'aces_legacy';
 export type ColorSpaceName = 'srgb' | 'linear';
 
 export interface GraphicsSettings {
-  renderer: Renderer;
+  /** How colours become pixels, as MuJoCo's classic renderer or its Filament renderer; three.js draws both. */
+  colorManagement: ColorManagement;
   /** Filament only. */
   toneMapping: ToneMapping;
   /** Filament only: in stops, before tone mapping, as MuJoCo's `filament.cg.exposure`. */
@@ -40,7 +41,7 @@ export type GraphicsInput = Partial<Omit<GraphicsSettings, 'toneMapping'> & { to
 
 /** MuJoCo's: what a document without `graphics` is drawn with. */
 export const DEFAULT_GRAPHICS: Readonly<GraphicsSettings> = Object.freeze({
-  renderer: 'classic',
+  colorManagement: 'classic',
   toneMapping: 'neutral',
   exposure: 0,
   outputColorSpace: 'srgb',
@@ -75,7 +76,7 @@ export function toneMappingNamed(name: unknown): ToneMapping | null {
 const colorSpace = (value: unknown) => (value === 'srgb' || value === 'linear' ? value : null);
 const flag = (value: unknown) => (typeof value === 'boolean' ? value : null);
 const CHECKS: { [K in keyof GraphicsSettings]: (value: unknown) => GraphicsSettings[K] | null } = {
-  renderer: (value) => (value === 'classic' || value === 'filament' ? value : null),
+  colorManagement: (value) => (value === 'classic' || value === 'filament' ? value : null),
   toneMapping: toneMappingNamed,
   exposure: (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null),
   outputColorSpace: colorSpace,
@@ -102,5 +103,5 @@ export function mergeGraphics(base: GraphicsSettings, input: GraphicsInput | nul
 
 /** Whether an `rgba` is decoded from sRGB: Filament reads it so by default; classic takes it as written. */
 export function decodesBaseColor(settings: GraphicsSettings): boolean {
-  return settings.renderer === 'filament' && settings.baseColorType === 'srgb';
+  return settings.colorManagement === 'filament' && settings.baseColorType === 'srgb';
 }

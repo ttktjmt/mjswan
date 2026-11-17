@@ -224,7 +224,7 @@ export class Skin {
    */
   setGraphics(settings: GraphicsSettings): void {
     this.graphics = settings;
-    this.paint(settings.renderer === 'classic');
+    this.paint(settings.colorManagement === 'classic');
     const decode = decodesBaseColor(settings);
     for (const material of this.solids) setBaseColor(material, decode);
     for (const material of this.toon) {

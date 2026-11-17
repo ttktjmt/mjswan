@@ -20,13 +20,13 @@ import type {
   ColorSpaceName,
   GraphicsInput,
   GraphicsSettings,
-  Renderer,
+  ColorManagement,
   ToneMapping,
   ToneMappingName,
 } from '../core/scene/graphicsSettings';
 
 // How a scene is drawn (its manifest's `graphics`).
-export type { ColorSpaceName, GraphicsInput, GraphicsSettings, Renderer, ToneMapping, ToneMappingName };
+export type { ColorManagement, ColorSpaceName, GraphicsInput, GraphicsSettings, ToneMapping, ToneMappingName };
 
 // Bytes: asset bytes or a lazy loader. EnginePlugins: custom MDP terms, trusted-only.
 export type { Bytes, SplatTransform, ModelFormat, EnginePlugins, SkinConfig };

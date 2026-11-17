@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Literal, get_args
 
-Renderer = Literal["classic", "filament"]
+ColorManagement = Literal["classic", "filament"]
 
 ToneMapping = Literal[
     # three.js's operators
@@ -37,7 +37,7 @@ class ViewerConfig:
     """Viewer configuration for a scene: the camera, and how the scene is drawn.
 
     Matches the API of ``mjlab.viewer.ViewerConfig``, plus the graphics settings mjlab's
-    viewer does not have (``renderer`` onwards).
+    viewer does not have (``color_management`` onwards).
     """
 
     lookat: tuple[float, float, float] = (0.0, 0.0, 0.0)
@@ -96,11 +96,12 @@ class ViewerConfig:
     width: int = 320
     """Viewer canvas width in pixels."""
 
-    renderer: Renderer = "classic"
-    """``"classic"`` draws as MuJoCo's classic renderer: ``rgba`` as written, an sRGB 2D
-    texture decoded and the output not encoded, so darker than the file, a cube or skybox
-    as stored, and no tone mapping. ``"filament"`` draws as its Filament renderer: colour managed, tone mapped
-    and exposed. The settings below apply to it alone."""
+    color_management: ColorManagement = "classic"
+    """How colours become pixels. ``"classic"`` as MuJoCo's classic renderer: ``rgba`` as
+    written, an sRGB 2D texture decoded and the output not encoded, so darker than the
+    file, a cube or skybox as stored, and no tone mapping. ``"filament"`` as its Filament
+    renderer: colour managed, tone mapped and exposed. The settings below apply to it
+    alone."""
 
     tone_mapping: ToneMapping | None = None
     """Every operator three.js has, and MuJoCo's names with their meaning. Unset, the
@@ -122,7 +123,7 @@ class ViewerConfig:
     the model's ``<visual>`` ``haze`` and its colour, drawn only with a skybox."""
 
     def __post_init__(self) -> None:
-        _check_choice("renderer", self.renderer, Renderer)
+        _check_choice("color_management", self.color_management, ColorManagement)
         _check_choice("tone_mapping", self.tone_mapping, ToneMapping)
         _check_choice("output_color_space", self.output_color_space, ColorSpace)
         _check_choice("base_color_type", self.base_color_type, ColorSpace)
@@ -131,15 +132,16 @@ class ViewerConfig:
             raise ValueError(
                 f"ViewerConfig exposure={self.exposure!r} is not a finite number of stops."
             )
-        if self.renderer == "classic":
+        if self.color_management == "classic":
             set_here = [
                 name for name in _FILAMENT_FIELDS if getattr(self, name) is not None
             ]
             if set_here:
                 raise ValueError(
-                    f"ViewerConfig sets {', '.join(set_here)} with renderer='classic', "
-                    "which draws with no tone mapping or colour management, as MuJoCo's "
-                    "classic renderer does. Pass renderer='filament' to use them."
+                    f"ViewerConfig sets {', '.join(set_here)} with "
+                    "color_management='classic', which draws as MuJoCo's classic renderer "
+                    "does, with no tone mapping. Pass color_management='filament' to use "
+                    "them."
                 )
 
     def to_dict(self) -> dict[str, Any]:
@@ -212,4 +214,4 @@ def _check_choice(name: str, value: Any, choices: Any) -> None:
         )
 
 
-__all__ = ["ColorSpace", "Renderer", "ToneMapping", "ViewerConfig"]
+__all__ = ["ColorManagement", "ColorSpace", "ToneMapping", "ViewerConfig"]

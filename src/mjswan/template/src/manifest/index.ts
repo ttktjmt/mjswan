@@ -19,7 +19,7 @@ import {
   mergeGraphics,
   type ColorSpaceName,
   type GraphicsSettings,
-  type Renderer,
+  type ColorManagement,
   type ToneMappingName,
 } from '../core/scene/graphicsSettings';
 import type { PolicyInput, SceneInput, SkinInput, SplatInput } from '../engine/types';
@@ -42,7 +42,7 @@ export interface ManifestCamera {
 }
 /** How a scene is drawn (format 9): `ViewerConfig`'s graphics settings, resolved at build time. */
 export interface ManifestGraphics {
-  renderer?: Renderer;
+  color_management?: ColorManagement;
   tone_mapping?: ToneMappingName;
   /** In stops. */
   exposure?: number;
@@ -390,7 +390,7 @@ function toViewerConfig(camera: ManifestCamera | undefined, format: number): Vie
 /** The manifest's snake_case `graphics` as the engine's settings; without it (format 8 and below), MuJoCo's defaults. */
 function toGraphics(graphics: ManifestGraphics | undefined): GraphicsSettings {
   return mergeGraphics(DEFAULT_GRAPHICS, graphics && {
-    renderer: graphics.renderer,
+    colorManagement: graphics.color_management,
     toneMapping: graphics.tone_mapping,
     exposure: graphics.exposure,
     outputColorSpace: graphics.output_color_space,

@@ -45,7 +45,7 @@ THREE.ShaderChunk.tonemapping_pars_fragment = THREE.ShaderChunk.tonemapping_pars
 
 /** The renderer's share: tone mapping, exposure and the output's encoding. */
 export function applyToRenderer(renderer: THREE.WebGLRenderer, settings: GraphicsSettings): void {
-  const filament = settings.renderer === 'filament';
+  const filament = settings.colorManagement === 'filament';
   renderer.toneMapping = filament ? THREE_TONE_MAPPING[settings.toneMapping] : THREE.NoToneMapping;
   renderer.toneMappingExposure = 2 ** settings.exposure * (settings.toneMapping === 'aces' ? 0.6 : 1);
   renderer.outputColorSpace =
@@ -169,7 +169,7 @@ export class SceneGraphics {
   apply(settings: GraphicsSettings): void {
     this.settings = settings;
     const decode = decodesBaseColor(settings);
-    const classic = settings.renderer === 'classic';
+    const classic = settings.colorManagement === 'classic';
     this.forEachGeomMaterial((material) => setBaseColor(material, decode));
     for (const cube of this.cubes) cube.put(classic ? this.twin(cube.texture) : cube.texture);
     // An AR session's passthrough holds the sky meanwhile, and puts back the one it took.

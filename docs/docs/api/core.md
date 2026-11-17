@@ -531,7 +531,7 @@ The scene's viewer configuration: what `set_viewer` set, the task's for an mjlab
 ```python
 from dataclasses import replace
 
-scene.set_viewer(replace(scene.viewer, renderer="filament", tone_mapping="agx"))
+scene.set_viewer(replace(scene.viewer, color_management="filament", tone_mapping="agx"))
 ```
 
 The viewer panel's **Graphics** section copies this call, with the settings changed there, as **Copy as Python**.
@@ -917,7 +917,7 @@ class mjswan.ViewerConfig(
     enable_shadows: bool = True,
     height: int = 240,
     width: int = 320,
-    renderer: Literal["classic", "filament"] = "classic",
+    color_management: Literal["classic", "filament"] = "classic",
     tone_mapping: ToneMapping | None = None,
     exposure: float | None = None,
     output_color_space: Literal["srgb", "linear"] | None = None,
@@ -926,7 +926,7 @@ class mjswan.ViewerConfig(
 )
 ```
 
-Camera and graphics configuration applied to a scene via `SceneHandle.set_viewer()`. Matches the API of `mjlab.viewer.ViewerConfig`, plus the graphics settings mjlab's viewer does not have (`renderer` onwards).
+Camera and graphics configuration applied to a scene via `SceneHandle.set_viewer()`. Matches the API of `mjlab.viewer.ViewerConfig`, plus the graphics settings mjlab's viewer does not have (`color_management` onwards).
 
 **Selected fields**
 
@@ -942,13 +942,13 @@ Camera and graphics configuration applied to a scene via `SceneHandle.set_viewer
 | `enable_shadows` | Shadows, as MuJoCo's `mjRND_SHADOW`: cast from each directional or spot light with `castshadow`. |
 | `enable_reflections` | Reflections, as MuJoCo's `mjRND_REFLECTION`: the first opaque plane or box top with a material `reflectance` mirrors the model's geoms, scaled by it. |
 | `enable_haze` | Haze where the first infinite plane meets the skybox, as MuJoCo's `mjRND_HAZE`, from the model's `<visual>` `haze` and its colour. Drawn only with a skybox. |
-| `renderer` | `"classic"` draws as MuJoCo's classic renderer: `rgba` as written, an sRGB 2D texture decoded and the output not encoded (so darker than the file), a cube or skybox as stored, no tone mapping. `"filament"` draws as its Filament renderer: colour managed, tone mapped and exposed. |
+| `color_management` | How colours become pixels; three.js draws both. `"classic"` as MuJoCo's classic renderer: `rgba` as written, an sRGB 2D texture decoded and the output not encoded (so darker than the file), a cube or skybox as stored, no tone mapping. `"filament"` as its Filament renderer: colour managed, tone mapped and exposed. |
 | `tone_mapping` | Filament only. Every operator three.js has (`"none"`, `"linear"`, `"reinhard"`, `"cineon"`, `"aces_filmic"`, `"agx"`, `"neutral"`) and MuJoCo's names with their meaning: `"pbr_neutral"` is `"neutral"`, `"aces_legacy"` is `"aces_filmic"`, `"aces"` is `"aces_filmic"` at 0.6 of the exposure, `"filmic"` Narkowicz's curve. |
 | `exposure` | Filament only, in stops, before tone mapping. |
 | `output_color_space` | Filament only: `"srgb"` encodes the output, `"linear"` leaves it. |
 | `base_color_type` | Filament only: `"srgb"` decodes an `rgba` (and a `SolidShading` colour, and the viewer's own: tendons, debug drawings, frustums), `"linear"` takes it as written. |
 
-The four Filament settings raise `ValueError` with `renderer="classic"`, which would ignore them. Left unset, the build reads them from the model's `<custom>` flags, under MuJoCo 4.0's names (`filament.cg.tone_mapping`, `filament.cg.exposure`, `filament.cg.output_color_space`, `filament.material.base_color_type`), then takes MuJoCo's defaults (`"pbr_neutral"`, 0, `"srgb"`, `"srgb"`); a flag value MuJoCo does not know warns and takes the default. Every scene gets them, so the viewer can switch a classic one to Filament. Camera sensors are drawn as mujoco_warp draws them, whatever the settings: `rgba` as written, textures as stored, no reflection or haze, shadows by the sensor's `use_shadows`.
+The four Filament settings raise `ValueError` with `color_management="classic"`, which would ignore them. Left unset, the build reads them from the model's `<custom>` flags, under MuJoCo 4.0's names (`filament.cg.tone_mapping`, `filament.cg.exposure`, `filament.cg.output_color_space`, `filament.material.base_color_type`), then takes MuJoCo's defaults (`"pbr_neutral"`, 0, `"srgb"`, `"srgb"`); a flag value MuJoCo does not know warns and takes the default. Every scene gets them, so the viewer can switch a classic one to Filament. Camera sensors are drawn as mujoco_warp draws them, whatever the settings: `rgba` as written, textures as stored, no reflection or haze, shadows by the sensor's `use_shadows`.
 
 ### ViewerConfig.from_position
 

@@ -437,7 +437,7 @@ def graphics_entry(
     if exposure is None:
         exposure = _custom_number(model, "filament.cg.exposure")
     return {
-        "renderer": viewer.renderer,
+        "color_management": viewer.color_management,
         "tone_mapping": texts["tone_mapping"],
         "exposure": float(exposure) if exposure is not None else 0.0,
         "output_color_space": texts["output_color_space"],

@@ -1668,7 +1668,7 @@ class SceneHandle:
         some settings and keeps the rest, a task's camera included::
 
             from dataclasses import replace
-            scene.set_viewer(replace(scene.viewer, renderer="filament", tone_mapping="agx"))
+            scene.set_viewer(replace(scene.viewer, color_management="filament", tone_mapping="agx"))
         """
         return self._config.viewer or ViewerConfig()
 

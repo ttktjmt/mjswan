@@ -186,7 +186,7 @@ describe('parseManifest', () => {
 
   it('draws a scene as its graphics say, and one without as MuJoCo would by default', async () => {
     const graphics = {
-      renderer: 'filament',
+      color_management: 'filament',
       tone_mapping: 'pbr_neutral',
       exposure: 0.5,
       output_color_space: 'srgb',
@@ -199,7 +199,7 @@ describe('parseManifest', () => {
     const manifest = { ...MANIFEST, format: 9, projects: [{ ...MANIFEST.projects[0], scenes: [withGraphics] }] };
     const [scene] = parseManifest(manifest, fakeSource().source).projects[0].scenes;
     // MuJoCo's name for three.js's operator is the operator.
-    const expected = { renderer: 'filament', toneMapping: 'neutral', exposure: 0.5, outputColorSpace: 'srgb', baseColorType: 'linear', shadows: false, reflections: true, haze: true };
+    const expected = { colorManagement: 'filament', toneMapping: 'neutral', exposure: 0.5, outputColorSpace: 'srgb', baseColorType: 'linear', shadows: false, reflections: true, haze: true };
     expect(scene.graphics).toEqual(expected);
     expect((await scene.buildScene()).graphics).toEqual(expected);
 

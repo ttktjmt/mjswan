@@ -298,7 +298,7 @@ class TestSceneCamera:
         scene.set_viewer(ViewerConfig(distance=9.0))
         # The handle hands the config back, so a replace keeps the camera.
         scene.set_viewer(
-            replace(scene.viewer, renderer="filament", enable_shadows=False)
+            replace(scene.viewer, color_management="filament", enable_shadows=False)
         )
         manifest = build_manifest(project._builder, tmp_path / "out")
 
@@ -307,7 +307,7 @@ class TestSceneCamera:
         # The switches are in `graphics`, not the camera.
         assert "enable_shadows" not in entry["camera"]
         assert entry["graphics"] == {
-            "renderer": "filament",
+            "color_management": "filament",
             "tone_mapping": "pbr_neutral",
             "exposure": 0.0,
             "output_color_space": "srgb",

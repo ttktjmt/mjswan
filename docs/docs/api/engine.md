@@ -153,7 +153,7 @@ How a scene is drawn: the manifest's `graphics`, which `buildScene` passes as `S
 
 ```ts
 interface GraphicsSettings {
-  renderer: 'classic' | 'filament';
+  colorManagement: 'classic' | 'filament';
   toneMapping: ToneMapping;            // Filament only
   exposure: number;                    // Filament only, in stops
   outputColorSpace: 'srgb' | 'linear'; // Filament only
@@ -164,9 +164,10 @@ interface GraphicsSettings {
 }
 ```
 
-`classic` draws as MuJoCo's classic renderer: `rgba` as written, an sRGB 2D texture
-decoded and the output not encoded, a cube or skybox as stored, no tone mapping.
-`filament` draws as its Filament renderer: colour managed, tone mapped and exposed.
+Both are drawn by three.js. `classic` handles colour as MuJoCo's classic renderer: `rgba`
+as written, an sRGB 2D texture decoded and the output not encoded, a cube or skybox as
+stored, no tone mapping. `filament` as its Filament renderer: colour managed, tone mapped
+and exposed.
 `ToneMapping` is every operator three.js has
 (`none`, `linear`, `reinhard`, `cineon`, `aces_filmic`, `agx`, `neutral`) and MuJoCo's
 `aces` (three's `aces_filmic` at 0.6 of the exposure) and `filmic` (Narkowicz's curve);
@@ -184,7 +185,7 @@ sensor's `use_shadows`, and the robot a skin hides included. A splat is drawn as
 so exposure does not change it.
 
 The bundled app's panel has a **Graphics** section, below Camera Feeds and collapsed at
-first: the renderer, tone mapping and exposure under Filament, the three switches,
+first: the colour management, tone mapping and exposure under Filament, the three switches,
 **Reset**, and **Copy as Python**, which copies the `set_viewer` call for the settings
 changed there.
 

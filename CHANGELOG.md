@@ -14,9 +14,10 @@ shortcuts.
 
 ### Added
 
-- **Graphics settings: a scene drawn as MuJoCo's classic renderer draws it, or with its
-  Filament renderer's look** (**document format 9**, #232). `ViewerConfig` takes
-  `renderer` (`"classic"`, the default, or `"filament"`) and, for Filament,
+- **Graphics settings: a scene's colours handled as MuJoCo's classic renderer handles
+  them, or as its Filament renderer does** (**document format 9**, #232). `ViewerConfig`
+  takes `color_management` (`"classic"`, the default, or `"filament"`; three.js draws
+  both) and, for Filament,
   `tone_mapping` (every three.js operator, `"agx"` among them, and MuJoCo's names),
   `exposure` in stops, `output_color_space` and `base_color_type`; `enable_shadows`,
   `enable_reflections` and the new `enable_haze` are MuJoCo's `mjRND_SHADOW`,
@@ -35,7 +36,7 @@ shortcuts.
   `base_color_type`. Camera sensors are drawn as mujoco_warp draws them, whatever the
   settings. `engine.graphics.set()` / `reset()` and the state's `graphics` let a host
   change them for the session; the panel's **Graphics** section, below Camera Feeds and
-  collapsed at first, has the renderer, tone mapping, exposure, the three switches,
+  collapsed at first, has the colour management, tone mapping, exposure, the three switches,
   **Reset** and **Copy as Python**.
 
 - **Skins modelled on the robot: `ModelledSkinConfig`** (**document format 9**). A `.glb`

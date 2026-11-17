@@ -20,7 +20,7 @@ import { loadSceneFromURL } from '../scene';
 
 type MainModule = import('mujoco').MainModule;
 
-const FILAMENT: GraphicsSettings = { ...DEFAULT_GRAPHICS, renderer: 'filament' };
+const FILAMENT: GraphicsSettings = { ...DEFAULT_GRAPHICS, colorManagement: 'filament' };
 
 describe('graphics settings', () => {
   it("reads MuJoCo's names as the operators they mean", () => {
@@ -32,12 +32,12 @@ describe('graphics settings', () => {
 
   it('keeps a setting it cannot draw', () => {
     const merged = mergeGraphics(DEFAULT_GRAPHICS, {
-      renderer: 'filament',
+      colorManagement: 'filament',
       toneMapping: 'bogus' as never,
       exposure: Number.NaN,
       haze: false,
     });
-    expect(merged).toEqual({ ...DEFAULT_GRAPHICS, renderer: 'filament', haze: false });
+    expect(merged).toEqual({ ...DEFAULT_GRAPHICS, colorManagement: 'filament', haze: false });
   });
 
   it('tone maps and encodes under Filament alone, its exposure in stops', () => {

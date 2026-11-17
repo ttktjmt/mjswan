@@ -6,7 +6,7 @@ import {
   TONE_MAPPINGS,
   type GraphicsInput,
   type GraphicsSettings,
-  type Renderer,
+  type ColorManagement,
   type ToneMapping,
 } from '../engine';
 import { CommandSection } from './CommandSection';
@@ -27,7 +27,7 @@ const TONE_MAPPING_LABELS: Record<ToneMapping, string> = {
 
 /** Each setting's `ViewerConfig` field, and whether only Filament reads it. */
 const PYTHON_FIELDS: ReadonlyArray<[keyof GraphicsSettings, string, boolean]> = [
-  ['renderer', 'renderer', false],
+  ['colorManagement', 'color_management', false],
   ['toneMapping', 'tone_mapping', true],
   ['exposure', 'exposure', true],
   ['outputColorSpace', 'output_color_space', true],
@@ -48,9 +48,9 @@ function pythonValue(value: string | number | boolean): string {
  * in. Back to classic, the Filament settings are cleared: a classic `ViewerConfig` refuses them.
  */
 export function graphicsAsPython(current: GraphicsSettings, scene: GraphicsSettings): string {
-  const classic = current.renderer === 'classic';
+  const classic = current.colorManagement === 'classic';
   const args = PYTHON_FIELDS.flatMap(([key, field, filamentOnly]) => {
-    if (filamentOnly && classic) return scene.renderer === 'classic' ? [] : [`${field}=None`];
+    if (filamentOnly && classic) return scene.colorManagement === 'classic' ? [] : [`${field}=None`];
     return current[key] === scene[key] ? [] : [`${field}=${pythonValue(current[key])}`];
   });
   return `from dataclasses import replace\n\nscene.set_viewer(replace(scene.viewer${args.map((arg) => `, ${arg}`).join('')}))\n`;
@@ -85,21 +85,22 @@ export function GraphicsSection({
   );
   return (
     <CommandSection label="Graphics" expandByDefault={false}>
-      <Box px="xs" pb="0.5em">
+      <LabeledInput label="Color management">
         <SegmentedControl
           fullWidth
           size="xs"
           radius="xs"
+          aria-label="Color management"
           styles={{ label: { fontSize: 'var(--mantine-font-size-sm)' } }}
-          value={graphics.renderer}
-          onChange={(renderer) => onChange({ renderer: renderer as Renderer })}
+          value={graphics.colorManagement}
+          onChange={(value) => onChange({ colorManagement: value as ColorManagement })}
           data={[
             { value: 'classic', label: 'Classic' },
             { value: 'filament', label: 'Filament' },
           ]}
         />
-      </Box>
-      {graphics.renderer === 'filament' && (
+      </LabeledInput>
+      {graphics.colorManagement === 'filament' && (
         <>
           <LabeledInput id="graphics:tone-mapping" label="Tone mapping">
             <Select
