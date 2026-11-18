@@ -24,8 +24,7 @@ import {
 import { loadMjzFile, resetWorking, WORKING, type ArchiveLimits } from '../utils/mjzLoader';
 import { type Bytes } from '../utils/bytes';
 import type { EnginePlugins } from '../plugins';
-import { type SplatTransform, type SplatMesh, loadSplat, disposeSplat, applySplatTransform } from '../scene/splat';
-import { loadCollider, disposeCollider } from '../scene/collider';
+import type { SplatTransform, SplatMesh } from '../scene/splat';
 import { SeeThrough } from '../scene/seeThrough';
 import type { Skin } from '../skin/skin';
 import type { SkinConfig } from '../skin/config';
@@ -113,6 +112,13 @@ const DEFAULT_TERM_SEED = 0x5eed;
 
 /** The skin's Debug Viz switch, listed after mjlab's drawings and under "Enabled" alike. */
 const XRAY_SWITCH = 'xray';
+
+/**
+ * Spark (half a megabyte) and the collider's GLTFLoader, loaded with the first splat rather
+ * than with every scene. Set before any splat or collider exists, so code holding one has them.
+ */
+let splatModule: typeof import('../scene/splat') | null = null;
+let colliderModule: typeof import('../scene/collider') | null = null;
 
 
 /**
@@ -644,11 +650,11 @@ export class mjswanRuntime {
 
     // Dispose previous splat/collider before switching scenes
     if (this.splatMesh) {
-      disposeSplat(this.splatMesh, this.scene);
+      splatModule!.disposeSplat(this.splatMesh, this.scene);
       this.splatMesh = null;
     }
     if (this.colliderMesh) {
-      disposeCollider(this.colliderMesh, this.scene);
+      colliderModule!.disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
     this.disposeSkin();
@@ -917,11 +923,11 @@ export class mjswanRuntime {
 
   async setSplat(splat: ResolvedSplat | null): Promise<void> {
     if (this.splatMesh) {
-      disposeSplat(this.splatMesh, this.scene);
+      splatModule!.disposeSplat(this.splatMesh, this.scene);
       this.splatMesh = null;
     }
     if (this.colliderMesh) {
-      disposeCollider(this.colliderMesh, this.scene);
+      colliderModule!.disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
     if (splat) {
@@ -931,9 +937,11 @@ export class mjswanRuntime {
 
   private async applySplat(splat: ResolvedSplat): Promise<void> {
     this.currentSplatTransform = splat.transform ?? {};
-    this.splatMesh = loadSplat(splat.data, this.currentSplatTransform, this.scene);
+    splatModule ??= await import('../scene/splat');
+    this.splatMesh = splatModule.loadSplat(splat.data, this.currentSplatTransform, this.scene);
     if (splat.collider) {
-      this.colliderMesh = await loadCollider(splat.collider, this.scene);
+      colliderModule ??= await import('../scene/collider');
+      this.colliderMesh = await colliderModule.loadCollider(splat.collider, this.scene);
     }
   }
 
@@ -1044,7 +1052,7 @@ export class mjswanRuntime {
   calibrateSplat(transform: SplatTransform): void {
     this.currentSplatTransform = transform;
     if (this.splatMesh) {
-      applySplatTransform(this.splatMesh, transform);
+      splatModule!.applySplatTransform(this.splatMesh, transform);
     }
   }
 
@@ -2619,11 +2627,11 @@ export class mjswanRuntime {
     await this.policyGraphs.clear();
     this.modelFieldDefaults = null;
     if (this.splatMesh) {
-      disposeSplat(this.splatMesh, this.scene);
+      splatModule!.disposeSplat(this.splatMesh, this.scene);
       this.splatMesh = null;
     }
     if (this.colliderMesh) {
-      disposeCollider(this.colliderMesh, this.scene);
+      colliderModule!.disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
     this.disposeSkin();
