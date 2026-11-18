@@ -33,6 +33,7 @@ from .mjlab import (
     camera_groups,
     resolve_action_scales,
     resolve_actuator_delays,
+    resolve_dc_motor_curves,
     resolve_default_joint_vel,
     resolve_pd_gains,
     resolve_runner_defaults,
@@ -649,6 +650,7 @@ class SceneHandle:
                     one = {name: term}
                     resolve_action_scales(one, joints)
                     resolve_pd_gains(one, joints, resolved_env_cfg)
+                    resolve_dc_motor_curves(one, joints, resolved_env_cfg)
                     resolve_actuator_delays(one, joints, resolved_env_cfg)
                     resolve_default_joint_vel(one, joints, resolved_env_cfg)
             warn_unrun_actuator_fields(mdp.actions, resolved_env_cfg)

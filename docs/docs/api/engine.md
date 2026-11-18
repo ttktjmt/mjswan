@@ -125,6 +125,8 @@ interface MjswanEngineState {
   camera: { tracking: boolean; fovy: number };
   /** The graphics settings drawn now, every one resolved. */
   graphics: GraphicsSettings;
+  /** Which of the shadow, reflection and haze switches change anything in the loaded model. */
+  graphicsAvailable: { shadows: boolean; reflections: boolean; haze: boolean };
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
   /** Every pointer mode, with whether this scene can run it. */
@@ -173,7 +175,10 @@ and exposed.
 `aces` (three's `aces_filmic` at 0.6 of the exposure) and `filmic` (Narkowicz's curve);
 `graphics.set` also takes MuJoCo's `pbr_neutral` and `aces_legacy`, which the state reports
 as `neutral` and `aces_filmic`. Shadows, reflections and haze are MuJoCo's `mjRND_SHADOW`,
-`mjRND_REFLECTION` and `mjRND_HAZE`, on by default.
+`mjRND_REFLECTION` and `mjRND_HAZE`, on by default. A model draws each only by MuJoCo's
+rules: shadows from a light that casts them, a reflection in the first opaque plane or box
+with a `reflectance`, haze where an infinite plane meets a skybox. `state.graphicsAvailable`
+says which this model has, so a host can leave the other switches unoffered.
 
 `graphics.set(partial)` changes some settings, ignoring with a warning a value the engine
 cannot draw; `graphics.reset()` returns to the scene's own. A change lasts until the next

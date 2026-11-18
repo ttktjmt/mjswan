@@ -67,6 +67,13 @@ export interface ResolvedActionTerm {
   positionActuator: boolean[];
   kp: Float32Array;
   kd: Float32Array;
+  /**
+   * mjlab's DC motor, per joint: the torque it gives at rest and the speed at which it gives
+   * none (`saturation_effort`, `velocity_limit`). The torque computed for a motor is clipped
+   * to the line between, as mjlab's `dc_motor_clip` does. `Infinity` for any other motor.
+   */
+  saturationEffort?: Float32Array;
+  velocityLimit?: Float32Array;
   /** `muscle_activation` only: how a raw action becomes a control. */
   muscleMode: MuscleMode;
   /** `muscle_activation` with `direct`: each actuator's own `ctrlrange`, per joint. */
@@ -262,8 +269,10 @@ type DataViews = Pick<MjData, 'ctrl' | 'qpos' | 'qvel'>;
  * One physics substep's `apply`: every term's `processed` into `mjData.ctrl`.
  *
  * Zeroes `ctrl` first, so an actuator no term claims stays at rest rather than holding
- * the previous step's value. `substep` counts from 0 within the control step, for a
- * term that ramps across it.
+ * the previous step's value, as mjlab resets a target no term writes. With no term at all
+ * (a scene without a policy) there is no controller, and `ctrl` keeps what a keyframe or
+ * the host set, as MuJoCo's own viewer leaves it. `substep` counts from 0 within the
+ * control step, for a term that ramps across it.
  */
 export function applyAction(
   mjData: MjData,
@@ -271,6 +280,7 @@ export function applyAction(
   substep = 0,
   decimation = 1,
 ): void {
+  if (terms.length === 0) return;
   // Read once: each embind getter allocates a new view.
   const views: DataViews = { ctrl: mjData.ctrl, qpos: mjData.qpos, qvel: mjData.qvel };
   views.ctrl.fill(0.0);
@@ -324,18 +334,34 @@ function applyActionTerm(
   }
   for (const delay of term.delays) delay.apply(targets);
 
+  const { saturationEffort, velocityLimit } = term;
   for (let i = 0; i < n; i++) {
     const ctrlIndex = ctrlAdr[i];
     if (ctrlIndex < 0) continue;
-    if (controlType === 'torque' || positionActuator[i]) {
+    if (positionActuator[i]) {
       ctrl[ctrlIndex] = targets[i];
-    } else if (position) {
-      ctrl[ctrlIndex] = kp[i] * (targets[i] - qpos[qposAdr[i]]) + kd[i] * (0 - qvel[qvelAdr[i]]);
-    } else {
-      // A velocity actuator (`biastype=affine`) runs its own damping on `ctrl`.
-      ctrl[ctrlIndex] = kd[i] * (targets[i] - qvel[qvelAdr[i]]);
+      continue;
     }
+    const vel = qvel[qvelAdr[i]];
+    let torque: number;
+    if (controlType === 'torque') torque = targets[i];
+    else if (position) torque = kp[i] * (targets[i] - qpos[qposAdr[i]]) + kd[i] * (0 - vel);
+    // A velocity actuator (`biastype=affine`) runs its own damping on `ctrl`.
+    else torque = kd[i] * (targets[i] - vel);
+    ctrl[ctrlIndex] =
+      saturationEffort && velocityLimit ? dcMotorClip(torque, saturationEffort[i], velocityLimit[i], vel) : torque;
   }
+}
+
+/**
+ * mjlab's `dc_motor_clip`: `effort` within the line from `saturation` at rest to nothing at
+ * `velocityLimit`. Its `force_limit` bound is the motor's own `ctrlrange`, which MuJoCo
+ * applies after; clamping there leaves what mjlab's speed clamp at the corner would.
+ */
+export function dcMotorClip(effort: number, saturation: number, velocityLimit: number, vel: number): number {
+  if (!Number.isFinite(saturation)) return effort;
+  const slope = vel / velocityLimit;
+  return clamp(effort, saturation * (-1 - slope), saturation * (1 - slope));
 }
 
 function clamp01(value: number): number {

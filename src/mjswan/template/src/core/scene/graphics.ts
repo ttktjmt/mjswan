@@ -15,6 +15,7 @@ import { linearCube } from './textures';
 import {
   DEFAULT_GRAPHICS,
   decodesBaseColor,
+  type GraphicsAvailable,
   type GraphicsSettings,
   type ToneMapping,
 } from './graphicsSettings';
@@ -103,6 +104,8 @@ export class SceneGraphics {
   private readonly sky: THREE.CubeTexture | null;
   private linearSky: THREE.CubeTexture | null = null;
   private readonly eye = new THREE.Vector3();
+  /** Which switches change anything in this model. */
+  readonly available: GraphicsAvailable;
 
   constructor(
     mujoco: MainModule,
@@ -164,6 +167,11 @@ export class SceneGraphics {
       // MuJoCo's skybox and haze stand at 0.7 of its far plane.
       this.haze = { mesh, plane: hazePlane, distance: 0.7 * modelZfar(mjModel) };
     }
+    this.available = {
+      shadows: lights.some((light) => !!light.userData.castShadow),
+      reflections: this.mirror !== null,
+      haze: this.haze !== null,
+    };
   }
 
   apply(settings: GraphicsSettings): void {

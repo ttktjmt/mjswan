@@ -299,9 +299,10 @@ export function sanitizeName(name: string): string {
  * `action_term` input slot (ADR 0009); 7 a scene's `skins`; 8 a motion's `frame_fields`;
  * 9 a camera sensor's descriptor, an image-shaped policy input, a skin modelled on
  * the robot (`fit: 'modelled'`), with `align`, `rest_qpos`, a solid material and
- * `hide_tendons`, and a scene's `graphics`.
+ * `hide_tendons`, and a scene's `graphics`; 10 an action term's DC motor
+ * `saturation_effort` and `velocity_limit`.
  */
-export const MAX_DOCUMENT_FORMAT = 9;
+export const MAX_DOCUMENT_FORMAT = 10;
 
 /**
  * Refuse a document this reader cannot read: one without a `format`, or one newer than it

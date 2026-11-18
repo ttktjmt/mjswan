@@ -36,6 +36,26 @@ export interface GraphicsSettings {
   haze: boolean;
 }
 
+/**
+ * Which of the three switches change anything in the loaded model, by the rules MuJoCo
+ * draws with: a host can leave the others unoffered.
+ */
+export interface GraphicsAvailable {
+  /** A light casts shadows. */
+  shadows: boolean;
+  /** An opaque plane or box has a `reflectance`. */
+  reflections: boolean;
+  /** An infinite plane meets a skybox. */
+  haze: boolean;
+}
+
+/** Before a model loads, nothing is drawn. */
+export const NO_GRAPHICS_AVAILABLE: Readonly<GraphicsAvailable> = Object.freeze({
+  shadows: false,
+  reflections: false,
+  haze: false,
+});
+
 /** What a host may pass: any of the settings, a tone mapping by any of its names. */
 export type GraphicsInput = Partial<Omit<GraphicsSettings, 'toneMapping'> & { toneMapping: ToneMappingName }>;
 

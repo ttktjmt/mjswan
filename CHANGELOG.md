@@ -14,6 +14,19 @@ shortcuts.
 
 ### Added
 
+- **A DC motor's torque-speed curve runs in the browser** (**document format 10**). mjlab's
+  `DcMotorActuatorCfg` clips its PD torque to a line falling from `saturation_effort` at
+  rest to nothing at `velocity_limit`. The build now writes both on the action term, read
+  off the entity's actuators as the gains are, and the browser clips the torque it computes
+  for those motors alike; MuJoCo then bounds it by the motor's `ctrlrange`, which mjlab sets
+  to the effort limit. The build no longer warns that the curve does not run. An older
+  engine would run those motors without it.
+
+- **The state's `graphicsAvailable` names the switches that change anything in the
+  model**: shadows from a light that casts them, a reflection in an opaque plane or box with
+  a `reflectance`, haze where an infinite plane meets a skybox. The panel's **Graphics**
+  section offers the others disabled.
+
 - **Graphics settings: a scene's colours handled as MuJoCo's classic renderer handles
   them, or as its Filament renderer does** (**document format 9**, #232). `ViewerConfig`
   takes `color_management` (`"classic"`, the default, or `"filament"`; three.js draws
@@ -1035,6 +1048,13 @@ shortcuts.
   3.11, so a 3.10 install could only resolve the vulnerable releases.
 
 ### Fixed
+
+- **A scene without a policy holds its keyframe's controls.** The engine zeroed `ctrl` before
+  every physics step even with no action term, dropping the `ctrl` a keyframe sets, so the
+  position actuators drove every joint toward 0: MuJoCo Menagerie's Unitree Go1, whose `home`
+  keyframe holds its crouch with one, flipped onto its back within a second. With no action
+  term `ctrl` now stays as the keyframe or the host set it, as MuJoCo's own viewer leaves it.
+  Under a policy an actuator no term drives is still zeroed, as mjlab resets its target.
 
 - **Shadows fall where MuJoCo casts them.** A directional light's shadow map covered the
   space behind the light, so nothing under it was shadowed; it now has MuJoCo's frustum

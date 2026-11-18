@@ -34,6 +34,7 @@ from mjswan.mjlab import (
     camera_groups,
     resolve_action_scales,
     resolve_actuator_delays,
+    resolve_dc_motor_curves,
     resolve_pd_gains,
     resolve_runner_defaults,
     warn_unrun_actuator_fields,
@@ -970,6 +971,18 @@ _FakeIdealPdActuatorCfg = _fake_actuator_cls("IdealPdActuatorCfg")
 _FakeBuiltinPositionActuatorCfg = _fake_actuator_cls("BuiltinPositionActuatorCfg")
 
 
+class _FakeDcMotorActuatorCfg(_FakeIdealPdActuatorCfg):
+    """mjlab's DC motor: the ideal PD within a torque-speed curve."""
+
+    def __init__(self, target_names_expr, saturation_effort, velocity_limit):
+        super().__init__(target_names_expr, 40.0, 2.0)
+        self.saturation_effort = saturation_effort
+        self.velocity_limit = velocity_limit
+
+
+_FakeDcMotorActuatorCfg.__name__ = "DcMotorActuatorCfg"
+
+
 def _env_cfg_with(*actuators: Any) -> Any:
     entity = SimpleNamespace(articulation=SimpleNamespace(actuators=actuators))
     return SimpleNamespace(scene=SimpleNamespace(entities={"robot": entity}))
@@ -1036,6 +1049,61 @@ class TestResolvePdGains:
         assert actions["joint_pos"].damping is None
 
 
+class TestResolveDcMotorCurves:
+    """A DC motor's torque-speed curve runs in the browser, off the fields mjlab keeps on
+    the actuator."""
+
+    JOINTS = TestResolvePdGains.JOINTS
+
+    def test_the_curve_expands_to_the_joints_its_motors_match(self):
+        from mjswan.envs.mdp.actions import JointPositionActionCfg
+
+        actions = {"joint_pos": JointPositionActionCfg()}
+        resolve_dc_motor_curves(
+            actions,
+            self.JOINTS,
+            _env_cfg_with(
+                _FakeDcMotorActuatorCfg((".*_knee_joint",), 30.0, 20.0),
+                _FakeIdealPdActuatorCfg(("waist_yaw_joint",), 40.0, 2.5),
+            ),
+        )
+
+        term = actions["joint_pos"]
+        assert term.saturation_effort == {
+            "robot/left_knee_joint": 30.0,
+            "robot/right_knee_joint": 30.0,
+        }
+        assert term.velocity_limit == {
+            "robot/left_knee_joint": 20.0,
+            "robot/right_knee_joint": 20.0,
+        }
+
+    def test_no_dc_motor_leaves_the_term_unclipped(self):
+        from mjswan.envs.mdp.actions import JointPositionActionCfg
+
+        actions = {"joint_pos": JointPositionActionCfg()}
+        resolve_dc_motor_curves(
+            actions,
+            self.JOINTS,
+            _env_cfg_with(_FakeIdealPdActuatorCfg((".*",), 99.0, 6.3)),
+        )
+
+        assert actions["joint_pos"].saturation_effort is None
+        assert actions["joint_pos"].velocity_limit is None
+
+    def test_the_curve_reaches_the_manifest_entry(self):
+        from mjswan.envs.mdp.actions import JointPositionActionCfg
+
+        entry = JointPositionActionCfg(
+            saturation_effort={"robot/left_knee_joint": 30.0},
+            velocity_limit={"robot/left_knee_joint": 20.0},
+        ).to_dict()
+
+        assert entry["saturation_effort"] == {"robot/left_knee_joint": 30.0}
+        assert entry["velocity_limit"] == {"robot/left_knee_joint": 20.0}
+        assert "saturation_effort" not in JointPositionActionCfg().to_dict()
+
+
 @pytest.mark.mjlab
 class TestWarnUnrunActuatorFields:
     """The browser runs an ideal-PD actuator's PD within its effort limit, and no more."""
@@ -1086,7 +1154,8 @@ class TestWarnUnrunActuatorFields:
             )
         assert len(record) == 1
 
-    def test_a_dc_motor_warns_naming_its_curve(self, actuator):
+    def test_a_dc_motor_curve_does_not_warn(self, actuator):
+        # The browser runs it: resolve_dc_motor_curves hands it to the term.
         cfg = actuator.DcMotorActuatorCfg(
             target_names_expr=(".*",),
             stiffness=40.0,
@@ -1095,11 +1164,8 @@ class TestWarnUnrunActuatorFields:
             saturation_effort=30.0,
             velocity_limit=20.0,
         )
-        with pytest.warns(
-            RuntimeWarning,
-            match=r"sets saturation_effort=30\.0, velocity_limit=20\.0, which the "
-            r"browser does not run: it runs only the PD within the effort limit",
-        ):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
             warn_unrun_actuator_fields(
                 self._two_terms_on_one_entity(), _env_cfg_with(cfg)
             )

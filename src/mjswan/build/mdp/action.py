@@ -162,9 +162,9 @@ def traced_action_entry(
         "type": kind,
         "actuator_names": [re.escape(t) for t in export.target_names],
     }
-    for gain in ("stiffness", "damping"):
-        if (value := getattr(cfg, gain)) is not None:
-            entry[gain] = value
+    for field in ("stiffness", "damping", "saturation_effort", "velocity_limit"):
+        if (value := getattr(cfg, field)) is not None:
+            entry[field] = value
     if cfg.delay:
         entry["delay"] = cfg.delay
     if interpolate:
