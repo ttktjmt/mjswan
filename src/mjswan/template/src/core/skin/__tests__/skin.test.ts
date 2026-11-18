@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { MToonMaterial, VRMExpressionManager } from '@pixiv/three-vrm';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 import { Skin, geomBottom, type SkinConfig } from '../skin';
-import { checkSpringChains } from '../budget';
+import { checkSpringChains, checkSpringUpdates } from '../budget';
 import { loadSkinModel, paintable } from '../skinModel';
 import { fromMujoco } from '../retarget';
 
@@ -1050,5 +1050,14 @@ describe('a skin past its budget', () => {
     expect(() => checkSpringChains(springs(301, 300))).toThrow(/collider tests/);
     expect(() => checkSpringChains(springs(5000, 0))).toThrow(/joints/);
     expect(() => checkSpringChains(springs(4, 3))).not.toThrow();
+  });
+
+  it('refuses manifest springs that repeat a bone with nodes below it', () => {
+    const bone = new THREE.Object3D();
+    for (let i = 0; i < 256; i++) bone.add(new THREE.Object3D());
+    expect(() => checkSpringUpdates(Array(1024).fill(bone))).toThrow(/updates a step/);
+    const strand = Array.from({ length: 8 }, () => new THREE.Object3D());
+    for (let i = 1; i < strand.length; i++) strand[i - 1].add(strand[i]);
+    expect(() => checkSpringUpdates(strand)).not.toThrow();
   });
 });

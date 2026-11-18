@@ -6,7 +6,13 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { MainModule, MjModel } from 'mujoco';
-import type { VRM } from '@pixiv/three-vrm';
+import {
+  VRMSpringBoneCollider,
+  VRMSpringBoneColliderShapeSphere,
+  VRMSpringBoneJoint,
+  VRMSpringBoneManager,
+  type VRM,
+} from '@pixiv/three-vrm';
 import { SpringPhysics } from '../springs';
 import { Skin } from '../skin';
 
@@ -146,6 +152,31 @@ describe('SpringPhysics', () => {
     expect(anchors.map((a) => a.node.name)).toEqual(['head']);
     expect(xml.match(/type="ball"/g)).toHaveLength(2);
     expect(SpringPhysics.build(mujoco, vrm.springBoneManager!, vrm.scene)!.jointCount).toBe(2);
+  });
+
+  it('refuses colliders past the contacts an avatar makes, groups sharing a bit included', () => {
+    /** A joint per count, each with its own collider group of that many spheres. */
+    const springs = (...counts: number[]) => {
+      const scene = new THREE.Group();
+      const manager = new VRMSpringBoneManager();
+      for (const count of counts) {
+        const bone = new THREE.Object3D();
+        const tail = new THREE.Object3D();
+        bone.add(tail);
+        scene.add(bone);
+        const colliders = Array.from({ length: count }, () => {
+          const collider = new VRMSpringBoneCollider(new VRMSpringBoneColliderShapeSphere({ radius: 0.01 }));
+          scene.add(collider);
+          return collider;
+        });
+        manager.addJoint(new VRMSpringBoneJoint(bone, tail, {}, [{ colliders }]));
+      }
+      return () => SpringPhysics.describe(manager, scene);
+    };
+    expect(springs(4096)).toThrow(/contact pairs/);
+    // Groups 30 apart share a contype bit: every 30th joint meets the first one's colliders.
+    expect(springs(2048, ...Array(246).fill(0))).toThrow(/contact pairs/);
+    expect(springs(...Array(40).fill(8))).not.toThrow();
   });
 
   it('holds the rest pose with no gravity and a still head', async () => {

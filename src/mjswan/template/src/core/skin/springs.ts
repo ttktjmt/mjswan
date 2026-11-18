@@ -32,6 +32,8 @@ const MIN_RADIUS = 0.002;
 const MIN_DAMPING = 2;
 /** Spin about the bone has little inertia of its own; this keeps it from out-running the step. */
 const ARMATURE_RATIO = 0.25;
+/** Joint-collider pairs MuJoCo may make contacts of, stepped up to 8 times a frame; an avatar makes under 1400. */
+const MAX_CONTACT_PAIRS = 2048;
 /** Heavy enough that a chain's pull on it is noise next to the push onto the pose. */
 const ANCHOR_MASS = 1000;
 
@@ -70,6 +72,13 @@ const wxyz = (q: THREE.Quaternion): string => `${num(q.w)} ${num(q.x)} ${num(q.y
 
 function isCollider(object: THREE.Object3D | null): boolean {
   return !!object && 'shape' in object && 'colliderMatrix' in object;
+}
+
+/** The contype bits of the collider groups a joint meets. */
+function maskOf(joint: VRMSpringBoneJoint, groupBits: Map<VRMSpringBoneColliderGroup, number>): number {
+  let mask = 0;
+  for (const group of joint.colliderGroups) mask |= groupBits.get(group) ?? 0;
+  return mask;
 }
 
 export class SpringPhysics {
@@ -174,6 +183,15 @@ export class SpringPhysics {
     for (const [group, bit] of groupBits) {
       for (const collider of group.colliders) colliderBits.set(collider, (colliderBits.get(collider) ?? 0) | bit);
     }
+    // Groups 30 apart share a bit, so count pairs by bit: an upper bound.
+    const jointsOn = new Array<number>(30).fill(0);
+    for (const joint of joints.values()) {
+      const mask = maskOf(joint, groupBits);
+      for (let b = 0; b < 30; b++) if (mask & (1 << b)) jointsOn[b]++;
+    }
+    let pairs = 0;
+    for (const bits of colliderBits.values()) for (let b = 0; b < 30; b++) if (bits & (1 << b)) pairs += jointsOn[b];
+    if (pairs > MAX_CONTACT_PAIRS) throw new Error(`spring colliders make ${pairs} contact pairs (at most ${MAX_CONTACT_PAIRS})`);
 
     let gravity = 0;
     for (const [bone, joint] of joints) {
@@ -278,8 +296,7 @@ ${worldbody}
     const inertia = carried + armature;
     const omega = Math.min(Math.sqrt(joint.settings.stiffness / (AUTHORED_STEP * length)), MAX_ANGULAR_FREQUENCY);
     const decay = Math.max(-Math.log(1 - Math.min(Math.max(joint.settings.dragForce, 0), 0.95)) / AUTHORED_STEP, MIN_DAMPING);
-    let mask = 0;
-    for (const group of joint.colliderGroups) mask |= groupBits.get(group) ?? 0;
+    const mask = maskOf(joint, groupBits);
     const mass = body.mass!;
     const own = 0.1 * mass * length * length;
     return [
