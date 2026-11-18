@@ -22,10 +22,13 @@ shortcuts.
   `exposure` in stops, `output_color_space` and `base_color_type`; `enable_shadows`,
   `enable_reflections` and the new `enable_haze` are MuJoCo's `mjRND_SHADOW`,
   `mjRND_REFLECTION` and `mjRND_HAZE`. Unset Filament settings come from the model's
-  `filament.*` `<custom>` flags (MuJoCo 4.0's names), then MuJoCo's defaults; the build
-  writes them all as the scene's `graphics`, beside `camera`, and setting one on a classic
-  scene raises. `SceneHandle.viewer` returns the scene's config, so
-  `scene.set_viewer(replace(scene.viewer, renderer="filament"))` keeps a task's camera.
+  `filament.*` `<custom>` flags (MuJoCo 4.0's names; a non-finite exposure draws 0, with a
+  warning), then MuJoCo's defaults; the build writes them all as the scene's `graphics`,
+  beside `camera`, and setting one on a classic scene raises. A manifest never carries
+  `NaN` or `Infinity`, which no browser parses: the build refuses it.
+  `SceneHandle.viewer` returns the scene's config, so
+  `scene.set_viewer(replace(scene.viewer, color_management="filament"))` keeps a task's
+  camera.
   Classic draws textures as MuJoCo uploads them (an sRGB 2D texture decoded and the output
   not encoded; a cube or skybox as stored), infinite planes lit, shadowed and following
   the viewer, haze where the first infinite plane meets the skybox, and a reflection on
@@ -1627,7 +1630,13 @@ shortcuts.
   `history_offsets` stacked one output frame each on a one-frame charge. A policy now
   declares at most 16 camera sensors and renders at most 64 images a step, each charged
   at its size; a slot reads only what it was charged, or nothing; and a history's output
-  is charged as well as its ring.
+  is charged as well as its ring. Sensors still got around it: a slot naming one by an
+  array or a number was served but never charged; the rays charged came from every nested
+  `sensors`, not those the runtime casts, and missed a `debug_vis` sensor of another kind;
+  a policy switch on one model kept the previous policy's caster for a name; and
+  `enabled_geom_groups`, looped over on every render, had no limit. A slot now names a
+  sensor only by a string, the budget charges the runtime's own raycast set and every
+  `debug_vis` sensor, each policy casts with its own, and geom groups are MuJoCo's 0 to 5.
 - **A skin can no longer make three-vrm hold the viewer's tab.** three-vrm did work the
   skin file (often a third party's avatar) controls with no bound: every expression bind
   over every primitive of its node, and a full ancestor walk per node constraint, on each
@@ -1635,7 +1644,10 @@ shortcuts.
   made, each tested against every collider group listed. A manifest's `springs` had no
   limit either. Expressions are now settled once at load (mjswan sets none), and a skin
   past fixed limits on constraints, spring joints, collider tests or spring depth is not
-  loaded; the scene runs without it.
+  loaded; the scene runs without it. Manifest chains past the updates a VRM's springs may
+  make each step are refused too (a chain naming one node over and over re-matrixes all
+  below it per joint), and with `mujoco_springs`, past 2048 joint-collider contact pairs
+  the springs are left to three-vrm.
 - **Each model an engine loads starts from an empty file area.** The engine unpacked every
   `.mjz` into one MuJoCo file area that it never emptied, so a later model could compile an
   earlier one's include or mesh, fail on a name the earlier one had used for a folder, or,
