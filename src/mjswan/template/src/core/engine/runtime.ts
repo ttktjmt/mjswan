@@ -1600,7 +1600,7 @@ export class mjswanRuntime {
       const structured = collectStructuredSensors(config);
       // Before any graph runs: a startup event and a command reset run theirs during the load.
       const budget = new BufferBudget();
-      reserveTermFeeds(config, budget, structured.camera);
+      reserveTermFeeds(config, budget, structured);
       if (!kept) await this.policyGraphs.load(policy.graphs ?? []);
       if (config.events && config.events.length > 0) {
         this.eventManager = new EventManager(

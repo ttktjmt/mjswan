@@ -58,6 +58,30 @@ export function checkSpringChains(chains: readonly SpringChainConfig[]): void {
   }
 }
 
+/** Objects three-vrm's step re-matrixes for a joint: those below its bone, up to the next joint's. */
+function below<T extends { children: T[] }>(bone: T, isJoint: (object: T) => boolean): number {
+  let n = 0;
+  for (const stack = [...bone.children]; stack.length; ) {
+    const object = stack.pop()!;
+    if (isJoint(object)) continue;
+    n++;
+    for (const child of object.children) stack.push(child);
+  }
+  return n;
+}
+
+/** Refuse a manifest's springs whose step re-matrixes more than a VRM's may. */
+export function checkSpringUpdates(bones: readonly THREE.Object3D[]): void {
+  const joints = new Set(bones);
+  const counted = new Map<THREE.Object3D, number>();
+  let updates = 0;
+  for (const bone of bones) {
+    if (!counted.has(bone)) counted.set(bone, below(bone, (object) => joints.has(object)));
+    updates += counted.get(bone)!;
+    if (updates > MAX_SPRING_UPDATES) throw new Error(`a skin's springs exceed ${MAX_SPRING_UPDATES} updates a step`);
+  }
+}
+
 /** three-vrm's spring import, refused before it imports or sorts anything past the budget. */
 export class BoundedSpringBones extends VRMSpringBoneLoaderPlugin {
   override async afterRoot(gltf: GLTF): Promise<void> {
@@ -155,21 +179,11 @@ export function springWork(json: unknown, nodes: THREE.Object3D[]): SpringWork {
     }
   }
 
-  // Each step re-matrixes, per joint, the objects below its bone up to the next joint's.
-  const below = new Map<Placed, number>();
+  const counted = new Map<Placed, number>();
   work.sort = joints.length;
   for (const { bone, groups } of joints) {
-    if (!below.has(bone)) {
-      let n = 0;
-      for (const stack = [...bone.children]; stack.length; ) {
-        const object = stack.pop()!;
-        if (object.joints) continue;
-        n++;
-        for (const child of object.children) stack.push(child);
-      }
-      below.set(bone, n);
-    }
-    work.updates += below.get(bone)!;
+    if (!counted.has(bone)) counted.set(bone, below(bone, (object) => object.joints > 0));
+    work.updates += counted.get(bone)!;
     if (work.updates > MAX_SPRING_UPDATES) return work;
     // The sort walks from the root to each dependency (the bone's parent, each distinct
     // collider) and calls itself for every joint on the way.

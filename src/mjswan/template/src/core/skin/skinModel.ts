@@ -16,7 +16,7 @@ import {
   VRMUtils,
   type VRM,
 } from '@pixiv/three-vrm';
-import { BoundedSpringBones, checkConstraints, checkSpringChains } from './budget';
+import { BoundedSpringBones, checkConstraints, checkSpringChains, checkSpringUpdates } from './budget';
 import { modelFrame } from './retarget';
 import { NodeRig, humanoidRig, type SkinRig } from './rig';
 import type { SkinConfig, SolidConfig, SpringChainConfig, ToonConfig } from './config';
@@ -224,6 +224,8 @@ async function springs(
       manager.addJoint(new VRMSpringBoneJoint(nodes[i], nodes[i + 1], settings, groups));
     }
   }
+  // checkSpringChains counts joints, not the nodes each re-matrixes: a chain may name one node over and over.
+  checkSpringUpdates([...manager.joints].map((joint) => joint.bone));
   manager.setInitState();
   return manager;
 }

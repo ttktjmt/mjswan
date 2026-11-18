@@ -8,6 +8,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
+import { CameraSensorSet } from '../camera';
 import { createSlotReader, isReadableEntityField, type SlotReaderContext } from '../slotReader';
 import { FIELD_READERS } from '../slotReader/fields';
 import { slotDims } from '../session';
@@ -665,6 +666,44 @@ describe('createSlotReader — structured sensor fields', () => {
 
     scene = { ...modelWith('robot/trunk'), descriptor: scan('robot/trunk') };
     close(read(slot), [1, 2, 3]);
+  });
+
+  it('reads a sensor only by a name, as the policy load charged it', () => {
+    const render = vi.fn(() => new Uint8Array(4));
+    const camera = { kind: 'camera' as const, camera: 'cam', width: 1, height: 1, enabled_geom_groups: [0], use_shadows: false };
+    const mjModel = { names: new TextEncoder().encode('cam\0').buffer, ncam: 1, name_camadr: [0] } as never;
+    const read = createSlotReader(() => ({ mujoco: {} as never, mjModel, mjData: {} as never }), {
+      cameraSensors: () => new CameraSensorSet({ cam: camera }, render),
+      raycastSensors: () => ({ '7': {} as never }),
+    });
+    expect(read({ sensor: 'cam', field: 'rgb', input: 'x' })).not.toBeNull();
+    render.mockClear();
+    expect(read({ sensor: ['cam'] as never, field: 'rgb', input: 'x' })).toBeNull();
+    expect(render).not.toHaveBeenCalled();
+    expect(read({ sensor: 7 as never, field: 'distances', input: 'x' })).toBeNull();
+  });
+
+  it("casts with the current policy's descriptor, not an earlier one of the same name", () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const scan = (body: string) => ({
+      frames: [{ type: 'body' as const, name: body }],
+      local_offsets: [[0, 0, 0]],
+      local_directions: [[0, 0, -1]],
+      ray_alignment: 'yaw' as const,
+      max_distance: 5,
+    });
+    const names = new TextEncoder().encode('world\0robot/pelvis\0robot/trunk\0');
+    const mjModel = { names: names.buffer, nbody: 3, name_bodyadr: [0, 6, 19] } as never;
+    const mjData = { xpos: new Float64Array([0, 0, 0, 1, 2, 3, 4, 5, 6]), xmat: new Float64Array(27) } as never;
+    let sensors: Record<string, never> = { terrain_scan: scan('robot/pelvis') as never };
+    const read = createSlotReader(() => ({ mujoco: {} as never, mjModel, mjData }), { raycastSensors: () => sensors });
+    const slot = { sensor: 'terrain_scan', field: 'frame_pos_w', input: 'x' };
+    close(read(slot), [1, 2, 3]);
+    sensors = { terrain_scan: scan('robot/trunk') as never };
+    close(read(slot), [4, 5, 6]);
+    sensors = {};
+    expect(read(slot)).toBeNull();
+    warn.mockRestore();
   });
 
   it('still serves a builtin sensor, which carries no field', () => {
