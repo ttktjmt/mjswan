@@ -3,7 +3,20 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build]
-exclude = ["src/mjswan/template/.nodeenv", "src/mjswan/template/node_modules", "**/__pycache__/**"]
+exclude = [
+    "src/mjswan/template/.nodeenv",
+    "src/mjswan/template/node_modules",
+    "**/__pycache__/**",
+    # The frontend's tests and their fixtures: no build reads them. `_source_fingerprint`
+    # skips the same files, so the wheel's prebuilt dist/ still matches.
+    "src/mjswan/template/src/**/__tests__/**",
+    "src/mjswan/template/src/**/*.test.ts",
+    "src/mjswan/template/src/**/*.test.tsx",
+    "src/mjswan/template/e2e/**",
+    "src/mjswan/template/harness*.html",
+    "src/mjswan/template/playwright.config.ts",
+    "src/mjswan/template/vitest.config.ts",
+]
 # Client build is in the gitignore, but we still want it in the distribution.
 ignore-vcs = true
 

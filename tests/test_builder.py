@@ -396,6 +396,23 @@ class TestFrontendBuildCache:
         app.write_text("export default 2;\n")
         assert cb._source_fingerprint() != before
 
+    def test_tests_stay_out_of_the_fingerprint(self, tmp_path):
+        """The wheel ships no tests, yet must hash as the tree its dist/ was marked on."""
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "App.tsx").write_text("export default 1;\n")
+        cb = ClientBuilder(tmp_path)
+        before = cb._source_fingerprint()
+        for test in (
+            "core/__tests__/fixtures/rollout.json",
+            "core/__tests__/helpers.ts",
+            "core/mjz.test.ts",
+            "urlState.test.tsx",
+        ):
+            path = tmp_path / "src" / test
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("{}\n")
+        assert cb._source_fingerprint() == before
+
     def test_version_bump_alone_does_not_churn_fingerprint(self, tmp_path):
         pkg = tmp_path / "package.json"
         pkg.write_text(
