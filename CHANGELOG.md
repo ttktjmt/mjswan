@@ -500,6 +500,27 @@ shortcuts.
 
 ### Changed
 
+- **`pip install mjswan` builds an app without Node, from a 7.7 MB wheel instead of 12.1
+  MB.** The release built the whole frontend (the SPA, the library build, the manifest
+  parser) and marked none of it, so `Builder.build()` never matched the packaged `dist/`
+  and set up Node to rebuild the SPA after every install. The wheel now carries the SPA
+  alone, marked as the build for the default options (`base_path="/"`, no GTM ID,
+  single-threaded, no debug), which reuse it; any other option still rebuilds with Node.
+  The frontend's unit tests and their fixtures, its E2E specs and harness pages, and the
+  Vitest and Playwright configs are no longer packaged. The npm package is built as before.
+
+- **The app downloads less before a scene starts: 2.34 MB over brotli for a scene
+  without a policy, down from 2.73 MB.** The UI font is Inter cut to the Latin range as
+  WOFF2 (82 KB, from an 805 KB TTF), drawn the same; its OFL notice, missing until now,
+  joins `THIRD_PARTY_LICENSES.md`. Spark, the Gaussian splat renderer (483 KB), loads with
+  the first splat and ONNX Runtime Web's JS (70 KB) with the first ONNX session, so a
+  scene without them never fetches either. `.mjz` archives unpack with fflate instead of
+  JSZip, file for file as JSZip unpacked them. The CSS keeps Mantine's rules only for the
+  components the app renders (107 KB, from 201 KB). The JS loaded up front is 1.50 MB,
+  from 2.14 MB. The engine bundle (`mjswan.js`) fetches the Spark and ONNX Runtime chunks
+  from its `assets/` as it already fetches MuJoCo's, so a host serving `dist/` serves
+  nothing new.
+
 - **Every scene now looks as MuJoCo draws it, published ones included.** Under the
   default classic renderer an sRGB 2D texture (a PNG that says so, or `colorspace="sRGB"`)
   is darker, as in MuJoCo; set its `colorspace` to `linear` to keep it as stored. A floor
