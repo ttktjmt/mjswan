@@ -98,8 +98,12 @@ interface BundledLicense {
   text?: string;
 }
 
+// Bundled from no npm package, so `build.license` cannot list it: src/assets/'s UI font.
+const VENDORED_LICENSES: BundledLicense[] = [{ name: 'Inter', version: '3.19', identifier: 'OFL-1.1' }];
+
 // Minify drops the notices bundled packages carry, so dist/ carries them in one file. A
-// package that publishes no LICENSE takes its text from licenses/<package>/LICENSE.
+// package that publishes no LICENSE, and anything vendored, takes its text from
+// licenses/<name>/LICENSE.
 function thirdPartyLicensesPlugin(): Plugin {
   return {
     name: 'mjswan-third-party-licenses',
@@ -114,7 +118,8 @@ function thirdPartyLicensesPlugin(): Plugin {
         const source =
           typeof json.source === 'string' ? json.source : Buffer.from(json.source).toString('utf-8');
         const missing: string[] = [];
-        const sections = (JSON.parse(source) as BundledLicense[]).map(
+        const bundled = [...(JSON.parse(source) as BundledLicense[]), ...VENDORED_LICENSES];
+        const sections = bundled.map(
           ({ name, version, identifier, text }) => {
             const own = path.resolve(__dirname, 'licenses', name, 'LICENSE');
             text ??= fs.existsSync(own) ? fs.readFileSync(own, 'utf-8').trim() : undefined;

@@ -362,6 +362,7 @@ class TestThirdPartyLicenses:
         text = (full_dist / "THIRD_PARTY_LICENSES.md").read_text()
         assert "pixiv Inc." in text  # @pixiv/three-vrm's own LICENSE
         assert "Copyright (c) Microsoft Corporation" in text  # licenses/onnxruntime-web
+        assert "SIL OPEN FONT LICENSE Version 1.1" in text  # licenses/Inter, the UI font
         assert not (full_dist / ".vite").exists()
 
 
