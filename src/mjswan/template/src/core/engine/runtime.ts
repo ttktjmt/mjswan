@@ -86,7 +86,8 @@ import { ControlStep } from './controlStep';
 import { decimationFor } from './decimation';
 import { yieldToBrowser } from './yieldToBrowser';
 import { TerminationManager } from '../termination/TerminationManager';
-import * as ort from 'onnxruntime-web/wasm';
+import type * as ort from 'onnxruntime-web/wasm';
+import { getOrt } from '../onnx/ortEnv';
 import { BufferBudget, reserveTermFeeds } from '../policy/bufferBudget';
 import { PolicyRunner } from '../policy/PolicyRunner';
 import { OnnxModule } from '../policy/OnnxModule';
@@ -2261,12 +2262,13 @@ export class mjswanRuntime {
       if (!this.onnxInputDict) {
         this.onnxInputDict = module.initInput();
       }
+      const { Tensor } = getOrt();
       const input: Record<string, ort.Tensor> = { ...this.onnxInputDict };
       if (module.inKeys.includes('time_step')) {
-        input.time_step = new ort.Tensor('float32', new Float32Array([this.onnxTimeStep]), [1, 1]);
+        input.time_step = new Tensor('float32', new Float32Array([this.onnxTimeStep]), [1, 1]);
       }
       for (const [key, value] of Object.entries(obs)) {
-        input[key] = new ort.Tensor('float32', value, module.inputDims(key, value.length));
+        input[key] = new Tensor('float32', value, module.inputDims(key, value.length));
       }
       for (const key of module.inKeys) {
         if (!input[key]) {

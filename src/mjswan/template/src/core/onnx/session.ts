@@ -2,10 +2,9 @@
  * The one place that talks to `onnxruntime-web`, kept minimal so a term handler stays
  * testable with a fake — no ORT, browser or WASM.
  */
-import * as ort from 'onnxruntime-web/wasm';
+import type * as ort from 'onnxruntime-web/wasm';
 
-// Configures ort.env before any session is created; see ortEnv.ts.
-import './ortEnv';
+import { getOrt, loadOrt } from './ortEnv';
 import { queueOrtRun } from './runQueue';
 import type { ModelElements } from './slotReader/model';
 
@@ -132,14 +131,15 @@ export function declaredFeeds(
 }
 
 function toOrtTensor(t: OnnxTensorLike): ort.Tensor {
+  const { Tensor } = getOrt();
   if (t.data instanceof Uint8Array) {
     // ORT's 'bool' dtype takes a Uint8Array of 0/1 — a direct pass-through.
-    return new ort.Tensor('bool', t.data, t.dims);
+    return new Tensor('bool', t.data, t.dims);
   }
   if (t.data instanceof BigInt64Array) {
-    return new ort.Tensor('int64', t.data, t.dims);
+    return new Tensor('int64', t.data, t.dims);
   }
-  return new ort.Tensor('float32', t.data, t.dims);
+  return new Tensor('float32', t.data, t.dims);
 }
 
 function fromOrtTensor(t: ort.Tensor): OnnxTensorLike {
@@ -172,7 +172,8 @@ class OrtSession implements OnnxSession {
 
 /** Create a real ORT-Web-backed session from graph bytes; never fetches. */
 export async function createOnnxSession(bytes: ArrayBuffer): Promise<OnnxSession> {
-  const session = await ort.InferenceSession.create(bytes, {
+  const { InferenceSession } = await loadOrt();
+  const session = await InferenceSession.create(bytes, {
     // The only provider the shipped ORT build registers, and the right one anyway: many
     // small graphs per step through one serialized queue. See docs/docs/api/engine.md,
     // "Where inference runs".

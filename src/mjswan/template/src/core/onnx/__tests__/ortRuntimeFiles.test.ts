@@ -16,7 +16,7 @@ import {
   ORT_WASM_FILE,
   UPSTREAM_WASM,
 } from '../../../../vite.wasm';
-import '../ortEnv';
+import { loadOrt } from '../ortEnv';
 
 const NODE_MODULES = join(__dirname, '../../../../node_modules');
 const ORT_PKG = join(NODE_MODULES, 'onnxruntime-web');
@@ -38,7 +38,8 @@ describe('onnxruntime-web runtime files', () => {
 });
 
 describe('ortEnv', () => {
-  it('keeps ORT single-threaded, which the inlined-loader path depends on', () => {
+  it('keeps ORT single-threaded, which the inlined-loader path depends on', async () => {
+    expect(await loadOrt()).toBe(ort);
     expect(ort.env.wasm.numThreads).toBe(1);
   });
 });
