@@ -1,4 +1,4 @@
-import JSZip from 'jszip';
+import { zipSync } from 'fflate';
 import { describe, expect, it, vi } from 'vitest';
 import { loadNpz } from '../npz';
 
@@ -27,11 +27,12 @@ function raw(header: string, data: Uint8Array, major = 1): Uint8Array {
   return out;
 }
 
-async function stored(entries: Record<string, Uint8Array>): Promise<ArrayBuffer> {
-  const zip = new JSZip();
-  for (const [name, bytes] of Object.entries(entries)) zip.file(name, bytes);
-  return zip.generateAsync({ type: 'arraybuffer', compression: 'STORE' });
+async function archive(entries: Record<string, Uint8Array>, level: 0 | 6): Promise<ArrayBuffer> {
+  const bytes = zipSync(entries, { level });
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
+
+const stored = (entries: Record<string, Uint8Array>) => archive(entries, 0);
 
 describe('loadNpz', () => {
   it.each(['<U0', 'S0'])('drops a %s array whose shape overflows to Infinity', async (descr) => {
@@ -67,11 +68,9 @@ describe('loadNpz', () => {
 
   it('drops an array whose header claims more values than it holds', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const zip = new JSZip();
-    zip.file('qpos.npy', npy([400_000, 8], new Float32Array(0)));
-    zip.file('fps.npy', npy([1], new Float32Array([30])));
-
-    const npz = await loadNpz(await zip.generateAsync({ type: 'arraybuffer' }));
+    const npz = await loadNpz(
+      await stored({ 'qpos.npy': npy([400_000, 8], new Float32Array(0)), 'fps.npy': npy([1], new Float32Array([30])) }),
+    );
 
     expect(npz.qpos).toBeUndefined();
     expect(Array.from(npz.fps.data)).toEqual([30]);
@@ -79,9 +78,7 @@ describe('loadNpz', () => {
   });
 
   it('stops inflating at the host limit', async () => {
-    const zip = new JSZip();
-    zip.file('big.npy', npy([262_144], new Float32Array(262_144)));
-    const bytes = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
+    const bytes = await archive({ 'big.npy': npy([262_144], new Float32Array(262_144)) }, 6);
 
     await expect(loadNpz(bytes, 64 * 1024)).rejects.toThrow(/inflates past/);
     expect((await loadNpz(bytes)).big.data.length).toBe(262_144);

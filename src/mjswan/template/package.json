@@ -71,7 +71,7 @@
     "@pixiv/three-vrm": "^3.5.5",
     "@sparkjsdev/spark": "^0.1.10",
     "@tabler/icons-react": "^3.0.0",
-    "jszip": "^3.10.1",
+    "fflate": "^0.8.3",
     "mujoco": "npm:@ttktjmt/mujoco@3.11.0",
     "onnxruntime-web": "^1.29.0",
     "react": "^18.3.1",

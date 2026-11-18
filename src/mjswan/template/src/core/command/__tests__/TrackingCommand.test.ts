@@ -4,7 +4,7 @@
  * `TrackingCommand` itself. This pins the one part of that which can be silently wrong: the
  * re-anchoring frame, mjlab's `update_relative_body_poses`.
  */
-import JSZip from 'jszip';
+import { zipSync } from 'fflate';
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -254,20 +254,26 @@ function npy(shape: number[], values: number[]): Uint8Array {
   return out;
 }
 
+/** A `.npz` as `np.savez` writes one: each array stored as is. */
+async function npz(files: Record<string, Uint8Array>): Promise<ArrayBuffer> {
+  const bytes = zipSync(files, { level: 0 });
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 /** A body_world clip of `frames` frames whose `latent` row i is (10i, 10i + 1). */
 function clip(frames: number, extra: Record<string, Uint8Array> = {}): Promise<ArrayBuffer> {
-  const zip = new JSZip();
   const zeros = (width: number) => npy([frames, width], new Array(frames * width).fill(0));
   const frameIndex = Array.from({ length: frames }, (_, i) => i);
-  zip.file('joint_pos.npy', npy([frames, 1], frameIndex));
-  zip.file('joint_vel.npy', zeros(1));
-  zip.file('body_pos_w.npy', zeros(3));
-  zip.file('body_quat_w.npy', npy([frames, 4], frameIndex.flatMap(() => [1, 0, 0, 0])));
-  zip.file('body_lin_vel_w.npy', zeros(3));
-  zip.file('body_ang_vel_w.npy', zeros(3));
-  zip.file('latent.npy', npy([frames, 2], frameIndex.flatMap((i) => [10 * i, 10 * i + 1])));
-  for (const [name, bytes] of Object.entries(extra)) zip.file(`${name}.npy`, bytes);
-  return zip.generateAsync({ type: 'arraybuffer', compression: 'STORE' });
+  return npz({
+    'joint_pos.npy': npy([frames, 1], frameIndex),
+    'joint_vel.npy': zeros(1),
+    'body_pos_w.npy': zeros(3),
+    'body_quat_w.npy': npy([frames, 4], frameIndex.flatMap(() => [1, 0, 0, 0])),
+    'body_lin_vel_w.npy': zeros(3),
+    'body_ang_vel_w.npy': zeros(3),
+    'latent.npy': npy([frames, 2], frameIndex.flatMap((i) => [10 * i, 10 * i + 1])),
+    ...Object.fromEntries(Object.entries(extra).map(([name, bytes]) => [`${name}.npy`, bytes])),
+  });
 }
 
 /**
@@ -373,10 +379,7 @@ describe('TrackingCommand frame fields', () => {
   });
 
   it('serves a qpos clip the same way', async () => {
-    const zip = new JSZip();
-    zip.file('qpos.npy', npy([3, 1], [0, 0, 0]));
-    zip.file('latent.npy', npy([3, 1], [4, 5, 6]));
-    const data = await zip.generateAsync({ type: 'arraybuffer', compression: 'STORE' });
+    const data = await npz({ 'qpos.npy': npy([3, 1], [0, 0, 0]), 'latent.npy': npy([3, 1], [4, 5, 6]) });
     const { term } = await tracker([
       { ...(await walk()), data, clip_format: 'qpos' },
     ]);
@@ -396,14 +399,14 @@ describe('TrackingCommand reference state', () => {
   it("writes the root's angular velocity into qvel in the body's frame, as mjlab does", async () => {
     // Yawed 90 degrees and turning about the world's x axis, which is the body's -y.
     const s = Math.SQRT1_2;
-    const zip = new JSZip();
-    zip.file('joint_pos.npy', npy([2, 1], [0, 0]));
-    zip.file('joint_vel.npy', npy([2, 1], [0, 0]));
-    zip.file('body_pos_w.npy', npy([2, 3], [0, 0, 1, 0, 0, 1]));
-    zip.file('body_quat_w.npy', npy([2, 4], [s, 0, 0, s, s, 0, 0, s]));
-    zip.file('body_lin_vel_w.npy', npy([2, 3], [0.5, 0, 0, 0.5, 0, 0]));
-    zip.file('body_ang_vel_w.npy', npy([2, 3], [1, 0, 0, 1, 0, 0]));
-    const data = await zip.generateAsync({ type: 'arraybuffer', compression: 'STORE' });
+    const data = await npz({
+      'joint_pos.npy': npy([2, 1], [0, 0]),
+      'joint_vel.npy': npy([2, 1], [0, 0]),
+      'body_pos_w.npy': npy([2, 3], [0, 0, 1, 0, 0, 1]),
+      'body_quat_w.npy': npy([2, 4], [s, 0, 0, s, s, 0, 0, s]),
+      'body_lin_vel_w.npy': npy([2, 3], [0.5, 0, 0, 0.5, 0, 0]),
+      'body_ang_vel_w.npy': npy([2, 3], [1, 0, 0, 1, 0, 0]),
+    });
     const mjModel = { njnt: 1, nbody: 2, jnt_type: [0], jnt_qposadr: [0], jnt_dofadr: [0] };
     const mjData = { qpos: new Float64Array(7), qvel: new Float64Array(6) };
     const context = {
