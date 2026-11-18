@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import warnings
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
@@ -436,6 +437,15 @@ def graphics_entry(
     exposure = viewer.exposure
     if exposure is None:
         exposure = _custom_number(model, "filament.cg.exposure")
+        # JSON has no infinity or NaN: the browser would refuse the whole manifest.
+        if exposure is not None and not math.isfinite(exposure):
+            warnings.warn(
+                f"The model's filament.cg.exposure is {exposure}, not a finite number of "
+                "stops; the viewer draws 0.",
+                category=RuntimeWarning,
+                stacklevel=2,
+            )
+            exposure = None
     return {
         "color_management": viewer.color_management,
         "tone_mapping": texts["tone_mapping"],
@@ -553,7 +563,7 @@ def write_manifest(
         ],
     }
     with open(output_path / "manifest.json", "w") as f:
-        json.dump(manifest, f, indent=2)
+        json.dump(manifest, f, indent=2, allow_nan=False)
 
 
 __all__ = [

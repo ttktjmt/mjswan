@@ -131,6 +131,19 @@ def test_graphics_take_mujocos_defaults_and_its_fallback():
         assert graphics_entry(None, unknown)["tone_mapping"] == "pbr_neutral"
 
 
+@pytest.mark.parametrize("data", ["inf", "-inf", "nan"])
+def test_a_non_finite_model_exposure_draws_zero(data):
+    from mjswan.build.manifest import graphics_entry
+
+    xml = (
+        f'<mujoco><custom><numeric name="filament.cg.exposure" data="{data}"/>'
+        "</custom><worldbody/></mujoco>"
+    )
+    for model in (mujoco.MjSpec.from_string(xml), mujoco.MjModel.from_xml_string(xml)):
+        with pytest.warns(RuntimeWarning, match="not a finite"):
+            assert graphics_entry(None, model)["exposure"] == 0.0
+
+
 def test_an_mjlab_viewer_config_brings_its_shadow_and_reflection_switches():
     adapted = adapt_viewer_config(
         SimpleNamespace(enable_shadows=False, enable_reflections=False)
