@@ -366,6 +366,41 @@ class TestThirdPartyLicenses:
         assert not (full_dist / ".vite").exists()
 
 
+def _mantine_classes(component: str) -> set[str]:
+    """A Mantine component's `m_` class names, as its class map gives them."""
+    source = (
+        TEMPLATE_DIR
+        / "node_modules/@mantine/core/esm/components"
+        / component
+        / f"{component}.module.css.mjs"
+    )
+    return set(re.findall(r'"(m_[0-9a-f]+)"', source.read_text()))
+
+
+@pytest.mark.slow
+class TestMantineCss:
+    """The SPA's CSS keeps Mantine's rules for the components it renders, and only those.
+
+    `mantineCssPlugin` in vite.config.ts cuts `@mantine/core/styles.css` by class name.
+    """
+
+    @staticmethod
+    def _classes_in_css(full_dist: Path) -> set[str]:
+        css = "".join(p.read_text() for p in (full_dist / "assets").glob("*.css"))
+        return set(re.findall(r"\.(m_[0-9a-f]+)", css))
+
+    def test_rendered_components_keep_their_rules(self, full_dist: Path):
+        present = self._classes_in_css(full_dist)
+        # Select draws with Combobox, Popover and Input, none of which src/ imports itself.
+        for component in ("Button", "Slider", "Tabs", "Combobox", "Popover", "Input"):
+            assert _mantine_classes(component) & present, component
+
+    def test_components_never_rendered_lose_theirs(self, full_dist: Path):
+        present = self._classes_in_css(full_dist)
+        for component in ("AppShell", "Accordion", "Stepper", "ColorPicker"):
+            assert not _mantine_classes(component) & present, component
+
+
 @pytest.fixture(scope="class")
 def manifest_dist() -> Path:
     """Build the `mjswan/manifest` CDN bundle once for the whole test class."""

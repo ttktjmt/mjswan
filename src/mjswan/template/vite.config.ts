@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import path from 'path';
 import fs from 'fs';
+import postcss from 'postcss';
 import { minify } from './vite.shared';
 
 // Extract version from Python package (source of truth)
@@ -88,6 +89,84 @@ function gtmPlugin(gtmId: string | undefined) {
   };
 }
 
+const MANTINE_ESM = path.resolve(__dirname, 'node_modules/@mantine/core/esm');
+
+/**
+ * The `m_` classes and keyframes of the Mantine components src/'s .tsx files import and of
+ * the components those import, as their class maps (`*.module.css.mjs`) name them.
+ */
+function mantineNamesInUse(): Set<string> {
+  const entries = new Map<string, string>();
+  const index = fs.readFileSync(path.join(MANTINE_ESM, 'index.mjs'), 'utf-8');
+  for (const [, names, from] of index.matchAll(/export \{([^}]*)\} from '([^']+)'/g)) {
+    for (const name of names.split(',')) entries.set(name.trim(), path.resolve(MANTINE_ESM, from));
+  }
+  const used = new Set<string>();
+  const seen = new Set<string>();
+  const walk = (file: string): void => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const code = fs.readFileSync(file, 'utf-8');
+    if (file.endsWith('.module.css.mjs')) {
+      for (const [, name] of code.matchAll(/"(m_[0-9a-f]+)"/g)) used.add(name);
+      return;
+    }
+    // Named imports only: the bundler drops Mantine's bare `import './x.mjs'` lines too.
+    for (const [, from] of code.matchAll(/(?:import|export) (?:\w+|\{[^}]*\}) from '(\.[^']+)'/g)) {
+      walk(path.resolve(path.dirname(file), from));
+    }
+  };
+  const src = path.resolve(__dirname, 'src');
+  for (const file of fs.readdirSync(src, { recursive: true, encoding: 'utf-8' })) {
+    if (!file.endsWith('.tsx') || file.includes('__tests__') || file.endsWith('.test.tsx')) continue;
+    const code = fs.readFileSync(path.join(src, file), 'utf-8');
+    for (const [, names] of code.matchAll(/import \{([^}]*)\} from ['"]@mantine\/core['"]/g)) {
+      for (const name of names.split(',')) {
+        const entry = entries.get(name.trim().split(/\s+as\s+/)[0]);
+        if (entry) walk(entry);
+      }
+    }
+  }
+  return used;
+}
+
+// `@mantine/core/styles.css` styles all of Mantine (200 KB); the app renders a few dozen
+// components. This drops each rule whose `m_` classes, or keyframes, no component in use
+// names, before Vite hashes the CSS. Mantine's per-component files are no substitute: they
+// size in px where styles.css scales by rem, and index.css sets the root font size.
+function mantineCssPlugin(): Plugin {
+  let used = new Set<string>();
+  const unused = (names: string[]) => names.length > 0 && names.every((name) => !used.has(name));
+  return {
+    name: 'mjswan-mantine-css',
+    enforce: 'pre',
+    buildStart() {
+      used = mantineNamesInUse();
+      if (used.size === 0) this.error('found no Mantine component in use under src/');
+    },
+    transform(code, id) {
+      if (!/[\\/]@mantine[\\/]core[\\/]styles\.css$/.test(id.split('?')[0])) return null;
+      const root = postcss.parse(code);
+      root.walkRules((rule) => {
+        if (unused([...rule.selector.matchAll(/\.(m_[0-9a-f]+)(?![\w-])/g)].map((m) => m[1]))) rule.remove();
+      });
+      root.walkAtRules('keyframes', (rule) => {
+        if (unused(rule.params.match(/^m_[0-9a-f]+$/) ?? [])) rule.remove();
+      });
+      for (let emptied = true; emptied; ) {
+        emptied = false;
+        root.walkAtRules((rule) => {
+          if (rule.nodes?.length === 0) {
+            rule.remove();
+            emptied = true;
+          }
+        });
+      }
+      return { code: root.toString(), map: null };
+    },
+  };
+}
+
 // What `build.license` writes, for thirdPartyLicensesPlugin to read and drop.
 const LICENSES_JSON = '.vite/licenses.json';
 
@@ -146,6 +225,7 @@ export default defineConfig({
     vanillaExtractPlugin(),
     mtPlugin(isMt),
     gtmPlugin(process.env.MJSWAN_GTM_ID),
+    mantineCssPlugin(),
     thirdPartyLicensesPlugin(),
   ],
   base: process.env.MJSWAN_BASE_PATH || '/',
