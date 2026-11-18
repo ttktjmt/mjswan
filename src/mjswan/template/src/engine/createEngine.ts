@@ -26,6 +26,7 @@ import type {
   CreateEngineOptions,
   DebugVisControls,
   EventControls,
+  GraphicsControls,
   InteractionControls,
   MjswanEngine,
   InteractionModeId,
@@ -115,6 +116,7 @@ class Engine implements MjswanEngine {
   private readonly listeners = new Set<(state: MjswanEngineState) => void>();
 
   readonly camera: CameraControls;
+  readonly graphics: GraphicsControls;
   readonly commands: CommandControls;
   readonly debugVis: DebugVisControls;
   readonly cameraFeeds: CameraFeedControls;
@@ -140,6 +142,16 @@ class Engine implements MjswanEngine {
       frame: () => this.runtime.frameCamera(),
       setTracking: (enabled) => {
         this.runtime.setCameraTracking(enabled);
+        this.refresh();
+      },
+    };
+    this.graphics = {
+      set: (input) => {
+        this.runtime.setGraphics(input);
+        this.refresh();
+      },
+      reset: () => {
+        this.runtime.resetGraphics();
         this.refresh();
       },
     };
@@ -221,6 +233,7 @@ class Engine implements MjswanEngine {
       debugVisEnabled: this.runtime.debugViz.isShown(),
       cameraFeeds: this.runtime.cameraFeeds.list(),
       camera: { tracking: this.runtime.isCameraTracking, fovy: this.runtime.getCameraView().fovy },
+      graphics: this.runtime.getGraphics(),
       events: this.runtime.eventControls(),
       interactions: this.runtime.interactionModes().map((mode) => ({
         ...mode,
@@ -283,6 +296,7 @@ class Engine implements MjswanEngine {
         splat: input.splat ? await resolveSplat(input.splat) : null,
         skin: input.skin ? await resolveSkin(input.skin) : null,
         viewer: input.viewer ?? null,
+        graphics: input.graphics ?? null,
         terrainData: input.terrainData ?? null,
         controlDt: input.controlDt ?? null,
         plugins: input.plugins,

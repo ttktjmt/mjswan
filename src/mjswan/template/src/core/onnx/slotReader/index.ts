@@ -160,15 +160,16 @@ export function createSlotReader(
 ): SlotReader {
   let cachedModel: MjModel | null = null;
   const indices = new Map<string, EntityIndex>();
-  // One per sensor, held for its frame resolution and ray buffers: ~200 rays a step.
-  const casters = new Map<string, RaycastSensor | null>();
+  // By descriptor, not name: each policy brings its own, charged at its load. A caster
+  // re-resolves its frames per model.
+  const casters = new WeakMap<RaycastSensorDescriptor, RaycastSensor>();
+  const missing = new Set<string>();
 
-  /** Drop what the previous scene resolved: both maps hold its model indices. */
+  /** Drop the previous scene's index: it holds that model's ids. */
   const forModel = (mjModel: MjModel): void => {
     if (mjModel === cachedModel) return;
     cachedModel = mjModel;
     indices.clear();
-    casters.clear();
   };
 
   const readRaycast = (
@@ -178,23 +179,23 @@ export function createSlotReader(
   ): Float32Array | null => {
     const { mjModel, mjData, mujoco } = context;
     if (!mjModel || !mjData || !mujoco) return null;
-    forModel(mjModel);
-    if (!casters.has(sensor)) {
-      const descriptor = options.raycastSensors?.()[sensor];
-      if (!descriptor) {
+    const descriptor = options.raycastSensors?.()[sensor];
+    if (!descriptor) {
+      if (!missing.has(sensor)) {
         console.warn(
           `[slotReader] no raycast descriptor for sensor "${sensor}"; the build ` +
             'did not emit one.',
         );
       }
-      casters.set(sensor, descriptor ? new RaycastSensor(mujoco, descriptor) : null);
+      missing.add(sensor);
+      return null;
     }
-    const caster = casters.get(sensor);
-    if (!caster) return null;
     if (!isRaycastField(field)) {
       console.warn(`[slotReader] raycast sensor "${sensor}" cannot serve "${field}".`);
       return null;
     }
+    let caster = casters.get(descriptor);
+    if (!caster) casters.set(descriptor, (caster = new RaycastSensor(mujoco, descriptor)));
     return caster.read(field, mjModel, mjData);
   };
 
@@ -246,6 +247,8 @@ export function createSlotReader(
     if (slot.model) return readModelSlot(mjModel, slot, context.modelDefaults);
 
     if (slot.sensor) {
+      // Looked up by key, a non-string would coerce to a name the load never charged.
+      if (typeof slot.sensor !== 'string') return null;
       if (slot.field) {
         // A structured sensor: no single `sensordata` window to fall through to, so
         // each kind is served by the module that knows its layout.

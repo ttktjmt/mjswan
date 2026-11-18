@@ -11,6 +11,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 
+import { colorAsRgba } from './graphics';
 import { cameraFovy, poseCamera } from './sensorCamera';
 
 /** `ViserCameraViewer`'s `min_display_size`: images are enlarged by whole steps toward it. */
@@ -20,7 +21,7 @@ const MIN_DISPLAY_SIZE = 128;
  * its default `line_width=2.0`, in CSS pixels as `LineMaterial` takes it.
  */
 const FRUSTUM_SCALE = 0.15;
-const FRUSTUM_COLOR = 0xc8c8c8;
+const FRUSTUM_COLOR = new THREE.Color().setHex(0xc8c8c8, THREE.LinearSRGBColorSpace);
 const FRUSTUM_LINE_WIDTH = 2;
 
 /** A camera sensor the loaded policy reads, resolved to the model's camera. */
@@ -100,7 +101,7 @@ class Feed {
     );
     this.frustum = new LineSegments2(
       geometry,
-      new LineMaterial({ color: FRUSTUM_COLOR, linewidth: FRUSTUM_LINE_WIDTH }),
+      colorAsRgba(new LineMaterial({ color: FRUSTUM_COLOR, linewidth: FRUSTUM_LINE_WIDTH })),
     );
     this.frustum.name = `${sensor.camera}_frustum`;
     this.frustum.matrixAutoUpdate = false;

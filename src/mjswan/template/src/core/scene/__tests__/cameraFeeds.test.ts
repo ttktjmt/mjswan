@@ -147,7 +147,8 @@ describe('CameraFeeds', () => {
     const material = (root.children[0] as THREE.Mesh).material as LineMaterial;
     expect(material.linewidth).toBe(2);
     expect(material.worldUnits).toBe(false);
-    expect(material.color.getHex()).toBe(0xc8c8c8);
+    // As written: the renderer reads it as a model's rgba.
+    expect(material.color.getHex(THREE.LinearSRGBColorSpace)).toBe(0xc8c8c8);
   });
 
   it('shows and hides the frustum, which follows its camera', () => {

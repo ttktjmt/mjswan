@@ -31,6 +31,7 @@ import FloatingPanel from './FloatingPanel';
 import { LabeledInput } from './LabeledInput';
 import { CommandSection } from './CommandSection';
 import { CameraFeedsSection } from './CameraFeedsSection';
+import { GraphicsSection } from './GraphicsSection';
 import { InteractionSection } from './InteractionSection';
 import { WebXrSection } from './WebXrSection';
 import { SliderRow } from './SliderRow';
@@ -43,6 +44,8 @@ import type {
   CameraFeedDescriptor,
   DebugVisDescriptor,
   EventDescriptor,
+  GraphicsInput,
+  GraphicsSettings,
   HandTrackingDescriptor,
   InteractionModeDescriptor,
   InteractionModeId,
@@ -120,6 +123,13 @@ interface ControlPanelProps {
   camera?: { tracking: boolean; fovy: number };
   onCameraTrackingChange?: (enabled: boolean) => void;
   onCameraFovyChange?: (fovy: number) => void;
+  /** engine state's `graphics`, and the scene's own, which Reset returns to. */
+  graphics?: GraphicsSettings;
+  sceneGraphics?: GraphicsSettings;
+  /** engine.graphics.set. */
+  onGraphicsChange?: (input: GraphicsInput) => void;
+  /** engine.graphics.reset. */
+  onGraphicsReset?: () => void;
   /** Reset the simulation (engine.reset). */
   onReset?: () => void;
   /** Pointer modes the viewer offers, as the engine reports them. */
@@ -295,6 +305,10 @@ function ControlPanel(props: ControlPanelProps) {
     camera,
     onCameraTrackingChange,
     onCameraFovyChange,
+    graphics,
+    sceneGraphics,
+    onGraphicsChange,
+    onGraphicsReset,
     onReset,
     interactions = [],
     interactionMode = 'pull',
@@ -831,6 +845,15 @@ function ControlPanel(props: ControlPanelProps) {
               feeds={cameraFeeds}
               onAttach={onCameraFeedAttach}
               onFrustumChange={onCameraFrustumChange}
+            />
+          )}
+
+          {graphics && sceneGraphics && onGraphicsChange && onGraphicsReset && (
+            <GraphicsSection
+              graphics={graphics}
+              sceneGraphics={sceneGraphics}
+              onChange={onGraphicsChange}
+              onReset={onGraphicsReset}
             />
           )}
 

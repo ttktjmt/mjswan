@@ -178,7 +178,7 @@ builder.build().launch()
 | `env_cfg.events` | the scene's default events, which every policy that declares none inherits into its MDP; `reset_root_state_uniform` is swapped for a spawn on a random flat terrain patch, since the browser runs one env where mjlab trains many spread across the terrain |
 | `env_cfg.sim.timestep × decimation` | `control_dt` |
 | `env_cfg.episode_length_s` | the episode length `time_out` ends at, for every policy not given an `env_cfg` of its own |
-| `env_cfg.viewer` | the initial camera |
+| `env_cfg.viewer` | the initial camera, and its shadow and reflection switches |
 | terrain flat-patch table | baked spawn points |
 | the task's **runner** config | which observation group the actor reads, and `clip_actions`; an actor that also reads camera groups, as rsl-rl's CNN model does, takes each as an input of its own name (`in_keys=["actor", "camera"]`) |
 | the live env | the tracing target for every term body |
@@ -195,7 +195,9 @@ and a **Frustum** switch, on at first, that draws the camera's frustum in the sc
 image is the one the policy read, not a second render.
 
 The image is three.js drawing the scene, not mujoco_warp's ray tracer: shading, shadows
-and edges differ, so a policy keyed to them may act differently than in mjlab. `depth`
+and edges differ, so a policy keyed to them may act differently than in mjlab. Colours,
+textures and shadows are read as mujoco_warp reads them, whatever the scene's
+[graphics settings](../api/core.md#viewerconfig). `depth`
 and `segmentation` are not rendered yet, and an orthographic camera is refused.
 
 Rewards, curricula, metrics and recorders are training-only and simply ignored — mjswan is

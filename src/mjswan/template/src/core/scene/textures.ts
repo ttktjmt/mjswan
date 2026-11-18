@@ -192,6 +192,16 @@ function createCubeTexture(mjModel: MjModel, texId: number, faceOrder = [3, 2, 0
   return cubeTexture;
 }
 
+/**
+ * MuJoCo's Filament renderer decodes an sRGB texture as it is sampled, and reads any other
+ * (`linear`, or `auto` on an image that does not say) as written; its classic renderer
+ * does so for a 2D texture, and uploads a cube or skybox as stored (`SceneGraphics.apply`).
+ */
+function colorSpaceOf(mujoco: MainModule, mjModel: MjModel, texId: number): THREE.ColorSpace {
+  const srgb = mujoco.mjtColorSpace.mjCOLORSPACE_SRGB.value;
+  return Number(mjModel.tex_colorspace?.[texId]) === srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+}
+
 export function createTexture({
   mujoco,
   mjModel,
@@ -204,16 +214,16 @@ export function createTexture({
 
   const type = mjModel.tex_type ? Number(mjModel.tex_type[texId]) : mujoco.mjtTexture.mjTEXTURE_2D.value;
 
+  let texture: THREE.Texture | null = null;
   if (type === mujoco.mjtTexture.mjTEXTURE_2D.value) {
-    return create2DTexture(mjModel, texId);
+    texture = create2DTexture(mjModel, texId);
+  } else if (type === mujoco.mjtTexture.mjTEXTURE_CUBE.value) {
+    texture = createCubeTexture(mjModel, texId, cubeFaceOrder);
+  } else {
+    console.warn(`Unsupported texture type ${type} for texId: ${texId}`);
   }
-
-  if (type === mujoco.mjtTexture.mjTEXTURE_CUBE.value) {
-    return createCubeTexture(mjModel, texId, cubeFaceOrder);
-  }
-
-  console.warn(`Unsupported texture type ${type} for texId: ${texId}`);
-  return null;
+  if (texture) texture.colorSpace = colorSpaceOf(mujoco, mjModel, texId);
+  return texture;
 }
 
 export function createSkyboxTexture(mujoco: MainModule, mjModel: MjModel): THREE.CubeTexture | null {
@@ -239,10 +249,44 @@ export function createSkyboxTexture(mujoco: MainModule, mjModel: MjModel): THREE
           ctx.drawImage(src, 0, 0);
           faces[f] = flipped;
         }
+        cube.colorSpace = colorSpaceOf(mujoco, mjModel, i);
         cube.needsUpdate = true;
       }
       return cube;
     }
   }
   return null;
+}
+
+/**
+ * An sRGB cube texture decoded into linear half floats, read as written: what Filament
+ * draws an sRGB sky as. Its faces are the canvases `createCubeTexture` drew.
+ */
+export function linearCube(cube: THREE.CubeTexture): THREE.CubeTexture {
+  const decode = new Uint16Array(256);
+  const colour = new THREE.Color();
+  for (let i = 0; i < 256; i++) {
+    decode[i] = THREE.DataUtils.toHalfFloat(colour.setRGB(i / 255, i / 255, i / 255, THREE.SRGBColorSpace).r);
+  }
+  const faces = (cube.image as unknown as HTMLCanvasElement[]).map((canvas) => {
+    const { data, width, height } = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+    const half = new Uint16Array(data.length);
+    for (let i = 0; i < data.length; i += 4) {
+      half[i] = decode[data[i]];
+      half[i + 1] = decode[data[i + 1]];
+      half[i + 2] = decode[data[i + 2]];
+      half[i + 3] = THREE.DataUtils.toHalfFloat(data[i + 3] / 255);
+    }
+    return new THREE.DataTexture(half, width, height, THREE.RGBAFormat, THREE.HalfFloatType);
+  });
+  const linear = new THREE.CubeTexture(faces as unknown as HTMLImageElement[]);
+  linear.format = THREE.RGBAFormat;
+  linear.type = THREE.HalfFloatType;
+  linear.colorSpace = THREE.LinearSRGBColorSpace;
+  linear.flipY = cube.flipY;
+  linear.magFilter = THREE.LinearFilter;
+  linear.minFilter = THREE.LinearFilter;
+  linear.generateMipmaps = false;
+  linear.needsUpdate = true;
+  return linear;
 }

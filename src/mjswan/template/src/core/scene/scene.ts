@@ -5,6 +5,7 @@ import { createLights, lightSpecularRatio } from './lights';
 import { createTexture, createSkyboxTexture } from './textures';
 import { createTendonMeshes } from './tendons';
 import { primitiveGeometry, primitiveScale } from './primitive';
+import { modelZfar, planeGeometry } from './plane';
 import { VIEWER_GEOM_GROUPS, geomGroupLayer } from './layers';
 
 /** How a scene's model bytes are encoded: `add_scene(spec=...)` writes `mjz`, `model=` `mjb`. */
@@ -58,106 +59,6 @@ function normalizePathSegments(path: string): string {
   return resolved.join('/');
 }
 
-function createInfinitePlaneShaderMaterial(params: {
-  color: THREE.Color;
-  opacity: number;
-  texture: THREE.Texture | null;
-  // Precomputed UV scale per axis, matching MuJoCo's GL_OBJECT_PLANE formula:
-  //   infinite axis: 0.5 * texrepeat
-  //   finite axis:   0.5 * texrepeat / halfSize
-  uvScaleX: number;
-  uvScaleZ: number;
-  planeY: number;
-  // World-space center of the geom (for finite-extent clipping)
-  centerX: number;
-  centerZ: number;
-  infiniteX: boolean;
-  infiniteZ: boolean;
-  halfExtentX: number;
-  halfExtentZ: number;
-}): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uColor: { value: params.color },
-      uOpacity: { value: params.opacity },
-      uTexture: { value: params.texture },
-      uHasTexture: { value: params.texture !== null },
-      uUVScale: { value: new THREE.Vector2(params.uvScaleX, params.uvScaleZ) },
-      uPlaneY: { value: params.planeY },
-      uCenterX: { value: params.centerX },
-      uCenterZ: { value: params.centerZ },
-      uInfiniteX: { value: params.infiniteX },
-      uInfiniteZ: { value: params.infiniteZ },
-      uHalfExtentX: { value: params.halfExtentX },
-      uHalfExtentZ: { value: params.halfExtentZ },
-      uProjInverse: { value: new THREE.Matrix4() },
-      uCamWorldMatrix: { value: new THREE.Matrix4() },
-    },
-    vertexShader: /* glsl */ `
-      varying vec2 vNDC;
-      void main() {
-        vNDC = position.xy;
-        gl_Position = vec4(position.xy, 1.0, 1.0);
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      precision highp float;
-      varying vec2 vNDC;
-      uniform vec3 uColor;
-      uniform float uOpacity;
-      uniform sampler2D uTexture;
-      uniform bool uHasTexture;
-      uniform vec2 uUVScale;
-      uniform float uPlaneY;
-      uniform float uCenterX;
-      uniform float uCenterZ;
-      uniform bool uInfiniteX;
-      uniform bool uInfiniteZ;
-      uniform float uHalfExtentX;
-      uniform float uHalfExtentZ;
-      uniform mat4 uProjInverse;
-      uniform mat4 uCamWorldMatrix;
-
-      void main() {
-        // Unproject NDC to view-space ray
-        vec4 viewRay = uProjInverse * vec4(vNDC, 1.0, 1.0);
-        viewRay /= viewRay.w;
-
-        // Transform to world-space direction
-        vec3 worldDir = normalize((uCamWorldMatrix * vec4(viewRay.xyz, 0.0)).xyz);
-
-        // Ray-plane intersection at y = uPlaneY
-        float denom = worldDir.y;
-        if (abs(denom) < 1e-6) discard;
-
-        float t = (uPlaneY - cameraPosition.y) / denom;
-        if (t < 0.0) discard;
-
-        vec3 worldPos = cameraPosition + t * worldDir;
-
-        // Clip finite extents relative to geom center
-        if (!uInfiniteX && abs(worldPos.x - uCenterX) > uHalfExtentX) discard;
-        if (!uInfiniteZ && abs(worldPos.z - uCenterZ) > uHalfExtentZ) discard;
-
-        if (uHasTexture) {
-          // MuJoCo GL_OBJECT_PLANE formula:
-          //   infinite: S = worldPos * 0.5 * texrepeat
-          //   finite:   S = worldPos * 0.5 * texrepeat / halfSize
-          // Both cases are baked into uUVScale on the JS side.
-          vec2 uv = fract(worldPos.xz * uUVScale);
-          gl_FragColor = texture2D(uTexture, uv) * vec4(uColor, uOpacity);
-        } else {
-          gl_FragColor = vec4(uColor, uOpacity);
-        }
-      }
-    `,
-    transparent: params.opacity < 1.0,
-    depthTest: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-}
-
 /** What drawing one geom needs from the scene it is drawn into. */
 type GeomMeshContext = {
   mujoco: MainModule;
@@ -167,7 +68,92 @@ type GeomMeshContext = {
   specularRatio: number;
   /** `mjModel.names`, read once for every body. */
   names: Uint8Array;
+  /** MuJoCo's far plane, `vis.map.zfar` times `stat.extent`: how far an infinite plane reaches. */
+  zfar: number;
 };
+
+
+/** The viewer's own bodies, the pointer's anchor and the tracked hands, are named so. */
+const INJECTED_PREFIX = 'mjswan_';
+
+/** The `stat.meansize` MuJoCo leaves a model with no body but the world. */
+const NO_BODY_MEANSIZE = 0.2;
+
+/**
+ * Give the model back its shipped `stat.extent`: MuJoCo's `setStat` counts the viewer's
+ * bodies parked 100 m up, stretching all it sizes (infinite planes, haze, shadow maps) a
+ * hundredfold. Recomputed as MuJoCo does without them; left as compiled when the sum with
+ * them is not MuJoCo's (an author's `<statistic>`, flex edges).
+ */
+function restoreShippedExtent(mujoco: MainModule, mjModel: MjModel, mjData: MjData, names: Uint8Array): void {
+  const injected = new Set<number>();
+  for (let b = 1; b < mjModel.nbody; b++) {
+    if (bodyName(mjModel, names, b).startsWith(INJECTED_PREFIX)) injected.add(b);
+  }
+  if (injected.size === 0) return;
+  mujoco.mj_kinematics(mjModel, mjData);
+  // Read once: each read of a field makes a view.
+  const { xpos, xipos, xanchor, site_xpos: sitePos, geom_xpos: geomPos } = mjData;
+  const { jnt_bodyid: jointBody, site_bodyid: siteBody, geom_bodyid: geomBody, body_parentid: parent } = mjModel;
+  const rbound = Array.from({ length: mjModel.ngeom }, (_, g) => geomRbound(mujoco, mjModel, g));
+  const distance = (a: ArrayLike<number>, i: number, b: ArrayLike<number>, j: number) =>
+    Math.hypot(a[i * 3] - b[j * 3], a[i * 3 + 1] - b[j * 3 + 1], a[i * 3 + 2] - b[j * 3 + 2]);
+  // Each body's size: its farthest joint from its centre of mass, and its geoms' reach.
+  const size = new Float64Array(mjModel.nbody);
+  for (let j = 0; j < mjModel.njnt; j++) {
+    for (const b of [jointBody[j], parent[jointBody[j]]]) size[b] = Math.max(size[b], distance(xipos, b, xanchor, j));
+  }
+  size[0] = 0;
+  for (let g = 0; g < mjModel.ngeom; g++) {
+    const b = geomBody[g];
+    if (b > 0 && mjModel.geom_rbound[g] > 0) size[b] = Math.max(size[b], mjModel.geom_rbound[g] + distance(xipos, b, geomPos, g));
+  }
+
+  const extent = (skip: (body: number) => boolean) => {
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+    const add = (xyz: ArrayLike<number>, i: number, r = 0) => {
+      for (let k = 0; k < 3; k++) {
+        min[k] = Math.min(min[k], xyz[i * 3 + k] - r);
+        max[k] = Math.max(max[k], xyz[i * 3 + k] + r);
+      }
+    };
+    let bodies = 0;
+    let meansize = 0;
+    for (let b = 1; b < mjModel.nbody; b++) {
+      if (skip(b)) continue;
+      add(xpos, b);
+      add(xipos, b);
+      bodies += 1;
+      meansize += Math.max(size[b], 1e-5);
+    }
+    meansize = bodies ? meansize / bodies : NO_BODY_MEANSIZE;
+    for (let j = 0; j < mjModel.njnt; j++) if (!skip(jointBody[j])) add(xanchor, j);
+    for (let i = 0; i < mjModel.nsite; i++) if (!skip(siteBody[i])) add(sitePos, i);
+    for (let g = 0; g < mjModel.ngeom; g++) if (!skip(geomBody[g])) add(geomPos, g, rbound[g]);
+    const box = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
+    return Math.max(Number.isFinite(box) ? box : 0, 1e-5, 2 * meansize);
+  };
+  const stat = mjModel.stat;
+  const full = extent(() => false);
+  if (Math.abs(stat.extent - full) > 1e-9 * full) return;
+  stat.extent = extent((b) => injected.has(b));
+}
+
+/** The radius `setStat` gives a geom: its own, or a tenth of a plane's or height field's largest size. */
+function geomRbound(mujoco: MainModule, mjModel: MjModel, g: number): number {
+  if (mjModel.geom_rbound[g] > 0) return mjModel.geom_rbound[g];
+  const type = mjModel.geom_type[g];
+  if (type === mujoco.mjtGeom.mjGEOM_PLANE.value) {
+    const [x, y] = [mjModel.geom_size[g * 3], mjModel.geom_size[g * 3 + 1]];
+    return x || y ? Math.max(x, y) * 0.1 : 0.01;
+  }
+  if (type === mujoco.mjtGeom.mjGEOM_HFIELD.value) {
+    const h = mjModel.geom_dataid[g] * 4;
+    return Math.max(...[0, 1, 2, 3].map((k) => mjModel.hfield_size[h + k])) * 0.1;
+  }
+  return 0;
+}
 
 function bodyName(mjModel: MjModel, names: Uint8Array, b: number): string {
   const start = mjModel.name_bodyadr[b];
@@ -184,7 +170,7 @@ function placeOnGroupLayer(object: THREE.Object3D, group: number): void {
 
 /** Add geom `g`'s mesh to its body, creating the body's group if it has none yet. */
 function addGeomMesh(
-  { mujoco, mjModel, bodies, meshes, specularRatio, names }: GeomMeshContext,
+  { mujoco, mjModel, bodies, meshes, specularRatio, names, zfar }: GeomMeshContext,
   g: number,
 ): void {
   const b = mjModel.geom_bodyid[g];
@@ -205,15 +191,13 @@ function addGeomMesh(
   }
 
   let geometry: THREE.BufferGeometry | undefined;
+  const isPlane = type === mujoco.mjtGeom.mjGEOM_PLANE.value;
+  let planeStep: [number, number] = [0, 0];
   switch (type) {
     case mujoco.mjtGeom.mjGEOM_PLANE.value: {
-      if (size[0] === 0 || size[1] === 0) {
-        // PlaneGeometry(2,2) in XY plane: vertices at (±1, ±1, 0)
-        // Used as a full-screen clip-space quad by the infinite plane shader
-        geometry = new THREE.PlaneGeometry(2, 2);
-      } else {
-        geometry = primitiveGeometry('plane', size);
-      }
+      const plane = planeGeometry(mjModel, g, zfar);
+      geometry = plane.geometry;
+      planeStep = plane.step;
       break;
     }
     case mujoco.mjtGeom.mjGEOM_HFIELD.value:
@@ -270,9 +254,12 @@ function addGeomMesh(
         type === mujoco.mjtGeom.mjGEOM_BOX.value ? [0, 1, 2, 3, 4, 5] : undefined;
       texture = createTexture({ mujoco, mjModel, texId, cubeFaceOrder });
       if (texture) {
-        const repeatX = mjModel.mat_texrepeat ? mjModel.mat_texrepeat[matId * 2 + 0] : 1;
-        const repeatY = mjModel.mat_texrepeat ? mjModel.mat_texrepeat[matId * 2 + 1] : 1;
-        texture.repeat.set(repeatX, repeatY);
+        // A plane's coordinates already carry `texrepeat`, as MuJoCo generates them.
+        if (!isPlane) {
+          const repeatX = mjModel.mat_texrepeat ? mjModel.mat_texrepeat[matId * 2 + 0] : 1;
+          const repeatY = mjModel.mat_texrepeat ? mjModel.mat_texrepeat[matId * 2 + 1] : 1;
+          texture.repeat.set(repeatX, repeatY);
+        }
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
       }
@@ -285,6 +272,8 @@ function addGeomMesh(
     opacity: color[3],
     ...reflectanceParams(mjModel, mjModel.geom_matid[g], specularRatio),
   });
+  // As written: the scene's graphics settings decide how it is read (`setBaseColor`).
+  currentMaterial.userData.rgba = [color[0], color[1], color[2]];
 
   if (texture) {
     if (!(texture instanceof THREE.CubeTexture)) {
@@ -311,7 +300,9 @@ function addGeomMesh(
   placeOnGroupLayer(mesh, mjModel.geom_group[g]);
   const ignoreDragForce = bodies[b].name === 'terrain';
 
-  mesh.castShadow = ignoreDragForce ? false : g !== 0;
+  // Nothing is under an infinite plane to shadow, and drawn into the map it shadows itself.
+  const infinite = planeStep[0] > 0 || planeStep[1] > 0;
+  mesh.castShadow = ignoreDragForce || infinite ? false : g !== 0;
   mesh.receiveShadow = type !== mujoco.mjtGeom.mjGEOM_MESH.value;
   mesh.bodyID = b;
   // The geom behind this mesh, so a size written at runtime can be drawn.
@@ -319,50 +310,12 @@ function addGeomMesh(
   mesh.userData.ignoreDragForce = ignoreDragForce;
   bodies[b].userData.ignoreDragForce = ignoreDragForce;
   bodies[b].add(mesh);
-  if (type === mujoco.mjtGeom.mjGEOM_PLANE.value) {
-    // Read by `Passthrough`, which hides these so an AR session shows the room's floor.
-    mesh.userData.isGroundPlane = true;
-  }
   getPosition(mjModel.geom_pos, g, mesh.position);
-  const isInfinitePlane =
-    type === mujoco.mjtGeom.mjGEOM_PLANE.value && (size[0] === 0 || size[1] === 0);
-  if (!isInfinitePlane) {
-    getQuaternion(mjModel.geom_quat, g, mesh.quaternion);
-  }
+  getQuaternion(mjModel.geom_quat, g, mesh.quaternion);
   if (type === mujoco.mjtGeom.mjGEOM_ELLIPSOID.value) {
     primitiveScale('ellipsoid', size, mesh.scale);
   }
-  if (isInfinitePlane) {
-    const baseMat = currentMaterial;
-    const tex = baseMat.map ?? null;
-    const repeatX = tex?.repeat.x ?? 1;
-    const repeatY = tex?.repeat.y ?? 1;
-    // MuJoCo GL_OBJECT_PLANE formula: coeff = 0.5 * texrepeat / halfSize (finite),
-    // or 0.5 * texrepeat (infinite, halfSize=0)
-    const uvScaleX = size[0] > 0 ? (repeatX * 0.5) / size[0] : repeatX * 0.5;
-    const uvScaleZ = size[1] > 0 ? (repeatY * 0.5) / size[1] : repeatY * 0.5;
-    const shaderMat = createInfinitePlaneShaderMaterial({
-      color: baseMat.color.clone(),
-      opacity: baseMat.opacity,
-      texture: tex,
-      uvScaleX,
-      uvScaleZ,
-      planeY: mesh.position.y,
-      centerX: mesh.position.x,
-      centerZ: mesh.position.z,
-      infiniteX: size[0] === 0,
-      infiniteZ: size[1] === 0,
-      halfExtentX: size[0],
-      halfExtentZ: size[1],
-    });
-    mesh.material = shaderMat;
-    mesh.frustumCulled = false;
-    mesh.renderOrder = 1;
-    mesh.onBeforeRender = (_renderer, _scene, camera) => {
-      shaderMat.uniforms.uProjInverse.value.copy(camera.projectionMatrixInverse);
-      shaderMat.uniforms.uCamWorldMatrix.value.copy(camera.matrixWorld);
-    };
-  } else if (type === mujoco.mjtGeom.mjGEOM_PLANE.value) {
+  if (isPlane) {
     const frontMat = currentMaterial;
     const backMat = frontMat.clone();
     backMat.side = THREE.BackSide;
@@ -370,13 +323,20 @@ function addGeomMesh(
     backMat.opacity = frontMat.opacity * 0.35;
     backMat.depthWrite = false;
     const backMesh = new THREE.Mesh(geometry, backMat);
-    backMesh.userData.isGroundPlane = true;
     backMesh.userData.geomId = g;
     backMesh.position.copy(mesh.position);
     backMesh.quaternion.copy(mesh.quaternion);
     backMesh.raycast = () => {};
     placeOnGroupLayer(backMesh, mjModel.geom_group[g]);
     bodies[b].add(backMesh);
+    for (const side of [mesh, backMesh]) {
+      // Read by `Passthrough`, which hides these so an AR session shows the room's floor.
+      side.userData.isGroundPlane = true;
+      if (infinite) {
+        side.userData.recentre = { origin: side.position.clone(), step: planeStep };
+        side.userData.unbounded = true;
+      }
+    }
   }
 }
 
@@ -406,6 +366,7 @@ export function addSensorGeomMeshes(
     meshes: (parent.meshes ??= {}),
     specularRatio: lightSpecularRatio(mjModel),
     names: new Uint8Array(mjModel.names),
+    zfar: modelZfar(mjModel),
   };
   for (let g = 0; g < mjModel.ngeom; g++) {
     if (wanted.has(mjModel.geom_group[g])) addGeomMesh(context, g);
@@ -497,6 +458,7 @@ export async function loadSceneFromURL(
   const mjData = newData;
 
   const names = new Uint8Array(mjModel.names);
+  restoreShippedExtent(mujoco, mjModel, mjData, names);
 
   const mujocoRoot = new THREE.Group();
   mujocoRoot.name = 'MuJoCo Root';
@@ -506,7 +468,15 @@ export async function loadSceneFromURL(
   const meshes: Record<number, THREE.BufferGeometry> = {};
   const specularRatio = lightSpecularRatio(mjModel);
 
-  const geomContext: GeomMeshContext = { mujoco, mjModel, bodies, meshes, specularRatio, names };
+  const geomContext: GeomMeshContext = {
+    mujoco,
+    mjModel,
+    bodies,
+    meshes,
+    specularRatio,
+    names,
+    zfar: modelZfar(mjModel),
+  };
   for (let g = 0; g < mjModel.ngeom; g++) {
     if (mjModel.geom_group[g] < VIEWER_GEOM_GROUPS) addGeomMesh(geomContext, g);
   }

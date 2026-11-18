@@ -10,6 +10,15 @@ import {
   type ModelFormat,
 } from '../scene/scene';
 import { SensorCameraRenderer, type SensorCameraView } from '../scene/sensorCamera';
+import {
+  DEFAULT_GRAPHICS,
+  SceneGraphics,
+  applyToRenderer,
+  decodesBaseColor,
+  mergeGraphics,
+  type GraphicsInput,
+  type GraphicsSettings,
+} from '../scene/graphics';
 import { loadMjzFile, resetWorking, WORKING, type ArchiveLimits } from '../utils/mjzLoader';
 import { type Bytes } from '../utils/bytes';
 import type { EnginePlugins } from '../plugins';
@@ -109,7 +118,8 @@ const XRAY_SWITCH = 'xray';
  * body hangs under body 0, so a flag checked on the root's children alone never matches.
  */
 function expandSceneBounds(box: THREE.Box3, object: THREE.Object3D): void {
-  if (object.userData.injected) return;
+  // Infinite planes and the haze say nothing of where the scene is.
+  if (object.userData.injected || object.userData.unbounded) return;
   if ((object as THREE.Mesh).isMesh) box.expandByObject(object);
   for (const child of object.children) expandSceneBounds(box, child);
 }
@@ -221,6 +231,8 @@ export type ResolvedScene = {
   splat?: ResolvedSplat | null;
   skin?: ResolvedSkin | null;
   viewer?: ViewerConfig | null;
+  /** How the scene is drawn; absent, as MuJoCo's classic renderer with its defaults. */
+  graphics?: GraphicsInput | null;
   /** Spawn positions the event terms of any policy on this scene may draw from. */
   terrainData?: TerrainData | null;
   /** Seconds per control step (mjlab's `step_dt`). */
@@ -435,6 +447,11 @@ export class mjswanRuntime {
   /** Owned here too: rendering one draws this scene. */
   private cameraSensors = new CameraSensorSet();
   private sensorCameraRenderer: SensorCameraRenderer | null = null;
+  /** The loaded model's pieces of the scene's graphics: the reflection, the haze, the planes. */
+  private sceneGraphics: SceneGraphics | null = null;
+  /** The scene's own graphics settings, and the ones drawn now: a host may override them. */
+  private sceneGraphicsSettings: GraphicsSettings = { ...DEFAULT_GRAPHICS };
+  private graphics: GraphicsSettings = { ...DEFAULT_GRAPHICS };
   /** mjlab's Camera Feeds: what each camera sensor last saw, and its frustum. */
   readonly cameraFeeds = new CameraFeeds();
 
@@ -514,10 +531,10 @@ export class mjswanRuntime {
     this.renderer.xr.enabled = true;
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(width, height);
+    // Always on: the shadow switches are the lights' (`SceneGraphics.apply`).
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-    this.renderer.toneMapping = THREE.NoToneMapping;
+    applyToRenderer(this.renderer, this.graphics);
     this.container.appendChild(this.renderer.domElement);
 
     // Always created: the hand spaces stay empty until a session is granted `hand-tracking`.
@@ -637,6 +654,10 @@ export class mjswanRuntime {
     // Initialize CommandManager with default velocity commands
     this.initializeCommands();
 
+    // A host's override lasts until the next load.
+    this.sceneGraphicsSettings = mergeGraphics(DEFAULT_GRAPHICS, scene.graphics);
+    this.graphics = this.sceneGraphicsSettings;
+
     // Clear current references before loading the new scene.
     this.releaseModel();
     this.bodies = null;
@@ -741,6 +762,8 @@ export class mjswanRuntime {
       if (existingRoot) {
         this.scene.remove(existingRoot);
       }
+      this.sceneGraphics?.dispose();
+      this.sceneGraphics = null;
 
       const parent = { scene: this.scene };
 
@@ -755,6 +778,10 @@ export class mjswanRuntime {
       }
 
       this.mujocoRoot = this.scene.getObjectByName('MuJoCo Root') as THREE.Group | null;
+      if (this.mujocoRoot) {
+        this.sceneGraphics = new SceneGraphics(this.mujoco, this.mjModel, this.mujocoRoot, this.scene, this.lights);
+      }
+      this.applyGraphics();
       this.passthrough.refresh();
 
       this.mujoco.mj_forward(this.mjModel, this.mjData);
@@ -925,6 +952,7 @@ export class mjswanRuntime {
         return;
       }
       skin.bind(this.mujoco, this.mjModel);
+      skin.setGraphics(this.graphics);
       this.scene.add(skin.root);
       this.skin = skin;
       this.drawRobotUnderSkin();
@@ -940,6 +968,8 @@ export class mjswanRuntime {
     this.skin = null;
     this.debugVizSet.removeSwitch(XRAY_SWITCH);
     this.robotThrough.restore();
+    // The materials it kept missed any graphics change made meanwhile.
+    this.sceneGraphics?.apply(this.graphics);
     this.drawRobot(skin.hiddenBodies, true);
     this.drawTendons(true);
     skin.dispose();
@@ -951,7 +981,10 @@ export class mjswanRuntime {
     if (!skin) return;
     const through = this.xray && !!this.bodies;
     if (through) this.robotThrough.apply(skin.hiddenBodies.map((b) => this.bodies![b]));
-    else this.robotThrough.restore();
+    else {
+      this.robotThrough.restore();
+      this.sceneGraphics?.apply(this.graphics);
+    }
     this.drawRobot(skin.hiddenBodies, through);
     this.drawTendons(!skin.hidesTendons);
   }
@@ -975,6 +1008,29 @@ export class mjswanRuntime {
         for (const m of Array.isArray(material) ? material : [material]) m.visible = drawn;
       });
     }
+  }
+
+  /** The graphics settings drawn now. */
+  getGraphics(): GraphicsSettings {
+    return this.graphics;
+  }
+
+  /** Draw the scene otherwise until the next scene load; the model is untouched. */
+  setGraphics(input: GraphicsInput): void {
+    this.graphics = mergeGraphics(this.graphics, input);
+    this.applyGraphics();
+  }
+
+  private applyGraphics(): void {
+    applyToRenderer(this.renderer, this.graphics);
+    this.sceneGraphics?.apply(this.graphics);
+    this.skin?.setGraphics(this.graphics);
+    this.preview.setBaseColorDecoded(decodesBaseColor(this.graphics));
+  }
+
+  /** Back to the scene's own graphics settings. */
+  resetGraphics(): void {
+    this.setGraphics(this.sceneGraphicsSettings);
   }
 
   /** Update transform of the existing splat without disposing/reloading (dev calibration). */
@@ -1544,7 +1600,7 @@ export class mjswanRuntime {
       const structured = collectStructuredSensors(config);
       // Before any graph runs: a startup event and a command reset run theirs during the load.
       const budget = new BufferBudget();
-      reserveTermFeeds(config, budget, structured.camera);
+      reserveTermFeeds(config, budget, structured);
       if (!kept) await this.policyGraphs.load(policy.graphs ?? []);
       if (config.events && config.events.length > 0) {
         this.eventManager = new EventManager(
@@ -2352,7 +2408,9 @@ export class mjswanRuntime {
       getQuaternion(this.mjData.xquat, Number(id), body.quaternion);
     }
     updateLightsFromData(this.mujoco, this.mjData, this.lights);
-    this.sensorCameraRenderer ??= new SensorCameraRenderer(this.renderer, this.scene);
+    this.sensorCameraRenderer ??= new SensorCameraRenderer(this.renderer, this.scene, (useShadows, draw) =>
+      this.robotThrough.asOwn(() => (this.sceneGraphics ? this.sceneGraphics.asSensor(useShadows, draw) : draw())),
+    );
     const pixels = this.sensorCameraRenderer.render(view, this.mjModel, this.mjData, this.lights);
     this.cameraFeeds.update(view.cameraId, pixels, view.width, view.height);
     return pixels;
@@ -2475,6 +2533,7 @@ export class mjswanRuntime {
 
     this.interaction.frame();
     this.preview.update();
+    this.sceneGraphics?.beforeRender(this.renderer, this.camera, presenting);
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -2573,6 +2632,8 @@ export class mjswanRuntime {
     this.renderer.setAnimationLoop(null);
     this.sensorCameraRenderer?.dispose();
     this.sensorCameraRenderer = null;
+    this.sceneGraphics?.dispose();
+    this.sceneGraphics = null;
     this.cameraFeeds.clear();
     this.renderer.dispose();
 

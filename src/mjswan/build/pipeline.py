@@ -51,7 +51,14 @@ from .asset import (
 )
 from .credit import license_names
 from .frontend import TEMPLATE_DIR, ClientBuilder, install_spa, uses_custom_js
-from .manifest import load_sidecar, mdp_entry, policy_entry, scene_entry, write_manifest
+from .manifest import (
+    graphics_entry,
+    load_sidecar,
+    mdp_entry,
+    policy_entry,
+    scene_entry,
+    write_manifest,
+)
 from .mjz import collect_spec_assets, to_zip_deflated
 
 if TYPE_CHECKING:
@@ -177,6 +184,7 @@ def write_app(
                 steps.begin("building scene", total=3)
                 steps.on("packaging scene")
                 if scene.spec is not None:
+                    graphics = graphics_entry(scene.viewer, scene.spec)
                     scene.spec.assets.update(collect_spec_assets(scene.spec))
                     to_zip_deflated(scene.spec, str(scene_path))
                     scene.spec = None
@@ -185,6 +193,7 @@ def write_app(
                         raise RuntimeError(
                             f"Scene '{scene.name}' has no model to save as .mjb"
                         )
+                    graphics = graphics_entry(scene.viewer, scene.model)
                     mujoco.mj_saveModel(scene.model, str(scene_path))
                     scene.model = None
                 gc.collect()
@@ -254,7 +263,7 @@ def write_app(
                     )
 
                 scene_entries[(project.id, scene.id)] = scene_entry(
-                    scene, mdp_entries, policy_entries, licenses
+                    scene, mdp_entries, policy_entries, licenses, graphics
                 )
                 progress.advance(task)
             steps.close()

@@ -112,7 +112,9 @@ describe('reserveTermFeeds', () => {
   const reads = (n: number) =>
     Array.from({ length: n }, (_, i) => ({ sensor: 'scan', field: 'distances', input: `x${i}` }));
   const terminations = (sensor: object, slots: object[]) => ({ t: { name: 't', onnx: 't.onnx', sensors: { scan: sensor }, input_slots: slots } });
-  const reserve = (config: object) => () => reserveTermFeeds(config, new BufferBudget());
+  // `raycast` is the runtime's set, the one the slot reader casts from.
+  const reserve = (config: object, raycast: Record<string, object> = {}) => () =>
+    reserveTermFeeds(config, new BufferBudget(), { raycast });
 
   it('admits a shipped-size policy', () => {
     const config = {
@@ -121,7 +123,7 @@ describe('reserveTermFeeds', () => {
       terminations: terminations(scan(1, 187), reads(1)),
       debug_vis: { sensors: { scan: { ...scan(1, 187), debug_vis: true } }, rewards: { up: { terrain_sensors: ['scan'] } } },
     };
-    expect(reserve(config)).not.toThrow();
+    expect(reserve(config, { scan: scan(1, 187) })).not.toThrow();
   });
 
   it.each([
@@ -130,19 +132,39 @@ describe('reserveTermFeeds', () => {
     ['a fractional rand_dim', { events: [{ rand_dim: 1.5 }] }],
     ['a sim slot past the total', { terminations: { t: { input_slots: [{ sim: 'qpos', rows: [0], shape: [1, 1, 16_000_001] }] } } }],
     ['an observation size past the total', { observations: { actor: [{ name: 'c', native: 'constant', size: 16_000_001 }] } }],
-    ['a scan read past the ray limit', { terminations: terminations(scan(300, 300), reads(1)) }],
-    ['one scan read by many slots', { terminations: terminations(scan(10, 1000), reads(100)) }],
   ])('refuses %s', (_, config) => {
     expect(reserve(config)).toThrow(/limit/);
   });
 
+  it.each([
+    ['a scan read past the ray limit', scan(300, 300), 1],
+    ['one scan read by many slots', scan(10, 1000), 100],
+  ])('refuses %s', (_, sensor, n) => {
+    expect(reserve({ terminations: terminations(sensor, reads(n)) }, { scan: sensor })).toThrow(/ray limit/);
+  });
+
+  it("charges the runtime's raycast sensor, not a copy the document nests elsewhere", () => {
+    const config = { terminations: terminations(scan(300, 300), reads(1)), events: [{ sensors: { scan: scan(1, 1) } }] };
+    expect(reserve(config, { scan: scan(300, 300) })).toThrow(/ray limit/);
+  });
+
+  it('refuses a raycast sensor with no frames to cast from', () => {
+    expect(reserve({}, { scan: { kind: 'raycast' } })).toThrow(/lists no frames/);
+  });
+
+  it('charges every debug_vis sensor, whatever its kind: DebugViz casts each', () => {
+    const sensors = { touch: { ...scan(300, 300), kind: 'contact', debug_vis: true } };
+    expect(reserve({ debug_vis: { sensors } })).toThrow(/ray limit/);
+    expect(reserve({ debug_vis: { sensors: { touch: { kind: 'contact' } } } })).toThrow(/lists no frames/);
+  });
+
   describe('camera sensors', () => {
-    const camera = (width: number, height: number) => ({ kind: 'camera', camera: 'wrist', width, height, enabled_geom_groups: [], use_shadows: false });
+    const camera = (width: number, height: number, groups: unknown = [0, 1, 2]) => ({ kind: 'camera', camera: 'wrist', width, height, enabled_geom_groups: groups, use_shadows: false });
     // A one-value slot: the image is rendered at the descriptor's size all the same.
     const rgb = (sensor: string, n: number) =>
       Array.from({ length: n }, (_, i) => ({ sensor, field: 'rgb', input: `i${i}`, shape: [1, 1] }));
     const load = (slots: object[], cameras: Record<string, ReturnType<typeof camera>>) => () =>
-      reserveTermFeeds({ observations: { actor: [{ name: 'o', input_slots: slots }] } }, new BufferBudget(), cameras);
+      reserveTermFeeds({ observations: { actor: [{ name: 'o', input_slots: slots }] } }, new BufferBudget(), { camera: cameras });
     const many = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`c${i}`, camera(1, 1)]));
 
     it('admits a vision policy', () => {
@@ -157,6 +179,9 @@ describe('reserveTermFeeds', () => {
       ['more sensors than the limit', [], many(MAX_CAMERA_SENSORS + 1), /camera sensors/],
       ['an empty image', [], { cam: camera(0, 64) }, /0x64 image/],
       ['a fractional size', [], { cam: camera(1.5, 64) }, /1.5x64 image/],
+      ['more geom groups than MuJoCo has', [], { cam: camera(1, 1, [0, 1, 2, 3, 4, 5, 0]) }, /geom groups/],
+      ['a geom group past 5', [], { cam: camera(1, 1, [6]) }, /geom groups/],
+      ['geom groups that are no list', [], { cam: camera(1, 1, 3) }, /geom groups/],
     ])('refuses %s', (_, slots, cameras, error) => {
       expect(load(slots, cameras)).toThrow(error);
     });
@@ -166,6 +191,6 @@ describe('reserveTermFeeds', () => {
     const sensors = { scan: { ...scan(10, 1000), debug_vis: false } };
     const rewards = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`r${i}`, { terrain_sensors: ['scan'] }]));
     expect(reserve({ debug_vis: { sensors, rewards } })).toThrow(/ray limit/);
-    expect(reserve({ terminations: terminations(scan(10, 1000), reads(1)) })).not.toThrow();
+    expect(reserve({ terminations: terminations(scan(10, 1000), reads(1)) }, { scan: scan(10, 1000) })).not.toThrow();
   });
 });

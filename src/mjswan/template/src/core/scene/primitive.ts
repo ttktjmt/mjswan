@@ -8,7 +8,7 @@ import * as THREE from 'three';
 /** The primitive geom types, by MuJoCo's names (`mjtGeom` without its prefix). */
 export type PrimitiveType = 'plane' | 'sphere' | 'capsule' | 'ellipsoid' | 'cylinder' | 'box';
 
-/** A plane here is a finite one: an infinite plane (a size of 0) is the scene's shader quad. */
+/** A plane here is a finite one, its texture stretched over it: a model's planes are `plane.ts`'s. */
 export function primitiveGeometry(type: PrimitiveType, size: ArrayLike<number>): THREE.BufferGeometry {
   switch (type) {
     case 'plane': {

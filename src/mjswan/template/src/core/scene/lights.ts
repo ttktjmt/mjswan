@@ -74,6 +74,41 @@ export function lightBudget(mjModel: MjModel): number {
   return total;
 }
 
+/** What MuJoCo's shadow maps cover (`mjr_render`, `mjr_makeContext`), read once per model. */
+type ShadowFrustum = { near: number; far: number; clip: number; scale: number };
+
+function shadowFrustum(mjModel: MjModel): ShadowFrustum {
+  const map = mjModel.vis.map;
+  const extent = mjModel.stat.extent;
+  return { near: map.znear * extent, far: map.zfar * extent, clip: map.shadowclip * extent, scale: map.shadowscale };
+}
+
+/**
+ * A directional light's map as MuJoCo's: orthographic from the light's place along its
+ * direction, `shadowclip` times the model's extent to each side; a spot light's, its cone
+ * widened by `shadowscale`. Both reach as far as the free camera sees.
+ */
+function castShadowAsMujoco(
+  light: THREE.DirectionalLight | THREE.SpotLight,
+  { near, far, clip, scale }: ShadowFrustum,
+  cutoff: number,
+): void {
+  const camera = light.shadow.camera;
+  camera.near = near;
+  camera.far = far;
+  if ((light as THREE.DirectionalLight).isDirectionalLight) {
+    const ortho = camera as THREE.OrthographicCamera;
+    ortho.left = -clip;
+    ortho.right = clip;
+    ortho.top = clip;
+    ortho.bottom = -clip;
+  } else {
+    // three widens the cone by `focus`; MuJoCo caps the angle at 160 degrees.
+    (light.shadow as THREE.SpotLightShadow).focus = Math.min(scale, 160 / Math.max(2 * cutoff, 1e-6));
+  }
+  camera.updateProjectionMatrix();
+}
+
 export function createLights({
   mujoco,
   mjModel,
@@ -81,6 +116,7 @@ export function createLights({
 }: CreateLightsParams): THREE.Light[] {
   const lights: THREE.Light[] = [];
   const ambientSum = new THREE.Color(0, 0, 0);
+  const shadow = shadowFrustum(mjModel);
 
   if (mjModel.nlight > 0) {
     for (let l = 0; l < mjModel.nlight; l++) {
@@ -136,23 +172,25 @@ export function createLights({
       );
       ambientSum.add(ambientColor);
 
-      light.castShadow = mjModel.light_castshadow[l];
+      // The model's switch, which the viewer's and a sensor's gate; MuJoCo casts from directional and spot lights only.
+      light.userData.castShadow =
+        !!mjModel.light_castshadow[l] && lightType !== mujoco.mjtLightType.mjLIGHT_POINT.value;
+      light.castShadow = light.userData.castShadow;
       if (light.castShadow) {
         light.shadow!.mapSize.width = 1024;
         light.shadow!.mapSize.height = 1024;
-        light.shadow!.camera.near = 1;
-        light.shadow!.camera.far = 10;
         light.shadow!.radius = mjModel.light_bulbradius[l] * 50;
+        castShadowAsMujoco(light as THREE.DirectionalLight | THREE.SpotLight, shadow, mjModel.light_cutoff[l]);
       }
 
       const pos = mjcToThreeCoordinate(mjModel.light_pos.slice(l * 3, l * 3 + 3)).toArray();
       const dir = mjcToThreeCoordinate(mjModel.light_dir.slice(l * 3, l * 3 + 3)).normalize();
 
       if (lightType === mujoco.mjtLightType.mjLIGHT_DIRECTIONAL.value) {
-        const len = Math.max(1, mjModel.light_range[l] || 10);
+        // At the light's own place, where MuJoCo's shadow map looks from.
         const dl = light as THREE.DirectionalLight;
-        dl.position.set(pos[0] - dir.x * len, pos[1] - dir.y * len, pos[2] - dir.z * len);
-        dl.target.position.set(pos[0], pos[1], pos[2]);
+        dl.position.set(pos[0], pos[1], pos[2]);
+        dl.target.position.set(pos[0] + dir.x, pos[1] + dir.y, pos[2] + dir.z);
       } else if (lightType === mujoco.mjtLightType.mjLIGHT_SPOT.value) {
         const sl = light as THREE.SpotLight;
         sl.position.set(pos[0], pos[1], pos[2]);
@@ -254,9 +292,8 @@ export function updateLightsFromData(mujoco: MainModule, mjData: MjData, lights:
 
     if (type === mujoco.mjtLightType.mjLIGHT_DIRECTIONAL.value) {
       const dl = light as THREE.DirectionalLight;
-      const len = Math.max(1, (dl.shadow?.camera?.far as number) || 10);
-      dl.target.position.copy(pos);
-      dl.position.copy(pos).addScaledVector(dir, -len);
+      dl.position.copy(pos);
+      dl.target.position.copy(pos).add(dir);
       dl.target.updateMatrixWorld?.();
     } else if (type === mujoco.mjtLightType.mjLIGHT_SPOT.value) {
       const sl = light as THREE.SpotLight;

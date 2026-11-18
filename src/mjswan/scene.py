@@ -1661,12 +1661,23 @@ class SceneHandle:
         self._config.splat_section = True
         return self
 
+    @property
+    def viewer(self) -> ViewerConfig:
+        """This scene's viewer configuration: what :meth:`set_viewer` set, the task's
+        for an mjlab scene, else the defaults. ``dataclasses.replace`` on it changes
+        some settings and keeps the rest, a task's camera included::
+
+            from dataclasses import replace
+            scene.set_viewer(replace(scene.viewer, color_management="filament", tone_mapping="agx"))
+        """
+        return self._config.viewer or ViewerConfig()
+
     def set_viewer(self, config: ViewerConfig) -> SceneHandle:
         """Set viewer configuration for this scene.
 
         Args:
             config: A :class:`ViewerConfig` instance describing the camera
-                position, tracking mode, and rendering settings.
+                position, tracking mode, and graphics settings.
 
         Returns:
             Self for method chaining.

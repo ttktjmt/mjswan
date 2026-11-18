@@ -35,6 +35,20 @@ export class SeeThrough {
     }
   }
 
+  /** Run `draw` with every mesh as it was, as a camera sensor sees the robot, then see-through again. */
+  asOwn<T>(draw: () => T): T {
+    const through = [...this.own.keys()].map((mesh) => {
+      const now = { material: mesh.material, castShadow: mesh.castShadow, renderOrder: mesh.renderOrder };
+      Object.assign(mesh, this.own.get(mesh));
+      return [mesh, now] as const;
+    });
+    try {
+      return draw();
+    } finally {
+      for (const [mesh, now] of through) Object.assign(mesh, now);
+    }
+  }
+
   /** Every mesh back as it was. */
   restore(): void {
     for (const [mesh, own] of this.own) {

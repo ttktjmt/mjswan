@@ -45,8 +45,11 @@ MANIFEST_NAME = "manifest.json"
 #: engine renders, and an observation group may feed a policy input of more than two
 #: dimensions (an image). A skin may be modelled on the robot (``fit: "modelled"``), each
 #: of its joints fixed to the body it rests on, and may carry ``align``, ``rest_qpos``, a
-#: solid ``material`` and ``hide_tendons``. An older engine would read the camera as a
-#: raycast sensor, and retarget the skin as a character, drawing it off the robot.
+#: solid ``material`` and ``hide_tendons``. A scene carries ``graphics``: its colour
+#: management (MuJoCo's ``classic``, or ``filament``'s, with tone mapping and
+#: exposure) and the shadow, reflection and haze switches, no longer in ``camera``. An
+#: older engine would read the camera as a raycast sensor, retarget the skin as a
+#: character, drawing it off the robot, and draw every scene its one way.
 DOCUMENT_FORMAT = 9
 
 #: Input slots the runtime fills itself rather than from an observation group: the

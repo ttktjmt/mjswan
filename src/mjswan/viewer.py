@@ -5,14 +5,39 @@ from __future__ import annotations
 import enum
 import math
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, get_args
+
+ColorManagement = Literal["classic", "filament"]
+
+ToneMapping = Literal[
+    # three.js's operators
+    "none",
+    "linear",
+    "reinhard",
+    "cineon",
+    "aces_filmic",
+    "agx",
+    "neutral",
+    # MuJoCo Filament's, as it means them: `pbr_neutral` is `neutral`, `aces_legacy` is
+    # `aces_filmic`, `aces` is `aces_filmic` at 0.6 of the exposure, `filmic` Narkowicz's
+    "pbr_neutral",
+    "aces_legacy",
+    "aces",
+    "filmic",
+]
+
+ColorSpace = Literal["srgb", "linear"]
+
+#: The settings only the Filament renderer reads.
+_FILAMENT_FIELDS = ("tone_mapping", "exposure", "output_color_space", "base_color_type")
 
 
 @dataclass
 class ViewerConfig:
-    """Viewer configuration for a scene.
+    """Viewer configuration for a scene: the camera, and how the scene is drawn.
 
-    Matches the API of ``mjlab.viewer.ViewerConfig``.
+    Matches the API of ``mjlab.viewer.ViewerConfig``, plus the graphics settings mjlab's
+    viewer does not have (``color_management`` onwards).
     """
 
     lookat: tuple[float, float, float] = (0.0, 0.0, 0.0)
@@ -59,16 +84,65 @@ class ViewerConfig:
     """Number of neighboring environments to render around env_idx."""
 
     enable_reflections: bool = True
-    """Whether to enable reflections."""
+    """Reflections, as MuJoCo's ``mjRND_REFLECTION``: the first opaque plane or box top
+    with a material ``reflectance`` mirrors the scene."""
 
     enable_shadows: bool = True
-    """Whether to enable shadows."""
+    """Shadows, as MuJoCo's ``mjRND_SHADOW``: cast from each light with ``castshadow``."""
 
     height: int = 240
     """Viewer canvas height in pixels."""
 
     width: int = 320
     """Viewer canvas width in pixels."""
+
+    color_management: ColorManagement = "classic"
+    """How colours become pixels. ``"classic"`` as MuJoCo's classic renderer: ``rgba`` as
+    written, an sRGB 2D texture decoded and the output not encoded, so darker than the
+    file, a cube or skybox as stored, and no tone mapping. ``"filament"`` as its Filament
+    renderer: colour managed, tone mapped and exposed. The settings below apply to it
+    alone."""
+
+    tone_mapping: ToneMapping | None = None
+    """Every operator three.js has, and MuJoCo's names with their meaning. Unset, the
+    model's ``filament.cg.tone_mapping``, else ``"pbr_neutral"``."""
+
+    exposure: float | None = None
+    """In stops, before tone mapping. Unset, the model's ``filament.cg.exposure``, else 0."""
+
+    output_color_space: ColorSpace | None = None
+    """``"srgb"`` encodes the output, ``"linear"`` leaves it. Unset, the model's
+    ``filament.cg.output_color_space``, else ``"srgb"``."""
+
+    base_color_type: ColorSpace | None = None
+    """How an ``rgba`` is read: ``"srgb"`` decodes it, ``"linear"`` takes it as written.
+    Unset, the model's ``filament.material.base_color_type``, else ``"srgb"``."""
+
+    enable_haze: bool = True
+    """Haze where the first infinite plane meets the skybox, as MuJoCo's ``mjRND_HAZE``:
+    the model's ``<visual>`` ``haze`` and its colour, drawn only with a skybox."""
+
+    def __post_init__(self) -> None:
+        _check_choice("color_management", self.color_management, ColorManagement)
+        _check_choice("tone_mapping", self.tone_mapping, ToneMapping)
+        _check_choice("output_color_space", self.output_color_space, ColorSpace)
+        _check_choice("base_color_type", self.base_color_type, ColorSpace)
+        # JSON has no infinity: the browser would refuse the whole document.
+        if self.exposure is not None and not math.isfinite(self.exposure):
+            raise ValueError(
+                f"ViewerConfig exposure={self.exposure!r} is not a finite number of stops."
+            )
+        if self.color_management == "classic":
+            set_here = [
+                name for name in _FILAMENT_FIELDS if getattr(self, name) is not None
+            ]
+            if set_here:
+                raise ValueError(
+                    f"ViewerConfig sets {', '.join(set_here)} with "
+                    "color_management='classic', which draws as MuJoCo's classic renderer "
+                    "does, with no tone mapping. Pass color_management='filament' to use "
+                    "them."
+                )
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to the manifest's ``camera`` entry (snake_case, ADR 0006)."""
@@ -78,8 +152,6 @@ class ViewerConfig:
             "elevation": self.elevation,
             "azimuth": self.azimuth,
             "origin_type": self.origin_type.name,
-            "enable_reflections": self.enable_reflections,
-            "enable_shadows": self.enable_shadows,
             "height": self.height,
             "width": self.width,
             # None means "45" to Python; the document says what it means.
@@ -135,4 +207,11 @@ class ViewerConfig:
         )
 
 
-__all__ = ["ViewerConfig"]
+def _check_choice(name: str, value: Any, choices: Any) -> None:
+    if value is not None and value not in get_args(choices):
+        raise ValueError(
+            f"ViewerConfig {name}={value!r} is not one of {', '.join(get_args(choices))}."
+        )
+
+
+__all__ = ["ColorManagement", "ColorSpace", "ToneMapping", "ViewerConfig"]

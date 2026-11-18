@@ -19,3 +19,5 @@ export { createEngine } from './createEngine';
 export { createEngine as default } from './createEngine';
 // Which traced graphs a config refers to, for a caller assembling inputs by hand.
 export { policyGraphRefs } from '../core/onnx/graphRefs';
+// MuJoCo's graphics defaults, and every tone mapping, for a host drawing its own controls.
+export { DEFAULT_GRAPHICS, TONE_MAPPINGS } from '../core/scene/graphicsSettings';

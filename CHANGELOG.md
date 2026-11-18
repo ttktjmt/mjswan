@@ -14,6 +14,34 @@ shortcuts.
 
 ### Added
 
+- **Graphics settings: a scene's colours handled as MuJoCo's classic renderer handles
+  them, or as its Filament renderer does** (**document format 9**, #232). `ViewerConfig`
+  takes `color_management` (`"classic"`, the default, or `"filament"`; three.js draws
+  both) and, for Filament,
+  `tone_mapping` (every three.js operator, `"agx"` among them, and MuJoCo's names),
+  `exposure` in stops, `output_color_space` and `base_color_type`; `enable_shadows`,
+  `enable_reflections` and the new `enable_haze` are MuJoCo's `mjRND_SHADOW`,
+  `mjRND_REFLECTION` and `mjRND_HAZE`. Unset Filament settings come from the model's
+  `filament.*` `<custom>` flags (MuJoCo 4.0's names; a non-finite exposure draws 0, with a
+  warning), then MuJoCo's defaults; the build writes them all as the scene's `graphics`,
+  beside `camera`, and setting one on a classic scene raises. A manifest never carries
+  `NaN` or `Infinity`, which no browser parses: the build refuses it.
+  `SceneHandle.viewer` returns the scene's config, so
+  `scene.set_viewer(replace(scene.viewer, color_management="filament"))` keeps a task's
+  camera.
+  Classic draws textures as MuJoCo uploads them (an sRGB 2D texture decoded and the output
+  not encoded; a cube or skybox as stored), infinite planes lit, shadowed and following
+  the viewer, haze where the first infinite plane meets the skybox, and a reflection on
+  the first opaque plane or box top with a `reflectance`. Filament decodes `rgba` and sRGB
+  textures, the sky included, encodes the output, and tone maps and exposes it; the
+  viewer's own colours (tendons, debug drawings, frustums, handles) follow `rgba`; skins keep
+  glTF's and VRM's own colour management there, and a `SolidShading` colour follows
+  `base_color_type`. Camera sensors are drawn as mujoco_warp draws them, whatever the
+  settings. `engine.graphics.set()` / `reset()` and the state's `graphics` let a host
+  change them for the session; the panel's **Graphics** section, below Camera Feeds and
+  collapsed at first, has the colour management, tone mapping, exposure, the three switches,
+  **Reset** and **Copy as Python**.
+
 - **Skins modelled on the robot: `ModelledSkinConfig`** (**document format 9**). A `.glb`
   made over the robot at its rest pose, in its world frame, as MyoSuite's muscle atlas
   (its renderer's `--muscle-mesh atlas` and `atlas-hd`) is over its full body, is drawn as
@@ -461,6 +489,16 @@ shortcuts.
   dialog it opens.
 
 ### Changed
+
+- **Every scene now looks as MuJoCo draws it, published ones included.** Under the
+  default classic renderer an sRGB 2D texture (a PNG that says so, or `colorspace="sRGB"`)
+  is darker, as in MuJoCo; set its `colorspace` to `linear` to keep it as stored. A floor
+  such as menagerie's takes the robot's shadow and, with a `reflectance`, mirrors it; a
+  skybox hazes the horizon; a finite plane places its texture as MuJoCo does (`texrepeat`
+  over the plane, per metre with `texuniform`). A camera sensor's image changes with it,
+  as mujoco_warp draws one: the floor lit, and shadowed with `use_shadows`. A camera
+  frustum and the pull arrow are drawn in the colours they are given, lighter than before.
+  A document is drawn by the engine that opens it, so published scenes change too.
 
 - **A policy slower than the screen no longer moves the robot in jumps.** The engine ran
   a control step's physics at once and drew only its end, so a 10 Hz policy (the SO-101
@@ -997,6 +1035,18 @@ shortcuts.
   3.11, so a 3.10 install could only resolve the vulnerable releases.
 
 ### Fixed
+
+- **Shadows fall where MuJoCo casts them.** A directional light's shadow map covered the
+  space behind the light, so nothing under it was shadowed; it now has MuJoCo's frustum
+  (from the light, `shadowclip` times the extent to each side), a spot light's cone is
+  widened by `shadowscale`, and a point light casts none. A camera sensor's `use_shadows`
+  now takes effect. The viewer's bodies parked 100 m up no longer stretch the model's
+  extent, nor what it sizes, a camera sensor's far plane (10 km) included.
+
+- **A camera sensor sees the whole model, whatever the viewer hides.** Under a
+  `hide_robot` skin a wrist camera lost its gripper, and with Xray on saw the robot
+  see-through; it now sees the robot as it is, the floor an AR session hides and a geom a
+  host's preview replaces.
 
 - **`hide_robot=True` hides the robot's tendons too.** A character drawn in the robot's
   place stayed wrapped in its tendon lines, which no setting hid. A skin now stops the
@@ -1580,7 +1630,13 @@ shortcuts.
   `history_offsets` stacked one output frame each on a one-frame charge. A policy now
   declares at most 16 camera sensors and renders at most 64 images a step, each charged
   at its size; a slot reads only what it was charged, or nothing; and a history's output
-  is charged as well as its ring.
+  is charged as well as its ring. Sensors still got around it: a slot naming one by an
+  array or a number was served but never charged; the rays charged came from every nested
+  `sensors`, not those the runtime casts, and missed a `debug_vis` sensor of another kind;
+  a policy switch on one model kept the previous policy's caster for a name; and
+  `enabled_geom_groups`, looped over on every render, had no limit. A slot now names a
+  sensor only by a string, the budget charges the runtime's own raycast set and every
+  `debug_vis` sensor, each policy casts with its own, and geom groups are MuJoCo's 0 to 5.
 - **A skin can no longer make three-vrm hold the viewer's tab.** three-vrm did work the
   skin file (often a third party's avatar) controls with no bound: every expression bind
   over every primitive of its node, and a full ancestor walk per node constraint, on each
@@ -1588,7 +1644,10 @@ shortcuts.
   made, each tested against every collider group listed. A manifest's `springs` had no
   limit either. Expressions are now settled once at load (mjswan sets none), and a skin
   past fixed limits on constraints, spring joints, collider tests or spring depth is not
-  loaded; the scene runs without it.
+  loaded; the scene runs without it. Manifest chains past the updates a VRM's springs may
+  make each step are refused too (a chain naming one node over and over re-matrixes all
+  below it per joint), and with `mujoco_springs`, past 2048 joint-collider contact pairs
+  the springs are left to three-vrm.
 - **Each model an engine loads starts from an empty file area.** The engine unpacked every
   `.mjz` into one MuJoCo file area that it never emptied, so a later model could compile an
   earlier one's include or mesh, fail on a name the earlier one had used for a folder, or,
