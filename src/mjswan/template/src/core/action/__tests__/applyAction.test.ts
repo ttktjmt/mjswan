@@ -344,8 +344,7 @@ describe('applyAction: other kinds', () => {
   });
 
   it('leaves ctrl as a keyframe set it in a scene without a policy', () => {
-    // MuJoCo keeps ctrl until something writes it: a position actuator holds the keyframe's
-    // pose, where zeros would drive every joint toward 0 (Unitree Go1's flip).
+    // MuJoCo keeps ctrl until something writes it, so position actuators hold the keyframe's pose.
     const data = fakeData(3);
     data.ctrl.set([0, 0.9, -1.8]);
     applySubstep(data, []);
@@ -354,8 +353,7 @@ describe('applyAction: other kinds', () => {
 });
 
 describe('applyAction: DC motor', () => {
-  // mjlab's `dc_motor_clip(effort, 30, 20, 20, vel)`, from its own code (mjlab 1.6.0), at
-  // these efforts (columns) and joint speeds (rows), corners of the curve included.
+  // mjlab 1.6.0's `dc_motor_clip(effort, 30, 20, 20, vel)`, efforts across, joint speeds down.
   const EFFORTS = [-60, -25, -5, 0, 5, 25, 60];
   const MJLAB: Record<number, number[]> = {
     [-50]: [20, 20, 20, 20, 20, 20, 20],

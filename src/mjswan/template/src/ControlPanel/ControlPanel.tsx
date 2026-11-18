@@ -127,7 +127,7 @@ interface ControlPanelProps {
   /** engine state's `graphics`, and the scene's own, which Reset returns to. */
   graphics?: GraphicsSettings;
   sceneGraphics?: GraphicsSettings;
-  /** engine state's `graphicsAvailable`: the switches that change anything in this model. */
+  /** engine state's `graphicsAvailable`. */
   graphicsAvailable?: GraphicsAvailable;
   /** engine.graphics.set. */
   onGraphicsChange?: (input: GraphicsInput) => void;

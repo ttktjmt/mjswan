@@ -175,10 +175,9 @@ and exposed.
 `aces` (three's `aces_filmic` at 0.6 of the exposure) and `filmic` (Narkowicz's curve);
 `graphics.set` also takes MuJoCo's `pbr_neutral` and `aces_legacy`, which the state reports
 as `neutral` and `aces_filmic`. Shadows, reflections and haze are MuJoCo's `mjRND_SHADOW`,
-`mjRND_REFLECTION` and `mjRND_HAZE`, on by default. A model draws each only by MuJoCo's
-rules: shadows from a light that casts them, a reflection in the first opaque plane or box
-with a `reflectance`, haze where an infinite plane meets a skybox. `state.graphicsAvailable`
-says which this model has, so a host can leave the other switches unoffered.
+`mjRND_REFLECTION` and `mjRND_HAZE`, on by default. `state.graphicsAvailable` says which
+of them the loaded model can draw: shadows need a light that casts them, a reflection the
+first opaque plane or box with a `reflectance`, haze an infinite plane and a skybox.
 
 `graphics.set(partial)` changes some settings, ignoring with a warning a value the engine
 cannot draw; `graphics.reset()` returns to the scene's own. A change lasts until the next

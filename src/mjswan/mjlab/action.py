@@ -195,8 +195,7 @@ def _expand_patterns(value: Any, joint_names: list[str]) -> Any:
 #: into the model and need nothing here.
 _PYTHON_PD_ACTUATOR = "IdealPdActuatorCfg"
 
-#: The ideal PD's subclass that clips its torque to a torque-speed curve, which the
-#: browser runs from these fields.
+#: An ideal PD with a torque-speed curve, which the browser runs from these fields.
 _DC_MOTOR_ACTUATOR = "DcMotorActuatorCfg"
 _DC_MOTOR_FIELDS = ("saturation_effort", "velocity_limit")
 
@@ -285,13 +284,8 @@ def resolve_dc_motor_curves(
     joint_names: list[str],
     env_cfg: Any | None,
 ) -> None:
-    """Fill a term's ``saturation_effort``/``velocity_limit`` from the entity's DC motors,
-    in place.
-
-    mjlab clips a DC motor's PD torque to a line falling from ``saturation_effort`` at rest
-    to nothing at ``velocity_limit``, and the browser clips the torque it computes alike.
-    A term that sets either field is left alone.
-    """
+    """Fill a term's ``saturation_effort``/``velocity_limit`` from the entity's DC
+    motors, in place, unless the term sets either."""
     if not actions or not joint_names:
         return
 
@@ -338,9 +332,8 @@ def _unrun_fields(cfg: Any) -> dict[str, Any]:
 def warn_unrun_actuator_fields(
     actions: Mapping[str, MjswanActionTermCfg] | None, env_cfg: Any | None
 ) -> None:
-    """Warn once per ideal-PD actuator config of the entities *actions* drive that does
-    more than its PD within the effort limit and a DC motor's torque-speed curve, which is
-    all the browser runs."""
+    """Warn once per ideal-PD actuator config of the entities *actions* drive that sets
+    a field the browser does not run (``_unrun_fields``)."""
     actuators = {
         id(cfg): cfg
         for term in (actions or {}).values()

@@ -36,10 +36,7 @@ export interface GraphicsSettings {
   haze: boolean;
 }
 
-/**
- * Which of the three switches change anything in the loaded model, by the rules MuJoCo
- * draws with: a host can leave the others unoffered.
- */
+/** Which of the three switches change anything in the loaded model, by MuJoCo's rules. */
 export interface GraphicsAvailable {
   /** A light casts shadows. */
   shadows: boolean;

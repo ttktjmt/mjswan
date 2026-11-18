@@ -972,8 +972,6 @@ _FakeBuiltinPositionActuatorCfg = _fake_actuator_cls("BuiltinPositionActuatorCfg
 
 
 class _FakeDcMotorActuatorCfg(_FakeIdealPdActuatorCfg):
-    """mjlab's DC motor: the ideal PD within a torque-speed curve."""
-
     def __init__(self, target_names_expr, saturation_effort, velocity_limit):
         super().__init__(target_names_expr, 40.0, 2.0)
         self.saturation_effort = saturation_effort
@@ -1050,8 +1048,7 @@ class TestResolvePdGains:
 
 
 class TestResolveDcMotorCurves:
-    """A DC motor's torque-speed curve runs in the browser, off the fields mjlab keeps on
-    the actuator."""
+    """A DC motor's curve runs in the browser, off fields mjlab keeps on the actuator."""
 
     JOINTS = TestResolvePdGains.JOINTS
 
@@ -1106,7 +1103,7 @@ class TestResolveDcMotorCurves:
 
 @pytest.mark.mjlab
 class TestWarnUnrunActuatorFields:
-    """The browser runs an ideal-PD actuator's PD within its effort limit, and no more."""
+    """An ideal-PD actuator warns for each field the browser does not run."""
 
     @pytest.fixture
     def actuator(self):

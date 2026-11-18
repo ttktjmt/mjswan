@@ -289,8 +289,8 @@ the build reads it off the actuator configs, as it reads the gains. Lags drawn a
 follow mjlab's distribution from the browser's seeded RNG, not torch's stream.
 
 A `DcMotorActuatorCfg`'s torque-speed curve runs too: the build reads its
-`saturation_effort` and `velocity_limit` onto the term, and the browser clips the torque it
-computes for those motors to the line between, as mjlab's `dc_motor_clip` does.
+`saturation_effort` and `velocity_limit` onto the term, and the browser clips the motor's
+torque as mjlab's `dc_motor_clip` does.
 
 What the browser does not run warns at build time rather than being dropped silently: an
 mjlab action field mjswan's class does not have, when it holds a non-default value, and

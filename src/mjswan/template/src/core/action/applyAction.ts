@@ -67,11 +67,7 @@ export interface ResolvedActionTerm {
   positionActuator: boolean[];
   kp: Float32Array;
   kd: Float32Array;
-  /**
-   * mjlab's DC motor, per joint: the torque it gives at rest and the speed at which it gives
-   * none (`saturation_effort`, `velocity_limit`). The torque computed for a motor is clipped
-   * to the line between, as mjlab's `dc_motor_clip` does. `Infinity` for any other motor.
-   */
+  /** A DC motor's `saturation_effort` and `velocity_limit` per joint, `Infinity` for other motors. */
   saturationEffort?: Float32Array;
   velocityLimit?: Float32Array;
   /** `muscle_activation` only: how a raw action becomes a control. */
@@ -270,9 +266,8 @@ type DataViews = Pick<MjData, 'ctrl' | 'qpos' | 'qvel'>;
  *
  * Zeroes `ctrl` first, so an actuator no term claims stays at rest rather than holding
  * the previous step's value, as mjlab resets a target no term writes. With no term at all
- * (a scene without a policy) there is no controller, and `ctrl` keeps what a keyframe or
- * the host set, as MuJoCo's own viewer leaves it. `substep` counts from 0 within the
- * control step, for a term that ramps across it.
+ * (no policy), `ctrl` keeps what a keyframe or the host set, as in MuJoCo's own viewer.
+ * `substep` counts from 0 within the control step, for a term that ramps across it.
  */
 export function applyAction(
   mjData: MjData,
@@ -354,9 +349,8 @@ function applyActionTerm(
 }
 
 /**
- * mjlab's `dc_motor_clip`: `effort` within the line from `saturation` at rest to nothing at
- * `velocityLimit`. Its `force_limit` bound is the motor's own `ctrlrange`, which MuJoCo
- * applies after; clamping there leaves what mjlab's speed clamp at the corner would.
+ * mjlab's `dc_motor_clip` without its `force_limit` bound, which MuJoCo then applies as the
+ * motor's `ctrlrange` with the same result.
  */
 export function dcMotorClip(effort: number, saturation: number, velocityLimit: number, vel: number): number {
   if (!Number.isFinite(saturation)) return effort;

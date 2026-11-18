@@ -59,13 +59,12 @@ class BaseActionCfg(ActionTermCfg):
 
     saturation_effort: float | list[float] | dict[str, float] | None = None
     """mjswan-specific: mjlab's ``DcMotorActuatorCfg.saturation_effort`` on this term's
-    joints, the torque its motor gives at rest. With ``velocity_limit`` it bounds the
-    torque the browser computes for a motor, falling linearly to nothing at that speed, as
+    joints. With ``velocity_limit``, the browser clips the motor torque it computes as
     mjlab's ``dc_motor_clip`` does. Resolved from the actuator configs when unset."""
 
     velocity_limit: float | list[float] | dict[str, float] | None = None
-    """mjswan-specific: mjlab's ``DcMotorActuatorCfg.velocity_limit``, the joint speed at
-    which the motor gives no torque. See ``saturation_effort``."""
+    """mjswan-specific: mjlab's ``DcMotorActuatorCfg.velocity_limit``. See
+    ``saturation_effort``."""
 
     def _add_delay(self, entry: dict[str, Any]) -> None:
         if self.delay:

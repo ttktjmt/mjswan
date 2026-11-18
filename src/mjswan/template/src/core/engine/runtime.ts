@@ -1832,7 +1832,7 @@ export class mjswanRuntime {
 
       const kp = this.normalizeControlArray(actionTerm.stiffness, n, 0.0, subsetJointNames);
       const kd = this.normalizeControlArray(actionTerm.damping, n, 0.0, subsetJointNames);
-      // A DC motor's torque-speed curve, on the joints it names; any other motor is unclipped.
+      // A DC motor's torque-speed curve; Infinity leaves any other motor unclipped.
       const curve =
         actionTerm.saturation_effort !== undefined && actionTerm.velocity_limit !== undefined
           ? {
