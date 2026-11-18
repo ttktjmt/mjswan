@@ -54,7 +54,7 @@ const RAY_FIELDS = new Set(['distances', 'hit_pos_w', 'normals_w']);
 const SECTIONS = ['observations', 'actions', 'terminations', 'commands', 'events'];
 const isEntry = (v: unknown): v is Entry => typeof v === 'object' && v !== null;
 const isRaycast = (d: unknown): d is Raycast =>
-  isEntry(d) && d.kind !== 'contact' && Array.isArray(d.frames) && Array.isArray(d.local_offsets);
+  isEntry(d) && Array.isArray(d.frames) && Array.isArray(d.local_offsets);
 const raysOf = (d: Raycast) => d.frames.length * d.local_offsets.length;
 const numel = (dims: unknown) => (Array.isArray(dims) ? dims : []).reduce((a: number, b) => a * b, 1);
 
@@ -70,34 +70,40 @@ function walk(value: unknown, visit: (entry: Entry) => void): void {
  * Reserve what a policy's term graphs are fed each step, before any of them runs: each
  * rand vector and input slot, and each raycast sensor's buffers (13 floats a ray). Rays count
  * per cast site, since a sensor recasts on every read of a ray field and every drawing.
- * `cameras` are the camera sensors the runtime keeps, each slot reading one rendering its
- * image at the descriptor's size, whatever the slot's shape says.
+ * `structured` is the runtime's own sensor sets, the ones the slot reader serves: a slot
+ * reading a camera renders its image at the descriptor's size, whatever the slot's shape says.
  */
 export function reserveTermFeeds(
   config: object,
   budget: BufferBudget,
-  cameras: Record<string, { width: unknown; height: unknown }> = {},
+  structured: {
+    camera?: Record<string, { width: unknown; height: unknown; enabled_geom_groups: unknown }>;
+    raycast?: Record<string, unknown>;
+  } = {},
 ): void {
   const sections = SECTIONS.map((s) => (config as Entry)[s]);
-  const named = Object.entries(cameras);
+  const named = Object.entries(structured.camera ?? {});
   if (named.length > MAX_CAMERA_SENSORS) {
     throw new Error(`mjswan: the policy declares ${named.length} camera sensors, past its limit of ${MAX_CAMERA_SENSORS}.`);
   }
   const pixels = new Map<string, number>();
-  for (const [name, { width, height }] of named) {
+  for (const [name, { width, height, enabled_geom_groups: groups }] of named) {
     if (!size(width) || !size(height) || width < 1 || height < 1) {
       throw new Error(`mjswan: camera sensor ${JSON.stringify(name)} declares a ${width}x${height} image.`);
+    }
+    // Every render enables each listed group.
+    if (!Array.isArray(groups) || groups.length > 6 || !groups.every((g) => Number.isInteger(g) && g >= 0 && g < 6)) {
+      throw new Error(`mjswan: camera sensor ${JSON.stringify(name)} draws geom groups other than MuJoCo's 0 to 5.`);
     }
     budget.reserve(1, 2 * width * height, `camera sensor ${JSON.stringify(name)}`);
     pixels.set(name, width * height);
   }
   const raycasts = new Map<string, Raycast>();
-  walk(sections, (entry) => {
-    for (const [name, d] of Object.entries(isEntry(entry.sensors) ? entry.sensors : {})) {
-      if (isRaycast(d)) raycasts.set(name, d);
-    }
-  });
-  for (const [name, d] of raycasts) budget.reserve(1, 13 * raysOf(d), `raycast sensor "${name}"`);
+  for (const [name, d] of Object.entries(structured.raycast ?? {})) {
+    if (!isRaycast(d)) throw new Error(`mjswan: raycast sensor ${JSON.stringify(name)} lists no frames and offsets.`);
+    budget.reserve(1, 13 * raysOf(d), `raycast sensor ${JSON.stringify(name)}`);
+    raycasts.set(name, d);
+  }
   // An observation term's output is allocated at its declared size every step.
   walk((config as Entry).observations, (entry) => {
     if (typeof entry.size === 'number') budget.reserve(1, entry.size, `observation ${JSON.stringify(entry.name)}`);
@@ -118,11 +124,11 @@ export function reserveTermFeeds(
       }
     }
   });
-  // DebugViz holds its own casters, and each drawing traces on every update.
+  // DebugViz casts every entry, whatever its kind; each drawing traces on every update.
   const vis = isEntry((config as Entry).debug_vis) ? ((config as Entry).debug_vis as Entry) : {};
   const sensors = isEntry(vis.sensors) ? vis.sensors : {};
   for (const [name, d] of Object.entries(sensors)) {
-    if (!isRaycast(d)) continue;
+    if (!isRaycast(d)) throw new Error(`mjswan: debug_vis sensor ${JSON.stringify(name)} lists no frames and offsets.`);
     budget.reserve(1, 13 * raysOf(d), `debug_vis sensor "${name}"`);
     if ((d as Entry).debug_vis) budget.reserveRays(raysOf(d), `debug_vis sensor "${name}"`);
   }
