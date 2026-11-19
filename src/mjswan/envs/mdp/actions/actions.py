@@ -57,9 +57,23 @@ class BaseActionCfg(ActionTermCfg):
     "hold_prob", "update_period", "per_env_phase"}``. Resolved from the actuator configs
     when unset."""
 
+    saturation_effort: float | list[float] | dict[str, float] | None = None
+    """mjswan-specific: mjlab's ``DcMotorActuatorCfg.saturation_effort`` on this term's
+    joints. With ``velocity_limit``, the browser clips the motor torque it computes as
+    mjlab's ``dc_motor_clip`` does. Resolved from the actuator configs when unset."""
+
+    velocity_limit: float | list[float] | dict[str, float] | None = None
+    """mjswan-specific: mjlab's ``DcMotorActuatorCfg.velocity_limit``. See
+    ``saturation_effort``."""
+
     def _add_delay(self, entry: dict[str, Any]) -> None:
         if self.delay:
             entry["delay"] = self.delay
+
+    def _add_torque_curve(self, entry: dict[str, Any]) -> None:
+        if self.saturation_effort is not None and self.velocity_limit is not None:
+            entry["saturation_effort"] = self.saturation_effort
+            entry["velocity_limit"] = self.velocity_limit
 
     def to_dict(self) -> dict[str, Any]:
         if self.unsupported_reason is not None:
@@ -116,6 +130,7 @@ class JointPositionActionCfg(BaseActionCfg):
             entry["stiffness"] = self.stiffness
         if self.damping is not None:
             entry["damping"] = self.damping
+        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry
@@ -159,6 +174,7 @@ class ReferenceJointPositionActionCfg(BaseActionCfg):
             entry["stiffness"] = self.stiffness
         if self.damping is not None:
             entry["damping"] = self.damping
+        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry
@@ -194,6 +210,7 @@ class CommandJointPositionActionCfg(BaseActionCfg):
             entry["stiffness"] = self.stiffness
         if self.damping is not None:
             entry["damping"] = self.damping
+        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry
@@ -231,6 +248,7 @@ class RelativeJointPositionActionCfg(BaseActionCfg):
             entry["stiffness"] = self.stiffness
         if self.damping is not None:
             entry["damping"] = self.damping
+        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry
@@ -263,6 +281,7 @@ class JointVelocityActionCfg(BaseActionCfg):
         entry["actuator_names"] = list(self.actuator_names)
         if self.damping is not None:
             entry["damping"] = self.damping
+        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry
@@ -295,6 +314,7 @@ class JointEffortActionCfg(BaseActionCfg):
             entry["stiffness"] = self.stiffness
         if self.damping is not None:
             entry["damping"] = self.damping
+        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry

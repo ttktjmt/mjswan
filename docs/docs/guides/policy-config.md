@@ -288,11 +288,14 @@ An actuator's command delay (mjlab's `delay_min_lag`, `delay_max_lag`, `delay_ho
 the build reads it off the actuator configs, as it reads the gains. Lags drawn at random
 follow mjlab's distribution from the browser's seeded RNG, not torch's stream.
 
+A `DcMotorActuatorCfg`'s torque-speed curve runs too: the build reads its
+`saturation_effort` and `velocity_limit` onto the term, and the browser clips the motor's
+torque as mjlab's `dc_motor_clip` does.
+
 What the browser does not run warns at build time rather than being dropped silently: an
 mjlab action field mjswan's class does not have, when it holds a non-default value, and
-whatever an `IdealPdActuatorCfg` does beyond its PD within the effort limit and its
-command delay, such as a subclass's own fields (`DcMotorActuatorCfg`'s torque-speed curve,
-a friction model).
+whatever an `IdealPdActuatorCfg` does beyond its PD within the effort limit, a DC motor's
+curve and its command delay, such as a subclass's own fields (a friction model).
 
 ### Task-defined action terms
 

@@ -234,6 +234,7 @@ class Engine implements MjswanEngine {
       cameraFeeds: this.runtime.cameraFeeds.list(),
       camera: { tracking: this.runtime.isCameraTracking, fovy: this.runtime.getCameraView().fovy },
       graphics: this.runtime.getGraphics(),
+      graphicsAvailable: this.runtime.getGraphicsAvailable(),
       events: this.runtime.eventControls(),
       interactions: this.runtime.interactionModes().map((mode) => ({
         ...mode,

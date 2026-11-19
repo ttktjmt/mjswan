@@ -22,6 +22,7 @@ from ..envs.mdp.actions import is_traced, native_class
 from ..envs.mdp.actions.actions import (
     BaseActionCfg,
     CommandJointPositionActionCfg,
+    JointEffortActionCfg,
     JointPositionActionCfg,
     JointVelocityActionCfg,
     ReferenceJointPositionActionCfg,
@@ -194,6 +195,25 @@ def _expand_patterns(value: Any, joint_names: list[str]) -> Any:
 #: into the model and need nothing here.
 _PYTHON_PD_ACTUATOR = "IdealPdActuatorCfg"
 
+#: An ideal PD with a torque-speed curve, which the browser runs from these fields.
+_DC_MOTOR_ACTUATOR = "DcMotorActuatorCfg"
+_DC_MOTOR_FIELDS = ("saturation_effort", "velocity_limit")
+
+#: The terms the browser computes a motor's torque for.
+_MOTOR_TORQUE_TERMS = (
+    JointPositionActionCfg,
+    ReferenceJointPositionActionCfg,
+    CommandJointPositionActionCfg,
+    RelativeJointPositionActionCfg,
+    JointVelocityActionCfg,
+    JointEffortActionCfg,
+    TracedActionCfg,
+)
+
+
+def _is_actuator(cfg: Any, class_name: str) -> bool:
+    return any(base.__name__ == class_name for base in type(cfg).__mro__)
+
 
 def _entity_cfg(env_cfg: Any | None, term: MjswanActionTermCfg) -> Any | None:
     entities = getattr(getattr(env_cfg, "scene", None), "entities", None) or {}
@@ -205,7 +225,7 @@ def _pd_actuators(env_cfg: Any | None, term: MjswanActionTermCfg) -> list[Any]:
     return [
         cfg
         for cfg in getattr(getattr(entity, "articulation", None), "actuators", ())
-        if any(base.__name__ == _PYTHON_PD_ACTUATOR for base in type(cfg).__mro__)
+        if _is_actuator(cfg, _PYTHON_PD_ACTUATOR)
     ]
 
 
@@ -259,25 +279,61 @@ def resolve_pd_gains(
         term.damping = gains["damping"]
 
 
+def resolve_dc_motor_curves(
+    actions: Mapping[str, MjswanActionTermCfg] | None,
+    joint_names: list[str],
+    env_cfg: Any | None,
+) -> None:
+    """Fill a term's ``saturation_effort``/``velocity_limit`` from the entity's DC
+    motors, in place, unless the term sets either."""
+    if not actions or not joint_names:
+        return
+
+    for term in actions.values():
+        if not isinstance(term, _MOTOR_TORQUE_TERMS):
+            continue
+        if term.saturation_effort is not None or term.velocity_limit is not None:
+            continue
+        motors = [
+            cfg
+            for cfg in _pd_actuators(env_cfg, term)
+            if _is_actuator(cfg, _DC_MOTOR_ACTUATOR)
+        ]
+        curve = {
+            field: _expand_patterns(
+                {
+                    pattern: float(getattr(cfg, field))
+                    for cfg in motors
+                    for pattern in cfg.target_names_expr
+                },
+                joint_names,
+            )
+            for field in _DC_MOTOR_FIELDS
+        }
+        if curve["saturation_effort"]:
+            term.saturation_effort = curve["saturation_effort"]
+            term.velocity_limit = curve["velocity_limit"]
+
+
 def _unrun_fields(cfg: Any) -> dict[str, Any]:
-    """What an ideal-PD-family *cfg* sets beyond that PD and its command delay, which the
-    browser runs: a subclass's own fields (a torque-speed curve, friction)."""
-    pd_fields = {
+    """What an ideal-PD-family *cfg* sets beyond that PD, a DC motor's torque-speed curve
+    and its command delay, which the browser runs: a subclass's own fields (friction)."""
+    run = {
         f.name
         for base in type(cfg).__mro__
         if base.__name__ == _PYTHON_PD_ACTUATOR and dataclasses.is_dataclass(base)
         for f in dataclasses.fields(base)
     }
-    return {
-        name: value for name, value in _set_fields(cfg).items() if name not in pd_fields
-    }
+    if _is_actuator(cfg, _DC_MOTOR_ACTUATOR):
+        run.update(_DC_MOTOR_FIELDS)
+    return {name: value for name, value in _set_fields(cfg).items() if name not in run}
 
 
 def warn_unrun_actuator_fields(
     actions: Mapping[str, MjswanActionTermCfg] | None, env_cfg: Any | None
 ) -> None:
-    """Warn once per ideal-PD actuator config of the entities *actions* drive that does
-    more than its PD within the effort limit, which is all the browser runs."""
+    """Warn once per ideal-PD actuator config of the entities *actions* drive that sets
+    a field the browser does not run (``_unrun_fields``)."""
     actuators = {
         id(cfg): cfg
         for term in (actions or {}).values()
@@ -288,8 +344,8 @@ def warn_unrun_actuator_fields(
             warnings.warn(
                 f"mjlab actuator '{type(cfg).__name__}' on "
                 f"{reprlib.repr(cfg.target_names_expr)} sets {_listing(unrun)}, which "
-                "the browser does not run: it runs only the PD within the effort limit "
-                "and the command delay.",
+                "the browser does not run: it runs only the PD within the effort limit, "
+                "a DC motor's torque-speed curve and the command delay.",
                 category=RuntimeWarning,
                 stacklevel=2,
             )
@@ -436,6 +492,7 @@ __all__ = [
     "adapt_actions",
     "resolve_action_scales",
     "resolve_actuator_delays",
+    "resolve_dc_motor_curves",
     "resolve_default_joint_vel",
     "resolve_pd_gains",
     "warn_split_delays",

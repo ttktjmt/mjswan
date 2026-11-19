@@ -435,6 +435,7 @@ function AppContent() {
             onCameraFovyChange={(fovy) => engineRef.current?.camera.set({ fovy })}
             graphics={engineState?.graphics}
             sceneGraphics={sceneEntry.graphics}
+            graphicsAvailable={engineState?.graphicsAvailable}
             onGraphicsChange={(input) => engineRef.current?.graphics.set(input)}
             onGraphicsReset={() => engineRef.current?.graphics.reset()}
             interactions={engineState?.interactions ? [...engineState.interactions] : []}

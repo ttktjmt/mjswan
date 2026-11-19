@@ -14,6 +14,16 @@ shortcuts.
 
 ### Added
 
+- **A DC motor's torque-speed curve runs in the browser** (**document format 10**). Action
+  terms gain `saturation_effort` and `velocity_limit`, filled from mjlab's
+  `DcMotorActuatorCfg` as the gains are, and the browser clips the motor's PD torque as
+  mjlab's `dc_motor_clip` does. The build no longer warns that the curve does not run.
+
+- **The state's `graphicsAvailable` names the switches that change anything in the
+  model**: shadows from a light that casts them, a reflection in an opaque plane or box with
+  a `reflectance`, haze where an infinite plane meets a skybox. The panel's **Graphics**
+  section disables the others.
+
 - **Graphics settings: a scene's colours handled as MuJoCo's classic renderer handles
   them, or as its Filament renderer does** (**document format 9**, #232). `ViewerConfig`
   takes `color_management` (`"classic"`, the default, or `"filament"`; three.js draws
@@ -1035,6 +1045,12 @@ shortcuts.
   3.11, so a 3.10 install could only resolve the vulnerable releases.
 
 ### Fixed
+
+- **A scene without a policy holds its keyframe's controls.** The engine zeroed `ctrl`
+  before every physics step even with no action term, so position actuators drove every
+  joint toward 0 (MuJoCo Menagerie's Unitree Go1 flipped onto its back within a second).
+  `ctrl` now keeps what the keyframe or the host set; under a policy, an actuator no term
+  drives is still zeroed, as in mjlab.
 
 - **Shadows fall where MuJoCo casts them.** A directional light's shadow map covered the
   space behind the light, so nothing under it was shadowed; it now has MuJoCo's frustum

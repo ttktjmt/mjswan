@@ -50,7 +50,10 @@ MANIFEST_NAME = "manifest.json"
 #: exposure) and the shadow, reflection and haze switches, no longer in ``camera``. An
 #: older engine would read the camera as a raycast sensor, retarget the skin as a
 #: character, drawing it off the robot, and draw every scene its one way.
-DOCUMENT_FORMAT = 9
+#:
+#: 10: an action term may carry a DC motor's torque-speed curve (``saturation_effort``,
+#: ``velocity_limit``). An older engine would run those motors without it.
+DOCUMENT_FORMAT = 10
 
 #: Input slots the runtime fills itself rather than from an observation group: the
 #: recurrent carry (``is_init``, ``adapt_hx``) and the step counter (``time_step``).

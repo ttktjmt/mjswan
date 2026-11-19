@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyAction as applySubstep,
   clampActions,
+  dcMotorClip,
   inHold,
   isTargetActuator,
   processAction,
@@ -340,6 +341,71 @@ describe('applyAction: other kinds', () => {
       Float32Array.from([0.1, 0.2]),
     );
     expect(data.ctrl[2]).toBe(0);
+  });
+
+  it('leaves ctrl as a keyframe set it in a scene without a policy', () => {
+    // MuJoCo keeps ctrl until something writes it, so position actuators hold the keyframe's pose.
+    const data = fakeData(3);
+    data.ctrl.set([0, 0.9, -1.8]);
+    applySubstep(data, []);
+    expect(Array.from(data.ctrl)).toEqual([0, 0.9, -1.8]);
+  });
+});
+
+describe('applyAction: DC motor', () => {
+  // mjlab 1.6.0's `dc_motor_clip(effort, 30, 20, 20, vel)`, efforts across, joint speeds down.
+  const EFFORTS = [-60, -25, -5, 0, 5, 25, 60];
+  const MJLAB: Record<number, number[]> = {
+    [-50]: [20, 20, 20, 20, 20, 20, 20],
+    [-30]: [15, 15, 15, 15, 15, 20, 20],
+    [-20]: [0, 0, 0, 0, 5, 20, 20],
+    [-5]: [-20, -20, -5, 0, 5, 20, 20],
+    [0]: [-20, -20, -5, 0, 5, 20, 20],
+    [5]: [-20, -20, -5, 0, 5, 20, 20],
+    [20]: [-20, -20, -5, 0, 0, 0, 0],
+    [30]: [-20, -20, -15, -15, -15, -15, -15],
+    [50]: [-20, -20, -20, -20, -20, -20, -20],
+  };
+
+  it("matches mjlab's curve once MuJoCo bounds the motor by its ctrlrange", () => {
+    // The motor mjlab builds has ctrlrange = ±effort_limit, which MuJoCo applies after.
+    const ctrlrange = (value: number) => Math.min(Math.max(value, -20), 20);
+    for (const [vel, row] of Object.entries(MJLAB)) {
+      EFFORTS.forEach((effort, i) => {
+        expect(ctrlrange(dcMotorClip(effort, 30, 20, Number(vel)))).toBeCloseTo(row[i], 4);
+      });
+    }
+  });
+
+  it('leaves a motor with no curve unclipped', () => {
+    expect(dcMotorClip(500, Infinity, Infinity, 40)).toBe(500);
+  });
+
+  it("clips the PD torque it computes to the joint's curve", () => {
+    // At 15 rad/s the curve allows at most 30 * (1 - 15 / 20) = 7.5.
+    const data = fakeData(1, [0], [15]);
+    applyAction(
+      data,
+      [
+        term({
+          ctrlAdr: [0],
+          qposAdr: [0],
+          qvelAdr: [0],
+          actionIndices: [0],
+          actionScale: Float32Array.from([1]),
+          actionOffset: new Float32Array(1),
+          defaultJointPos: new Float32Array(1),
+          encoderBias: new Float32Array(1),
+          positionActuator: [false],
+          kp: Float32Array.from([100]),
+          kd: new Float32Array(1),
+          saturationEffort: Float32Array.from([30]),
+          velocityLimit: Float32Array.from([20]),
+        }),
+      ],
+      Float32Array.from([1]),
+    );
+    expect(data.ctrl[0]).toBeCloseTo(7.5, 6);
   });
 });
 

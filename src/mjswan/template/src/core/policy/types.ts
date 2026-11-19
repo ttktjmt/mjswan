@@ -48,6 +48,9 @@ export type ActionConfigEntry = {
   use_default_offset?: boolean;
   stiffness?: number | number[] | Record<string, number>;
   damping?: number | number[] | Record<string, number>;
+  /** mjlab's DC motor torque-speed curve on the term's joints (format 10). */
+  saturation_effort?: number | number[] | Record<string, number>;
+  velocity_limit?: number | number[] | Record<string, number>;
   actuator_names?: string[];
   clip?: Record<string, readonly number[]>;
   /** Ramp each target across the substeps, from the previous processed action (ADR 0009). */

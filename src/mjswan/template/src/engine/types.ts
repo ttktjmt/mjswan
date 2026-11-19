@@ -18,6 +18,7 @@ import type { HandleKind, PreviewGeom, PreviewInput } from '../core/scene/previe
 import type { GeomType, PickHit } from '../core/interaction/pick';
 import type {
   ColorSpaceName,
+  GraphicsAvailable,
   GraphicsInput,
   GraphicsSettings,
   ColorManagement,
@@ -26,7 +27,15 @@ import type {
 } from '../core/scene/graphicsSettings';
 
 // How a scene is drawn (its manifest's `graphics`).
-export type { ColorManagement, ColorSpaceName, GraphicsInput, GraphicsSettings, ToneMapping, ToneMappingName };
+export type {
+  ColorManagement,
+  ColorSpaceName,
+  GraphicsAvailable,
+  GraphicsInput,
+  GraphicsSettings,
+  ToneMapping,
+  ToneMappingName,
+};
 
 // Bytes: asset bytes or a lazy loader. EnginePlugins: custom MDP terms, trusted-only.
 export type { Bytes, SplatTransform, ModelFormat, EnginePlugins, SkinConfig };
@@ -338,6 +347,8 @@ export interface MjswanEngineState {
   camera: { tracking: boolean; fovy: number };
   /** The graphics settings drawn now, every one resolved; see {@link GraphicsControls}. */
   graphics: GraphicsSettings;
+  /** Which of the shadow, reflection and haze switches change anything in the loaded model. */
+  graphicsAvailable: GraphicsAvailable;
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
   /** Every pointer mode, with whether this scene can run it. */

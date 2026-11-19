@@ -179,6 +179,41 @@ describe('SceneGraphics', () => {
   });
 });
 
+describe('which switches change anything', () => {
+  it('names a shadow-casting light and a mirror, and no haze without a skybox', () => {
+    expect(new SceneGraphics(mujoco, mjModel, root, scene, lights).available).toEqual({
+      shadows: true,
+      reflections: true,
+      haze: false,
+    });
+  });
+
+  it('names the haze where an infinite plane meets a skybox, and nothing else here', () => {
+    const xml = `<mujoco>
+      <asset><texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="8" height="48"/></asset>
+      <worldbody>
+        <light pos="0 0 2" dir="0 0 -1" castshadow="false"/>
+        <geom type="plane" size="0 0 0.05" rgba="0.5 0.5 0.5 1"/>
+      </worldbody>
+    </mujoco>`;
+    // Compiled alone: building the skybox's cube texture needs a browser canvas, and the
+    // rule reads only the model's textures and the plane drawn for its geom.
+    mujoco.FS.writeFile('/working/sky.xml', xml);
+    const model = mujoco.MjModel.from_xml_path('/working/sky.xml');
+    const skyRoot = new THREE.Group();
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshPhysicalMaterial());
+    plane.userData.geomId = 0;
+    skyRoot.add(plane);
+    const light = new THREE.DirectionalLight();
+    light.userData.castShadow = false;
+    expect(new SceneGraphics(mujoco, model, skyRoot, new THREE.Scene(), [light]).available).toEqual({
+      shadows: false,
+      reflections: false,
+      haze: true,
+    });
+  });
+});
+
 describe("the model's extent", () => {
   const load = async (name: string, xml: string) => {
     mujoco.FS.writeFile(`/working/${name}`, xml);

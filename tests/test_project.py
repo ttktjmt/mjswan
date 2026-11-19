@@ -7,6 +7,7 @@ Tests the "contract" of the builder's hierarchical configuration API:
 
 import contextlib
 import sys
+import warnings
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -857,7 +858,7 @@ class TestPolicyTermsDerivedFromEnvCfg:
         assert inherited._config.mdp.episode_length_s is None
 
     @pytest.mark.mjlab
-    def test_an_actuator_curve_the_browser_does_not_run_warns(
+    def test_a_dc_motor_curve_reaches_the_action_term(
         self, minimal_model, minimal_onnx
     ):
         actuator = pytest.importorskip("mjlab.actuator")
@@ -879,10 +880,15 @@ class TestPolicyTermsDerivedFromEnvCfg:
         )
         scene = _mjlab_scene(minimal_model, env_cfg)
 
-        with pytest.warns(RuntimeWarning, match="saturation_effort=30.0"):
-            scene.add_policy(
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            cfg = scene.add_policy(
                 name="Policy", policy=minimal_onnx, policy_joint_names=["robot/hip"]
-            )
+            )._config
+
+        term = (cfg.actions or {})["joint_pos"]
+        assert term.saturation_effort == {"robot/hip": 30.0}
+        assert term.velocity_limit == {"robot/hip": 20.0}
 
 
 def _fake_checkpoints(*names: str):

@@ -44,6 +44,7 @@ import type {
   CameraFeedDescriptor,
   DebugVisDescriptor,
   EventDescriptor,
+  GraphicsAvailable,
   GraphicsInput,
   GraphicsSettings,
   HandTrackingDescriptor,
@@ -126,6 +127,8 @@ interface ControlPanelProps {
   /** engine state's `graphics`, and the scene's own, which Reset returns to. */
   graphics?: GraphicsSettings;
   sceneGraphics?: GraphicsSettings;
+  /** engine state's `graphicsAvailable`. */
+  graphicsAvailable?: GraphicsAvailable;
   /** engine.graphics.set. */
   onGraphicsChange?: (input: GraphicsInput) => void;
   /** engine.graphics.reset. */
@@ -307,6 +310,7 @@ function ControlPanel(props: ControlPanelProps) {
     onCameraFovyChange,
     graphics,
     sceneGraphics,
+    graphicsAvailable,
     onGraphicsChange,
     onGraphicsReset,
     onReset,
@@ -852,6 +856,7 @@ function ControlPanel(props: ControlPanelProps) {
             <GraphicsSection
               graphics={graphics}
               sceneGraphics={sceneGraphics}
+              available={graphicsAvailable}
               onChange={onGraphicsChange}
               onReset={onGraphicsReset}
             />

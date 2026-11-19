@@ -12,10 +12,12 @@ import {
 import { SensorCameraRenderer, type SensorCameraView } from '../scene/sensorCamera';
 import {
   DEFAULT_GRAPHICS,
+  NO_GRAPHICS_AVAILABLE,
   SceneGraphics,
   applyToRenderer,
   decodesBaseColor,
   mergeGraphics,
+  type GraphicsAvailable,
   type GraphicsInput,
   type GraphicsSettings,
 } from '../scene/graphics';
@@ -1015,6 +1017,11 @@ export class mjswanRuntime {
     return this.graphics;
   }
 
+  /** Which of the three switches change anything in the loaded model. */
+  getGraphicsAvailable(): GraphicsAvailable {
+    return this.sceneGraphics?.available ?? NO_GRAPHICS_AVAILABLE;
+  }
+
   /** Draw the scene otherwise until the next scene load; the model is untouched. */
   setGraphics(input: GraphicsInput): void {
     this.graphics = mergeGraphics(this.graphics, input);
@@ -1825,6 +1832,14 @@ export class mjswanRuntime {
 
       const kp = this.normalizeControlArray(actionTerm.stiffness, n, 0.0, subsetJointNames);
       const kd = this.normalizeControlArray(actionTerm.damping, n, 0.0, subsetJointNames);
+      // A DC motor's torque-speed curve; Infinity leaves any other motor unclipped.
+      const curve =
+        actionTerm.saturation_effort !== undefined && actionTerm.velocity_limit !== undefined
+          ? {
+              saturationEffort: this.normalizeControlArray(actionTerm.saturation_effort, n, Infinity, subsetJointNames),
+              velocityLimit: this.normalizeControlArray(actionTerm.velocity_limit, n, Infinity, subsetJointNames),
+            }
+          : {};
       // Pattern-keyed, unlike the exact-name siblings above.
       const { clipLo, clipHi } = resolveActionClip(actionTerm.clip, subsetJointNames, n);
 
@@ -1860,6 +1875,7 @@ export class mjswanRuntime {
         positionActuator,
         kp,
         kd,
+        ...curve,
         muscleMode: 'sigmoid' as MuscleMode,
         muscleCtrlLo: EMPTY_CTRL_RANGE,
         muscleCtrlHi: EMPTY_CTRL_RANGE,

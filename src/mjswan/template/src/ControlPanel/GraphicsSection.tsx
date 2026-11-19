@@ -4,6 +4,7 @@ import { IconCopy, IconRefresh } from '@tabler/icons-react';
 
 import {
   TONE_MAPPINGS,
+  type GraphicsAvailable,
   type GraphicsInput,
   type GraphicsSettings,
   type ColorManagement,
@@ -63,12 +64,15 @@ export function graphicsAsPython(current: GraphicsSettings, scene: GraphicsSetti
 export function GraphicsSection({
   graphics,
   sceneGraphics,
+  available,
   onChange,
   onReset,
 }: {
   graphics: GraphicsSettings;
   /** The scene's own settings, which Reset returns to and Copy as Python compares with. */
   sceneGraphics: GraphicsSettings;
+  /** The switches that change anything in this model; the others are offered disabled. */
+  available?: GraphicsAvailable;
   onChange: (input: GraphicsInput) => void;
   onReset: () => void;
 }) {
@@ -78,6 +82,7 @@ export function GraphicsSection({
       <Checkbox
         id={`graphics:${key}`}
         checked={graphics[key]}
+        disabled={available ? !available[key] : false}
         onChange={(event) => onChange({ [key]: event.currentTarget.checked })}
         size="xs"
       />
