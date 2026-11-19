@@ -47,17 +47,29 @@ jobs:
         with:
           node-version: '24'
 
+      # SPA only: publish-npm builds the library (`mjswan.js`), which no pip install loads.
       - name: Build web template
         working-directory: src/mjswan/template
         run: |
           npm install
-          npm run build
+          npm run build:spa
 
       - name: Remove artifacts from pypi package
         working-directory: src/mjswan/template
         run: |
           rm -rf node_modules
           rm -rf .nodeenv
+
+      # Lets `ClientBuilder.build()` reuse this dist/ for the default options, without Node.
+      # Written on the tree as shipped, after the version is set: the marker hashes both.
+      - name: Mark the prebuilt SPA as reusable
+        run: |
+          uv run --locked --python 3.12 python - <<'PY'
+          import json
+          from mjswan.build.frontend import TEMPLATE_DIR, ClientBuilder
+          meta = ClientBuilder(TEMPLATE_DIR)._build_meta("/", None, False, False)
+          (TEMPLATE_DIR / "dist" / ".mjswan-build-meta.json").write_text(json.dumps(meta))
+          PY
 
       - name: Build and publish
         run: |

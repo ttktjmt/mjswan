@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import path from 'path';
 import fs from 'fs';
+import postcss from 'postcss';
 import { minify } from './vite.shared';
 
 // Extract version from Python package (source of truth)
@@ -88,6 +89,80 @@ function gtmPlugin(gtmId: string | undefined) {
   };
 }
 
+const MANTINE_ESM = path.resolve(__dirname, 'node_modules/@mantine/core/esm');
+
+/** The `m_` names in the class maps of the Mantine components src/'s .tsx files reach. */
+function mantineNamesInUse(): Set<string> {
+  const entries = new Map<string, string>();
+  const index = fs.readFileSync(path.join(MANTINE_ESM, 'index.mjs'), 'utf-8');
+  for (const [, names, from] of index.matchAll(/export \{([^}]*)\} from '([^']+)'/g)) {
+    for (const name of names.split(',')) entries.set(name.trim(), path.resolve(MANTINE_ESM, from));
+  }
+  const used = new Set<string>();
+  const seen = new Set<string>();
+  const walk = (file: string): void => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const code = fs.readFileSync(file, 'utf-8');
+    if (file.endsWith('.module.css.mjs')) {
+      for (const [, name] of code.matchAll(/"(m_[0-9a-f]+)"/g)) used.add(name);
+      return;
+    }
+    // Named imports only: the bundler drops Mantine's bare `import './x.mjs'` lines too.
+    for (const [, from] of code.matchAll(/(?:import|export) (?:\w+|\{[^}]*\}) from '(\.[^']+)'/g)) {
+      walk(path.resolve(path.dirname(file), from));
+    }
+  };
+  const src = path.resolve(__dirname, 'src');
+  for (const file of fs.readdirSync(src, { recursive: true, encoding: 'utf-8' })) {
+    if (!file.endsWith('.tsx') || file.includes('__tests__') || file.endsWith('.test.tsx')) continue;
+    const code = fs.readFileSync(path.join(src, file), 'utf-8');
+    for (const [, names] of code.matchAll(/import \{([^}]*)\} from ['"]@mantine\/core['"]/g)) {
+      for (const name of names.split(',')) {
+        const entry = entries.get(name.trim().split(/\s+as\s+/)[0]);
+        if (entry) walk(entry);
+      }
+    }
+  }
+  return used;
+}
+
+// Drops each `@mantine/core/styles.css` rule no component in use names, before Vite hashes
+// the CSS. Not Mantine's per-component files: they size in px where styles.css scales by
+// rem, which index.css's root font size relies on.
+function mantineCssPlugin(): Plugin {
+  let used = new Set<string>();
+  const unused = (names: string[]) => names.length > 0 && names.every((name) => !used.has(name));
+  return {
+    name: 'mjswan-mantine-css',
+    enforce: 'pre',
+    buildStart() {
+      used = mantineNamesInUse();
+      if (used.size === 0) this.error('found no Mantine component in use under src/');
+    },
+    transform(code, id) {
+      if (!/[\\/]@mantine[\\/]core[\\/]styles\.css$/.test(id.split('?')[0])) return null;
+      const root = postcss.parse(code);
+      root.walkRules((rule) => {
+        if (unused([...rule.selector.matchAll(/\.(m_[0-9a-f]+)(?![\w-])/g)].map((m) => m[1]))) rule.remove();
+      });
+      root.walkAtRules('keyframes', (rule) => {
+        if (unused(rule.params.match(/^m_[0-9a-f]+$/) ?? [])) rule.remove();
+      });
+      for (let emptied = true; emptied; ) {
+        emptied = false;
+        root.walkAtRules((rule) => {
+          if (rule.nodes?.length === 0) {
+            rule.remove();
+            emptied = true;
+          }
+        });
+      }
+      return { code: root.toString(), map: null };
+    },
+  };
+}
+
 // What `build.license` writes, for thirdPartyLicensesPlugin to read and drop.
 const LICENSES_JSON = '.vite/licenses.json';
 
@@ -98,8 +173,12 @@ interface BundledLicense {
   text?: string;
 }
 
+// Bundled from no npm package, so `build.license` cannot list it: src/assets/'s UI font.
+const VENDORED_LICENSES: BundledLicense[] = [{ name: 'Inter', version: '3.19', identifier: 'OFL-1.1' }];
+
 // Minify drops the notices bundled packages carry, so dist/ carries them in one file. A
-// package that publishes no LICENSE takes its text from licenses/<package>/LICENSE.
+// package that publishes no LICENSE, and anything vendored, takes its text from
+// licenses/<name>/LICENSE.
 function thirdPartyLicensesPlugin(): Plugin {
   return {
     name: 'mjswan-third-party-licenses',
@@ -114,7 +193,8 @@ function thirdPartyLicensesPlugin(): Plugin {
         const source =
           typeof json.source === 'string' ? json.source : Buffer.from(json.source).toString('utf-8');
         const missing: string[] = [];
-        const sections = (JSON.parse(source) as BundledLicense[]).map(
+        const bundled = [...(JSON.parse(source) as BundledLicense[]), ...VENDORED_LICENSES];
+        const sections = bundled.map(
           ({ name, version, identifier, text }) => {
             const own = path.resolve(__dirname, 'licenses', name, 'LICENSE');
             text ??= fs.existsSync(own) ? fs.readFileSync(own, 'utf-8').trim() : undefined;
@@ -141,6 +221,7 @@ export default defineConfig({
     vanillaExtractPlugin(),
     mtPlugin(isMt),
     gtmPlugin(process.env.MJSWAN_GTM_ID),
+    mantineCssPlugin(),
     thirdPartyLicensesPlugin(),
   ],
   base: process.env.MJSWAN_BASE_PATH || '/',

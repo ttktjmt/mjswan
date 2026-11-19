@@ -29,6 +29,13 @@ TEMPLATE_DIR = Path(__file__).parents[1] / "template"
 _SPA_EXCLUDES = frozenset({"fixtures", ".mjswan-build-meta.json"})
 
 
+def _is_frontend_test(relative: Path) -> bool:
+    """A test or its fixture, which the wheel leaves out (pyproject.toml)."""
+    return "__tests__" in relative.parts or relative.name.endswith(
+        (".test.ts", ".test.tsx")
+    )
+
+
 def install_spa(dest: Path, template_dir: Path | None = None) -> bool:
     """Copy the built SPA, the engine, into ``dest``; False when none is built yet.
 
@@ -348,9 +355,10 @@ class ClientBuilder:
         """SHA-256 over the frontend build inputs (app source + config + declared deps).
 
         Invalidates the cache whenever the app codebase changes. Excludes derived
-        outputs (node_modules / dist / .nodeenv) and package-lock.json (npm may
-        rewrite it); package.json's ``version`` is normalized out since it is
-        already a separate part of the key.
+        outputs (node_modules / dist / .nodeenv), package-lock.json (npm may
+        rewrite it) and the tests the wheel leaves out, so an installed template
+        hashes as the tree its dist/ was marked on. package.json's ``version`` is
+        normalized out since it is already a separate part of the key.
         """
         inputs: list[Path] = []
         for top in (
@@ -369,7 +377,11 @@ class ClientBuilder:
         for root in ("src", "public"):
             base = self.project_dir / root
             if base.exists():
-                inputs.extend(p for p in base.rglob("*") if p.is_file())
+                inputs.extend(
+                    p
+                    for p in base.rglob("*")
+                    if p.is_file() and not _is_frontend_test(p.relative_to(base))
+                )
 
         digest = hashlib.sha256()
         for path in sorted(

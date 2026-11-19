@@ -24,8 +24,7 @@ import {
 import { loadMjzFile, resetWorking, WORKING, type ArchiveLimits } from '../utils/mjzLoader';
 import { type Bytes } from '../utils/bytes';
 import type { EnginePlugins } from '../plugins';
-import { type SplatTransform, type SplatMesh, loadSplat, disposeSplat, applySplatTransform } from '../scene/splat';
-import { loadCollider, disposeCollider } from '../scene/collider';
+import type { SplatTransform, SplatMesh } from '../scene/splat';
 import { SeeThrough } from '../scene/seeThrough';
 import type { Skin } from '../skin/skin';
 import type { SkinConfig } from '../skin/config';
@@ -87,7 +86,8 @@ import { ControlStep } from './controlStep';
 import { decimationFor } from './decimation';
 import { yieldToBrowser } from './yieldToBrowser';
 import { TerminationManager } from '../termination/TerminationManager';
-import * as ort from 'onnxruntime-web/wasm';
+import type * as ort from 'onnxruntime-web/wasm';
+import { getOrt } from '../onnx/ortEnv';
 import { BufferBudget, reserveTermFeeds } from '../policy/bufferBudget';
 import { PolicyRunner } from '../policy/PolicyRunner';
 import { OnnxModule } from '../policy/OnnxModule';
@@ -113,6 +113,13 @@ const DEFAULT_TERM_SEED = 0x5eed;
 
 /** The skin's Debug Viz switch, listed after mjlab's drawings and under "Enabled" alike. */
 const XRAY_SWITCH = 'xray';
+
+/**
+ * Loaded with the first splat, not every scene (Spark is half a megabyte). Set before any
+ * splat or collider exists, so code holding one can use them.
+ */
+let splatModule: typeof import('../scene/splat') | null = null;
+let colliderModule: typeof import('../scene/collider') | null = null;
 
 
 /**
@@ -644,11 +651,11 @@ export class mjswanRuntime {
 
     // Dispose previous splat/collider before switching scenes
     if (this.splatMesh) {
-      disposeSplat(this.splatMesh, this.scene);
+      splatModule!.disposeSplat(this.splatMesh, this.scene);
       this.splatMesh = null;
     }
     if (this.colliderMesh) {
-      disposeCollider(this.colliderMesh, this.scene);
+      colliderModule!.disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
     this.disposeSkin();
@@ -917,11 +924,11 @@ export class mjswanRuntime {
 
   async setSplat(splat: ResolvedSplat | null): Promise<void> {
     if (this.splatMesh) {
-      disposeSplat(this.splatMesh, this.scene);
+      splatModule!.disposeSplat(this.splatMesh, this.scene);
       this.splatMesh = null;
     }
     if (this.colliderMesh) {
-      disposeCollider(this.colliderMesh, this.scene);
+      colliderModule!.disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
     if (splat) {
@@ -931,9 +938,11 @@ export class mjswanRuntime {
 
   private async applySplat(splat: ResolvedSplat): Promise<void> {
     this.currentSplatTransform = splat.transform ?? {};
-    this.splatMesh = loadSplat(splat.data, this.currentSplatTransform, this.scene);
+    splatModule ??= await import('../scene/splat');
+    this.splatMesh = splatModule.loadSplat(splat.data, this.currentSplatTransform, this.scene);
     if (splat.collider) {
-      this.colliderMesh = await loadCollider(splat.collider, this.scene);
+      colliderModule ??= await import('../scene/collider');
+      this.colliderMesh = await colliderModule.loadCollider(splat.collider, this.scene);
     }
   }
 
@@ -1044,7 +1053,7 @@ export class mjswanRuntime {
   calibrateSplat(transform: SplatTransform): void {
     this.currentSplatTransform = transform;
     if (this.splatMesh) {
-      applySplatTransform(this.splatMesh, transform);
+      splatModule!.applySplatTransform(this.splatMesh, transform);
     }
   }
 
@@ -2253,12 +2262,13 @@ export class mjswanRuntime {
       if (!this.onnxInputDict) {
         this.onnxInputDict = module.initInput();
       }
+      const { Tensor } = getOrt();
       const input: Record<string, ort.Tensor> = { ...this.onnxInputDict };
       if (module.inKeys.includes('time_step')) {
-        input.time_step = new ort.Tensor('float32', new Float32Array([this.onnxTimeStep]), [1, 1]);
+        input.time_step = new Tensor('float32', new Float32Array([this.onnxTimeStep]), [1, 1]);
       }
       for (const [key, value] of Object.entries(obs)) {
-        input[key] = new ort.Tensor('float32', value, module.inputDims(key, value.length));
+        input[key] = new Tensor('float32', value, module.inputDims(key, value.length));
       }
       for (const key of module.inKeys) {
         if (!input[key]) {
@@ -2619,11 +2629,11 @@ export class mjswanRuntime {
     await this.policyGraphs.clear();
     this.modelFieldDefaults = null;
     if (this.splatMesh) {
-      disposeSplat(this.splatMesh, this.scene);
+      splatModule!.disposeSplat(this.splatMesh, this.scene);
       this.splatMesh = null;
     }
     if (this.colliderMesh) {
-      disposeCollider(this.colliderMesh, this.scene);
+      colliderModule!.disposeCollider(this.colliderMesh, this.scene);
       this.colliderMesh = null;
     }
     this.disposeSkin();

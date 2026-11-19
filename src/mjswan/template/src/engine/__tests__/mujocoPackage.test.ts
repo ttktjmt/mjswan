@@ -19,4 +19,11 @@ describe('mujoco', () => {
     const installed = readJson('node_modules/mujoco/package.json');
     expect(`npm:${installed.name}@${installed.version}`).toBe(pinned);
   });
+
+  it('runs the MuJoCo the Python package pins', async () => {
+    const pyproject = readFileSync(join(ROOT, '../../../pyproject.toml'), 'utf-8');
+    const pinned = /^\s*"mujoco==([^"]+)",$/m.exec(pyproject)?.[1];
+    const mujoco = await (await import('mujoco')).default();
+    expect(mujoco.mj_versionString()).toBe(pinned);
+  });
 });

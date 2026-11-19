@@ -3,7 +3,7 @@
  * holds, and a host's upload check can read only that, so these forge the directory and
  * hold the loader to what the archive really unpacks to.
  */
-import JSZip from 'jszip';
+import { Zip, ZipDeflate, ZipPassThrough, zipSync } from 'fflate';
 import type { MainModule } from 'mujoco';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -14,20 +14,38 @@ const SCENE = '<mujoco><compiler meshdir="."/></mujoco>';
 
 /** A stand-in for MuJoCo's VFS that notes what was written where. */
 function vfs() {
-  const written = new Map<string, number>();
+  const written = new Map<string, Uint8Array>();
   const mujoco = {
-    FS: { mkdirTree: () => {}, writeFile: (path: string, data: Uint8Array) => written.set(path, data.length) },
+    FS: { mkdirTree: () => {}, writeFile: (path: string, data: Uint8Array) => written.set(path, data.slice()) },
   } as unknown as MainModule;
   return { mujoco, written };
 }
 
-async function zip(files: Record<string, string | Uint8Array>): Promise<Uint8Array> {
-  const archive = new JSZip();
-  for (const [name, data] of Object.entries(files)) archive.file(name, data);
-  return archive.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+const ascii = (s: string) => new TextEncoder().encode(s);
+const bytesOf = (data: string | Uint8Array) => (typeof data === 'string' ? ascii(data) : data);
+
+/** As most writers make one: every file deflated, its sizes in its local header. */
+async function zip(files: Record<string, string | Uint8Array>, level: 0 | 6 = 6): Promise<Uint8Array> {
+  return zipSync(Object.fromEntries(Object.entries(files).map(([name, data]) => [name, bytesOf(data)])), { level });
 }
 
-const ascii = (s: string) => new TextEncoder().encode(s);
+/** As a streaming writer makes one: each file's sizes in a data descriptor after it. */
+function streamed(files: [name: string, data: string | Uint8Array, method: 'stored' | 'deflated'][]): Uint8Array {
+  const parts: Uint8Array[] = [];
+  const archive = new Zip((error, chunk) => {
+    if (error) throw error;
+    parts.push(chunk);
+  });
+  for (const [name, data, method] of files) {
+    const file = method === 'stored' ? new ZipPassThrough(name) : new ZipDeflate(name);
+    archive.add(file);
+    file.push(bytesOf(data), true);
+  }
+  archive.end();
+  const out = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
+  parts.reduce((at, part) => (out.set(part, at), at + part.length), 0);
+  return out;
+}
 
 /** Where `name` starts in the bytes, the local header's copy first and the directory's after. */
 function at(bytes: Uint8Array, name: string, nth: number): number {
@@ -73,8 +91,7 @@ describe('loadMjzFile', () => {
     expect(written.has('/working/base.stl')).toBe(false);
   });
 
-  // The directory names `model.stl`, which a host's check passes; JSZip writes the name
-  // in the local header.
+  // The directory names `model.stl`, which a host's check passes; the local header's name is written.
   it('holds the name a file is written under to the limits, not the one the directory gives', async () => {
     const bytes = await zip({ 'scene.xml': SCENE, 'model.stl': 'solid' });
     bytes.set(ascii('evil.html'), at(bytes, 'model.stl', 0));
@@ -90,13 +107,86 @@ describe('loadMjzFile', () => {
     expect(held.written.size).toBe(0);
   });
 
-  // JSZip itself resolves `..` inside the archive as it loads; a backslash it keeps.
+  // `..` in a name is resolved as the archive loads; a backslash is kept.
   it('refuses more files than the limit, and a path readers take differently', async () => {
     const { mujoco } = vfs();
     const many = await zip({ 'a.stl': 's', 'b.stl': 's', 'c.stl': 's', 'scene.xml': SCENE });
     await expect(loadMjzFile(mujoco, many.buffer as ArrayBuffer, LIMITS)).rejects.toThrow('holds 4 files; this host opens at most 3');
     const slanted = await zip({ 'meshes\\base.stl': 's', 'scene.xml': SCENE });
     await expect(loadMjzFile(mujoco, slanted.buffer as ArrayBuffer, LIMITS)).rejects.toThrow('holds "meshes\\base.stl"');
+  });
+});
+
+describe('loadMjzFile, archive by archive', () => {
+  const MESH = new Uint8Array(4096).map((_, i) => (i * 31) & 0xff);
+
+  it('reads an archive that stores every file as is', async () => {
+    const { mujoco, written } = vfs();
+    const bytes = await zip({ 'meshes/base.stl': MESH, 'scene.xml': SCENE }, 0);
+    await expect(loadMjzFile(mujoco, bytes.buffer as ArrayBuffer, LIMITS)).resolves.toBe('scene.xml');
+    expect(written.get('/working/meshes/base.stl')).toEqual(MESH);
+    expect(written.get('/working/scene.xml')).toEqual(ascii(SCENE));
+  });
+
+  // The central directory's sizes are read, so bytes that look like a header stay the file's.
+  it('reads sizes a streaming writer gives after each file, stored or deflated', async () => {
+    const lookalike = ascii('solid PK\x07\x08 PK\x03\x04 PK\x01\x02 endsolid');
+    const { mujoco, written } = vfs();
+    const bytes = streamed([
+      ['meshes/base.stl', MESH, 'deflated'],
+      ['meshes/look.stl', lookalike, 'stored'],
+      ['scene.xml', SCENE, 'stored'],
+    ]);
+    await expect(loadMjzFile(mujoco, bytes.buffer as ArrayBuffer, LIMITS)).resolves.toBe('scene.xml');
+    expect(written.get('/working/meshes/base.stl')).toEqual(MESH);
+    expect(written.get('/working/meshes/look.stl')).toEqual(lookalike);
+    expect(written.get('/working/scene.xml')).toEqual(ascii(SCENE));
+  });
+
+  it.each([0, 6] as const)('opens an archive at the inflate limit, and refuses one a byte over (level %s)', async (level) => {
+    const limits = { ...LIMITS, maxInflatedBytes: 64 * 1024 };
+    const fill = (n: number) => new Uint8Array(n).fill(7);
+    const at = await zip({ 'scene.xml': SCENE, 'base.stl': fill(limits.maxInflatedBytes - SCENE.length) }, level);
+    const over = await zip({ 'scene.xml': SCENE, 'base.stl': fill(limits.maxInflatedBytes - SCENE.length + 1) }, level);
+
+    await expect(loadMjzFile(vfs().mujoco, at.buffer as ArrayBuffer, limits)).resolves.toBe('scene.xml');
+    await expect(loadMjzFile(vfs().mujoco, over.buffer as ArrayBuffer, limits)).rejects.toThrow(
+      'The .mjz inflates to more than 0.0625 MB, which this host does not open.',
+    );
+  });
+
+  // The later file takes the earlier one's place in the order.
+  it('keeps the later of two files under one name, and counts the name once', async () => {
+    const bytes = streamed([
+      ['base.stl', 'first', 'deflated'],
+      ['scene.xml', SCENE, 'deflated'],
+      ['base.stl', 'second', 'stored'],
+    ]);
+    const { mujoco, written } = vfs();
+    await expect(loadMjzFile(mujoco, bytes.buffer as ArrayBuffer, { ...LIMITS, maxEntries: 2 })).resolves.toBe('scene.xml');
+    expect([...written.keys()]).toEqual(['/working/base.stl', '/working/scene.xml']);
+    expect(written.get('/working/base.stl')).toEqual(ascii('second'));
+    await expect(loadMjzFile(vfs().mujoco, bytes.buffer as ArrayBuffer, { ...LIMITS, maxEntries: 1 })).rejects.toThrow(
+      'holds 2 files; this host opens at most 1',
+    );
+  });
+
+  it('counts no directory among the files', async () => {
+    const bytes = await zip({ 'meshes/': new Uint8Array(0), 'meshes/a.stl': 's', 'b.stl': 's', 'scene.xml': SCENE });
+    await expect(loadMjzFile(vfs().mujoco, bytes.buffer as ArrayBuffer, LIMITS)).resolves.toBe('scene.xml');
+  });
+
+  // Info-ZIP on Linux, among others, writes a UTF-8 name without the flag that says so.
+  it('reads a name without the UTF-8 flag as UTF-8, as JSZip did', async () => {
+    const bytes = await zip({ 'メッシュ.stl': 's', 'scene.xml': SCENE });
+    for (const [signature, flags] of [[[0x50, 0x4b, 0x03, 0x04], 6], [[0x50, 0x4b, 0x01, 0x02], 8]] as const) {
+      for (let i = 0; i < bytes.length - 4; i++) {
+        if (signature.every((b, k) => bytes[i + k] === b)) bytes[i + flags + 1] &= ~0x08;
+      }
+    }
+    const { mujoco, written } = vfs();
+    await loadMjzFile(mujoco, bytes.buffer as ArrayBuffer);
+    expect([...written.keys()]).toContain('/working/メッシュ.stl');
   });
 });
 

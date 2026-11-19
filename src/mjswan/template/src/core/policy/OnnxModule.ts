@@ -1,7 +1,6 @@
-import * as ort from 'onnxruntime-web/wasm';
+import type * as ort from 'onnxruntime-web/wasm';
 
-// Configures ort.env before any session is created; see ortEnv.ts.
-import '../onnx/ortEnv';
+import { getOrt, loadOrt } from '../onnx/ortEnv';
 import { queueOrtRun } from '../onnx/runQueue';
 import DEFAULT_SLOTS from './default_slots.json';
 
@@ -49,7 +48,8 @@ export class OnnxModule {
   async init(): Promise<void> {
     // wasm is the only backend the bundled ORT build registers; `vite.wasm.ts` says why
     // the GPU one is not shipped. See docs/docs/api/engine.md.
-    this.session = await ort.InferenceSession.create(this.bytes, {
+    const { InferenceSession } = await loadOrt();
+    this.session = await InferenceSession.create(this.bytes, {
       executionProviders: ['wasm'],
       graphOptimizationLevel: 'all',
     });
@@ -58,18 +58,19 @@ export class OnnxModule {
   }
 
   initInput(): Record<string, ort.Tensor> {
+    const { Tensor } = getOrt();
     const inputs: Record<string, ort.Tensor> = {};
     if (this.isRecurrent) {
       const shape = this.carryShape();
-      inputs.is_init = new ort.Tensor('bool', [true], [1]);
-      inputs.adapt_hx = new ort.Tensor(
+      inputs.is_init = new Tensor('bool', [true], [1]);
+      inputs.adapt_hx = new Tensor(
         'float32',
         new Float32Array(shape.reduce((a, b) => a * b, 1)),
         shape,
       );
     }
     if (this.inKeys.includes('time_step')) {
-      inputs.time_step = new ort.Tensor('float32', new Float32Array([0.0]), [1, 1]);
+      inputs.time_step = new Tensor('float32', new Float32Array([0.0]), [1, 1]);
     }
     return inputs;
   }
@@ -134,7 +135,8 @@ export class OnnxModule {
 
     const carry: Record<string, ort.Tensor> = {};
     if (this.isRecurrent && result['next,adapt_hx']) {
-      carry.is_init = new ort.Tensor('bool', [false], [1]);
+      const { Tensor } = getOrt();
+      carry.is_init = new Tensor('bool', [false], [1]);
       carry.adapt_hx = result['next,adapt_hx'];
     }
 

@@ -420,6 +420,9 @@ test('a policy switch during an inference drops its output instead of failing th
   await openHarness(page, errors);
 
   await page.evaluate(async () => {
+    // The stand-in below has no session to load ONNX Runtime, so load it as one would.
+    const { loadOrt } = await import('/src/core/onnx/ortEnv.ts');
+    await loadOrt();
     const engine = window.__engine as HarnessEngine;
     let started!: () => void;
     const running = new Promise<void>((resolve) => (started = resolve));

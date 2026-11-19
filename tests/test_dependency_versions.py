@@ -14,6 +14,10 @@ PYPROJECT_TOML = PROJECT_ROOT / "pyproject.toml"
 TEMPLATE_PACKAGE_JSON = PROJECT_ROOT / "src" / "mjswan" / "template" / "package.json"
 MODEL_GALLERY = PROJECT_ROOT / "examples" / "demo" / "mujoco_models.py"
 
+#: Fork releases that rebuild a MuJoCo release, and the MuJoCo each holds
+#: (`src/engine/__tests__/mujocoPackage.test.ts` checks the one installed).
+FORK_REBUILDS = {"npm:@ttktjmt/mujoco@3.11.1": "3.11.0"}
+
 
 def _read_python_mujoco_version() -> str:
     pyproject = PYPROJECT_TOML.read_text()
@@ -50,6 +54,8 @@ def _read_npm_mujoco_version() -> str:
             "Expected a key of 'mujoco', '@mujoco/mujoco', '@ttktjmt/mujoco', "
             "or any '<scope>/mujoco'."
         )
+    if version_spec in FORK_REBUILDS:
+        return FORK_REBUILDS[version_spec]
     # npm alias form: "npm:@scope/pkg@X.Y.Z" — extract trailing @version
     alias_match = re.search(r"@(\d+\.\d+\.\d+[^\"']*)$", version_spec)
     if alias_match:
