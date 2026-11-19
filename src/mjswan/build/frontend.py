@@ -356,9 +356,9 @@ class ClientBuilder:
 
         Invalidates the cache whenever the app codebase changes. Excludes derived
         outputs (node_modules / dist / .nodeenv), package-lock.json (npm may
-        rewrite it) and the tests, which the wheel does not ship: an installed
-        template must hash as the tree its dist/ was marked on. package.json's
-        ``version`` is normalized out since it is already a separate part of the key.
+        rewrite it) and the tests the wheel leaves out, so an installed template
+        hashes as the tree its dist/ was marked on. package.json's ``version`` is
+        normalized out since it is already a separate part of the key.
         """
         inputs: list[Path] = []
         for top in (

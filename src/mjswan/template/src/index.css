@@ -1,7 +1,6 @@
 /* Inter 3.19 (licenses/Inter/LICENSE), both axes kept, cut to Google Fonts' Latin range:
    pyftsubset Inter-VariableFont_slnt,wght.ttf --flavor=woff2 --layout-features='*'
-     --name-IDs='*' --unicodes=<the unicode-range below>
-   Other characters fall back to the fonts after Inter on body. */
+     --name-IDs='*' --unicodes=<the unicode-range below> */
 @font-face {
   font-family: "Inter";
   src: url("./assets/Inter-latin.woff2") format("woff2");

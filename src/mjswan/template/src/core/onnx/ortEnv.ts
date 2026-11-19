@@ -1,6 +1,6 @@
 /**
- * ONNX Runtime Web, loaded when the first session is made and configured once for every
- * module that creates one; a scene without a policy never downloads it.
+ * ONNX Runtime Web, loaded with the first session (a scene with no ONNX graph never fetches
+ * it) and configured once for every module that creates one.
  *
  * The library build points ORT at the runtime wasm it emits into `dist/assets/`, so a host
  * serving `dist/` from its own origin executes and fetches nothing it did not serve (issue
@@ -38,7 +38,7 @@ export function loadOrt(): Promise<typeof Ort> {
       return ort;
     },
     (error: unknown) => {
-      // A chunk that failed to arrive may arrive for the next policy.
+      // Lets the next session retry a chunk that failed to load.
       loading = null;
       throw error;
     },
@@ -46,10 +46,7 @@ export function loadOrt(): Promise<typeof Ort> {
   return loading;
 }
 
-/**
- * ORT once `loadOrt()` has resolved, for what runs every step and must not wait: building
- * tensors. Every caller holds a session, which `loadOrt()` came before.
- */
+/** ORT for per-step tensors, which must not wait: every caller holds a session, so it is loaded. */
 export function getOrt(): typeof Ort {
   if (!loaded) throw new Error('ONNX Runtime was used before loadOrt() resolved.');
   return loaded;

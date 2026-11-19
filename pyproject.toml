@@ -7,8 +7,7 @@ exclude = [
     "src/mjswan/template/.nodeenv",
     "src/mjswan/template/node_modules",
     "**/__pycache__/**",
-    # The frontend's tests and their fixtures: no build reads them. `_source_fingerprint`
-    # skips the same files, so the wheel's prebuilt dist/ still matches.
+    # Frontend tests, which `_source_fingerprint` also skips so the wheel's dist/ still matches.
     "src/mjswan/template/src/**/__tests__/**",
     "src/mjswan/template/src/**/*.test.ts",
     "src/mjswan/template/src/**/*.test.tsx",

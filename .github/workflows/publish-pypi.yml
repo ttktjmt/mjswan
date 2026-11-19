@@ -47,8 +47,7 @@ jobs:
         with:
           node-version: '24'
 
-      # The SPA alone: the library build (`mjswan.js`) is publish-npm's, and nothing
-      # installed from PyPI loads it.
+      # SPA only: publish-npm builds the library (`mjswan.js`), which no pip install loads.
       - name: Build web template
         working-directory: src/mjswan/template
         run: |
@@ -61,10 +60,8 @@ jobs:
           rm -rf node_modules
           rm -rf .nodeenv
 
-      # `ClientBuilder.build()` reuses a dist/ only when its marker matches the build asked
-      # for, so without one every pip install rebuilds with Node. Computed on the tree as
-      # shipped, after the version is set: the default build reuses this dist/, any other
-      # option still rebuilds.
+      # Lets `ClientBuilder.build()` reuse this dist/ for the default options, without Node.
+      # Written on the tree as shipped, after the version is set: the marker hashes both.
       - name: Mark the prebuilt SPA as reusable
         run: |
           uv run --locked --python 3.12 python - <<'PY'

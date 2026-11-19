@@ -91,8 +91,7 @@ describe('loadMjzFile', () => {
     expect(written.has('/working/base.stl')).toBe(false);
   });
 
-  // The directory names `model.stl`, which a host's check passes; the file is written
-  // under the name in its local header, as JSZip wrote it.
+  // The directory names `model.stl`, which a host's check passes; the local header's name is written.
   it('holds the name a file is written under to the limits, not the one the directory gives', async () => {
     const bytes = await zip({ 'scene.xml': SCENE, 'model.stl': 'solid' });
     bytes.set(ascii('evil.html'), at(bytes, 'model.stl', 0));
@@ -108,7 +107,7 @@ describe('loadMjzFile', () => {
     expect(held.written.size).toBe(0);
   });
 
-  // `..` inside the archive is resolved as it loads, as JSZip resolved it; a backslash is kept.
+  // `..` in a name is resolved as the archive loads; a backslash is kept.
   it('refuses more files than the limit, and a path readers take differently', async () => {
     const { mujoco } = vfs();
     const many = await zip({ 'a.stl': 's', 'b.stl': 's', 'c.stl': 's', 'scene.xml': SCENE });
@@ -129,9 +128,7 @@ describe('loadMjzFile, archive by archive', () => {
     expect(written.get('/working/scene.xml')).toEqual(ascii(SCENE));
   });
 
-  // A streaming writer cannot know a file's sizes before its bytes; its local header says
-  // 0. The central directory's sizes are the ones read, so bytes that look like the next
-  // header are still the file's own.
+  // The central directory's sizes are read, so bytes that look like a header stay the file's.
   it('reads sizes a streaming writer gives after each file, stored or deflated', async () => {
     const lookalike = ascii('solid PK\x07\x08 PK\x03\x04 PK\x01\x02 endsolid');
     const { mujoco, written } = vfs();
@@ -158,8 +155,7 @@ describe('loadMjzFile, archive by archive', () => {
     );
   });
 
-  // As JSZip read it: the later file under a name replaces the earlier one where that one
-  // stood, and a name counts once.
+  // The later file takes the earlier one's place in the order.
   it('keeps the later of two files under one name, and counts the name once', async () => {
     const bytes = streamed([
       ['base.stl', 'first', 'deflated'],

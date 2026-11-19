@@ -45,10 +45,7 @@ const extensionOf = (name: string) => {
   return dot === -1 ? '' : name.slice(dot).toLowerCase();
 };
 
-/**
- * One file or directory, read as JSZip (which this module used before) read it: listed,
- * sized and typed by the central directory, named by its local header.
- */
+/** Listed, sized and typed by the central directory; named by its local header. */
 interface ZipEntry {
   name: string;
   dir: boolean;
@@ -72,7 +69,7 @@ const STORED = 0;
 const DEFLATED = 8;
 const MADE_BY_UNIX = 3;
 
-// JSZip kept a leading BOM in a name, which TextDecoder strips by default.
+// A name keeps a leading BOM, which TextDecoder strips by default.
 const utf8 = new TextDecoder('utf-8', { ignoreBOM: true });
 
 let crcTable: Uint32Array | undefined;
@@ -87,9 +84,8 @@ function crc32(bytes: Uint8Array): number {
 }
 
 /**
- * The archive's entries in central directory order, with JSZip's reading of each: the end
- * record found from the back, zip64 records, data prepended to the archive (a self-extractor)
- * skipped, a name decoded as UTF-8 unless an up-to-date Unicode path field gives it.
+ * The archive's entries in central directory order. A name is decoded as UTF-8 whatever its
+ * flag says, unless an up-to-date Unicode path field gives it.
  */
 function readEntries(bytes: Uint8Array): ZipEntry[] {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -209,7 +205,7 @@ function readEntries(bytes: Uint8Array): ZipEntry[] {
   return entries;
 }
 
-/** JSZip's folding of a loaded name: `.` and empty segments dropped, `..` taking one back. */
+/** Folds `.` and empty segments out of a name, and `..` with the segment before it. */
 function resolve(name: string): string {
   const parts = name.split('/');
   const kept: string[] = [];
@@ -221,15 +217,15 @@ function resolve(name: string): string {
   return kept.join('/');
 }
 
-/** Thrown from inside the inflate, so it stops there; never reaches the caller. */
+/** Stops an inflate past the room left; loadMjzFile catches it. */
 class PastRoom extends Error {}
 
-/** JSZip's read size: a bomb is stopped within one chunk's worth of output. */
+/** A bomb is stopped within one chunk's worth of output. */
 const CHUNK = 16 * 1024;
 
 /** A file's bytes, counted as they inflate so the count can stop it partway. */
 function inflate(entry: ZipEntry, room: number): Uint8Array {
-  // JSZip took a file its directory sizes at 0 for empty, whatever the archive holds.
+  // A file its directory sizes at 0 is empty, whatever the archive holds.
   if (entry.size === 0) return new Uint8Array(0);
   if (entry.method === STORED) {
     if (entry.data.length > room) throw new PastRoom();
@@ -273,7 +269,7 @@ export async function loadMjzFile(
     limits?: ArchiveLimits,
     mtime?: number
 ): Promise<string> {
-    // Keyed as JSZip keyed them: a later file under a name replaces the earlier one in place.
+    // A later file under a name replaces the earlier one where that one stood.
     const byName: Record<string, ZipEntry> = Object.create(null);
     for (const entry of readEntries(new Uint8Array(mjzBytes))) {
         const name = resolve(entry.name);

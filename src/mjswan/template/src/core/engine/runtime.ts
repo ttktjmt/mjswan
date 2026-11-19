@@ -115,8 +115,8 @@ const DEFAULT_TERM_SEED = 0x5eed;
 const XRAY_SWITCH = 'xray';
 
 /**
- * Spark (half a megabyte) and the collider's GLTFLoader, loaded with the first splat rather
- * than with every scene. Set before any splat or collider exists, so code holding one has them.
+ * Loaded with the first splat, not every scene (Spark is half a megabyte). Set before any
+ * splat or collider exists, so code holding one can use them.
  */
 let splatModule: typeof import('../scene/splat') | null = null;
 let colliderModule: typeof import('../scene/collider') | null = null;

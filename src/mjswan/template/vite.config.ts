@@ -91,10 +91,7 @@ function gtmPlugin(gtmId: string | undefined) {
 
 const MANTINE_ESM = path.resolve(__dirname, 'node_modules/@mantine/core/esm');
 
-/**
- * The `m_` classes and keyframes of the Mantine components src/'s .tsx files import and of
- * the components those import, as their class maps (`*.module.css.mjs`) name them.
- */
+/** The `m_` names in the class maps of the Mantine components src/'s .tsx files reach. */
 function mantineNamesInUse(): Set<string> {
   const entries = new Map<string, string>();
   const index = fs.readFileSync(path.join(MANTINE_ESM, 'index.mjs'), 'utf-8');
@@ -130,10 +127,9 @@ function mantineNamesInUse(): Set<string> {
   return used;
 }
 
-// `@mantine/core/styles.css` styles all of Mantine (200 KB); the app renders a few dozen
-// components. This drops each rule whose `m_` classes, or keyframes, no component in use
-// names, before Vite hashes the CSS. Mantine's per-component files are no substitute: they
-// size in px where styles.css scales by rem, and index.css sets the root font size.
+// Drops each `@mantine/core/styles.css` rule no component in use names, before Vite hashes
+// the CSS. Not Mantine's per-component files: they size in px where styles.css scales by
+// rem, which index.css's root font size relies on.
 function mantineCssPlugin(): Plugin {
   let used = new Set<string>();
   const unused = (names: string[]) => names.length > 0 && names.every((name) => !used.has(name));

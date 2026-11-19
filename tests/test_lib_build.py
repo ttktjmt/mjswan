@@ -362,7 +362,7 @@ class TestThirdPartyLicenses:
         text = (full_dist / "THIRD_PARTY_LICENSES.md").read_text()
         assert "pixiv Inc." in text  # @pixiv/three-vrm's own LICENSE
         assert "Copyright (c) Microsoft Corporation" in text  # licenses/onnxruntime-web
-        assert "SIL OPEN FONT LICENSE Version 1.1" in text  # licenses/Inter, the UI font
+        assert "SIL OPEN FONT LICENSE Version 1.1" in text  # licenses/Inter
         assert not (full_dist / ".vite").exists()
 
 
@@ -379,10 +379,7 @@ def _mantine_classes(component: str) -> set[str]:
 
 @pytest.mark.slow
 class TestMantineCss:
-    """The SPA's CSS keeps Mantine's rules for the components it renders, and only those.
-
-    `mantineCssPlugin` in vite.config.ts cuts `@mantine/core/styles.css` by class name.
-    """
+    """The SPA keeps Mantine's CSS for the components it renders, and only that (vite.config.ts)."""
 
     @staticmethod
     def _classes_in_css(full_dist: Path) -> set[str]:
