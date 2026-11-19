@@ -550,7 +550,7 @@ Python builder injects it into the bundle.
 | Requirement | Version |
 |---|---|
 | Node.js | 24+ (for building; the runtime is browser-only) |
-| MuJoCo | 3.11.0 (`@ttktjmt/mujoco`, bundled: MuJoCo's own package with the `mjtBool` array fix of [google-deepmind/mujoco#3616](https://github.com/google-deepmind/mujoco/pull/3616)), the same version as the Python package's `mujoco` pin |
+| MuJoCo | 3.11.0 (`@ttktjmt/mujoco` 3.11.1, bundled: MuJoCo's own package with the `mjtBool` array fix of [google-deepmind/mujoco#3616](https://github.com/google-deepmind/mujoco/pull/3616), built without debug info), the same version as the Python package's `mujoco` pin |
 | Browser | WebAssembly + WebGL2. `SharedArrayBuffer` only for `multithreaded: true`. |
 
 The library build (`dist/mjswan.js`) is a single self-contained ESM: every dependency is
