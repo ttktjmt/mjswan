@@ -500,14 +500,16 @@ shortcuts.
 
 ### Changed
 
-- **`pip install mjswan` builds an app without Node, from a 7.7 MB wheel instead of 12.1
+- **`pip install mjswan` builds an app without Node, from a 6.5 MB wheel instead of 12.1
   MB.** The wheel carries the prebuilt SPA alone, marked as the build for the default
   options (`base_path="/"`, no GTM ID, single-threaded, no debug), which reuse it; any
   other option still builds with Node. The frontend's tests are no longer packaged.
 
-- **A scene without a policy loads 2.34 MB over brotli before it starts, down from 2.73
-  MB.** The UI font is Inter as a Latin-range WOFF2 (82 KB, from an 805 KB TTF), drawn
-  the same, with its OFL notice in `THIRD_PARTY_LICENSES.md`. Spark, the splat renderer
+- **A scene without a policy loads 1.45 MB over brotli before it starts, down from 2.73
+  MB.** MuJoCo's WASM comes from `@ttktjmt/mujoco` 3.11.1, the same MuJoCo 3.11.0 built
+  without debug info: `mujoco.wasm` is 4.75 MB, from 10.12. The UI font is Inter as a
+  Latin-range WOFF2 (82 KB, from an 805 KB TTF), drawn the same, with its OFL notice in
+  `THIRD_PARTY_LICENSES.md`. Spark, the splat renderer
   (483 KB), loads with the first splat and ONNX Runtime Web's JS (70 KB) with the first
   ONNX session. `.mjz` archives unpack with fflate instead of JSZip, to the same files. The
   CSS keeps only the Mantine rules of the components the app renders (107 KB, from 201
