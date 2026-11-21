@@ -38,7 +38,7 @@ There are no per-project `index.html` copies: the SPA selects a project from `?p
 
 ## Ids
 
-Every id is `name2id(name)` (`document/ids.py`): lowercased, every run of characters outside `[a-z0-9]` collapsed to one `_`, ends stripped. That keeps an id safe as a storage key (an unescaped `'` in an R2/S3 key breaks the presigned SigV4 upload signature) and readable in a URL. A name with no ASCII letter or digit sanitizes to an empty id and is refused.
+Every id is `name2id(name)` (`document/ids.py`): lowercased, every run of characters outside `[a-z0-9]` collapsed to one `_`, ends stripped. That keeps an id safe as a file name and a storage key, and readable in a URL. A name with no ASCII letter or digit sanitizes to an empty id and is refused.
 
 | id | unique within |
 |---|---|

@@ -20,7 +20,7 @@ The defining architectural fact: mjswan reimplements none of mjlab's MDP term fu
 | [mjlab.md](context/mjlab.md) | `mjlab/` adapters, the trace envs, the runner, `onnx_meta` pitfalls, and `source/` (W&B, Hub, URL) |
 | [document.md](context/document.md) | the tree and `.swn`, manifest rules, ids, the `in_keys` / `out_keys` slot tables, `format` versus `version`, an MDP owning its events and the MDP switch, `app.py` |
 | [licenses.md](context/licenses.md) | `license/`: file locations, detection, identification and tiers, why files |
-| [cloud.md](context/cloud.md) | `cloud/`: what `publish` sends and refuses, content-addressed pieces, login |
+| [cloud.md](context/cloud.md) | `cloud/`: what `publish` sends and refuses, and login |
 | [skins.md](context/skins.md) | `skin.py`, `rig/`, `core/skin/`: characters drawn outside the model |
 | [frontend.md](context/frontend.md) | `template/`: the engine API, the step loop, `src/core/`, graphics, interaction with pick and preview, the three builds, plugins and custom TS |
 | [ci.md](context/ci.md) | tests, workflows, release, deployment |
@@ -74,8 +74,8 @@ src/mjswan/          Python package: the object model at the root, one package p
   rig/                 Fitting a skin to its robot: humanoid.py (VRM bones, presets), pose.py
                        (rest pose, root height, hips, limb lengths, the body each joint of a
                        modelled skin rests on), guess.py (`mjswan skin map`'s drafts)
-  cloud/               mjswan Cloud: publish.py, blob.py (the cutter), auth.py (loopback PKCE
-                       OAuth), transport.py
+  cloud/               `mjswan publish` and login: publish.py, blob.py (the cutter), auth.py,
+                       transport.py
   license/             LICENSE / NOTICE files in the build: path, spdx, attribution; vrm.py,
                        a VRM's license as its meta states it
   managers/            mjlab-mirror cfgs: observation / event / action / termination / command
@@ -167,7 +167,7 @@ The primary CLI is `mjswan` (Typer-based, defined in `cli.py:app`). Subcommands:
 | `mjswan info <dist-dir \| document.swn>` | Show a tree of projects/scenes/policies and asset sizes, each license file and skin with its license |
 | `mjswan publish <dist-dir>` | Upload a built dist's data files to mjswan Cloud (rejects custom-TS builds) |
 | `mjswan skin map <file> [--robot <xml \| mjb \| task>]` | Draft a skin's bone maps against a robot, as a `SkinConfig` (or a `ModelledSkinConfig`) to check |
-| `mjswan login` / `whoami` / `logout` | mjswan Cloud session (loopback GitHub OAuth) |
+| `mjswan login` / `whoami` / `logout` | mjswan Cloud session |
 | `mjswan version` / `--version` | Print the installed mjswan version |
 
 ## Tooling and workflow
