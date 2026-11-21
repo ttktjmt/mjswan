@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 
 import { threeToMjcCoordinate } from '../scene/coordinate';
+import { geomRgba } from '../scene/geomRgba';
 import { geomGroupMask } from '../onnx/raycast';
 import type { PrimitiveType } from '../scene/primitive';
 
@@ -34,7 +35,7 @@ export interface PickHit {
   type: GeomType;
   /** MuJoCo's `size`, three numbers whatever the type. */
   size: [number, number, number];
-  /** As the scene draws it: its material's colour when it has one. */
+  /** The colour the scene draws it in, resolved as MuJoCo does ({@link geomRgba}). */
   rgba: [number, number, number, number];
   /** Where it is now: its centre, and its turn (w, x, y, z). */
   pos: [number, number, number];
@@ -97,9 +98,6 @@ export class SurfacePicker {
     const geom = this.geomId.GetView()[0] as number;
     const n = this.normal.GetView() as ArrayLike<number>;
     const facing = n[0] * direction.x + n[1] * direction.y + n[2] * direction.z > 0 ? -1 : 1;
-    const material = mjModel.geom_matid[geom];
-    const rgba = material >= 0 ? mjModel.mat_rgba : mjModel.geom_rgba;
-    const at = (material >= 0 ? material : geom) * 4;
     const m = mjData.geom_xmat;
     const g = geom * 9;
     const turn = this.turn.setFromRotationMatrix(
@@ -117,7 +115,7 @@ export class SurfacePicker {
       name: this.mujoco.mj_id2name(mjModel, this.mujoco.mjtObj.mjOBJ_GEOM.value, geom) ?? '',
       type: GEOM_TYPES[mjModel.geom_type[geom]],
       size: [mjModel.geom_size[geom * 3], mjModel.geom_size[geom * 3 + 1], mjModel.geom_size[geom * 3 + 2]],
-      rgba: [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]],
+      rgba: geomRgba(mjModel, geom),
       pos: [mjData.geom_xpos[geom * 3], mjData.geom_xpos[geom * 3 + 1], mjData.geom_xpos[geom * 3 + 2]],
       quat: [turn.w, turn.x, turn.y, turn.z],
     };

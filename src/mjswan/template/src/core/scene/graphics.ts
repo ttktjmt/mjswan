@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { MainModule, MjModel } from 'mujoco';
 import { sampledCube } from './cubeMap';
+import { geomRgba } from './geomRgba';
 import { createHaze, placeHaze } from './haze';
 import { VIEWER_GEOM_GROUPS } from './layers';
 import { Mirror } from './mirror';
@@ -135,7 +136,7 @@ export class SceneGraphics {
       // MuJoCo mirrors in the first opaque plane or box with a reflectance, and that one only.
       const matId = mjModel.geom_matid[g];
       const reflectance = matId >= 0 ? mjModel.mat_reflectance[matId] : 0;
-      const alpha = matId >= 0 ? mjModel.mat_rgba[matId * 4 + 3] : mjModel.geom_rgba[g * 4 + 3];
+      const alpha = geomRgba(mjModel, g)[3];
       if (reflectance > 0 && alpha >= 0.995) {
         const height = type === mjGEOM_BOX.value ? mjModel.geom_size[g * 3 + 2] : 0;
         this.mirror = new Mirror(drawn[0], drawn, height, reflectance);
