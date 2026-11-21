@@ -85,7 +85,8 @@ export class MyObservation extends ObservationBase {
 }
 ```
 
-The build step bundles your source into the engine. See
+The build compiles your source into `plugins.js`, a module of its own that the app hands
+to the engine. See
 [How the Build Works](https://mjswan.readthedocs.io/en/latest/guides/how-it-works/#a-term-cannot-be-traced)
 for when a term needs one, and how a binding's `ts_src` names the file.
 
