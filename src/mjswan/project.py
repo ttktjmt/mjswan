@@ -422,10 +422,19 @@ class ProjectHandle:
 
 
 def _collect_mjlab_scene_assets(scene_cfg: Any) -> dict[str, bytes]:
-    """Collect assets from mjlab scene component specs before they are flattened."""
+    """Collect assets from mjlab scene component specs before they are flattened.
+
+    A path two entities ship with different bytes is left out, so MuJoCo finds each
+    entity's own file instead of handing both one."""
     assets: dict[str, bytes] = {}
+    clashing: set[str] = set()
     for spec in entity_specs(scene_cfg):
-        assets.update(collect_spec_assets(spec))
+        for name, data in collect_spec_assets(spec).items():
+            if assets.get(name, data) != data:
+                clashing.add(name)
+            assets[name] = data
+    for name in clashing:
+        del assets[name]
     return assets
 
 

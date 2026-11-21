@@ -698,7 +698,7 @@ class TestDefaultClasses:
     def test_an_empty_class_left_by_an_unprefixed_attach_is_dropped(
         self, tmp_path: Path
     ):
-        """mjlab attaches its terrain so; the classes that do load back stay."""
+        """mjlab attaches its terrain this way; the classes that load back stay."""
         scene = _arm("r")
         floor = mujoco.MjSpec.from_string(
             '<mujoco><worldbody><geom name="floor" type="plane" size="1 1 0.1"/>'
