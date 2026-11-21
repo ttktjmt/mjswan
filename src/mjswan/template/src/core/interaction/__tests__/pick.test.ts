@@ -84,7 +84,7 @@ describe('SurfacePicker', () => {
     expect(round(hit.pos)).toEqual([0, 0, 0.5]);
     expect(round(hit.quat)).toEqual(round([Math.SQRT1_2, 0, 0, Math.SQRT1_2]));
 
-    // A geom's own rgba, set away from the default, wins over its material's, as MuJoCo draws it.
+    // The geom's own rgba wins over its material's, as in MuJoCo.
     const floor = picker.pick(model, data, camera(5), RECT, RECT.left + 10, RECT.top + 10)!;
     expect(floor.type).toBe('plane');
     expect(round(floor.rgba)).toEqual([0.9, 0.9, 0.9, 1]);

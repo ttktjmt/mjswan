@@ -1,7 +1,4 @@
-/**
- * A geom's colour, as MuJoCo's `setMaterial` resolves it: the material's, unless the geom's own
- * rgba is set away from the default; a result at alpha 0 is not drawn at all.
- */
+/** `geomRgba`, and the scene drawing each geom in that colour. */
 import * as THREE from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -35,8 +32,7 @@ describe('geomRgba', () => {
   });
 });
 
-// A textured plane hidden at alpha 0 inside an opaque floor. Drawn opaque, the two
-// flickered in and out of each other.
+// A textured plane hidden at alpha 0 inside an opaque floor, and a tinted textured box.
 const SCENE = `<mujoco>
   <asset>
     <texture name="grid" type="2d" builtin="checker" width="8" height="8" rgb1="0 0 0" rgb2="1 1 1"/>
