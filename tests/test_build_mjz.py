@@ -20,9 +20,11 @@ import numpy as np
 import pytest
 
 from mjswan.build.mjz import (
+    _TENDON_FIELDS,
     _absolute_entry_names,
     _buffer_texture_to_png,
     _defaults_unreadable,
+    _drop_empty_nameless_defaults,
     _make_zip_safe_path,
     _rewrite_xml_paths,
     _strip_leading_dotdot,
@@ -43,8 +45,8 @@ class TestStripLeadingDotdot:
 
     def test_multiple_dotdot_stripped(self):
         assert (
-            _strip_leading_dotdot("../../myo_sim/meshes/clavicle.stl")
-            == "myo_sim/meshes/clavicle.stl"
+            _strip_leading_dotdot("../../models/meshes/arm.stl")
+            == "models/meshes/arm.stl"
         )
 
     def test_dotdot_within_path_normalized(self):
@@ -62,8 +64,8 @@ class TestStripLeadingDotdot:
 
     def test_deep_dotdot_chain_stripped(self):
         assert (
-            _strip_leading_dotdot("../../../../simhive/myo_sim/meshes/a.stl")
-            == "simhive/myo_sim/meshes/a.stl"
+            _strip_leading_dotdot("../../../../shared/models/meshes/a.stl")
+            == "shared/models/meshes/a.stl"
         )
 
 
@@ -154,7 +156,7 @@ class TestRewriteXmlPaths:
     def test_mesh_file_path_prepended_and_dotdot_stripped(self):
         xml = (
             '<mujoco><compiler meshdir="../"/>'
-            '<asset><mesh name="m" file="myo_sim/meshes/foo.stl"/></asset></mujoco>'
+            '<asset><mesh name="m" file="models/meshes/foo.stl"/></asset></mujoco>'
         )
         result = _rewrite_xml_paths(xml, mesh_dir="../", texture_dir="")
         mesh = ET.fromstring(result).find(".//mesh")
@@ -239,6 +241,27 @@ class TestDefaultsUnreadable:
             "</default></mujoco>"
         )
         assert _defaults_unreadable(ET.fromstring(xml))
+
+    def test_empty_nameless_classes_go_however_deep(self):
+        xml = (
+            "<mujoco><default>"
+            '<default class="arm"/><default><default><default/></default></default>'
+            "</default></mujoco>"
+        )
+        root = ET.fromstring(xml)
+
+        _drop_empty_nameless_defaults(root)
+
+        assert [d.get("class") for d in root.iter("default")] == [None, "arm"]
+        assert not _defaults_unreadable(root)
+
+    def test_a_nameless_class_that_sets_something_stays(self):
+        xml = '<mujoco><default><default><geom group="2"/></default></default></mujoco>'
+        root = ET.fromstring(xml)
+
+        _drop_empty_nameless_defaults(root)
+
+        assert _defaults_unreadable(root)
 
 
 # ===========================================================================
@@ -364,7 +387,9 @@ class TestToZipDeflated:
         }
         assert extents["large/part"] > 2 * extents["small/part"]
 
-    def test_falls_back_to_basename_for_spec_assets(self):
+    def test_falls_back_to_basename_for_spec_assets(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         class FakeMesh:
             def __init__(self, file: str):
                 self.file = file
@@ -379,28 +404,33 @@ class TestToZipDeflated:
             skins = []
             bodies = []
             frames = []
-            assets = {"clavicle.stl": b"mesh-bytes"}
+            assets = {"arm.stl": b"mesh-bytes"}
 
             def __init__(self):
-                self.meshes = [FakeMesh("../myo_sim/meshes/clavicle.stl")]
+                self.meshes = [FakeMesh("../models/meshes/arm.stl")]
 
             def to_xml(self) -> str:
                 return (
                     '<mujoco model="fake"><asset>'
-                    '<mesh name="clavicle" file="../myo_sim/meshes/clavicle.stl"/>'
+                    '<mesh name="arm" file="../models/meshes/arm.stl"/>'
                     "</asset></mujoco>"
                 )
 
+        packed = '<mujoco><asset><mesh name="arm" file="arm.stl"/></asset></mujoco>'
+        monkeypatch.setattr(
+            "mjswan.build.mjz._encode",
+            lambda spec, extra: (ET.fromstring(packed), {"arm.stl": b"mesh-bytes"}),
+        )
         buf = io.BytesIO()
         to_zip_deflated(FakeSpec(), buf)
         buf.seek(0)
 
         with zipfile.ZipFile(buf) as zf:
-            assert "myo_sim/meshes/clavicle.stl" in zf.namelist()
-            assert zf.read("myo_sim/meshes/clavicle.stl") == b"mesh-bytes"
+            assert "models/meshes/arm.stl" in zf.namelist()
+            assert zf.read("models/meshes/arm.stl") == b"mesh-bytes"
             xml = zf.read("fake.xml").decode()
             mesh = ET.fromstring(xml).find(".//mesh")
-            assert mesh.get("file") == "myo_sim/meshes/clavicle.stl"
+            assert mesh.get("file") == "models/meshes/arm.stl"
 
 
 # ===========================================================================
@@ -491,6 +521,58 @@ class TestAttachedModels:
         )
         assert dict(scene.assets) == assets
 
+    def test_a_file_under_the_same_path_in_the_scenes_folder_is_not_taken(
+        self, tmp_path: Path
+    ):
+        scene = _arm_on_disk(tmp_path / "scene", 0.1)
+        arm = _arm_on_disk(tmp_path / "arm", 0.3)
+        scene.attach(arm, prefix="a/", frame=scene.worldbody.add_frame())
+        reference = scene.compile()
+
+        model = _round_trip(scene)
+
+        for name in ("bone", "a/bone"):
+            assert _mesh_extent(model, name) == pytest.approx(
+                _mesh_extent(reference, name)
+            )
+
+    def test_a_stray_file_under_the_same_path_is_left_out(self, tmp_path: Path):
+        stray = TETRA.format(s=0.1)
+        (tmp_path / "scene" / "meshes").mkdir(parents=True)
+        (tmp_path / "scene" / "meshes" / "bone.obj").write_text(stray)
+        (tmp_path / "scene" / "scene.xml").write_text(
+            '<mujoco><compiler meshdir="meshes"/><worldbody/></mujoco>'
+        )
+        scene = mujoco.MjSpec.from_file(str(tmp_path / "scene" / "scene.xml"))
+        arm = _arm_on_disk(tmp_path / "arm", 0.3)
+        scene.attach(arm, prefix="a/", frame=scene.worldbody.add_frame())
+        reference = scene.compile()
+        buf = io.BytesIO()
+
+        to_zip_deflated(scene, buf)
+
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            assert stray.encode() not in [zf.read(n) for n in zf.namelist()]
+        buf.seek(0)
+        model = mujoco.MjSpec.from_zip(buf).compile()
+        assert _mesh_extent(model, "a/bone") == pytest.approx(
+            _mesh_extent(reference, "a/bone")
+        )
+
+    def test_files_the_encoder_cannot_check_are_packed_with_a_warning(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        def refuse(spec: mujoco.MjSpec, extra: dict[str, bytes]):
+            raise RuntimeError("no encoder")
+
+        monkeypatch.setattr("mjswan.build.mjz._encode", refuse)
+
+        with pytest.warns(RuntimeWarning, match="not checked"):
+            model = _round_trip(_arm_on_disk(tmp_path / "arm", 0.2))
+
+        assert model.nmesh == 1
+
     def test_a_file_nothing_can_find_raises(self, monkeypatch: pytest.MonkeyPatch):
         class FakeMesh:
             file = "gone.stl"
@@ -517,7 +599,8 @@ class TestAttachedModels:
 ARM_WITH_CLASS = """
 <mujoco>
   <default><default class="arm"><geom group="{group}" rgba="{rgba}"/>
-    <tendon stiffness="{stiffness}"/></default></default>
+    <tendon stiffness="{stiffness}" damping="{damping}" frictionloss="0.1" limited="true"
+      range="-1 1" margin="0.02" springlength="0.3"/></default></default>
   <worldbody><body name="upper_{side}" childclass="arm"><joint name="j_{side}"/>
     <geom name="g_{side}" size="0.1"/></body></worldbody>
   <tendon><fixed name="t_{side}" class="arm"><joint joint="j_{side}" coef="1"/></fixed></tendon>
@@ -525,19 +608,19 @@ ARM_WITH_CLASS = """
 """
 
 
+def _arm(side: str, group=1, rgba="1 0 0 1", stiffness=5, damping=0.5) -> mujoco.MjSpec:
+    return mujoco.MjSpec.from_string(
+        ARM_WITH_CLASS.format(
+            side=side, group=group, rgba=rgba, stiffness=stiffness, damping=damping
+        )
+    )
+
+
 class TestDefaultClasses:
     def _two_arms_without_a_prefix(self) -> mujoco.MjSpec:
-        """MyoSuite's composition: two arms whose classes share names but not values."""
+        """Two arms attached without a prefix, whose classes share names but not values."""
         scene = mujoco.MjSpec()
-        for side, group, rgba, stiffness in (
-            ("r", 1, "1 0 0 1", 5),
-            ("l", 2, "0 0 1 1", 7),
-        ):
-            arm = mujoco.MjSpec.from_string(
-                ARM_WITH_CLASS.format(
-                    side=side, group=group, rgba=rgba, stiffness=stiffness
-                )
-            )
+        for arm in (_arm("r"), _arm("l", 2, "0 0 1 1", 7, 0.9)):
             scene.attach(arm, prefix="", suffix="", frame=scene.worldbody.add_frame())
         return scene
 
@@ -551,11 +634,37 @@ class TestDefaultClasses:
             ref, got = reference.geom(f"g_{side}"), model.geom(f"g_{side}")
             assert got.group == ref.group
             np.testing.assert_allclose(got.rgba, ref.rgba)
-            np.testing.assert_allclose(
-                model.tendon_stiffness[model.tendon(f"t_{side}").id],
-                reference.tendon_stiffness[reference.tendon(f"t_{side}").id],
+            got_t, ref_t = (
+                model.tendon(f"t_{side}").id,
+                reference.tendon(f"t_{side}").id,
             )
+            for field in (f for f in dir(reference) if f.startswith("tendon_")):
+                np.testing.assert_allclose(
+                    getattr(model, field)[got_t],
+                    getattr(reference, field)[ref_t],
+                    err_msg=field,
+                )
         assert reference.geom("g_r").group != reference.geom("g_l").group
+        assert reference.tendon_damping[0] != reference.tendon_damping[1]
+
+    def test_every_field_of_a_tendon_is_written_out(self):
+        """A field MuJoCo adds to MjsTendon fails here until _TENDON_FIELDS has it."""
+        not_from_a_class = {
+            "compiler",
+            "default",
+            "id",
+            "info",
+            "name",
+            "path",
+            "signature",
+            "wrap_geom",
+            "wrap_joint",
+            "wrap_pulley",
+            "wrap_site",
+        }
+        fields = {f for f in dir(mujoco.MjsTendon) if not f.startswith("_")}
+
+        assert fields - not_from_a_class == set(_TENDON_FIELDS.values())
 
     def test_writing_them_out_leaves_the_spec_as_it_was(self):
         scene = self._two_arms_without_a_prefix()
@@ -577,9 +686,7 @@ class TestDefaultClasses:
         assert model.site("shoulder").group == 0
 
     def test_classes_that_load_back_are_kept(self, tmp_path: Path):
-        scene = mujoco.MjSpec.from_string(
-            ARM_WITH_CLASS.format(side="r", group=1, rgba="1 0 0 1", stiffness=5)
-        )
+        scene = _arm("r")
         out = tmp_path / "arm.mjz"
 
         to_zip_deflated(scene, str(out))
@@ -592,9 +699,7 @@ class TestDefaultClasses:
         self, tmp_path: Path
     ):
         """mjlab attaches its terrain so; the classes that do load back stay."""
-        scene = mujoco.MjSpec.from_string(
-            ARM_WITH_CLASS.format(side="r", group=1, rgba="1 0 0 1", stiffness=5)
-        )
+        scene = _arm("r")
         floor = mujoco.MjSpec.from_string(
             '<mujoco><worldbody><geom name="floor" type="plane" size="1 1 0.1"/>'
             "</worldbody></mujoco>"

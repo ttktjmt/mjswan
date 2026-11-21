@@ -12,6 +12,7 @@ import os
 import posixpath
 import struct
 import tempfile
+import warnings
 import xml.etree.ElementTree as ET
 import zipfile
 import zlib
@@ -114,8 +115,8 @@ def _iter_asset_lookup_candidates(path: str) -> list[str]:
     - a normalized ZIP-safe path (leading ``..`` stripped), or
     - only the basename when the source spec used an absolute meshdir/texturedir.
 
-    MyoSuite scenes hit the third case after mjlab attaches child specs into the
-    final scene spec, so we try progressively looser matches in that order.
+    A child spec mjlab attaches into a scene can hit the third case, so the matches
+    loosen in that order.
     """
     posix_path = path.replace("\\", "/")
     candidates: list[str] = []
@@ -265,20 +266,46 @@ _CLASSED = (
     "flexes",
 )
 _LIMITED = {0: "false", 1: "true", 2: "auto"}
+# A tendon's fields, as MJCF attribute and MjsTendon field. All of them are written,
+# since which ones a class may set varies with the MuJoCo version.
+_TENDON_FIELDS = {
+    "group": "group",
+    "limited": "limited",
+    "actuatorfrclimited": "actfrclimited",
+    "range": "range",
+    "actuatorfrcrange": "actfrcrange",
+    "solreflimit": "solref_limit",
+    "solimplimit": "solimp_limit",
+    "solreffriction": "solref_friction",
+    "solimpfriction": "solimp_friction",
+    "frictionloss": "frictionloss",
+    "springlength": "springlength",
+    "width": "width",
+    "margin": "margin",
+    "stiffness": "stiffness",
+    "damping": "damping",
+    "armature": "armature",
+    "rgba": "rgba",
+    "material": "material",
+    "user": "userdata",
+}
+_TENDON_PATH_ATTRS = ("width", "rgba", "material")  # a fixed tendon draws no path
 
 
-def _drop_empty_nameless_defaults(root: ET.Element) -> None:
+def _drop_empty_nameless_defaults(parent: ET.Element) -> None:
     """Remove nested classes with neither a name nor contents. The writer leaves one for
-    each model attached with an empty prefix (mjlab's terrain), and it sets nothing."""
-    for default in list(root.iter("default")):
-        for child in default.findall("default"):
-            if not child.get("class") and len(child) == 0:
-                default.remove(child)
+    each model attached with an empty prefix (mjlab's terrain), and it sets nothing.
+
+    Children go first, so a class left empty by removing its own goes too."""
+    for child in parent.findall("default"):
+        _drop_empty_nameless_defaults(child)
+        if parent.tag == "default" and not child.get("class") and len(child) == 0:
+            parent.remove(child)
 
 
 def _defaults_unreadable(root: ET.Element) -> bool:
     """Whether MuJoCo would refuse these defaults: a nested class without a name, or one
-    named twice (models attached with an empty prefix, as MyoSuite attaches its arms)."""
+    named twice (models attached with an empty prefix)."""
     seen: set[str] = set()
     for default in root.iter("default"):
         for child in default.findall("default"):
@@ -342,34 +369,22 @@ def _spell_out_tendons(root: ET.Element, tendons: list[Any]) -> None:
         if tendon.name and elem.get("name") != tendon.name:
             raise RuntimeError(f"tendon {tendon.name!r} was written out of order")
         elem.attrib.pop("class", None)
-        values: dict[str, str] = {
-            "group": str(int(tendon.group)),
-            "limited": _LIMITED[int(tendon.limited)],
-            "actuatorfrclimited": _LIMITED[int(tendon.actfrclimited)],
-            "range": _numbers(tendon.range),
-            "actuatorfrcrange": _numbers(tendon.actfrcrange),
-            "solreflimit": _numbers(tendon.solref_limit),
-            "solimplimit": _numbers(tendon.solimp_limit),
-            "solreffriction": _numbers(tendon.solref_friction),
-            "solimpfriction": _numbers(tendon.solimp_friction),
-            "frictionloss": _numbers(tendon.frictionloss),
-            "springlength": _numbers(tendon.springlength),
-            "width": _numbers(tendon.width),
-            "margin": _numbers(tendon.margin),
-            "stiffness": _numbers(tendon.stiffness),
-            "damping": _numbers(tendon.damping),
-            "armature": _numbers(tendon.armature),
-            "rgba": _numbers(tendon.rgba),
-        }
-        if tendon.material:
-            values["material"] = tendon.material
-        if len(tendon.userdata):
-            values["user"] = _numbers(tendon.userdata)
-        if elem.tag == "fixed":  # a fixed tendon has no path to draw
-            for attr in ("width", "rgba", "material"):
-                values.pop(attr, None)
-        for attr, value in values.items():
-            elem.set(attr, value)
+        for attr, field in _TENDON_FIELDS.items():
+            if elem.tag == "fixed" and attr in _TENDON_PATH_ATTRS:
+                continue
+            value = getattr(tendon, field)
+            if attr == "group":
+                elem.set(attr, str(int(value)))
+            elif attr in ("limited", "actuatorfrclimited"):
+                elem.set(attr, _LIMITED[int(value)])
+            elif attr == "material":
+                if value:
+                    elem.set(attr, value)
+            elif attr == "user":
+                if len(value):
+                    elem.set(attr, _numbers(value))
+            else:
+                elem.set(attr, _numbers(value))
 
 
 def _flat_xml(spec: mujoco.MjSpec) -> str:
@@ -452,43 +467,85 @@ def _unused_entry(name: str, data: bytes, files: dict[str, bytes | str]) -> str:
     return entry
 
 
-def _recover_missing(
+def _check_with_encoder(
     spec: mujoco.MjSpec,
     xml_str: str,
     missing: set[str],
     *,
     mesh_dir: str,
     texture_dir: str,
+    absolute_names: dict[str, str],
     files_to_zip: dict[str, bytes | str],
     extra_assets: dict[str, bytes],
 ) -> dict[tuple[int, str], str]:
-    """Add the files this module could not find, as MuJoCo's encoder finds them.
+    """Hold every file this module packed to the one MuJoCo's encoder packs.
 
-    Both XMLs come from the same writer, so their file elements pair up in order.
-    Returns the entries by element index and attribute, for :func:`_rewrite_xml_paths`.
+    A file of a spec attached from another directory is either missing here or, worse,
+    found under the same relative path in the scene's own directory. Where the encoder's
+    bytes differ, or this module found none, the encoder's are packed instead. Both XMLs
+    come from the same writer, so their file elements pair up in order. Returns the
+    entries by element index and attribute, for :func:`_rewrite_xml_paths`.
     """
     try:
         encoded_root, encoded = _encode(spec, extra_assets)
     except (ValueError, RuntimeError, mujoco.FatalError) as e:
-        raise FileNotFoundError(_missing_message(missing)) from e
+        if missing:
+            raise FileNotFoundError(_missing_message(missing)) from e
+        warnings.warn(
+            f"the scene's asset files were not checked against MuJoCo's encoder: {e}",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return {}
     ours = _file_elements(ET.fromstring(xml_str))
     theirs = _file_elements(encoded_root)
+    if [e.tag for e in ours] != [e.tag for e in theirs]:
+        if missing:
+            raise FileNotFoundError(_missing_message(missing))
+        raise RuntimeError("MuJoCo's encoder wrote the scene's files in another order")
+    compiler = encoded_root.find("compiler")
+    packed_dirs = (
+        ("", "")
+        if compiler is None
+        else (compiler.get("meshdir", ""), compiler.get("texturedir", ""))
+    )
+
+    def packed_entry(elem: ET.Element, attr: str) -> str:
+        # Under the encoder's meshdir / texturedir, except a file it renamed, whose
+        # attribute already names the entry.
+        file = elem.get(attr)
+        if not file:
+            return ""
+        joined = _referenced_path(elem.tag, file, *packed_dirs)
+        return next((e for e in (joined, file) if e in encoded), "")
+
     recovered: dict[tuple[int, str], str] = {}
     found: set[str] = set()
-    if [e.tag for e in ours] == [e.tag for e in theirs]:
-        for index, (mine, packed) in enumerate(zip(ours, theirs)):
-            for attr in _FILE_ATTRS[mine.tag]:
-                file, entry = mine.get(attr), packed.get(attr)
-                if not file or entry not in encoded:
-                    continue
-                path = _referenced_path(mine.tag, file, mesh_dir, texture_dir)
-                if path not in missing:
-                    continue
-                data = encoded[entry]
-                entry = _unused_entry(entry, data, files_to_zip)
-                files_to_zip[entry] = data
-                recovered[(index, attr)] = entry
+    kept: set[str] = set()
+    left: set[str] = set()
+    for index, (mine, packed) in enumerate(zip(ours, theirs)):
+        for attr in _FILE_ATTRS[mine.tag]:
+            file = mine.get(attr)
+            if not file:
+                continue
+            path = _referenced_path(mine.tag, file, mesh_dir, texture_dir)
+            default = _entry_name(path, absolute_names)
+            entry = packed_entry(packed, attr)
+            data = encoded.get(entry)
+            if data is None or (
+                path not in missing and files_to_zip.get(default) == data
+            ):
+                kept.add(default)
+                continue
+            entry = _unused_entry(entry, data, files_to_zip)
+            files_to_zip[entry] = data
+            recovered[(index, attr)] = entry
+            if path in missing:
                 found.add(path)
+            else:
+                left.add(default)
+    for entry in left - kept:
+        del files_to_zip[entry]
     if missing - found:
         raise FileNotFoundError(_missing_message(missing - found))
     return recovered
@@ -555,8 +612,9 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
 
     The function collects asset files from disk, normalises all relative
     paths (stripping leading ``..`` components) so that the resulting ZIP
-    is self-contained. Files of specs attached from another directory are
-    found with MuJoCo's own encoder; a file it cannot find either raises
+    is self-contained. Every file is checked against MuJoCo's own encoder,
+    which resolves a file of a spec attached from another directory where
+    ``spec.modelfiledir`` cannot; a file neither finds raises
     ``FileNotFoundError``.
     """
     base_dir = spec.modelfiledir or ""
@@ -570,6 +628,7 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
     # (mjlab stores assets under prefixed keys like "assets/robot/model.stl").
     files_to_zip: dict[str, bytes | str] = {}
     missing: set[str] = set()
+    referenced: list[str] = []
 
     def _read_asset(rel: str) -> bytes | None:
         """Return asset bytes from disk or spec.assets, or None if not found."""
@@ -593,6 +652,7 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
         return None
 
     def _add_asset(rel: str) -> None:
+        referenced.append(rel)
         data = _read_asset(rel)
         if data is None:
             missing.add(rel)
@@ -654,16 +714,17 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
         else:
             xml_str = ET.tostring(root, encoding="unicode")
         recovered = (
-            _recover_missing(
+            _check_with_encoder(
                 spec,
                 xml_str,
                 missing,
                 mesh_dir=mesh_dir,
                 texture_dir=texture_dir,
+                absolute_names=absolute_names,
                 files_to_zip=files_to_zip,
                 extra_assets=buffer_pngs,
             )
-            if missing
+            if referenced
             else {}
         )
     finally:
