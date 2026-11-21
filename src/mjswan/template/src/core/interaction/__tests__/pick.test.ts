@@ -84,10 +84,10 @@ describe('SurfacePicker', () => {
     expect(round(hit.pos)).toEqual([0, 0, 0.5]);
     expect(round(hit.quat)).toEqual(round([Math.SQRT1_2, 0, 0, Math.SQRT1_2]));
 
-    // The scene draws a geom in its material's colour.
+    // A geom's own rgba, set away from the default, wins over its material's, as MuJoCo draws it.
     const floor = picker.pick(model, data, camera(5), RECT, RECT.left + 10, RECT.top + 10)!;
     expect(floor.type).toBe('plane');
-    expect(round(floor.rgba)).toEqual([0.2, 0.3, 0.4, 1]);
+    expect(round(floor.rgba)).toEqual([0.9, 0.9, 0.9, 1]);
   });
 
   it('answers null over empty sky, and for a canvas with no size', () => {

@@ -1062,6 +1062,14 @@ shortcuts.
 
 ### Fixed
 
+- **A geom drawn over a material takes its own `rgba` when it sets one, and a fully
+  transparent geom is not drawn.** The viewer took a geom's colour from its material whenever
+  it had one. MuJoCo lets the geom's own `rgba` win once it is set away from the default
+  (0.5, 0.5, 0.5, 1), and draws nothing whose colour ends at alpha 0. MyoSuite's ChaseTag
+  hides each player's own checkered floor that way; drawn opaque in the world's floor, the
+  two flickered in and out of each other. The texture still comes from the material. A
+  picked geom's `rgba` and the mirror's choice of plane resolve the colour the same way.
+
 - **A scene of attached models packs as a `.mjz` that loads, MyoSuite's included.**
   Models attached with an empty prefix, as MyoSuite attaches its two arms, bring default
   classes of the same name, which MuJoCo writes but cannot read back; mjswan's repair
