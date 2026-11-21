@@ -35,8 +35,8 @@ describe('geomRgba', () => {
   });
 });
 
-// MyoSuite hides each ChaseTag player's own floor this way: a textured plane in the world's
-// floor, at alpha 0. Drawn opaque, the two flickered in and out of each other.
+// A textured plane hidden at alpha 0 inside an opaque floor. Drawn opaque, the two
+// flickered in and out of each other.
 const SCENE = `<mujoco>
   <asset>
     <texture name="grid" type="2d" builtin="checker" width="8" height="8" rgb1="0 0 0" rgb2="1 1 1"/>

@@ -328,7 +328,7 @@ interface PickHit {
   name: string;                      // '' for an unnamed geom
   type: GeomType;                    // a primitive's, or 'hfield', 'mesh', 'sdf'
   size: [number, number, number];
-  rgba: [number, number, number, number];  // as drawn: its material's when it has one
+  rgba: [number, number, number, number];  // as drawn; alpha 0 is a geom not drawn
   pos: [number, number, number];     // where the geom is now
   quat: [number, number, number, number];  // (w, x, y, z)
 }

@@ -35,7 +35,11 @@ export interface PickHit {
   type: GeomType;
   /** MuJoCo's `size`, three numbers whatever the type. */
   size: [number, number, number];
-  /** The colour the scene draws it in, resolved as MuJoCo does ({@link geomRgba}). */
+  /**
+   * The colour the scene draws it in, resolved as MuJoCo does ({@link geomRgba}). Alpha 0
+   * is a geom the scene does not draw: `mj_ray` sees a geom with a material by the
+   * material's alpha.
+   */
   rgba: [number, number, number, number];
   /** Where it is now: its centre, and its turn (w, x, y, z). */
   pos: [number, number, number];
