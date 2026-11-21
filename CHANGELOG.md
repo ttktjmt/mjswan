@@ -1062,6 +1062,13 @@ shortcuts.
 
 ### Fixed
 
+- **A geom with a material is drawn in its own `rgba` when it sets one (anything but the
+  default grey), and not at all at alpha 0, as in MuJoCo.** The viewer always took the
+  material's colour, so a textured plane hidden at alpha 0 inside an opaque floor was
+  drawn and flickered against it. The texture still comes from the material, and a pick's
+  `rgba` and the mirror's choice of plane follow the same colour. `engine.pick` can still
+  hit a geom drawn at alpha 0, as MuJoCo's `mj_ray` does.
+
 - **A scene of attached models packs as a `.mjz` that loads, with its own files.** Models
   attached with an empty prefix bring same-named default classes that MuJoCo writes but
   cannot read back, and under MuJoCo 3.11 an element on `main` inside another

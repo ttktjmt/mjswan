@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 import { sampleCubeTexture } from './cubeMap';
+import { geomRgba } from './geomRgba';
 import { createLights, lightSpecularRatio } from './lights';
 import { createTexture, createSkyboxTexture } from './textures';
 import { createTendonMeshes } from './tendons';
@@ -190,6 +191,10 @@ function addGeomMesh(
     bodies[b].has_custom_mesh = false;
   }
 
+  const color = geomRgba(mjModel, g);
+  // MuJoCo draws nothing for a geom whose colour is fully transparent.
+  if (color[3] === 0) return;
+
   let geometry: THREE.BufferGeometry | undefined;
   const isPlane = type === mujoco.mjtGeom.mjGEOM_PLANE.value;
   let planeStep: [number, number] = [0, 0];
@@ -230,22 +235,9 @@ function addGeomMesh(
     }
   }
 
-  let color = [
-    mjModel.geom_rgba[g * 4 + 0],
-    mjModel.geom_rgba[g * 4 + 1],
-    mjModel.geom_rgba[g * 4 + 2],
-    mjModel.geom_rgba[g * 4 + 3],
-  ];
   let texture: THREE.Texture | null = null;
   if (mjModel.geom_matid[g] !== -1) {
     const matId = mjModel.geom_matid[g];
-    color = [
-      mjModel.mat_rgba[matId * 4 + 0],
-      mjModel.mat_rgba[matId * 4 + 1],
-      mjModel.mat_rgba[matId * 4 + 2],
-      mjModel.mat_rgba[matId * 4 + 3],
-    ];
-
     const role = mujoco.mjtTextureRole.mjTEXROLE_RGB.value;
     const texId = mjModel.mat_texid[matId * mujoco.mjtTextureRole.mjNTEXROLE.value + role];
     if (texId !== -1) {
