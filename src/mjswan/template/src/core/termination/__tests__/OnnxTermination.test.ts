@@ -1,5 +1,5 @@
 /**
- * Termination terms under ADR 0005: traced-ONNX bodies, the legacy native `time_out`,
+ * Termination terms: traced-ONNX bodies, the legacy native `time_out`,
  * and the manager's OR-reduce with truncation split out.
  *
  * The graph's math is validated Python-side by the parity harness; what matters

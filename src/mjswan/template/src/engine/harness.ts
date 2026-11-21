@@ -1,5 +1,5 @@
 /**
- * Headless acceptance harness for `createEngine` (ADR 0004, issue #76 step 1i).
+ * Headless acceptance harness for `createEngine` (issue #76 step 1i).
  *
  * Imports ONLY the engine (no React, no Mantine) and drives the full lifecycle
  * — create → subscribe → loadScene(bytes) → play/pause → dispose — proving the

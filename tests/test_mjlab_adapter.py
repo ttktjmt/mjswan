@@ -170,7 +170,7 @@ class TestAdaptObservations:
         assert result["policy"] is group
 
     def test_mjlab_obs_term_converted(self):
-        # `base_lin_vel` is a DSL term (ADR 0003) — adapter resolves to a callable.
+        # `base_lin_vel` is a DSL term — adapter resolves to a callable.
         mjlab_func = _make_mjlab_obs_func("base_lin_vel")
         mjlab_term = FakeMjlabObsTermCfg(func=mjlab_func, params={"world_frame": True})
         mjlab_group = FakeMjlabObsGroupCfg(
@@ -241,7 +241,7 @@ class TestAdaptObservations:
         assert result["policy"].history_length == 4
 
     def test_mjlab_asset_cfg_kept_intact_for_tracing(self):
-        # A plain (non-Binding) func is traced to ONNX at build time (ADR 0005) via `func(env,
+        # A plain (non-Binding) func is traced to ONNX at build time via `func(env,
         # **params)` — params must reach the tracer unchanged, including the real `asset_cfg`
         # object mjlab's own function expects, not a flattened entity_name/joint_names stand-in.
         mjlab_func = _make_mjlab_obs_func("joint_pos_rel")
@@ -259,8 +259,8 @@ class TestAdaptObservations:
         assert term.params["asset_cfg"] is asset_cfg
 
     def test_any_mjlab_obs_func_passes_through_for_tracing(self):
-        # ADR 0005: there is no mjswan-side mirror to resolve by name — any mjlab function
-        # (however unfamiliar) is passed straight through and traced to ONNX at build time.
+        # There is no mjswan-side mirror to resolve by name: any mjlab function (however
+        # unfamiliar) is passed straight through and traced to ONNX at build time.
         mjlab_func = _make_mjlab_obs_func("nonexistent_function")
         mjlab_term = FakeMjlabObsTermCfg(func=mjlab_func)
         mjlab_group = FakeMjlabObsGroupCfg(terms={"x": mjlab_term})
@@ -310,7 +310,7 @@ class TestDefaultSlotTables:
 
 
 class TestObservationGroupKey:
-    """A lone group lands under the default slot, ``actor`` (ADR 0006 §5).
+    """A lone group lands under the default slot, ``actor``.
 
     The dict key is a *slot* name (what the policy's ``in_keys`` table calls the tensor
     that fills an input), and the default table is ``["actor"]``, mjlab's own name for
@@ -619,7 +619,7 @@ class TestAdaptTerminations:
         assert term.time_out is False
 
     def test_mjlab_time_out_flag(self):
-        # `time_out` is a DSL term (ADR 0003) — resolved to a callable.
+        # `time_out` is a DSL term — resolved to a callable.
         mjlab_func = _make_mjlab_term_func("time_out")
         mjlab_cfg = FakeMjlabTermTermCfg(func=mjlab_func, time_out=True)
 
@@ -1310,7 +1310,7 @@ class TestUnsupportedMjlabActions:
 
 
 class TestAdaptedSerialization:
-    """Ensure adapted plain-callable terms defer to ONNX tracing (ADR 0005)."""
+    """Ensure adapted plain-callable terms defer to ONNX tracing."""
 
     def test_adapted_obs_to_dict_requires_tracing(self):
         # A plain-callable func (mjlab's own, resolved by the adapter with no mirror lookup)

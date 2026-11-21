@@ -125,11 +125,11 @@ shortcuts.
   `group="..."` lists a motion under a heading in the selector; `PolicyEntry.motions`
   carries it. A format-7 engine would serve no frame field and freeze the graph reading
   one.
-- **Handles that move the preview** (ADR 0011). `preview.show({ ..., handles: 'move' })`
+- **Handles that move the preview.** `preview.show({ ..., handles: 'move' })`
   draws an arrow along each of the world's axes from the geom's centre; dragging one moves
   the geom along it, its size and turn left alone, and `preview.onChange` reports it as it
   does a resize or a turn.
-- **Handles on the preview, and a pick that names the geom** (ADR 0011). `preview.show`
+- **Handles on the preview, and a pick that names the geom.** `preview.show`
   takes `handles: 'size'`, arrows along the geom's own axes that resize it as they are
   dragged (the opposite face stays, and the bottom where a radius sets the height), or
   `handles: 'turn'`, rings that turn it (Shift snaps to 15 degrees), both drawn a fixed
@@ -138,8 +138,8 @@ shortcuts.
   says whether the preview is under a point, and `replaces: geom` hides a geom of the model
   while the preview stands in for it. `PickHit` now carries the geom's `name`, `type`,
   `size`, `rgba` as drawn, and its `pos` and `quat` now.
-- **`engine.pick` and `engine.preview`, for a host that places geoms by pointing** (ADR
-  0011). `pick(clientX, clientY)` casts MuJoCo's own ray from the camera through a point of
+- **`engine.pick` and `engine.preview`, for a host that places geoms by pointing.**
+  `pick(clientX, clientY)` casts MuJoCo's own ray from the camera through a point of
   the canvas and returns the surface it meets (point and normal in MuJoCo axes, the geom
   and its body), the floor's infinite plane included and anything only drawn left out.
   `preview.show({ type, size, pos, quat?, rgba? })` draws one primitive geom over the scene,
@@ -156,7 +156,7 @@ shortcuts.
   engine ignores, so `format` stays 7. `mjswan/manifest` exposes them as
   `ProjectCatalog.work` and `SceneEntry.credits`, fetching a text only when asked.
   `mjswan.license.copyright_line` reads a license text's holder line.
-- **Skins: a rigged character drawn over the robot** (ADR 0010, **document format 7**).
+- **Skins: a rigged character drawn over the robot** (**document format 7**).
   `SceneHandle.add_skin(name, mjswan.SkinConfig(...))` adds a `.vrm` or a `.glb` to the
   scene's **Skin** menu, posed every frame from the robot's bodies while physics,
   collision and the policy stay the robot's; `?skin=<id>` opens on one, `?skin=` on
@@ -184,7 +184,7 @@ shortcuts.
   id; the scene's id, and so its `?scene=` value, follow the name.
 - **A `demo` extra**: what `examples/demo/main.py` imports (`hf`, `mjlab` and
   `wbc-mjlab`, which registers WBC-Mjlab's tasks).
-- **A task's own action class runs in the browser** (ADR 0009, **document format 6**). An
+- **A task's own action class runs in the browser** (**document format 6**). An
   mjlab action class mjswan has no class of its own for, such as in-hand rotation's
   `JointPositionDeltaAction` or luwu's `HeldJointPositionAction`, was skipped with a
   warning. The build now traces its `process_actions` and `reset` to ONNX, its state
@@ -271,7 +271,7 @@ shortcuts.
   beside `add_scene_mjlab`, and `source.hf.fetch_dir()` behind it. A model is rarely one
   file (the MJCF names meshes MuJoCo resolves relative to it), so the XML's whole
   directory comes down and the spec is compiled where it lands; `add_scene(spec=…)`'s
-  license detection then finds a `LICENSE` that travelled with it (ADR 0007 §2). The
+  license detection then finds a `LICENSE` that travelled with it. The
   scene is named after its directory when the XML's own stem only names a role
   (`scene.xml`), and `allow_patterns=` covers a model whose `meshdir` reaches outside
   its own directory, since nothing parses the XML to find out. An XML at the repository
@@ -326,8 +326,7 @@ shortcuts.
   actuator order. Useful for seeing what a model actuates; not `policy_joint_names`
   without thought, since that wants the order the network's actions come out in and an
   mjlab policy's is joint order.
-- **License files travel with the build**
-  ([ADR 0007](docs/adr/0007-license-files-in-the-build.md)): `<project-id>/LICENSE` /
+- **License files travel with the build:** `<project-id>/LICENSE` /
   `NOTICE` for the work, via `Builder(license=, copyright=)`, `add_project(license=…)` or
   `ProjectHandle.set_license()` / `set_notice()` (an SPDX id generates the standard text
   with its tag, a path is copied verbatim), and `<project-id>/<scene-id>/LICENSE.<component>`
@@ -348,8 +347,7 @@ shortcuts.
   `mjswan.kind` / `mjswan.term` / `mjswan.func`, so Netron's Model Properties name the
   source. Additive: the runtime ignores the keys, which exist for readers of the
   document, mjswan Cloud's inspector first.
-- **The build output is a simulation document**
-  ([ADR 0006](docs/adr/0006-swn-simulation-document.md)): one `manifest.json` at the
+- **The build output is a simulation document:** one `manifest.json` at the
   root — `{format, version, uses_custom_js, plugins?, projects}`, every key `snake_case`
   — over `<project-id>/<scene-id>/{scene.mjz, mdp/<mdp-id>/…, policy/<policy-id>.onnx,
   assets/…}`. Every path under a scene entry resolves against the scene directory. The
@@ -411,8 +409,7 @@ shortcuts.
   them. A term may also read `physics_dt` / `step_dt` / `cfg` off the env.
 - `add_policy` fills `policy_num_actions` from the ONNX output width when a policy has no
   joint names (muscle policies).
-- **MDP term bodies are traced to ONNX at build time and run by ONNX Runtime Web**
-  ([ADR 0005](docs/adr/0005-onnx-traced-terms-superseding-the-declarative-dsl.md)),
+- **MDP term bodies are traced to ONNX at build time and run by ONNX Runtime Web**,
   replacing the hand-written TypeScript DSL (see Removed). mjlab's real
   observation / termination / event / command functions are exported as graphs, so
   there is no second copy of the math and no closed primitive set. A term with no
@@ -560,7 +557,7 @@ shortcuts.
   instead of at the qpos0 a fresh `MjData` holds. `setPolicy(null)` also drops the removed
   policy's `initial_qpos`, which a later Reset used to apply.
 - **`mjswan publish` sends only what mjswan Cloud does not hold yet.** Cloud keeps every
-  file once, under the SHA-256 of its bytes (mjswan-cloud ADR 0017), so `publish` now sends
+  file once, under the SHA-256 of its bytes, so `publish` now sends
   a file map: each scene's `.mjz` as its entries, each `.onnx` cut before every tensor of
   32 KiB or more and before its metadata, any piece over 16 MiB cut by its content, and
   each license file as the hash of its text. It `PUT`s only the pieces Cloud asks for, waits
@@ -776,7 +773,7 @@ shortcuts.
 
 - **Two `add_policy_*` calls on one scene no longer both claim the default.** Each call
   marked its own highest-step checkpoint as the one the scene opens on, which the build
-  then refused for having several (ADR 0006 §4). A scene carrying two differently
+  then refused for having several. A scene carrying two differently
   trained policies takes two calls (they are two MDPs), so the first call to name a
   default now keeps it, and an `add_policy(default=True)` made later takes over from it.
 
@@ -785,7 +782,7 @@ shortcuts.
   display name between them, and the viewer's select refuses a repeated option, so the
   page rendered nothing. The second is now named `<name>_1` as its id becomes `<id>_1`,
   with the same warning, so every name the viewer lists is distinct and still spells its
-  `?scene=` / `?policy=` value (ADR 0006 §4).
+  `?scene=` / `?policy=` value.
 
 - **`add_policy_wandb` checks its extras when called.** With `only_latest=False` it
   converts at build time, so a missing `wandb`, `mjlab` or `torch` surfaced only after the
@@ -894,7 +891,7 @@ shortcuts.
   `TYPE_CHECKING` and into the one function that loads a file. Opening a MuJoCo model in
   the viewer with no policy involved now costs nothing for a policy format it never reads.
 
-- **The package is laid out by layer** ([ADR 0008](docs/adr/0008-package-layout.md)).
+- **The package is laid out by layer.**
   The root holds the object model (`Builder`, the `*Handle` / `*Config` pairs,
   `MdpConfig`, `cli.py`) and everything else is a package with one job: `build/` (what
   `Builder.build()` does, and the one place that knows the manifest's shape), `compile/`
@@ -1027,7 +1024,7 @@ shortcuts.
 - **`mjswan demo --list`** and **`mjswan demo` with no name running `simple`**: the bare
   command now lists, which is what `--list` did.
 - **`config.json` and the per-policy `<policy>.json`**, replaced by the one root
-  `manifest.json` (supersedes ADR 0005 §1). The per-project `index.html` / `logo.svg`
+  `manifest.json`. The per-project `index.html` / `logo.svg`
   copies and the `main/` special case for the first project go with them: a project's
   directory is its id, and the app resolves `?project=` against ids only.
 - `add_project(id=...)`: a project's id is `name2id(name)`, so the directory and the
@@ -1037,7 +1034,7 @@ shortcuts.
   event list for a separate helper to scan.
 - Slot tables read from a `config_path` sidecar (`onnx.meta.in_keys` / `out_keys`, or
   top-level `in_keys` / `out_keys`): declare them on `add_policy` instead.
-- **`mjswan.dsl`**, the declarative composition-graph DSL (ADR 0003) and its TypeScript
+- **`mjswan.dsl`**, the declarative composition-graph DSL and its TypeScript
   interpreter, with no alias. Term bodies are traced to ONNX instead (see Added), so
   `div` / `sqrt` / `slice_` / `normalize` / `quat_to_rot6d_columns` and the rest have no
   successor: write the term as an ordinary mjlab-style Python function against the live
@@ -1052,7 +1049,7 @@ shortcuts.
   so a fresh checkout builds and tests with no Python step in front of it.
 - **The generated `custom_*.ts` registries**, and the `Observations` / `Terminations` /
   `Events` modules that held nothing else. A `ts_src` term is collected into the standalone
-  `plugins.js` and reaches the engine as `EnginePlugins` (ADR 0004 §10), so nothing had
+  `plugins.js` and reaches the engine as `EnginePlugins`, so nothing had
   written those files since; the build stamped four empty registries out and the runtime
   spread four empty objects into the maps the plugins already filled. The comments claiming
   the registries held `ts_src` terms described the design they replaced.

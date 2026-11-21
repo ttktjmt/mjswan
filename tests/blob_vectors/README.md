@@ -1,8 +1,8 @@
 # The cutter's test files
 
 What `cut` in [../src/index.ts](../src/index.ts) returns for each file here, and what
-mjswan's Python cutter must return too ([ADR 0017](../../../docs/adr/0017-assets-as-content-addressed-blobs.md)
-§2.6). mjswan copies this directory into its tests, so a change here is made there too.
+mjswan's Python cutter must return too. mjswan copies this directory into its tests, so a
+change here is made there too.
 
 `vectors.json` lists the cases:
 

@@ -1,5 +1,5 @@
 /**
- * The reset chain's ordering (ADR 0005 §8, mjlab's `_reset_idx`).
+ * The reset chain's ordering (mjlab's `_reset_idx`).
  *
  * `runtime.ts` needs the MuJoCo WASM module to instantiate, so the order it used to
  * express inline — `void eventManager.onReset(…)`, then `commandManager.resetTerms()`,

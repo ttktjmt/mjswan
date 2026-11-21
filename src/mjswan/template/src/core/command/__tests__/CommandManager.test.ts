@@ -1,5 +1,5 @@
 /**
- * `CommandManager`: `OnnxCommand` registration (ADR 0005 §3).
+ * `CommandManager`: `OnnxCommand` registration.
  *
  * `OnnxCommand` bypasses the class registry the same way `OnnxEvent` bypasses
  * `EventManager`'s — it needs a session + rng the registry's

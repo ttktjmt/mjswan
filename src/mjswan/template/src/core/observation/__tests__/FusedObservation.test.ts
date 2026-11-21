@@ -1,5 +1,5 @@
 /**
- * `FusedObservation`: one graph per observation group (ADR 0005 §4, brief §4b).
+ * `FusedObservation`: one graph per observation group.
  *
  * The graph's math is validated Python-side against
  * `ObservationManager.compute_group`. What matters here is the native half — that

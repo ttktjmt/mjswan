@@ -39,7 +39,7 @@ def _is_frontend_test(relative: Path) -> bool:
 def install_spa(dest: Path, template_dir: Path | None = None) -> bool:
     """Copy the built SPA, the engine, into ``dest``; False when none is built yet.
 
-    An app is the engine plus an expanded document (ADR 0006 §8); this lays down the
+    An app is the engine plus an expanded document; this lays down the
     engine half, for both the builder and ``MjswanApp.from_document``.
     """
     root = template_dir or TEMPLATE_DIR
@@ -65,7 +65,7 @@ def uses_custom_js() -> bool:
     """Whether the current build embeds author-supplied TypeScript.
 
     Surfaced at the top of ``manifest.json`` so a consumer can enforce a
-    declarative-only policy without inspecting the bundled engine (ADR 0003).
+    declarative-only policy without inspecting the bundled engine.
     """
     from mjswan.envs.mdp.events import _custom_registry as _event_registry
     from mjswan.envs.mdp.observations import _custom_registry as _obs_registry
@@ -337,7 +337,7 @@ class ClientBuilder:
         """Cache key for a built SPA: version + build opts + a source fingerprint.
 
         The SPA is project-independent (custom terms load at runtime via
-        plugins.js, ADR 0004 §10), so any build with a matching key is reusable.
+        plugins.js), so any build with a matching key is reusable.
         The fingerprint rebuilds the SPA whenever the app codebase changes.
         """
         from mjswan._version import __version__

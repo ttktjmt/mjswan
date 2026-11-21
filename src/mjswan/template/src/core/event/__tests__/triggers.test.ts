@@ -1,10 +1,10 @@
 /**
- * Native Event-mode dispatch (ADR 0005 §5).
+ * Native Event-mode dispatch.
  *
  * `EventManager` previously only had `onReset()`; interval/startup dispatch is
  * genuinely new functionality (Velocity uses `mode="interval"` for `push_robot`
  * and `mode="startup"` for domain randomization). These tests pin the trigger
- * *semantics* ported from mjlab, expressed as scalars per ADR §5 — not tensors.
+ * *semantics* ported from mjlab, expressed as scalars, not tensors.
  */
 import { describe, expect, it } from 'vitest';
 

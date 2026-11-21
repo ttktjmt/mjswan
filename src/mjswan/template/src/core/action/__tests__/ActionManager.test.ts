@@ -1,5 +1,5 @@
 /**
- * A traced action term's native half (ADR 0009): its state carried across control steps,
+ * A traced action term's native half: its state carried across control steps,
  * its reset graph, the slice of the action it is fed, and what an observation reads off
  * it. The graph's math is checked against mjlab in Python and in `actionParity.test.ts`;
  * the session here is a fake, so these run with no ORT.

@@ -1,7 +1,7 @@
 /**
- * A traced action term's `process` (ADR 0009): its own `process_actions` and `reset`,
+ * A traced action term's `process`: its own `process_actions` and `reset`,
  * exported as graphs with the term's state promoted to explicit I/O, as a traced command's
- * is (ADR 0005 §3):
+ * is:
  *
  *     process: (raw, slots..., prev_<f>..., [rand]) -> (next_<f>..., processed, [processed_from])
  *     reset:   (slots..., prev_<f>..., [rand])      -> (next_<f>...)

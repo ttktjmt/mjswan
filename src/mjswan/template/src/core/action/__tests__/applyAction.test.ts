@@ -637,7 +637,7 @@ describe('readClipActions / clampActions', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Native per-substep options (ADR 0009): mjlab's relative target and command delay, and
+// Native per-substep options: mjlab's relative target and command delay, and
 // the hold and ramp task terms add.
 // ---------------------------------------------------------------------------
 

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * The preview's handles with a real mouse on a real canvas (ADR 0011): the hit test through
+ * The preview's handles with a real mouse on a real canvas: the hit test through
  * the real camera, the press a handle keeps from the camera, and each kind changing only its
  * own part of the geom. The drag maths is unit-tested in Node; this is what it meets in a
  * browser.

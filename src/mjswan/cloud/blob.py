@@ -1,5 +1,5 @@
 """A file as mjswan Cloud stores it: whole, or cut into pieces, each named by the SHA-256
-of its bytes (mjswan-cloud ADR 0017 §2.6).
+of its bytes.
 
 The rules are the platform's (its ``packages/blobs``), held to the same test files
 (``tests/blob_vectors``), so a build is cut the same wherever it is published from.

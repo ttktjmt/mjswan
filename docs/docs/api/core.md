@@ -33,7 +33,7 @@ Top-level builder that orchestrates projects, scenes, policies, and splats and p
 | `gtm_id` | `str \| None` | `None` | Google Tag Manager container ID (e.g. `"GTM-XXXXXXX"`). When provided, the GTM snippet is injected into the built HTML. |
 | `mt` | `bool` | `False` | Enable multi-threaded MuJoCo WASM. Requires Cross-Origin Isolation; mjswan emits a `_headers` file (Netlify / Cloudflare Pages / Vercel) and a `coi-serviceworker.js` (required for GitHub Pages, which cannot set response headers). |
 | `debug` | `bool` | `False` | Keep browser console messages in the built application. Defaults to stripping them from the production bundle. |
-| `license` | `str \| PathLike \| None` | `None` | The work's license for every project that does not set its own, written as `<project-id>/LICENSE` ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)). A generatable SPDX id (`"Apache-2.0"`, `"MIT"`, `"BSD-3-Clause"`, `"BSD-2-Clause"`, `"CC-BY-4.0"`, `"CC0-1.0"`) writes the standard text with an `SPDX-License-Identifier` tag on its first line; a path copies the file verbatim. A bad id or a missing file fails here, not at build. |
+| `license` | `str \| PathLike \| None` | `None` | The work's license for every project that does not set its own, written as `<project-id>/LICENSE`. A generatable SPDX id (`"Apache-2.0"`, `"MIT"`, `"BSD-3-Clause"`, `"BSD-2-Clause"`, `"CC-BY-4.0"`, `"CC0-1.0"`) writes the standard text with an `SPDX-License-Identifier` tag on its first line; a path copies the file verbatim. A bad id or a missing file fails here, not at build. |
 | `copyright` | `str \| None` | `None` | The holder line of a generated license text, e.g. `"2026 Example Lab"`. |
 
 ### Builder.from_mjlab
@@ -542,7 +542,7 @@ The viewer panel's **Graphics** section copies this call, with the settings chan
 def add_skin(name: str, config: SkinConfig | ModelledSkinConfig) -> SkinHandle
 ```
 
-Add a rigged character (a `.vrm`, or a `.glb`), posed every frame from the robot's bodies, to the scene's **Skin** menu (ADR 0010). The scene's physics, collision and policy are unchanged: the skin's spring bones (hair, a tail) swing by three-vrm, or with `mujoco_springs` in a MuJoCo model of their own, and the scene's model sees neither. A scene may carry several skins; the viewer shows one at a time, the first added by default, and the menu can clear it. `name` is shown in the menu; its id, `name2id(name)`, is unique within the scene (a clash is suffixed, with a warning) and is the `?skin=` value that opens the scene on it.
+Add a rigged character (a `.vrm`, or a `.glb`), posed every frame from the robot's bodies, to the scene's **Skin** menu. The scene's physics, collision and policy are unchanged: the skin's spring bones (hair, a tail) swing by three-vrm, or with `mujoco_springs` in a MuJoCo model of their own, and the scene's model sees neither. A scene may carry several skins; the viewer shows one at a time, the first added by default, and the menu can clear it. `name` is shown in the menu; its id, `name2id(name)`, is unique within the scene (a clash is suffixed, with a warning) and is the `?skin=` value that opens the scene on it.
 
 The skin is resolved here, so a mistake surfaces at once: a URL `source` is downloaded, the file is checked, every bone is found in it and every body in the scene's model, and its rest offsets, root height and hips placement are measured against the robot at `rest_pose`. A missing file raises `FileNotFoundError`, a URL that does not download `urllib.error.URLError`, and anything that does not fit `ValueError`: a `.gltf` (export it as glTF Binary), a file pointing outside itself, a compressed one (Draco, meshopt, KTX2/Basis: export it again without compression), a bone, node, body, joint or keyframe that is not there. The build copies the file unmodified to `assets/<skin-id>.vrm` or `.glb`, so a VRM's embedded license ships as its author wrote it; a `.glb`'s `license` and `notice` are written to the project's `licenses/` as `LICENSE.skin-<skin-id>` and `NOTICE.skin-<skin-id>`. With `hide_robot`, Debug Viz lists an **Xray** switch that draws the robot see-through over the skin, and `?xray=1` opens with it on; Debug Viz's **Enabled** hides it, never the skin. While a skin with `hide_tendons` is on show, the model's tendons are not drawn. See [`SkinConfig`](#skinconfig).
 
@@ -578,8 +578,7 @@ def add_attribution(
 ) -> SceneHandle
 ```
 
-Declare a third-party component this scene contains
-([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)).
+Declare a third-party component this scene contains.
 Written to the project's `licenses/` as `LICENSE.<component>` and `NOTICE.<component>`, once
 however many scenes carry the same text (another text under the same name becomes `-2`,
 `-3`, …), and shown on mjswan Cloud beside the work's own license. `add_scene(spec=...)` detects these for a
@@ -1517,7 +1516,7 @@ it could reorder the observation the policy reads: a subclass's own field (PAC-M
 
 `builder.build()` writes a fully static site: the engine, plus the **simulation document**
 — one `manifest.json` describing every project, scene, MDP, policy and splat, and one
-directory per project with its data (ADR 0006).
+directory per project with its data.
 
 ```
 dist/
@@ -1551,7 +1550,7 @@ dist/
 ```
 
 Copy `dist/` to any static host (GitHub Pages, Netlify, S3, …) and it works without a server.
-License files are not manifest keys ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)):
+License files are not manifest keys:
 `manifest.json` is the same with and without them.
 
 Every key in `manifest.json` is `snake_case`, and every path under a scene entry resolves

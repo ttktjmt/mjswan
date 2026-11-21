@@ -302,7 +302,7 @@ curve and its command delay, such as a subclass's own fields (a friction model).
 An action class mjswan has no class of its own for (a task's `JointPositionDeltaAction`,
 `HeldJointPositionAction`, an EMA filter) is built on the scene's trace env, and its
 `process_actions` and `reset` are traced to ONNX with the term's state carried between
-steps, as a traced command's is ([ADR 0009](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0009-action-terms-traced-process-native-apply.md)).
+steps, as a traced command's is.
 Each graph is checked against the term's own code before it ships. The build refuses a
 body a graph cannot reproduce, such as one that keeps a Python counter, writes the sim,
 caches the entity's data in `__init__` or keeps two names for one tensor, and says how to

@@ -1,4 +1,4 @@
-"""The ``.swn`` container: a build's data as one file (ADR 0006 §8).
+"""The ``.swn`` container: a build's data as one file.
 
 A ZIP whose entries are the build tree's own paths, so unpacking one gives back exactly
 what the build wrote. It holds the manifest and every file under a project directory,

@@ -1,5 +1,5 @@
 /**
- * The adjustable-range companion slider (ADR 0005 brief §3a).
+ * The adjustable-range companion slider.
  *
  * mjlab's play GUI pairs each velocity axis with a "Max <label>" slider that only
  * rescales how far the value slider drags. The property worth pinning is that it

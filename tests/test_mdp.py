@@ -1,4 +1,4 @@
-"""`MdpConfig`: the unit a policy runs against (ADR 0006 §3).
+"""`MdpConfig`: the unit a policy runs against.
 
 Layer: L1. Pins ownership and identity: the five term sets travel as one object, two
 policies handed the same object share one MDP, and an MDP's id comes from its name, from
@@ -52,7 +52,7 @@ class TestSugarBuildsAnAnonymousMdp:
         assert cfg.commands is cfg.mdp.commands
 
     def test_each_sugar_call_is_its_own_mdp(self, minimal_model, minimal_onnx):
-        # Equal content, separate objects: two MDPs. Identity is by object (ADR 0006 §3).
+        # Equal content, separate objects: two MDPs. Identity is by object.
         scene = _plain_scene(minimal_model)
         a = scene.add_policy(name="A", policy=minimal_onnx, commands={})._config
         b = scene.add_policy(name="B", policy=minimal_onnx, commands={})._config

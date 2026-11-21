@@ -1,5 +1,5 @@
 /**
- * Which traced term graphs a config refers to (ADR 0005 §4).
+ * Which traced term graphs a config refers to.
  *
  * Getting this wrong is quiet: a ref that is missed means no session, which means
  * the manager warns and drops that term — a policy that runs with a hole in its
@@ -11,7 +11,7 @@ import { policyGraphRefs } from '../graphRefs';
 
 describe('policyGraphRefs', () => {
   it('collects refs from observations, terminations, commands and events', () => {
-    // Events are one of the sections because they travel inside the MDP (ADR 0006 §3),
+    // Events are one of the sections because they travel inside the MDP,
     // and a native event carries no graph to collect.
     expect(
       policyGraphRefs({
@@ -48,7 +48,7 @@ describe('policyGraphRefs', () => {
   });
 
   it('de-duplicates a graph two terms share, and sorts', () => {
-    // Observation fusion (ADR 0005 §4) points several terms at one graph.
+    // Observation fusion points several terms at one graph.
     expect(
       policyGraphRefs({
         observations: {

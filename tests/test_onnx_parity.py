@@ -1,4 +1,4 @@
-"""ADR 0005 parity: exported ONNX term graphs vs the live mjlab env.
+"""Parity: exported ONNX term graphs vs the live mjlab env.
 
 Layer: L3 (requires the ``examples`` extras — mjlab / torch / onnxruntime — and a
 one-time warp CPU-kernel compile, so it is marked ``slow``/``mjlab`` and skipped

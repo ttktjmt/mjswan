@@ -10,7 +10,7 @@
  * `READER_FIELDS` names — plus mjlab's `EntityIndexing`, the ids the reader must
  * resolve each entity to.
  *
- * This closes the last gap in the ADR 0005 verification chain: the Python parity
+ * This closes the last gap in the parity chain: the Python parity
  * harness proves each traced graph reproduces mjlab's term, and this proves the
  * browser feeds that graph the same numbers mjlab would.
  *

@@ -5,7 +5,7 @@ import { queueOrtRun } from '../onnx/runQueue';
 import DEFAULT_SLOTS from './default_slots.json';
 
 /**
- * The policy's slot tables (ADR 0006 §5). `in_keys[i]` names the tensor that fills the
+ * The policy's slot tables. `in_keys[i]` names the tensor that fills the
  * session's i-th input, an observation group or one the runtime synthesizes (`is_init`,
  * `adapt_hx`, `time_step`); `out_keys[i]` names its i-th output. The mapping is
  * positional, so the model's own tensor names appear in no config.

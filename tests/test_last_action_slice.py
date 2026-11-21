@@ -1,4 +1,4 @@
-"""`last_action(action_name=...)` slice resolution (ADR 0005 §Decision).
+"""`last_action(action_name=...)` slice resolution.
 
 Layer: L1 (pure Python — a stub action manager, no mjlab env build).
 

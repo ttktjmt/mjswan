@@ -1,5 +1,5 @@
 /**
- * Action parity: task-defined action terms against mjlab, substep by substep (ADR 0009).
+ * Action parity: task-defined action terms against mjlab, substep by substep.
  * The Builder's own entry and graphs run through the real `OnnxActionProcess` over ORT,
  * then the real `applyAction` with the entry's ramp, hold or command delay; mjlab's
  * `ctrl` at each substep is the answer.

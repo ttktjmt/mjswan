@@ -66,7 +66,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# --- Sources, one per backend (ADR 0008). Each is imported inside a function, so
+# --- Sources, one per backend. Each is imported inside a function, so
 # `import mjswan` needs none of them.
 wandb = [
     "wandb>=0.23.1",

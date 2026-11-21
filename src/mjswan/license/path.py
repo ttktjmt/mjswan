@@ -1,12 +1,11 @@
-"""Where a license file may sit in a build, and how big it may be (ADR 0007 §1).
+"""Where a license file may sit in a build, and how big it may be.
 
 Files sit under a project directory, never at the build root, whose ``LICENSE`` and
 ``NOTICE`` are the engine's:
 
 - ``<project-id>/LICENSE`` and ``NOTICE``: the work's;
 - ``<project-id>/licenses/LICENSE.<component>`` / ``NOTICE.<component>``: one
-  third-party component the project's scenes contain, as mjswan writes them
-  (mjswan-cloud ADR 0017 §2.7);
+  third-party component the project's scenes contain, as mjswan writes them;
 - ``<project-id>/<scene-id>/LICENSE.<component>`` / ``NOTICE.<component>``: the same, as
   builds before it wrote them (a bare scene-level ``LICENSE`` is labelled with the scene
   id).

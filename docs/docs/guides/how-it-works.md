@@ -24,9 +24,7 @@ PyTorch tensors. In a browser there is no Python and no PyTorch.
 mjswan's answer is to **trace those functions to ONNX at build time** and run them with
 ONNX Runtime Web — the same runtime that already runs the policy network.
 
-!!! info "Design record"
-    The reasoning behind this, including the alternatives that were rejected, is
-    [ADR 0005](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0005-onnx-traced-terms-superseding-the-declarative-dsl.md){:target="_blank"}.
+!!! info "Why not a DSL"
     Earlier versions of mjswan interpreted a hand-written JSON DSL in TypeScript
     instead; that required a second implementation of every mjlab operation, kept
     numerically in lockstep by hand.
@@ -260,7 +258,7 @@ dist/
 ├── manifest.json                        # the one descriptor: format, version, projects → scenes → mdps / policies
 └── mjlab_tasks/                         # <project-id>
     ├── licenses/
-    │   └── LICENSE.unitree_g1           # the robot's license (ADR 0007), once a project
+    │   └── LICENSE.unitree_g1           # the robot's license, once a project
     └── mjlab_velocity_flat_unitree_g1/  # <scene-id>
         ├── scene.mjz                    # the MuJoCo model
         ├── mdp/mdp_0/                   # the run's MDP, traced once for all eleven checkpoints

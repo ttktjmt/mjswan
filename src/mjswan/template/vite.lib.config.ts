@@ -58,7 +58,7 @@ function upstreamWasmNames(): Map<string, string> {
 // Vite library mode force-inlines `new URL('x.wasm', import.meta.url)` as base64
 // `data:` URLs (ignoring assetsInlineLimit), bloating the bundle to ~70 MB. This
 // extracts each back to a co-located dist/ file resolved via `import.meta.url` so
-// it loads relative to the bundle. See mjswan-cloud ADR 0001.
+// it loads relative to the bundle, wherever mjswan Cloud's CDN serves it from.
 //
 // Each extracted file keeps its upstream name, so the SPA build's copy of the same bytes
 // lands on one path. ORT's is what src/core/onnx/ortEnv.ts points `wasmPaths` at, so its

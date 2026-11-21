@@ -1,4 +1,4 @@
-"""What must *not* be in a built bundle (ADR 0005 acceptance criteria 4 and 5).
+"""What must *not* be in a built bundle.
 
 Both hold by construction today, and construction is exactly what changes.
 
@@ -26,7 +26,7 @@ import pytest
 
 os.environ.setdefault("MUJOCO_GL", "disable")
 
-# Manager categories with no browser-side runtime (ADR 0003 §Coverage).
+# Manager categories with no browser-side runtime.
 FORBIDDEN_KEYS = (
     "reward",
     "rewards",

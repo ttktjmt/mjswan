@@ -63,7 +63,7 @@ for name, term in (adapt_actions(cfg.actions) or {}).items():
 PY
 ```
 
-A task's own action class, one mjswan has no class of its own for, is traced (ADR 0009): `adapt_actions` returns a `TracedActionCfg` for it, and the build traces its `process_actions` and `reset` against the trace env and checks both graphs against the term's own code. Its `apply_actions` runs natively in the browser. A class that inherits it from mjlab's position, relative, velocity or effort action needs nothing more; one that overrides it is refused until the port names what it does, reading the options off the task's cfg rather than restating them:
+A task's own action class, one mjswan has no class of its own for, is traced: `adapt_actions` returns a `TracedActionCfg` for it, and the build traces its `process_actions` and `reset` against the trace env and checks both graphs against the term's own code. Its `apply_actions` runs natively in the browser. A class that inherits it from mjlab's position, relative, velocity or effort action needs nothing more; one that overrides it is refused until the port names what it does, reading the options off the task's cfg rather than restating them:
 
 ```python
 mjswan.register_action(
@@ -249,7 +249,7 @@ A feature that makes the author restate what mjlab already declares is the wrong
 
 ### Where the change goes
 
-Find the neighbouring case in the mjswan tree first: each already carries a worked example of the thing being added. An action apply `ActionBinding` cannot name is the one exception to the no-TypeScript rule at the top of this file, because apply runs natively every physics substep (ADR 0009) and needs an engine-side branch in `applyAction.ts` as well as a binding field or cfg class; that prohibition covers per-port `ts_src`, not mjswan's own engine.
+Find the neighbouring case in the mjswan tree first: each already carries a worked example of the thing being added. An action apply `ActionBinding` cannot name is the one exception to the no-TypeScript rule at the top of this file, because apply runs natively every physics substep and needs an engine-side branch in `applyAction.ts` as well as a binding field or cfg class; that prohibition covers per-port `ts_src`, not mjswan's own engine.
 
 ### Change discipline
 

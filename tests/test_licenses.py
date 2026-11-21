@@ -1,4 +1,4 @@
-"""License files in the build (ADR 0007).
+"""License files in the build.
 
 L1 — the naming rule, identifier and tier table, detection beside a model on disk, the
 author API, and the files ``_save_web`` writes. No network; the Node build and the SPA

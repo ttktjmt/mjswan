@@ -1,5 +1,5 @@
 """Build-time tracing of mjlab MDP term bodies to ONNX graphs, plus a numeric parity
-harness validating the exported graphs against the live mjlab env (ADR 0005).
+harness validating the exported graphs against the live mjlab env.
 
 One pass records what a term reads (:mod:`.record`), a second replays those reads
 while torch traces the body (:mod:`.replay`); :mod:`.slot` names the reads and

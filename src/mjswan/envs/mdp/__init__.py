@@ -6,7 +6,7 @@ configs, same import pattern as mjlab::
 
     from mjswan.envs.mdp.actions import JointPositionActionCfg
 
-A task's own action class is traced instead (ADR 0009); ``mjswan.register_action`` names
+A task's own action class is traced instead; ``mjswan.register_action`` names
 what its ``apply_actions`` does when it overrides it.
 
 ``observations`` / ``terminations`` / ``events`` are different: mjswan reimplements

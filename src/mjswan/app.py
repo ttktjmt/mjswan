@@ -90,7 +90,7 @@ class MjswanApp:
         """The app for a built directory, or for a ``.swn`` document.
 
         A directory is already an app and is served where it sits. A document is only
-        the tree (ADR 0006 §8), so one is assembled: unpacked into a temporary directory
+        the tree, so one is assembled: unpacked into a temporary directory
         with the packaged engine laid over it, removed when the process exits. The engine
         is built first if no matching SPA is cached, exactly as a build would.
         """
@@ -112,7 +112,7 @@ class MjswanApp:
         if read_manifest(source).get("uses_custom_js") is True:
             raise DocumentError(
                 f"{source.name} was built with custom-TS MDP terms, whose runtime module "
-                "ships with the engine rather than in the document (ADR 0006 §8). Serve "
+                "ships with the engine rather than in the document. Serve "
                 "the built directory instead."
             )
 
@@ -134,7 +134,7 @@ class MjswanApp:
         return self._app_dir
 
     def save_document(self, path: str | Path | None = None) -> Path:
-        """Write the simulation as one ``.swn`` file and return its path (ADR 0006 §8).
+        """Write the simulation as one ``.swn`` file and return its path.
 
         The document is the build's data (``manifest.json`` and every project directory)
         packaged as a ZIP of the same tree, carrying no engine. ``path`` defaults to the

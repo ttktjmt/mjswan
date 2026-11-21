@@ -156,7 +156,7 @@ def _iter_event_terms(
 
 
 def _trace_action_terms(env: Any) -> tuple[list[TermReport], dict[str, list[str]]]:
-    """Trace each action term the build traces (ADR 0009), which checks both graphs
+    """Trace each action term the build traces, which checks both graphs
     against the term's own bodies. Returns the reports, and each term's state for the
     observations that read it."""
     reports: list[TermReport] = []

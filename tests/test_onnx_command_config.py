@@ -1,4 +1,4 @@
-"""OnnxCommand config serialization (ADR 0005 §3).
+"""OnnxCommand config serialization.
 
 Layer: L1 (pure Python — no mjlab/torch/onnxruntime; builds a CommandExport by
 hand). Verifies the config emitted from a traced command carries everything the

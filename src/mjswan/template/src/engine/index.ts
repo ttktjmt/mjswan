@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 
 // Expose this bundle's single three.js instance for author custom-MDP plugins
-// (ADR 0004 §10). Plugins are compiled to a *separate* ESM (plugins.js), so their
+//. Plugins are compiled to a *separate* ESM (plugins.js), so their
 // `import 'three'` is resolved — by the Builder's esbuild — to a shim that reads
 // this global. That keeps one three instance across the engine + plugin bundles,
 // so `instanceof THREE.Mesh` / shared scene objects / raycasting work. The engine

@@ -1,6 +1,6 @@
 """mjlab observation groups as mjswan's.
 
-mjlab's own term function is kept and traced at build time (ADR 0005); an author's
+mjlab's own term function is kept and traced at build time; an author's
 ``register_observation`` override replaces it by function or term name.
 """
 
@@ -182,7 +182,7 @@ _TRAINING_ONLY_OBS_GROUPS = frozenset({"critic"})
 
 #: The slot a single observation group lands under: the runtime's default ``in_keys``,
 #: which is mjlab's name for the actor's group, so the common case needs no key
-#: (ADR 0006 §5). The TypeScript copy is pinned to this one by ``default_slots.json``.
+#:. The TypeScript copy is pinned to this one by ``default_slots.json``.
 DEFAULT_OBS_GROUP_KEY = DEFAULT_IN_KEYS[0]
 
 #: mjlab's name for the exported policy's network, a key of ``rl_cfg.obs_groups``. Same

@@ -1,4 +1,4 @@
-"""Command-term parity: traced graph vs the live mjlab term (ADR 0005 §3).
+"""Command-term parity: traced graph vs the live mjlab term.
 
 Layer: L3 (needs the ``examples`` extras and a warp CPU-kernel compile, so
 ``slow``/``mjlab``).

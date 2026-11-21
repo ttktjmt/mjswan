@@ -145,7 +145,7 @@ class ViewerConfig:
                 )
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to the manifest's ``camera`` entry (snake_case, ADR 0006)."""
+        """Serialize to the manifest's ``camera`` entry (snake_case)."""
         d: dict[str, Any] = {
             "lookat": list(self.lookat),
             "distance": self.distance,

@@ -1,5 +1,5 @@
 /**
- * Input-slot naming contract (ADR 0005).
+ * Input-slot naming contract.
  *
  * The build decides each slot's graph input name and ships it in the slot's own
  * `input` field (`mjswan.compile.tracer.slot_to_json`), so the runtime never has

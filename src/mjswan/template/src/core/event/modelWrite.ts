@@ -35,7 +35,7 @@ export function isModelWriteTarget(t: WriteTarget | ModelWriteTarget): t is Mode
  * The compiled field values, snapshotted on first touch, so a second `add`/`scale` event
  * on one axis offsets the compiled value rather than the first event's output.
  *
- * One per model, not per pass (ADR 0006 §9): an MDP switch re-runs `mode="startup"`
+ * One per model, not per pass: an MDP switch re-runs `mode="startup"`
  * randomization, which must start from the compiled values rather than from what the
  * previous MDP left behind, so `restore()` puts every touched field back first.
  */
