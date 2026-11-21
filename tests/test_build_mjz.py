@@ -2,8 +2,10 @@
 
 Layer breakdown:
   L1 (pure Python, no MuJoCo): TestStripLeadingDotdot, TestMakeZipSafePath,
-                                TestRewriteXmlPaths, TestBufferTextureToPng
-  L2 (synthetic MuJoCo spec):  TestToZipDeflated, TestCollectSpecAssets
+                                TestRewriteXmlPaths, TestDefaultsUnreadable,
+                                TestBufferTextureToPng
+  L2 (synthetic MuJoCo spec):  TestToZipDeflated, TestAttachedModels,
+                                TestDefaultClasses, TestCollectSpecAssets
 """
 
 from __future__ import annotations
@@ -14,11 +16,13 @@ import zipfile
 from pathlib import Path
 
 import mujoco
+import numpy as np
 import pytest
 
 from mjswan.build.mjz import (
     _absolute_entry_names,
     _buffer_texture_to_png,
+    _defaults_unreadable,
     _make_zip_safe_path,
     _rewrite_xml_paths,
     _strip_leading_dotdot,
@@ -193,43 +197,48 @@ class TestRewriteXmlPaths:
         result = _rewrite_xml_paths(xml, mesh_dir="../", texture_dir="")
         assert ET.fromstring(result).find(".//mesh").get("file") is None
 
-    def test_classless_nested_default_removed(self):
+    def test_recovered_entry_replaces_the_path(self):
         xml = (
-            "<mujoco><default>"
-            "<default/>"
-            '<default class="robot"><geom density="100"/></default>'
-            "</default></mujoco>"
+            '<mujoco><compiler meshdir="meshes"/><asset>'
+            '<mesh name="a" file="bone.stl"/><mesh name="b" file="bone.stl"/>'
+            "</asset></mujoco>"
         )
-        result = _rewrite_xml_paths(xml, mesh_dir="", texture_dir="")
-        outer = ET.fromstring(result).find("default")
-        for child in outer:
-            if child.tag == "default":
-                assert child.get("class"), "Classless nested <default> must be removed"
+        result = _rewrite_xml_paths(
+            xml,
+            mesh_dir="meshes",
+            texture_dir="",
+            recovered={(1, "file"): "bone_0.stl"},
+        )
+        files = [m.get("file") for m in ET.fromstring(result).iter("mesh")]
+        assert files == ["meshes/bone.stl", "bone_0.stl"]
 
-    def test_root_default_without_class_preserved(self):
-        xml = (
-            "<mujoco><default>"
-            '<default class="robot"><geom density="100"/></default>'
-            "</default></mujoco>"
-        )
+    def test_defaults_are_left_as_written(self):
+        xml = '<mujoco><default><default class="robot"/><default/></default></mujoco>'
         result = _rewrite_xml_paths(xml, mesh_dir="", texture_dir="")
-        assert ET.fromstring(result).find("default") is not None
+        nested = ET.fromstring(result).find("default").findall("default")
+        assert [d.get("class") for d in nested] == ["robot", None]
 
-    def test_repeated_default_class_merged(self):
+
+class TestDefaultsUnreadable:
+    def test_named_classes_read_back(self):
         xml = (
             "<mujoco><default>"
-            '<default class="robot">'
-            '<default class="robot"><geom density="100"/></default>'
-            "</default>"
+            '<default class="arm"><default class="hand"/></default>'
             "</default></mujoco>"
         )
-        result = _rewrite_xml_paths(xml, mesh_dir="", texture_dir="")
-        outer = ET.fromstring(result).find("default")
-        robot = next(c for c in outer if c.tag == "default")
-        assert robot.get("class") == "robot"
-        for child in robot:
-            if child.tag == "default":
-                assert child.get("class") != "robot", "Duplicate class must be merged"
+        assert not _defaults_unreadable(ET.fromstring(xml))
+
+    def test_a_nested_class_without_a_name_does_not(self):
+        xml = "<mujoco><default><default/></default></mujoco>"
+        assert _defaults_unreadable(ET.fromstring(xml))
+
+    def test_a_class_named_twice_does_not(self):
+        xml = (
+            "<mujoco><default>"
+            '<default class="arm"/><default class="body"><default class="arm"/></default>'
+            "</default></mujoco>"
+        )
+        assert _defaults_unreadable(ET.fromstring(xml))
 
 
 # ===========================================================================
@@ -368,6 +377,8 @@ class TestToZipDeflated:
             textures = []
             hfields = []
             skins = []
+            bodies = []
+            frames = []
             assets = {"clavicle.stl": b"mesh-bytes"}
 
             def __init__(self):
@@ -390,6 +401,215 @@ class TestToZipDeflated:
             xml = zf.read("fake.xml").decode()
             mesh = ET.fromstring(xml).find(".//mesh")
             assert mesh.get("file") == "myo_sim/meshes/clavicle.stl"
+
+
+# ===========================================================================
+# L2: to_zip_deflated on attached models (synthetic MjSpec, files on disk)
+# ===========================================================================
+TETRA = "v 0 0 0\nv {s} 0 0\nv 0 {s} 0\nv 0 0 {s}\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n"
+
+
+def _arm_on_disk(folder: Path, size: float) -> mujoco.MjSpec:
+    """A model in its own folder whose mesh is found through a relative meshdir."""
+    (folder / "meshes").mkdir(parents=True)
+    (folder / "meshes" / "bone.obj").write_text(TETRA.format(s=size))
+    (folder / "arm.xml").write_text(
+        '<mujoco><compiler meshdir="meshes"/>'
+        '<asset><mesh name="bone" file="bone.obj"/></asset>'
+        '<worldbody><body name="upper"><geom type="mesh" mesh="bone"/></body></worldbody>'
+        "</mujoco>"
+    )
+    return mujoco.MjSpec.from_file(str(folder / "arm.xml"))
+
+
+def _round_trip(spec: mujoco.MjSpec) -> mujoco.MjModel:
+    buf = io.BytesIO()
+    to_zip_deflated(spec, buf)
+    buf.seek(0)
+    return mujoco.MjSpec.from_zip(buf).compile()
+
+
+def _mesh_extent(model: mujoco.MjModel, name: str) -> float:
+    i = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_MESH, name)
+    start = model.mesh_vertadr[i]
+    return float(model.mesh_vert[start : start + model.mesh_vertnum[i]].max())
+
+
+class TestAttachedModels:
+    def test_meshes_of_a_model_attached_from_another_folder_are_packed(
+        self, tmp_path: Path
+    ):
+        scene = mujoco.MjSpec()
+        arm = _arm_on_disk(tmp_path / "arm", 0.2)
+        scene.attach(arm, prefix="a/", frame=scene.worldbody.add_frame())
+        reference = scene.compile()
+
+        model = _round_trip(scene)
+
+        assert _mesh_extent(model, "a/bone") == pytest.approx(
+            _mesh_extent(reference, "a/bone")
+        )
+
+    def test_meshes_with_the_same_relative_path_keep_their_own_files(
+        self, tmp_path: Path
+    ):
+        scene = mujoco.MjSpec()
+        for name, size in (("left", 0.1), ("right", 0.3)):
+            arm = _arm_on_disk(tmp_path / name, size)
+            scene.attach(arm, prefix=f"{name}/", frame=scene.worldbody.add_frame())
+        reference = scene.compile()
+
+        model = _round_trip(scene)
+
+        for name in ("left/bone", "right/bone"):
+            assert _mesh_extent(model, name) == pytest.approx(
+                _mesh_extent(reference, name)
+            )
+        assert _mesh_extent(model, "right/bone") > 2 * _mesh_extent(model, "left/bone")
+
+    def test_a_buffer_texture_and_an_attached_mesh_are_both_packed(
+        self, tmp_path: Path
+    ):
+        scene = mujoco.MjSpec()
+        texture = scene.add_texture(
+            name="checker", type=mujoco.mjtTexture.mjTEXTURE_2D, width=2, height=2
+        )
+        texture.nchannel = 3
+        texture.data = bytes(range(12))
+        scene.add_material(name="paint", textures=["", "checker"])
+        scene.worldbody.add_geom(size=[0.1, 0, 0], material="paint")
+        arm = _arm_on_disk(tmp_path / "arm", 0.2)
+        scene.attach(arm, prefix="a/", frame=scene.worldbody.add_frame())
+        reference = scene.compile()
+        assets = dict(scene.assets)
+
+        model = _round_trip(scene)
+
+        np.testing.assert_array_equal(model.tex_data, reference.tex_data)
+        assert _mesh_extent(model, "a/bone") == pytest.approx(
+            _mesh_extent(reference, "a/bone")
+        )
+        assert dict(scene.assets) == assets
+
+    def test_a_file_nothing_can_find_raises(self, monkeypatch: pytest.MonkeyPatch):
+        class FakeMesh:
+            file = "gone.stl"
+
+        class FakeSpec:
+            modelname = "fake"
+            modelfiledir = meshdir = texturedir = ""
+            meshes = [FakeMesh()]
+            textures = hfields = skins = bodies = frames = []
+            assets: dict[str, bytes] = {}
+
+            def to_xml(self) -> str:
+                return (
+                    '<mujoco><asset><mesh name="m" file="gone.stl"/></asset></mujoco>'
+                )
+
+        empty = (ET.fromstring("<mujoco/>"), {})
+        monkeypatch.setattr("mjswan.build.mjz._encode", lambda spec, extra: empty)
+
+        with pytest.raises(FileNotFoundError, match="gone.stl"):
+            to_zip_deflated(FakeSpec(), io.BytesIO())
+
+
+ARM_WITH_CLASS = """
+<mujoco>
+  <default><default class="arm"><geom group="{group}" rgba="{rgba}"/>
+    <tendon stiffness="{stiffness}"/></default></default>
+  <worldbody><body name="upper_{side}" childclass="arm"><joint name="j_{side}"/>
+    <geom name="g_{side}" size="0.1"/></body></worldbody>
+  <tendon><fixed name="t_{side}" class="arm"><joint joint="j_{side}" coef="1"/></fixed></tendon>
+</mujoco>
+"""
+
+
+class TestDefaultClasses:
+    def _two_arms_without_a_prefix(self) -> mujoco.MjSpec:
+        """MyoSuite's composition: two arms whose classes share names but not values."""
+        scene = mujoco.MjSpec()
+        for side, group, rgba, stiffness in (
+            ("r", 1, "1 0 0 1", 5),
+            ("l", 2, "0 0 1 1", 7),
+        ):
+            arm = mujoco.MjSpec.from_string(
+                ARM_WITH_CLASS.format(
+                    side=side, group=group, rgba=rgba, stiffness=stiffness
+                )
+            )
+            scene.attach(arm, prefix="", suffix="", frame=scene.worldbody.add_frame())
+        return scene
+
+    def test_classes_named_twice_load_back_with_their_values(self):
+        scene = self._two_arms_without_a_prefix()
+        reference = scene.compile()
+
+        model = _round_trip(scene)
+
+        for side in ("r", "l"):
+            ref, got = reference.geom(f"g_{side}"), model.geom(f"g_{side}")
+            assert got.group == ref.group
+            np.testing.assert_allclose(got.rgba, ref.rgba)
+            np.testing.assert_allclose(
+                model.tendon_stiffness[model.tendon(f"t_{side}").id],
+                reference.tendon_stiffness[reference.tendon(f"t_{side}").id],
+            )
+        assert reference.geom("g_r").group != reference.geom("g_l").group
+
+    def test_writing_them_out_leaves_the_spec_as_it_was(self):
+        scene = self._two_arms_without_a_prefix()
+
+        to_zip_deflated(scene, io.BytesIO())
+
+        assert scene.to_xml() == self._two_arms_without_a_prefix().to_xml()
+
+    def test_a_root_class_inside_another_childclass_keeps_its_values(self):
+        scene = mujoco.MjSpec.from_string(
+            '<mujoco><default><default class="torso"><site group="3"/></default></default>'
+            '<worldbody><body name="pelvis" childclass="torso">'
+            '<body name="arm" childclass="main"><site name="shoulder"/></body>'
+            "</body></worldbody></mujoco>"
+        )
+
+        model = _round_trip(scene)
+
+        assert model.site("shoulder").group == 0
+
+    def test_classes_that_load_back_are_kept(self, tmp_path: Path):
+        scene = mujoco.MjSpec.from_string(
+            ARM_WITH_CLASS.format(side="r", group=1, rgba="1 0 0 1", stiffness=5)
+        )
+        out = tmp_path / "arm.mjz"
+
+        to_zip_deflated(scene, str(out))
+
+        with zipfile.ZipFile(out) as zf:
+            root = ET.fromstring(zf.read(f"{scene.modelname}.xml"))
+        assert [d.get("class") for d in root.iter("default")] == [None, "arm"]
+
+    def test_an_empty_class_left_by_an_unprefixed_attach_is_dropped(
+        self, tmp_path: Path
+    ):
+        """mjlab attaches its terrain so; the classes that do load back stay."""
+        scene = mujoco.MjSpec.from_string(
+            ARM_WITH_CLASS.format(side="r", group=1, rgba="1 0 0 1", stiffness=5)
+        )
+        floor = mujoco.MjSpec.from_string(
+            '<mujoco><worldbody><geom name="floor" type="plane" size="1 1 0.1"/>'
+            "</worldbody></mujoco>"
+        )
+        scene.attach(floor, prefix="", suffix="", frame=scene.worldbody.add_frame())
+        reference = scene.compile()
+        out = tmp_path / "scene.mjz"
+
+        to_zip_deflated(scene, str(out))
+
+        with zipfile.ZipFile(out) as zf:
+            root = ET.fromstring(zf.read(f"{scene.modelname}.xml"))
+        assert [d.get("class") for d in root.iter("default")] == [None, "arm"]
+        model = mujoco.MjSpec.from_zip(str(out)).compile()
+        assert model.geom("g_r").group == reference.geom("g_r").group
 
 
 # ===========================================================================

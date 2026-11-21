@@ -1062,6 +1062,20 @@ shortcuts.
 
 ### Fixed
 
+- **A scene of attached models packs as a `.mjz` that loads, MyoSuite's included.**
+  Models attached with an empty prefix, as MyoSuite attaches its two arms, bring default
+  classes of the same name, which MuJoCo writes but cannot read back; mjswan's repair
+  merged them or dropped a nameless one with the classes inside it, so a MyoSuite full
+  body did not load. Under MuJoCo 3.11 an element on the `main` class inside
+  another `childclass` also took that class when loaded back, without an error. When the
+  written defaults would not come back as they were, every element is now written on
+  the root class with its values spelled out. The empty, nameless class such an attach
+  also leaves (mjlab's terrain) is dropped as before, so mjlab's G1 and Go1 scenes pack
+  as they did, classes and all. And a
+  mesh or texture of a model attached from another directory was left out of the archive
+  without a word: it is now found with MuJoCo's own encoder (`MjSpec.encode`), and a
+  file nothing can find stops the build with `FileNotFoundError`.
+
 - **A scene without a policy holds its keyframe's controls.** The engine zeroed `ctrl`
   before every physics step even with no action term, so position actuators drove every
   joint toward 0 (MuJoCo Menagerie's Unitree Go1 flipped onto its back within a second).
