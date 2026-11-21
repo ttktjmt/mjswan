@@ -284,6 +284,58 @@ class TestProjectHandle:
             "prop.bin": b"prop",
         }
 
+    def test_collect_mjlab_scene_assets_leaves_out_a_path_entities_disagree_on(
+        self, tmp_path: Path
+    ):
+        tetra = "v 0 0 0\nv {s} 0 0\nv 0 {s} 0\nv 0 0 {s}\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n"
+
+        def entity(name: str, size: float) -> Path:
+            (tmp_path / name / "meshes").mkdir(parents=True)
+            (tmp_path / name / "meshes" / "bone.obj").write_text(tetra.format(s=size))
+            (tmp_path / name / "meshes" / "shared.obj").write_text(tetra.format(s=1))
+            xml = tmp_path / name / f"{name}.xml"
+            xml.write_text(
+                '<mujoco><compiler meshdir="meshes"/><asset>'
+                '<mesh name="bone" file="bone.obj"/><mesh name="shared" file="shared.obj"/>'
+                '</asset><worldbody><body name="b"><geom type="mesh" mesh="bone"/>'
+                '<geom type="mesh" mesh="shared"/></body></worldbody></mujoco>'
+            )
+            return xml
+
+        class FakeCfg:
+            def __init__(self, xml: Path):
+                self._xml = xml
+
+            def spec_fn(self):
+                return mujoco.MjSpec.from_file(str(self._xml))
+
+        class FakeSceneCfg:
+            entities = {
+                "left": FakeCfg(entity("left", 0.1)),
+                "right": FakeCfg(entity("right", 0.3)),
+            }
+
+        scene = mujoco.MjSpec()
+        for name, cfg in FakeSceneCfg.entities.items():
+            scene.attach(
+                cfg.spec_fn(), prefix=f"{name}/", frame=scene.worldbody.add_frame()
+            )
+        reference = scene.compile()
+
+        assets = _collect_mjlab_scene_assets(FakeSceneCfg())
+        scene.assets.update(assets)
+        model = scene.compile()
+
+        def extent(m: mujoco.MjModel, name: str) -> float:
+            i = m.mesh(name).id
+            start = m.mesh_vertadr[i]
+            return float(m.mesh_vert[start : start + m.mesh_vertnum[i]].max())
+
+        assert set(assets) == {"meshes/shared.obj"}
+        for name in ("left/bone", "right/bone"):
+            assert extent(model, name) == pytest.approx(extent(reference, name))
+        assert extent(model, "right/bone") > 2 * extent(model, "left/bone")
+
     def test_add_scene_mjlab_passes_play_flag_to_load_env_cfg(
         self, monkeypatch, minimal_spec
     ):

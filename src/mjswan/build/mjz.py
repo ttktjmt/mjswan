@@ -115,8 +115,7 @@ def _iter_asset_lookup_candidates(path: str) -> list[str]:
     - a normalized ZIP-safe path (leading ``..`` stripped), or
     - only the basename when the source spec used an absolute meshdir/texturedir.
 
-    A child spec mjlab attaches into a scene can hit the third case, so the matches
-    loosen in that order.
+    A child spec mjlab attaches into a scene can hit the third case.
     """
     posix_path = path.replace("\\", "/")
     candidates: list[str] = []
@@ -293,10 +292,8 @@ _TENDON_PATH_ATTRS = ("width", "rgba", "material")  # a fixed tendon draws no pa
 
 
 def _drop_empty_nameless_defaults(parent: ET.Element) -> None:
-    """Remove nested classes with neither a name nor contents. The writer leaves one for
-    each model attached with an empty prefix (mjlab's terrain), and it sets nothing.
-
-    Children go first, so a class left empty by removing its own goes too."""
+    """Remove nested classes with neither a name nor contents, children first. The writer
+    leaves one for each model attached with an empty prefix (mjlab's terrain)."""
     for child in parent.findall("default"):
         _drop_empty_nameless_defaults(child)
         if parent.tag == "default" and not child.get("class") and len(child) == 0:
@@ -358,8 +355,7 @@ def _numbers(value: Any) -> str:
 
 
 def _spell_out_tendons(root: ET.Element, tendons: list[Any]) -> None:
-    """Write what a class could set on each tendon on the tendon itself: Python cannot
-    move a tendon to another class."""
+    """Write each tendon's fields on the tendon: Python cannot move it to another class."""
     elems = [
         e for s in root.findall("tendon") for e in s if e.tag in ("spatial", "fixed")
     ]
@@ -390,9 +386,8 @@ def _spell_out_tendons(root: ET.Element, tendons: list[Any]) -> None:
 def _flat_xml(spec: mujoco.MjSpec) -> str:
     """The spec's XML with every element on the root class and its values written out.
 
-    For defaults the writer cannot write back. Each element keeps the values it took from
-    its class, so moving it to the root class makes the writer spell them out; the spec
-    is restored afterwards.
+    Each element keeps the values it took from its class, so moving it to the root class
+    makes the writer spell them out. The spec is restored afterwards.
     """
     root_default = spec.default
     undo: list[tuple[Any, str, Any]] = []
@@ -435,9 +430,7 @@ def _encode(
 ) -> tuple[ET.Element, dict[str, bytes]]:
     """The model XML and the files MuJoCo's own ``.mjz`` encoder packs for the spec.
 
-    The encoder resolves each element's file against the spec it was attached from,
-    which ``spec.modelfiledir`` cannot. ``extra_assets`` are lent to it for files only
-    this module has, the PNGs of buffer textures.
+    ``extra_assets`` (the buffer textures' PNGs) are lent to ``spec.assets`` for the call.
     """
     lent = [name for name in extra_assets if name not in spec.assets]
     for name in lent:
@@ -478,12 +471,11 @@ def _check_with_encoder(
     files_to_zip: dict[str, bytes | str],
     extra_assets: dict[str, bytes],
 ) -> dict[tuple[int, str], str]:
-    """Hold every file this module packed to the one MuJoCo's encoder packs.
+    """Pack the encoder's file wherever this module's differs or is missing.
 
-    A file of a spec attached from another directory is either missing here or, worse,
-    found under the same relative path in the scene's own directory. Where the encoder's
-    bytes differ, or this module found none, the encoder's are packed instead. Both XMLs
-    come from the same writer, so their file elements pair up in order. Returns the
+    Only the encoder resolves a file of a spec attached from another directory: here it
+    is missing, or found under the same relative path in the scene's own directory. Both
+    XMLs come from the same writer, so their file elements pair up in order. Returns the
     entries by element index and attribute, for :func:`_rewrite_xml_paths`.
     """
     try:
@@ -511,8 +503,7 @@ def _check_with_encoder(
     )
 
     def packed_entry(elem: ET.Element, attr: str) -> str:
-        # Under the encoder's meshdir / texturedir, except a file it renamed, whose
-        # attribute already names the entry.
+        # Under the encoder's meshdir, except a renamed file, whose attribute is the entry.
         file = elem.get(attr)
         if not file:
             return ""
@@ -604,17 +595,10 @@ def _buffer_texture_to_png(data: bytes | bytearray, width: int, height: int) -> 
 
 
 def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
-    """Save an MjSpec as a ZIP file with DEFLATE compression.
+    """Save ``spec`` as a self-contained, DEFLATE-compressed ``.mjz``.
 
-    This is a compressed alternative to ``mujoco.to_zip`` which stores
-    entries uncompressed.  The output is a standard ZIP that JSZip (and
-    other readers) can decompress transparently.
-
-    The function collects asset files from disk, normalises all relative
-    paths (stripping leading ``..`` components) so that the resulting ZIP
-    is self-contained. Every file is checked against MuJoCo's own encoder,
-    which resolves a file of a spec attached from another directory where
-    ``spec.modelfiledir`` cannot; a file neither finds raises
+    Asset paths lose their leading ``..``, and every file is checked against MuJoCo's own
+    encoder. A file neither this module nor the encoder finds raises
     ``FileNotFoundError``.
     """
     base_dir = spec.modelfiledir or ""
@@ -678,8 +662,8 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
         if skin.file:
             _add_asset(skin.file)
 
-    # Buffer textures have no backing file and cause spec.to_xml() to raise FatalError.
-    # Temporarily assign each one a filename and restore after to_xml().
+    # A buffer texture has no file, and spec.to_xml() raises FatalError on it: each gets a
+    # filename until the archive's contents are settled.
     _buffer_tex_restore: list[tuple[mujoco.MjsTexture, str]] = []
     buffer_pngs: dict[str, bytes] = {}
     for i, texture in enumerate(spec.textures):
