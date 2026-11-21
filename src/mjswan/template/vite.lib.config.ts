@@ -11,7 +11,7 @@ import { ORT_WASM_FILE, ORT_WASM_TOKEN, UPSTREAM_WASM } from './vite.wasm';
 // `createEngine(element, options?)` (the headless engine; no React/Mantine),
 // with every dependency bundled and the MuJoCo / ONNX WASM in `dist/assets/`
 // beside the SPA build's, resolved relative to the bundle wherever it is served
-// from. See src/engine/ and docs/adr/0004-headless-engine-core.md.
+// from. See src/engine/.
 
 function getVersionFromPython(): string {
   const initPath = path.resolve(__dirname, '../__init__.py');

@@ -41,7 +41,7 @@ pytestmark = [pytest.mark.slow, pytest.mark.mjlab]
 # RSI jitter traced, as a reset graph (see `test_onnx_command_config.py`), and its clip is
 # a W&B artifact the env cannot be built offline without.
 COMMAND_TASKS = [
-    # Stateful, with an `entity_write` side effect on the cube (§3b).
+    # Stateful, with an `entity_write` side effect on the cube.
     pytest.param("Mjlab-Lift-Cube-Yam", "lift_height", id="lift-cube-yam"),
     # mjlab's own body: heading tracking as a dynamic slot, draw-selected envs gated.
     pytest.param("Mjlab-Velocity-Flat-Unitree-G1", "twist", id="velocity-flat-g1"),
@@ -165,7 +165,7 @@ def test_every_draw_was_actually_replayed(command_report):
 
 @pytest.mark.parametrize("command_report", _PARAMS, indirect=True)
 def test_the_command_actually_draws_randomness(command_report):
-    """§2b is about terms *with* randomness; a `rand_dim` of 0 would be vacuous.
+    """Replaying draws checks terms *with* randomness; a `rand_dim` of 0 would be vacuous.
 
     Both of these resample from a range, so a zero here means the tracer stopped
     seeing the draws — which would make the replay above compare nothing.

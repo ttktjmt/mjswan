@@ -1,5 +1,5 @@
 /**
- * Public entry for the headless mjswan engine. See docs/adr/0004-headless-engine-core.md.
+ * Public entry for the headless mjswan engine. See context/frontend.md.
  *
  * `createEngine(element, options?)` prepares a pure-TS, instance-scoped engine
  * (MuJoCo WASM + WebGL, no React) and exposes bytes-in / snapshot-out verbs.

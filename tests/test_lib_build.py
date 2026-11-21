@@ -12,7 +12,7 @@ load-bearing invariants:
     data URLs) and referenced relative to the bundle,
   - ONNX Runtime Web is pointed at the co-located copy, so a host serving `dist/`
     from its own origin fetches nothing third-party (issue #123).
-See vite.lib.config.ts and docs/adr/0004-headless-engine-core.md.
+See vite.lib.config.ts.
 """
 
 from __future__ import annotations

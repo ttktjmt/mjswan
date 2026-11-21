@@ -347,7 +347,7 @@ describe('OnnxCommand: seeded rand', () => {
   });
 });
 
-describe('OnnxCommand: UI override (mjlab play parity, §3a)', () => {
+describe('OnnxCommand: UI override (mjlab play parity)', () => {
   const UI_CFG: OnnxCommandConfig = {
     ...VELOCITY_CFG,
     ui: {
@@ -423,7 +423,7 @@ describe('OnnxCommand: UI override (mjlab play parity, §3a)', () => {
   });
 });
 
-describe('OnnxCommand: entity_write hand-off (§3b)', () => {
+describe('OnnxCommand: entity_write hand-off', () => {
   function fakeModelData(): { mjModel: MjModel; mjData: MjData } {
     const mjModel = {
       njnt: 1,

@@ -907,8 +907,8 @@ shortcuts.
   `mjswan.publish` / `auth` → `mjswan.cloud.publish` / `auth`; `mjswan.licenses` →
   `mjswan.license`; `mjswan.document` is a package; `mjswan._cli` → `mjswan.cli`;
   `ActionTermCfg` is defined in `mjswan.managers.action_manager`, as mjlab's is. The
-  ADR carries the full old → new table. No compatibility shims: old module paths do not
-  import.
+  full old → new table is in [context/package-layout.md](context/package-layout.md). No
+  compatibility shims: old module paths do not import.
 
 - **The engine bundle fetches ONNX Runtime Web's wasm from within its own `dist/`**
   ([#123](https://github.com/ttktjmt/mjswan/issues/123)): `dist/mjswan.js` pointed

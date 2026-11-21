@@ -1308,8 +1308,9 @@ The two renamed modules' old paths are gone with them: `mjswan.viewer_config` is
 `mjswan.viewer`, and `mjswan.wandb_utils` (0.8's `mjswan.wandb_io`) is split into
 `mjswan.source.wandb`, which downloads, and `mjswan.mjlab.runner`, which exports a `.pt`
 to ONNX. Every other module moved when the package was laid out by layer, with no alias
-left behind; [ADR 0008](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0008-package-layout.md)
-maps each old path to its new one.
+left behind; the
+[package layout notes](https://github.com/ttktjmt/mjswan/blob/main/context/package-layout.md#old--new)
+map each old path to its new one.
 
 ---
 
