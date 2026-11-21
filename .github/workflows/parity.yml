@@ -1,9 +1,9 @@
 name: onnx parity
 
 # The numeric-parity check is mandatory: every traced term must reproduce its live
-# mjlab output, every step. The default `test` job cannot carry it: it installs only
-# the `dev` extra and runs `-m "not slow"`, so every parity test is skipped there. This job installs the `examples` extras
-# (mjlab / torch / onnxruntime) and compiles warp's CPU kernels once.
+# mjlab output, every step. The default `test` job installs only the `dev` extra and
+# runs `-m "not slow"`, so every parity test is skipped there. This job installs the
+# `examples` extras (mjlab / torch / onnxruntime) and compiles warp's CPU kernels once.
 #
 # On a PR that touches the tracer, the serializers or the resolved dependencies,
 # since those are what can silently change a traced term's numbers. Weekly on top

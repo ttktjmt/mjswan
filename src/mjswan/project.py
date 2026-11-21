@@ -47,8 +47,8 @@ class ProjectConfig:
 
     id: str = ""
     """Sanitized name, unique within the document: the project's directory in the build
-    and its ``?project=`` value. Assigned by :meth:`Builder.add_project`;
-    defaults to ``name2id(name)``."""
+    and its ``?project=`` value. Assigned by :meth:`Builder.add_project`; defaults to
+    ``name2id(name)``."""
 
     scenes: list[SceneConfig] = field(default_factory=list)
     """List of scenes in the project."""
@@ -141,12 +141,11 @@ class ProjectHandle:
             model: MuJoCo model for the scene (saved as .mjb).
             spec: MuJoCo spec for the scene (saved as .mjz).
             metadata: Optional metadata dictionary for the scene.
-            control_dt: Seconds per control step — the rate the policy acts at,
-                mjlab's ``timestep * decimation``. Required once the scene carries a
-                policy: the model supplies only the physics ``timestep``, so nothing
-                else can supply this, and a wrong control rate produces no error at
-                playback — only a policy running at a speed it was not trained for.
-                :meth:`add_scene_mjlab` fills it in from the task.
+            control_dt: Seconds per control step, the rate the policy acts at (mjlab's
+                ``timestep * decimation``). Required once the scene carries a policy:
+                the model supplies only the physics ``timestep``, and a wrong control
+                rate raises no error at playback, it only runs the policy at a speed it
+                was not trained for. :meth:`add_scene_mjlab` fills it in from the task.
             events: Optional dict of ``EventTermCfg`` instances (mjswan or mjlab).
                 Equivalent to calling :meth:`~mjswan.scene.SceneHandle.set_events`
                 afterwards: the default every policy's MDP on this scene takes for its
@@ -157,8 +156,8 @@ class ProjectHandle:
 
         For a ``spec`` loaded from disk, ``LICENSE*`` / ``NOTICE*`` files beside the
         model or its meshes and textures are copied verbatim into the project's
-        ``licenses/`` as ``LICENSE.<component>``; a model in the known-assets table gets a
-        generated file when none is found. Adjust with
+        ``licenses/`` as ``LICENSE.<component>``; a model in the known-assets table gets
+        a generated file when none is found. Adjust with
         :meth:`~mjswan.scene.SceneHandle.add_attribution` and
         :meth:`~mjswan.scene.SceneHandle.clear_attributions`.
 

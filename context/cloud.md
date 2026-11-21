@@ -6,13 +6,13 @@
 
 `publish.py`'s `publish_dist()` takes a built directory or a `.swn` (unpacked locally through `document.as_directory`, so both upload the same file set) and publishes only *data* files: `.json`, `.mjz`, `.onnx`, `.npz`, `.ply`, `.spz`, the skins' `.vrm` / `.glb`, and license files admitted by name. Never the compiled JS, CSS, WASM or `index.html`: Cloud loads a pinned engine from its own CDN, picked by the document's `version` ([document.md](document.md)). The SPA's own `assets/` directory is skipped, and a symlink is refused.
 
-Cloud receives individual files, not a `.swn`. One archive would need a server-side unpack, lose each file's content type, put every document under one file's size limit, and forfeit sending only what changed.
+Cloud receives individual files, not a `.swn`: one archive would need a server-side unpack, lose each file's content type, put every document under one file's size limit, and forfeit sending only what changed.
 
 Limits, mirroring the server's so a publish fails fast and locally: 50 MB a file or `.mjz` entry, 128 MB total with scenes unpacked and a piece two files share counted once, 200 files, 1,000 pieces.
 
 ## How it is sent: content-addressed pieces
 
-Cloud keeps each file once, by its SHA-256. `publish` sends a file map (each `.mjz` as its entries, each file as the pieces `blob.py` cuts it into, each license file as the hash of its text), `PUT`s only the pieces Cloud asks for, calls `verify` until Cloud has checked every piece's SHA-256, then commits, sending again once a piece a takedown released meanwhile.
+Cloud keeps each file once, by its SHA-256. `publish` sends a file map (each `.mjz` as its entries, each file as the pieces `blob.py` cuts it into, each license file as the hash of its text), `PUT`s only the pieces Cloud asks for, calls `verify` until Cloud has checked every piece's SHA-256, then commits, re-sending once any piece a takedown released meanwhile.
 
 `blob.py` is the cutter: an `.onnx` is cut before every tensor of 32 KiB or more and before its metadata, and any piece over 16 MiB again by content-defined chunking. The rules are the platform's, held to its own test files (`tests/blob_vectors`), so a build is cut the same wherever it is published from.
 

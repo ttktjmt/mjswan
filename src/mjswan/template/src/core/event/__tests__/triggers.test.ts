@@ -1,10 +1,6 @@
 /**
- * Native Event-mode dispatch.
- *
- * `EventManager` previously only had `onReset()`; interval/startup dispatch is
- * genuinely new functionality (Velocity uses `mode="interval"` for `push_robot`
- * and `mode="startup"` for domain randomization). These tests pin the trigger
- * *semantics* ported from mjlab, expressed as scalars, not tensors.
+ * Native Event-mode dispatch: the interval, reset and startup trigger *semantics* ported
+ * from mjlab, expressed as scalars, not tensors.
  */
 import { describe, expect, it } from 'vitest';
 

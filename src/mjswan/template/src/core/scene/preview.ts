@@ -1,8 +1,8 @@
 /**
  * A geom drawn over the scene and never simulated: what a host shows where a geom would
- * go before it adds one, and how it edits one. Parented to the
- * three.js scene, as the mode gizmos are, so a scene load keeps it, `frameCamera` never
- * frames it, and the pointer's raycast skips it.
+ * go before it adds one, and how it edits one. Parented to the three.js scene, as the
+ * mode gizmos are, so a scene load keeps it, `frameCamera` never frames it, and the
+ * pointer's raycast skips it.
  */
 import * as THREE from 'three';
 

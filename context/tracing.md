@@ -26,7 +26,7 @@ Why ONNX rather than a hand-written interpreter: the traced graph *is* the compu
 - `proxy.py`: the stand-ins both passes share, which subclass the real objects so a term's `isinstance` checks keep passing.
 - `record.py`: the discovery pass. A `sim` slot is narrowed to the rows the term indexes when discovery can tell which, unioned across a group's terms, and shipped whole otherwise. Structured sensors (`RayCastSensor`, `ContactSensor`) contribute one slot per field read. Event and command bodies record under tagged keys and have their `write_*_to_sim` calls captured; an event's `env.sim.model` writes land on a copy (`model.py`) and are captured too.
 - `replay.py`: the replay pass, serving the recorded slots back while torch traces; a read discovery never saw raises (see *What cannot be traced*).
-- `export.py`: classification, narrowing, constant buffers and the `torch.onnx.export` call (a graph with no inputs and no random op rewritten as its `Constant` outputs, and every graph held to `onnx.checker`'s full check), plus the single-env guard and the three vetted exporter warnings it silences, and the two checks an observation, termination or event graph passes before it ships: `check_against_module` runs the module it came from against it on perturbed inputs, and `no_hidden_reads` fails a refused read the body swallowed (`slot.refuse_read`).
+- `export.py`: classification, narrowing, constant buffers and the `torch.onnx.export` call (a graph with no inputs and no random op is rewritten as its `Constant` outputs; every graph passes `onnx.checker`'s full check), the single-env guard, the three vetted exporter warnings it silences, and two checks an observation, termination or event graph passes before it ships: `check_against_module` runs the source module against it on perturbed inputs, and `no_hidden_reads` fails a refused read the body swallowed (`slot.refuse_read`).
 - `term.py` / `event.py` / `command.py` / `action.py` / `group.py`: one trace per kind:
   - a value term: a termination that reads nothing fails the build (it would fire every step or never), a baked observation warns by name;
   - an event: writes become outputs, randomness an explicit `rand` input. A class term runs as the instance mjlab built with the env (a new one when the scene's params differ), the env and entities it keeps routed through the proxies, and fails if a call changes its state or it keeps a live object inside a plain object. `EVENTS_WITH_NOTHING_TO_WRITE` names the ones whose trace legitimately captures no write;
@@ -60,7 +60,7 @@ Tracing needs a live env: to read shapes from, and to resolve every `SceneEntity
 
 ## Stateful terms
 
-Statefulness does not preclude tracing. A stateful term is exported the way an RNN cell is: its hidden state is promoted to explicit inputs and outputs, and the browser's orchestrator holds it across frames. `self.foo` is Python's idiom for recurrent state, not evidence that a term must be native.
+Statefulness does not preclude tracing. A stateful term is exported as an RNN cell is: its hidden state is promoted to explicit inputs and outputs, and the browser's orchestrator holds it across frames. `self.foo` is Python's idiom for recurrent state, not evidence that a term must be native.
 
 - **Command**: `forward(prev_state, resample_mask, rand) → (next_state, command)`. `_resample_command` runs under a `torch.where` gated by `resample_mask`; `_update_command` always runs. A reset is not a separate code path: it is the same graph with `resample_mask = 1`, and with `reset_mask = 1` for what a term's `reset` adds (mjlab's `init_velocity_prob` start). The entry declares each state tensor's name, shape and initial value, captured at export.
 - **Event**: a trace carries no state. A class whose call changes its own state fails the build (state inside a plain object it keeps included), as does one that keeps the sim's arrays or a view of them (`env.sim.data.qpos[:]`, a raw warp array), or an entity inside a plain object, from its `__init__`, since reading them would freeze at build time.
@@ -74,7 +74,7 @@ All randomness inside an event or command body arrives as an explicit `rand` inp
 
 ## Fusion
 
-Terms in a group are traced into **one** graph rather than one per term. The motivation is per-call overhead, not arithmetic: a JS-to-WASM crossing, tensor marshalling and a promise round trip cost the same whether a graph has one node or a hundred. Velocity-Flat-G1 measured five observation terms as five one-node graphs, three a bare `Identity`; fused, one 59-node graph and one call per control step, and a slot feeding two terms is read and marshalled once.
+Terms in a group are traced into **one** graph rather than one per term. The reason is per-call overhead, not arithmetic: a JS-to-WASM crossing, tensor marshalling and a promise round trip cost the same for one node or a hundred. On Velocity-Flat-G1, five one-node observation graphs (three a bare `Identity`) fuse into one 59-node graph and one call per control step, and a slot feeding two terms is read and marshalled once.
 
 > **Fusion changes how many graphs exist, never how often they are called.**
 
@@ -108,7 +108,7 @@ reset(slots..., prev_<f>..., [rand])        -> (next_<f>...)
 - **State** is every tensor attribute either body writes, found by identity and in-place version, each tensor held so a freed one's id cannot pass for a new one's; its initial value is what `cfg.build(env)` leaves. A reset that writes nothing has no graph. A boolean-mask row write (`x[mask] = ...`) traces as a `where` (`gate.py`'s `MaskedRows`), so it keeps working when the mask changes.
 - **Refused**, with the fix in the message: a body that changes Python state (a counter, a new attribute, a deque of past actions), writes the sim, or reads a live mjlab object other than its entity cached at init; two state fields sharing one tensor, which the browser would carry apart; a slot the browser's reader does not serve; a reset that reads the episode clock, which the browser zeroes before its reset terms and mjlab after them; a term whose action width differs from the joints it drives, or that names no joints.
 - **Verified before it ships**: both graphs run against the term's own bodies over random actions, resets and episode clocks, and a disagreement fails the build.
-- A traced term costs one awaited graph run per control step. In the browser, `ActionManager` runs each term's process once per control step (`applyAction.ts`'s native formulas, or `OnnxActionProcess`) and its reset graphs in the reset chain.
+- A traced term costs one awaited graph run per control step (`OnnxActionProcess`); its reset graphs run in the reset chain ([frontend.md](frontend.md)).
 - mjlab zeroes the targets at a reset and writes them once before the next step, so a delayed actuator acts on zero for its first `lag` substeps; the browser starts each delay's history from that zero frame. Randomized lags come from the browser's seeded RNG (mjlab's distribution, not its stream). The browser keeps one delay per action term, so joints of two terms behind one mjlab delay buffer draw their lags apart, and the build warns when that lag is random. Lags an event sets through `Actuator.set_lags` are not run.
 
 ## What cannot be traced
@@ -123,7 +123,7 @@ Such a term **fails the build loudly and names itself**: never force-traced, nev
 
 ## Parity
 
-Numeric parity is mandatory, not optional: every traced graph is checked against the live mjlab term it came from. `compile/parity.py` steps a live env with a seeded action sequence and feeds the same raw state through each exported graph via `onnxruntime` (not torch), asserting `allclose` for every term at every step. The layers each cover something the others cannot:
+Numeric parity is mandatory: every traced graph is checked against the live mjlab term it came from. `compile/parity.py` steps a live env with a seeded action sequence and feeds the same raw state through each exported graph via `onnxruntime` (not torch), asserting `allclose` for every term at every step. The layers each cover something the others cannot:
 
 | Check | What it proves |
 |---|---|
@@ -147,7 +147,7 @@ Do not re-add these as unfinished requirements.
 
 ## Rejected
 
-- **A declarative JSON DSL of primitive ops with a TypeScript interpreter** (the earlier design). It made every op a second, hand-written copy of mjlab's math kept in step by hand, and a closed op set gated each new mjlab field behind an engine change.
+- **A declarative JSON DSL of primitive ops with a TypeScript interpreter**: every op is a second, hand-written copy of mjlab's math kept in step by hand, and a closed op set gates each new mjlab field behind an engine change.
 - **ONNX random ops**: see *Randomness*.
 - **Porting mjlab's batched tensors line for line**: GPU-scale machinery with no payoff at one env.
 - **Commands as native, untraced classes**: stateful is not untraceable.

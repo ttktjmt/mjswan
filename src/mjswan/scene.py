@@ -358,8 +358,8 @@ class SceneConfig:
 
     id: str = ""
     """Sanitized name, unique within the project: the scene's directory in the build and
-    its ``?scene=`` value. Assigned by :meth:`ProjectHandle.add_scene`;
-    defaults to ``name2id(name)``."""
+    its ``?scene=`` value. Assigned by :meth:`ProjectHandle.add_scene`; defaults to
+    ``name2id(name)``."""
 
     model: mujoco.MjModel | None = None
     """MuJoCo model for the scene (saved as .mjb)."""
@@ -397,8 +397,8 @@ class SceneConfig:
     events: dict[str, Any] | None = None
     """The scene's event terms (mjswan or mjlab ``EventTermCfg``), adapted.
 
-    The default a policy's MDP takes when it says nothing about events.
-    Serialized at build time, when ONNX tracing has the live env and output directory."""
+    The default a policy's MDP takes when it says nothing about events. Serialized at
+    build time, when ONNX tracing has the live env and output directory."""
 
     events_explicit: bool = field(default=False, repr=False, compare=False)
     """Whether :attr:`events` were set by the author rather than inherited from a task's
@@ -466,8 +466,8 @@ class SceneConfig:
     def mdp_id(self, mdp: MdpConfig, *, policy_id: str | None = None) -> str:
         """The id of ``mdp`` on this scene, registering it on first use.
 
-        By object identity, not equality: the same config on two policies
-        is one MDP, two equal configs are two.
+        By object identity, not equality: the same config on two policies is one MDP,
+        two equal configs are two.
 
         A named config takes ``name2id(name)``. One the term-set sugar built for a single
         policy takes that policy's id, so ``mdp/locomotion/`` sits beside
@@ -688,8 +688,8 @@ class SceneHandle:
         """Add an ONNX policy to this scene.
 
         The policy runs against an MDP: observations, actions, terminations, commands
-        and events. Pass one as ``mdp`` to share it between policies (the
-        checkpoints of one run), or pass the five term sets directly and an anonymous
+        and events. Pass one as ``mdp`` to share it between policies (the checkpoints of
+        one run), or pass the five term sets directly and an anonymous
         :class:`~mjswan.mdp.MdpConfig` is built from them; not both.
 
         Each term set defaults to the matching field of an mjlab env config, when one
@@ -1750,8 +1750,8 @@ class SceneHandle:
 
         Accepts mjswan or mjlab ``EventTermCfg`` instances in any of the four modes.
         ONNX tracing happens at build time, as for observations and terminations. Events
-        belong to an MDP, so a scene with events and no policy has nowhere
-        to put them, and the build says so.
+        belong to an MDP, so a scene with events and no policy has nowhere to put them,
+        and the build says so.
 
         Args:
             events: Dict mapping event names to ``EventTermCfg`` instances.

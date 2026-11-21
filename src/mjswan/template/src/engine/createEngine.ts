@@ -1,5 +1,5 @@
 /**
- * `createEngine` — the headless, instance-scoped mjswan engine.
+ * `createEngine`: the headless, instance-scoped mjswan engine.
  *
  * Wraps the React-free {@link mjswanRuntime}: loads the MuJoCo WASM module up
  * front, resolves app-supplied {@link Bytes} to concrete buffers, drives the

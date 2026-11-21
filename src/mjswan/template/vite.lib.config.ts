@@ -8,10 +8,9 @@ import { minify } from './vite.shared';
 import { ORT_WASM_FILE, ORT_WASM_TOKEN, UPSTREAM_WASM } from './vite.wasm';
 
 // Library build: emits a single self-contained ESM (`dist/mjswan.js`) exposing
-// `createEngine(element, options?)` (the headless engine; no React/Mantine),
-// with every dependency bundled and the MuJoCo / ONNX WASM in `dist/assets/`
-// beside the SPA build's, resolved relative to the bundle wherever it is served
-// from. See src/engine/.
+// `createEngine(element, options?)` (the headless engine; no React/Mantine), with every
+// dependency bundled and the MuJoCo / ONNX WASM in `dist/assets/` beside the SPA build's,
+// resolved relative to the bundle wherever it is served from. See src/engine/.
 
 function getVersionFromPython(): string {
   const initPath = path.resolve(__dirname, '../__init__.py');
@@ -55,10 +54,10 @@ function upstreamWasmNames(): Map<string, string> {
   return names;
 }
 
-// Vite library mode force-inlines `new URL('x.wasm', import.meta.url)` as base64
-// `data:` URLs (ignoring assetsInlineLimit), bloating the bundle to ~70 MB. This
-// extracts each back to a co-located dist/ file resolved via `import.meta.url` so
-// it loads relative to the bundle, wherever mjswan Cloud's CDN serves it from.
+// Vite library mode force-inlines `new URL('x.wasm', import.meta.url)` as base64 `data:`
+// URLs (ignoring assetsInlineLimit), bloating the bundle to ~70 MB. This extracts each
+// back to a co-located dist/ file resolved via `import.meta.url`, so it loads relative
+// to the bundle wherever it is served from (mjswan Cloud's CDN, say).
 //
 // Each extracted file keeps its upstream name, so the SPA build's copy of the same bytes
 // lands on one path. ORT's is what src/core/onnx/ortEnv.ts points `wasmPaths` at, so its

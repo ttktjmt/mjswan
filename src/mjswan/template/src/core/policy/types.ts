@@ -90,9 +90,9 @@ export type PolicyConfig = {
    */
   clip_actions?: number;
   /**
-   * The ONNX input slot table: `in_keys[i]` names the tensor that fills the
-   * network's i-th input, an observation group or one the runtime synthesizes. Absent
-   * for the common single-input policy, whose one input takes the `actor` group.
+   * The ONNX input slot table: `in_keys[i]` names the tensor that fills the network's
+   * i-th input, an observation group or one the runtime synthesizes. Absent for the
+   * common single-input policy, whose one input takes the `actor` group.
    */
   in_keys?: string[];
   /** The output slot table, positional like `in_keys`; absent means `['action']`. */

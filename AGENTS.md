@@ -7,7 +7,7 @@ mjswan packages browser-based MuJoCo simulations with real-time policy control i
 - **Python** ([src/mjswan/](src/mjswan/)): `Builder` / `Project` / `Scene` API that bundles models, policies, and UI config into a static site.
 - **Frontend template** ([src/mjswan/template/](src/mjswan/template/)): TypeScript + three.js + mujoco-wasm client that the Python build step bundles.
 
-Context is two levels deep: [CONTEXT.md](CONTEXT.md) is the map (layout, object model, layering, CLI, tooling), and [context/](context/) holds one file per area with its rules, the reasons behind them, and the options already rejected. Read the area's file before changing that area.
+[CONTEXT.md](CONTEXT.md) is the codebase map; [context/](context/) has one file per area with its rules, their reasons and the options already rejected. Read the area's file before changing it.
 
 ## Philosophy
 

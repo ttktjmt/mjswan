@@ -1,8 +1,7 @@
 """OnnxCommand config serialization.
 
-Layer: L1 (pure Python — no mjlab/torch/onnxruntime; builds a CommandExport by
-hand). Verifies the config emitted from a traced command carries everything the
-runtime needs.
+Layer: L1 (pure Python: no mjlab/torch/onnxruntime; builds a CommandExport by hand).
+Verifies the config emitted from a traced command carries everything the runtime needs.
 """
 
 from __future__ import annotations

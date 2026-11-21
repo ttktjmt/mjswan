@@ -11,11 +11,11 @@ Extras, one per asset source plus tooling: `wandb`, `hf` (`huggingface-hub`), `m
 
 **`mjlab` + `torch` are build-time requirements for any policy carrying traced MDP terms**: tracing runs `torch.onnx.export` against a live mjlab env. Neither ships to the browser, and a model-only scene needs neither. `onnxruntime` (not `onnxruntime-web`) is the parity harness's runtime.
 
-Python 3.11 to 3.13. 3.10 went at its end of life, when Pillow 13 and filelock 4.2 (the fixes for their advisories) required 3.11. The old `<3.13` cap was taken for `labmaze` (transitive via myosuite → dm-control, no cp313 wheel); myosuite left with the #128 examples cleanup, so the cap and the `h5py` override beside it are gone and the pytest matrix runs 3.13.
+Python 3.11 to 3.13. The floor is 3.11 because Pillow 13 and filelock 4.2, the fixes for their advisories, require it.
 
 ## MuJoCo, on both sides
 
-The core `mujoco` pin is exact and follows mjlab's, which is what lets `mjswan[mjlab]` resolve at all: mjlab 1.6.0 requires `mujoco~=3.11.0` and brings `mujoco-warp` with it. Holding the core at 3.8.1 while mjlab moved to 3.10 and then 3.11 is what a `[tool.uv] override-dependencies` block once existed for; aligning the pin retired it, and with it a resolution that only ever worked inside this repository.
+The core `mujoco` pin is exact and follows mjlab's, which is what lets `mjswan[mjlab]` resolve at all: mjlab 1.6.0 requires `mujoco~=3.11.0` and brings `mujoco-warp` with it. Do not hold the core on another MuJoCo with a `[tool.uv] override-dependencies` block: an override resolves only inside this repository, never for a user installing the extra.
 
 The browser's own engine is the template's `mujoco` dependency, an alias pinned to the `@ttktjmt/mujoco` release that holds the same MuJoCo: a `.mjz` carries MJCF the browser compiles itself, but a scene saved as `.mjb` loads only in the MuJoCo that wrote it. `tests/test_dependency_versions.py` holds the two pins together (a fork release that rebuilds a MuJoCo release, as 3.11.1 does 3.11.0, is listed there with the MuJoCo it holds) and `src/engine/__tests__/mujocoPackage.test.ts` checks the alias is what installs and runs that MuJoCo.
 
@@ -24,4 +24,4 @@ The alias is a fork because MuJoCo's own `@mujoco/mujoco` throws on every `mjtBo
 ## How releases enter the lock
 
 - **Python**: `[tool.uv] exclude-newer = "3 days"` keeps a release out of the lock until it is three days old, the window in which hijacked releases have been caught and pulled. To take a younger one deliberately, name it in `[tool.uv] exclude-newer-package`; passed on the command line instead, it leaves a lock that `--locked` rejects. `ruff` is pinned exactly, not floored (see the comment in `pyproject.toml`).
-- **npm**: the template's `.npmrc` refuses any package younger than three days (`min-release-age`), which a fresh fork release is. Its lockfile entry was written with that check off once, and `npm install` and `npm ci` then install from the lockfile without it. Pre-commit scans `.npmrc` for secrets.
+- **npm**: the template's `.npmrc` refuses any package younger than three days (`min-release-age`), which a fresh fork release is, so its lockfile entry is written once with that check off; `npm install` and `npm ci` then install it from the lockfile without the check. Pre-commit scans `.npmrc` for secrets.

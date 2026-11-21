@@ -3,8 +3,8 @@
 Layer: L3 (needs the ``examples`` extras and a warp CPU-kernel compile, so
 ``slow``/``mjlab``).
 
-Commands are the most randomness-heavy layer in the system — `lift_height` draws 7
-values per resample, the tracking RSI graph 41 — so every one runs through the RNG
+Commands are the most randomness-heavy layer in the system (`lift_height` draws 7
+values per resample, the tracking RSI graph 41), so every one runs through the RNG
 spy/replay harness.
 
 The resolution follows the Builder's own path: the registry's `CommandBinding`
@@ -165,10 +165,10 @@ def test_every_draw_was_actually_replayed(command_report):
 
 @pytest.mark.parametrize("command_report", _PARAMS, indirect=True)
 def test_the_command_actually_draws_randomness(command_report):
-    """Replaying draws checks terms *with* randomness; a `rand_dim` of 0 would be vacuous.
+    """A `rand_dim` of 0 would leave the draw replay nothing to check.
 
-    Both of these resample from a range, so a zero here means the tracer stopped
-    seeing the draws — which would make the replay above compare nothing.
+    Both of these resample from a range, so a zero here means the tracer stopped seeing
+    the draws, and the replay above would compare nothing.
     """
     assert command_report.rand_dim and command_report.rand_dim > 0, (
         f"{command_report.name} traced with rand_dim={command_report.rand_dim}; "

@@ -440,7 +440,7 @@ class TestPlanPublish:
         )
 
 
-# ── license files ──────────────────────────────────────────────
+# ── license files ────────────────────────────────────────────────────────────
 
 
 def _with_licenses(dist: Path, files: dict[str, str | bytes]) -> Path:

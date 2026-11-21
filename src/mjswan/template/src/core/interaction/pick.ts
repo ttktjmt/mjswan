@@ -1,7 +1,7 @@
 /**
- * What lies under a point of the canvas, by MuJoCo's own ray: the answer the
- * simulation would give, an infinite plane and a height field included, and nothing that
- * is only drawn (the mode gizmos, the preview, a skin, a splat).
+ * What lies under a point of the canvas, by MuJoCo's own ray: the answer the simulation
+ * would give, an infinite plane and a height field included, and nothing that is only
+ * drawn (the mode gizmos, the preview, a skin, a splat).
  */
 import * as THREE from 'three';
 

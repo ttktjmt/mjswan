@@ -275,14 +275,13 @@ class TestLibBuild:
     def test_no_unfolded_process_env_node_env(self, lib_dist: Path):
         """The bundle must be browser-self-contained: no unfolded `process`.
 
-        mjswan Cloud loads this bundle straight from a CDN with `@vite-ignore`,
-        so the consuming bundler never substitutes globals away. An eager,
-        unguarded `process.env.NODE_ENV` (shipped by React/Mantine dev checks)
-        therefore throws `ReferenceError: process is not defined` at mount time
-        in the browser. `vite.lib.config.ts` statically folds it to
-        "production"; this asserts none survives. The engine, not the host, owns this
-        invariant (the host must not need a `process` shim). See vite.lib.config.ts
-        `define`.
+        mjswan Cloud loads this bundle straight from a CDN with `@vite-ignore`, so the
+        consuming bundler never substitutes globals away. An eager, unguarded
+        `process.env.NODE_ENV` (shipped by React/Mantine dev checks) therefore throws
+        `ReferenceError: process is not defined` at mount time in the browser.
+        `vite.lib.config.ts` statically folds it to "production" (its `define`); this
+        asserts none survives, since the engine, not the host, owns this invariant (the
+        host must not need a `process` shim).
 
         Residual `process.*` references (e.g. setimmediate's `process.nextTick`)
         are allowed only because they sit behind runtime guards and never

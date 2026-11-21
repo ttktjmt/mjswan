@@ -1,4 +1,4 @@
-"""Task-defined action terms shaped like a task's own action classes, on a 3-joint arm.
+"""Task-defined action terms on a 3-joint arm, modelled on real tasks' own classes.
 
 ``DeltaAction`` is in-hand-rotation-mjlab's ``JointPositionDeltaAction``, trimmed;
 ``HeldAction`` is luwu_mjlab's ``HeldJointPositionAction``; ``EmaAction`` smooths the

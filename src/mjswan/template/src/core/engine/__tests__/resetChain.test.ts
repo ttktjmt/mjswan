@@ -1,11 +1,8 @@
 /**
- * The reset chain's ordering (mjlab's `_reset_idx`).
- *
- * `runtime.ts` needs the MuJoCo WASM module to instantiate, so the order it used to
- * express inline — `void eventManager.onReset(…)`, then `commandManager.resetTerms()`,
- * with `policyRunner.reset` trailing both — had no test and no way to get one. These
- * pin the extracted sequence: the ordering cases fail the moment the await is dropped
- * or the policy reset drifts back past the commands.
+ * The reset chain's ordering, mjlab's `_reset_idx`: events (awaited), the policy, the
+ * action terms (awaited), then the commands. It lives in `resetChain.ts` rather than in
+ * `runtime.ts`, which needs the MuJoCo WASM module to instantiate, so it can be pinned in
+ * Node.
  */
 import { describe, expect, it } from 'vitest';
 

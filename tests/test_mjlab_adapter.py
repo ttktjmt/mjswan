@@ -170,7 +170,6 @@ class TestAdaptObservations:
         assert result["policy"] is group
 
     def test_mjlab_obs_term_converted(self):
-        # `base_lin_vel` is a DSL term — adapter resolves to a callable.
         mjlab_func = _make_mjlab_obs_func("base_lin_vel")
         mjlab_term = FakeMjlabObsTermCfg(func=mjlab_func, params={"world_frame": True})
         mjlab_group = FakeMjlabObsGroupCfg(
@@ -241,9 +240,9 @@ class TestAdaptObservations:
         assert result["policy"].history_length == 4
 
     def test_mjlab_asset_cfg_kept_intact_for_tracing(self):
-        # A plain (non-Binding) func is traced to ONNX at build time via `func(env,
-        # **params)` — params must reach the tracer unchanged, including the real `asset_cfg`
-        # object mjlab's own function expects, not a flattened entity_name/joint_names stand-in.
+        # A plain (non-Binding) func is traced as `func(env, **params)`, so params must
+        # reach the tracer unchanged: the real `asset_cfg` mjlab's own function expects,
+        # not a flattened entity_name/joint_names stand-in.
         mjlab_func = _make_mjlab_obs_func("joint_pos_rel")
         asset_cfg = FakeMjlabSceneEntityCfg(
             name="robot", joint_names=("joint1", "joint2")
@@ -619,7 +618,6 @@ class TestAdaptTerminations:
         assert term.time_out is False
 
     def test_mjlab_time_out_flag(self):
-        # `time_out` is a DSL term — resolved to a callable.
         mjlab_func = _make_mjlab_term_func("time_out")
         mjlab_cfg = FakeMjlabTermTermCfg(func=mjlab_func, time_out=True)
 

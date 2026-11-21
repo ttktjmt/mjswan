@@ -86,17 +86,17 @@ src/mjswan/          Python package: the object model at the root, one package p
 context/             Second-level contributor context, one file per area (index above)
 
 examples/            Runnable examples. Python only: assets are fetched at run time
-  demo/                main.py (the deployed app: mjlab Tasks + Showcase, everything
-                       from mjlab or the Hub, skins included, but WBC-Mjlab's policy
-                       and clips, from its deploy repo at a pinned commit; the `demo`
-                       extra is what it imports), simple.py (one task, one checkpoint),
-                       minimum_policy.py (the smallest complete policy), mujoco_models.py
-                       (a gallery, no policy) and playground.py (MuJoCo Playground:
-                       SO101PickCube and SO101PickCubeVision as mjlab tasks driven by the
-                       policies examples/train trained, the latter through the wrist
-                       camera, and the tabletop scenes, no policy, its files from GitHub at
-                       pinned commits). `mjswan demo` runs the four named ones;
-                       minimum_policy.py is read, not run
+  demo/                One script per demo; `mjswan demo` runs all but minimum_policy.py
+    main.py              the deployed app: mjlab Tasks + Showcase from mjlab and the Hub,
+                         skins included, but WBC-Mjlab's policy and clips from its deploy
+                         repo at a pinned commit (the `demo` extra is what it imports)
+    simple.py            one task, one checkpoint
+    minimum_policy.py    the smallest complete policy, to read
+    mujoco_models.py     a gallery, no policy
+    playground.py        MuJoCo Playground's SO101PickCube and SO101PickCubeVision, driven
+                         by the policies examples/train trained (the latter through the
+                         wrist camera), and its tabletop scenes, no policy; files from
+                         GitHub at pinned commits
   colab/               Google Colab notebooks (demo, anymal_c_velocity)
   train/               so101_pick_cube.py: trains MuJoCo Playground 1.0.1's SO101PickCube, or
                        with --task vision SO101PickCubeVision, on one free GPU and exports the
@@ -145,14 +145,14 @@ MjswanApp.publish(title=..., tags=...)       # → mjswan Cloud; a .swn publishe
 
 - Each `*Handle` wraps a `*Config` dataclass: the handle is the fluent API, the config is the serializable state. `__init__.py` is the canonical public API.
 - Every project / scene / MDP / policy / splat / skin has `id = name2id(name)`, unique within its parent; ids are the build's directories and the `?project=` / `?scene=` / `?policy=` / `?skin=` values. A collision renames the second `<name>_1` with a RuntimeWarning rather than failing ([document.md](context/document.md)).
-- A policy scene needs two things a model-only scene does not: `control_dt` (a wrong control rate raises nothing at playback) and a trace env (`add_scene_mjlab` supplies both; a plain `add_scene` needs `set_trace_env(build_single_entity_trace_env(spec_fn))`). See [object-model.md](context/object-model.md) and [tracing.md](context/tracing.md).
+- A policy scene also needs `control_dt` and a trace env: `add_scene_mjlab` supplies both, a plain `add_scene` needs `set_trace_env(build_single_entity_trace_env(spec_fn))` ([object-model.md](context/object-model.md), [tracing.md](context/tracing.md)).
 
 ## Layering
 
 Imports only point downward ([package-layout.md](context/package-layout.md)):
 `cli.py` → `app.py` / `cloud/` → the object model at the root → `build/` → `compile/` →
 `mjlab/` · `source/` · `rig/` → `managers/` · `envs/mdp/` · `document/` · `license/`.
-`build/` alone knows the manifest's shape; `compile/` writes no file and never imports `mjlab/`; `cloud/` never imports `build/`. The root imports the build pipeline and `compile/` lazily and `mjlab/` imports mjlab only inside its functions, so `import mjswan` never costs a Node build and, in a core install, loads no source backend. mjswan's own names are singular; the mjlab-mirror paths keep mjlab's spelling because the import path is the contract.
+`build/` alone knows the manifest's shape; `compile/` writes no file and never imports `mjlab/`; `cloud/` never imports `build/`; `import mjswan` costs no Node build and, in a core install, no source backend. mjswan's own names are singular; mjlab-mirror paths keep mjlab's spelling, since the import path is the contract.
 
 ## CLI entry points
 
@@ -186,7 +186,7 @@ Key Makefile targets: `sync`, `format`, `type`, `check`, `test`, `test-all`, `do
 
 ## Tests and CI
 
-`@pytest.mark.slow` marks a test that runs a full frontend (npm + Vite) build; pre-commit skips those (`pytest -m "not slow"`), `make test` runs everything. `pytest.yml` runs the fast suite on Python 3.11 to 3.13 plus a `core` job with no extra; `parity.yml` runs the ONNX numeric-parity sweep against live mjlab on relevant pull requests and weekly; `frontend.yml` lints the template and runs vitest. Every workflow installs from `uv.lock` alone. Details in [ci.md](context/ci.md); the parity layers in [tracing.md](context/tracing.md).
+`@pytest.mark.slow` marks a test that runs a full frontend (npm + Vite) build: pre-commit skips it (`pytest -m "not slow"`), `make test` runs it. `pytest.yml` runs the fast suite on Python 3.11 to 3.13 plus a no-extra `core` job; `parity.yml` the ONNX numeric-parity sweep against live mjlab, on relevant pull requests and weekly; `frontend.yml` the template's lint and vitest. Every workflow installs from `uv.lock` alone. Details in [ci.md](context/ci.md), the parity layers in [tracing.md](context/tracing.md).
 
 ## Dependencies
 

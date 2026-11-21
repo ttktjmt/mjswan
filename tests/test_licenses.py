@@ -1,8 +1,8 @@
 """License files in the build.
 
-L1 — the naming rule, identifier and tier table, detection beside a model on disk, the
-author API, and the files ``_save_web`` writes. No network; the Node build and the SPA
-copy are mocked by ``build_manifest``.
+Layer: L1. The naming rule, identifier and tier table, detection beside a model on disk,
+the author API, and the files ``_save_web`` writes. No network; the Node build and the
+SPA copy are mocked by ``build_manifest``.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """`last_action(action_name=...)` slice resolution.
 
-Layer: L1 (pure Python — a stub action manager, no mjlab env build).
+Layer: L1 (pure Python: a stub action manager, no mjlab env build).
 
 mjlab's `last_action(action_name=...)` is `get_term(name).raw_action`: that one
 term's slice of the policy output, not the whole vector

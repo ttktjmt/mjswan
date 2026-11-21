@@ -1,8 +1,8 @@
 /**
- * `mjswan/manifest`: parse a build's `manifest.json` + a byte source into a typed
- * catalog of loadable scenes/policies/splats/skins. Framework-free;
- * shared by the in-repo React app and mjswan Cloud. The engine itself knows nothing
- * about the manifest; the app owns the catalog and calls engine verbs.
+ * `mjswan/manifest`: parse a build's `manifest.json` + a byte source into a typed catalog
+ * of loadable scenes/policies/splats/skins. Framework-free; shared by the in-repo React
+ * app and mjswan Cloud. The engine itself knows nothing about the manifest; the app owns
+ * the catalog and calls engine verbs.
  *
  * The manifest is the one descriptor of a document: every key `snake_case`, every path
  * under a scene entry relative to `<project-id>/<scene-id>/`, under a project's `work`
@@ -27,7 +27,7 @@ import type { PolicyInput, SceneInput, SkinInput, SplatInput } from '../engine/t
 /** Maps a document-relative path (e.g. `demo/humanoid/scene.mjz`) to bytes. */
 export type ByteSource = (relPath: string) => Bytes;
 
-// ── manifest.json shape (Python Builder ↔ consumer contract) ───────
+// ── manifest.json shape (Python Builder ↔ consumer contract) ─────────────────
 export interface ManifestCamera {
   lookat?: [number, number, number];
   distance?: number;
@@ -87,8 +87,8 @@ export interface ManifestMotion {
   [key: string]: unknown;
 }
 /**
- * One MDP: the five term sets a policy runs against, traced. Term entries keep the
- * shape they have always had; every `onnx`/`fused` ref is scene-relative.
+ * One MDP: the five term sets a policy runs against, traced. Every `onnx`/`fused` ref is
+ * scene-relative.
  */
 export interface ManifestMdp {
   id: string;
@@ -182,9 +182,9 @@ export type ViewerGuiNode =
 
 export interface Manifest {
   /**
-   * Document format: the structure of the build, bumped only for a break an
-   * older reader would misread. Distinct from `version`, the mjswan release, which is
-   * never a gate here.
+   * Document format: the structure of the build, bumped only for a break an older reader
+   * would misread. Distinct from `version`, the mjswan release, which is never a gate
+   * here.
    */
   format: number;
   version: string;
@@ -288,19 +288,18 @@ export function sanitizeName(name: string): string {
 }
 
 /**
- * The newest document format this reader understands. A ceiling: every
- * earlier format still parses. 2 added `sim` input slots and their `rows`; 3 made
- * `camera.azimuth` MuJoCo's, the direction the camera looks; 4 added the `env` input
- * slot that `time_out` is traced through; 5 the `action` input slot that `last_action`
- * is traced through, the `model` input slot and write target that model-field
- * randomization is traced through, and a command graph's `reset_mask`, gated writes and
- * `root_velocity_b` write; 6 an action term's traced `process` and `reset` graphs, its
- * `interpolate`, `hold_s` and `delay`, the `joint_position_relative` type, and the
- * `action_term` input slot; 7 a scene's `skins`; 8 a motion's `frame_fields`;
- * 9 a camera sensor's descriptor, an image-shaped policy input, a skin modelled on
- * the robot (`fit: 'modelled'`), with `align`, `rest_qpos`, a solid material and
- * `hide_tendons`, and a scene's `graphics`; 10 an action term's DC motor
- * `saturation_effort` and `velocity_limit`.
+ * The newest document format this reader understands. A ceiling: every earlier format
+ * still parses. 2 added `sim` input slots and their `rows`; 3 made `camera.azimuth`
+ * MuJoCo's, the direction the camera looks; 4 added the `env` input slot that `time_out`
+ * is traced through; 5 the `action` input slot that `last_action` is traced through, the
+ * `model` input slot and write target that model-field randomization is traced through,
+ * and a command graph's `reset_mask`, gated writes and `root_velocity_b` write; 6 an
+ * action term's traced `process` and `reset` graphs, its `interpolate`, `hold_s` and
+ * `delay`, the `joint_position_relative` type, and the `action_term` input slot; 7 a
+ * scene's `skins`; 8 a motion's `frame_fields`; 9 a camera sensor's descriptor, an
+ * image-shaped policy input, a skin modelled on the robot (`fit: 'modelled'`), with
+ * `align`, `rest_qpos`, a solid material and `hide_tendons`, and a scene's `graphics`;
+ * 10 an action term's DC motor `saturation_effort` and `velocity_limit`.
  */
 export const MAX_DOCUMENT_FORMAT = 10;
 
@@ -426,8 +425,7 @@ function buildSplat(dir: string, splat: ManifestSplat, source: ByteSource): Spla
 
 /**
  * Byte sources for a config's traced term graphs, keyed scene-relative, which is how the
- * runtime looks a session up. The source is asked for the document-relative
- * path instead.
+ * runtime looks a session up. The source is asked for the document-relative path instead.
  */
 function graphBytes(refs: string[], dir: string, source: ByteSource): Record<string, Bytes> {
   const graphs: Record<string, Bytes> = {};
@@ -528,8 +526,8 @@ function toSceneEntry(
       const splat = splatId == null ? undefined : scene.splats?.find((s) => s.id === splatId);
       const skinId = opts?.skin;
       const skin = skinId == null ? undefined : scene.skins?.find((s) => s.id === skinId);
-      // Events travel with the policy, inside its MDP, so the scene carries
-      // only `terrainData`, which every MDP on it may draw from.
+      // Events travel with the policy, inside its MDP, so the scene carries only
+      // `terrainData`, which every MDP on it may draw from.
       return {
         model: source(inScene(dir, scene.scene)),
         modelFormat: scene.scene.endsWith('.mjb') ? 'mjb' : 'mjz',

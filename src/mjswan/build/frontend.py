@@ -39,8 +39,8 @@ def _is_frontend_test(relative: Path) -> bool:
 def install_spa(dest: Path, template_dir: Path | None = None) -> bool:
     """Copy the built SPA, the engine, into ``dest``; False when none is built yet.
 
-    An app is the engine plus an expanded document; this lays down the
-    engine half, for both the builder and ``MjswanApp.from_document``.
+    An app is the engine plus an expanded document; this lays down the engine half, for
+    both the builder and ``MjswanApp.from_document``.
     """
     root = template_dir or TEMPLATE_DIR
     built = root / "dist"
@@ -336,9 +336,9 @@ class ClientBuilder:
     ) -> dict[str, object]:
         """Cache key for a built SPA: version + build opts + a source fingerprint.
 
-        The SPA is project-independent (custom terms load at runtime via
-        plugins.js), so any build with a matching key is reusable.
-        The fingerprint rebuilds the SPA whenever the app codebase changes.
+        The SPA is project-independent (custom terms load at runtime via plugins.js), so
+        any build with a matching key is reusable. The fingerprint rebuilds the SPA
+        whenever the app codebase changes.
         """
         from mjswan._version import __version__
 

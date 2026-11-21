@@ -44,8 +44,8 @@ def native_class(cfg: object) -> type[ActionTermCfg] | None:
 
 
 def is_traced(cfg: object) -> bool:
-    """Whether the build traces *cfg*'s term: a task's own buildable class
-    mjswan has none of. One of mjlab's own without one (differential IK) is skipped."""
+    """Whether the build traces *cfg*'s term: a task's own buildable class mjswan has
+    none of. One of mjlab's own without one (differential IK) is skipped."""
     return (
         native_class(cfg) is None
         and callable(getattr(cfg, "build", None))

@@ -1,17 +1,15 @@
 """What must *not* be in a built bundle.
 
-Both hold by construction today, and construction is exactly what changes.
-
 * **No training-only managers.** Reward, curriculum, metrics and recorders have no
   browser-side runtime. mjswan never reads them, and a build that *rejected* them
   could build nothing (every mjlab task carries rewards), so what is checkable is
   that the emitted artifacts mention none of them.
 * **No term source as executable text.** ONNX ships term bodies as graph bytes, so no
-  Python body may travel alongside — not as a source string, not as an eval-able payload.
+  Python body may travel alongside, as a source string or an eval-able payload.
 
-Both walk the real emitted output rather than inspecting the code that writes it,
-so a future serializer that starts attaching a `rewards` block or a `source` string
-fails here regardless of how it got there.
+Both walk the real emitted output rather than the code that writes it, so a serializer
+that starts attaching a `rewards` block or a `source` string fails here however it got
+there.
 """
 
 from __future__ import annotations

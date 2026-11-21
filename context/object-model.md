@@ -1,6 +1,6 @@
 # The object model
 
-The root of `src/mjswan/`: `Builder` and the `*Handle` / `*Config` pairs an author holds. CONTEXT.md has the call tree; this file has what each class owns and the rules it enforces. What the build then does with them is [build.md](build.md).
+The root of `src/mjswan/`: `Builder` and the `*Handle` / `*Config` pairs an author holds, what each owns and the rules it enforces. CONTEXT.md has the call tree; what the build does with them is [build.md](build.md).
 
 Each `*Handle` wraps a `*Config` dataclass: the handle is the fluent API, the config is the serializable state.
 
@@ -10,13 +10,13 @@ Each `*Handle` wraps a `*Config` dataclass: the handle is the fluent API, the co
 
 ## Ids
 
-Every project / scene / MDP / policy / splat / skin has `id = name2id(name)`, unique within its parent. A collision renames the second `<name>_1` with id `<id>_1` and a RuntimeWarning (`document.ids.assign_name`); a policy's motions, which have no id, are renamed the same way. The rules and the reasons are in [document.md](document.md).
+Every project / scene / MDP / policy / splat / skin has `id = name2id(name)`, unique within its parent. A collision renames the second `<name>_1` with id `<id>_1` and a RuntimeWarning (`document.ids.assign_name`); a policy's motions, which have no id, are renamed the same way. Rules and reasons: [document.md](document.md).
 
 ## `builder.py`: `Builder`
 
-The entry point. Accumulates `ProjectConfig` objects; `build()` resolves the output path against the caller's file and hands the projects to `build.pipeline.write_app`. `Builder(license=, copyright=)` is the work's license for every project that sets none ([licenses.md](licenses.md)).
+The entry point. Accumulates `ProjectConfig`s; `build()` resolves the output path against the caller's file and hands the projects to `build.pipeline.write_app`. `Builder(license=, copyright=)` is the work's license for every project that sets none ([licenses.md](licenses.md)).
 
-`Builder.from_mjlab(task_id, run_path=...)` is the one-liner for the common "visualize a single mjlab task" pattern. It delegates to the instance method `Builder.add_project_mjlab`, which creates a project, adds an mjlab scene, and optionally attaches all `model_*.pt` checkpoints from one or more W&B runs (converted to ONNX via mjlab and torch). For finer control, build manually: `add_project` → `ProjectHandle.add_scene_mjlab` → `SceneHandle.add_policy_wandb(...)`. `hf_repo_id=` is the same shortcut against a Hugging Face Hub repository, which holds an exported ONNX rather than training state and so needs no conversion.
+`Builder.from_mjlab(task_id, run_path=...)` is the one-liner for visualizing a single mjlab task. It delegates to `Builder.add_project_mjlab`, which creates a project, adds an mjlab scene and optionally attaches every `model_*.pt` checkpoint of one or more W&B runs (converted to ONNX via mjlab and torch). The manual path is `add_project` → `ProjectHandle.add_scene_mjlab` → `SceneHandle.add_policy_wandb(...)`. `hf_repo_id=` is the same shortcut against a Hugging Face Hub repository, which holds an exported ONNX and so needs no conversion.
 
 ## `scene.py`: `SceneConfig` / `SceneHandle`
 
@@ -25,11 +25,11 @@ A scene owns one MuJoCo model (an `MjModel`, saved as binary `.mjb`, or an `MjSp
 Two build-time requirements a policy scene has and a model-only scene does not:
 
 - **`control_dt`**: seconds per control step (mjlab's `timestep * decimation`). The model carries only the physics timestep, and a wrong control rate raises nothing at playback, so the builder requires it. `add_scene_mjlab` fills it in from the task.
-- **A trace env**: tracing needs a live env to read shapes from and resolve `SceneEntityCfg` regexes against. `add_scene_mjlab` builds one at build time; a plain `add_scene` scene with traced terms needs `set_trace_env(build_single_entity_trace_env(spec_fn))` or the build raises. Why, and what the env may and may not be, is in [tracing.md](tracing.md).
+- **A trace env**: tracing needs a live env to read shapes from and resolve `SceneEntityCfg` regexes against. `add_scene_mjlab` builds one at build time; a plain `add_scene` scene with traced terms needs `set_trace_env(build_single_entity_trace_env(spec_fn))` or the build raises. Why, and what the env may be: [tracing.md](tracing.md).
 
-Events with no policy have nowhere to go: events belong to an MDP ([document.md](document.md)), so a scene that sets events and adds no policy writes none, with a RuntimeWarning.
+Events belong to an MDP ([document.md](document.md)), so a scene that sets events and adds no policy writes none, with a RuntimeWarning.
 
-`add_policy_wandb` fetches a run's checkpoints (`source.wandb.fetch_checkpoints`) and converts each with `mjlab.runner.export_checkpoint`; `add_policy_hf` fetches a Hub repository's `.onnx` (`source.hf`) and fills the joint mapping from the task's action terms, else from `mjlab.onnx_meta` ([mjlab.md](mjlab.md)). Each call opens the scene on the highest-step checkpoint it added unless the scene already has a default, and a later `add_policy(default=True)` takes over. `add_policy_wandb(only_latest=False)` converts at build time but checks for wandb, mjlab and torch when called, and skips, with a RuntimeWarning, a checkpoint an earlier run in the list already added (mjlab's runs for one task form a resume chain, so the only name two runs share is that boundary). That skip is deduplication of *one* checkpoint seen twice; the id rename handles two *different* objects that sanitize to one id. Neither should grow into the other.
+`add_policy_wandb` fetches a run's checkpoints (`source.wandb.fetch_checkpoints`) and converts each with `mjlab.runner.export_checkpoint`; `add_policy_hf` fetches a Hub repository's `.onnx` (`source.hf`) and fills the joint mapping from the task's action terms, else from `mjlab.onnx_meta` ([mjlab.md](mjlab.md)). Each call opens the scene on the highest-step checkpoint it added unless the scene already has a default, and a later `add_policy(default=True)` takes over. `add_policy_wandb(only_latest=False)` converts at build time but checks for wandb, mjlab and torch when called, and skips, with a RuntimeWarning, a checkpoint an earlier run in the list already added (mjlab's runs for one task form a resume chain, so the only name two runs share is that boundary). That skip deduplicates *one* checkpoint seen twice; the id rename handles two *different* objects that sanitize to one id. Neither should grow into the other.
 
 ## `mdp.py`: `MdpConfig`
 
@@ -59,4 +59,4 @@ A rigged character drawn over the robot, outside the model: [skins.md](skins.md)
 
 Camera parameters (lookat, distance, fovy, elevation, azimuth) and tracking mode (`OriginType`: AUTO / WORLD / ASSET_ROOT / ASSET_BODY). Elevation and azimuth are MuJoCo's (the direction the camera looks), so an mjlab task's values carry over unchanged. `ViewerConfig.from_position()` computes spherical params from a Cartesian viewer position.
 
-The graphics settings (#232) follow mjlab's fields: `color_management` (`"classic"`, MuJoCo's classic renderer's colours, or `"filament"`, its Filament renderer's colour management, tone mapping and exposure), the Filament-only `tone_mapping`, `exposure` (stops), `output_color_space` and `base_color_type`, which a classic config refuses, and `enable_shadows` / `enable_reflections` / `enable_haze`, MuJoCo's `mjRND_*` flags. The manifest carries them as the scene's `graphics`, beside `camera` (format 9); `SceneHandle.viewer` hands the config back for `dataclasses.replace`. How the build resolves them and the browser draws them: [build.md](build.md), [frontend.md](frontend.md).
+The graphics settings follow mjlab's fields: `color_management` (`"classic"`, MuJoCo's classic renderer's colours, or `"filament"`, its Filament renderer's colour management, tone mapping and exposure), the Filament-only `tone_mapping`, `exposure` (stops), `output_color_space` and `base_color_type`, which a classic config refuses, and `enable_shadows` / `enable_reflections` / `enable_haze`, MuJoCo's `mjRND_*` flags. The manifest carries them as the scene's `graphics`, beside `camera` (format 9); `SceneHandle.viewer` hands the config back for `dataclasses.replace`. How the build resolves them and the browser draws them: [build.md](build.md), [frontend.md](frontend.md).

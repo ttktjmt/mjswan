@@ -300,9 +300,9 @@ export interface HandTrackingDescriptor {
 
 /**
  * One primitive geom drawn over the scene and never simulated: what a host shows where a
- * geom would go before it adds one, and while it edits one. It is
- * built as the model's geoms are, casts a shadow, and survives a scene load; neither the
- * pointer modes nor `pick` hit it.
+ * geom would go before it adds one, and while it edits one. It is built as the model's
+ * geoms are, casts a shadow, and survives a scene load; neither the pointer modes nor
+ * `pick` hit it.
  */
 export interface PreviewControls {
   /** Draw it, or move and reshape the one on show. Live: the model is never touched. */
@@ -410,8 +410,8 @@ export interface MjswanEngine {
 
   /**
    * The surface under a point of the canvas, in client CSS pixels as a `PointerEvent`
-   * gives them, by MuJoCo's own ray: what the simulation would hit, the floor
-   * included, and nothing only drawn. Null over empty space, or before a scene loads.
+   * gives them, by MuJoCo's own ray: what the simulation would hit, the floor included,
+   * and nothing only drawn. Null over empty space, or before a scene loads.
    */
   pick(clientX: number, clientY: number): PickHit | null;
 

@@ -1,6 +1,6 @@
 # The simulation document
 
-`document/` and the rules of what a build writes: the tree, `manifest.json`, ids, the policy slot tables, `format` versus `version`, the `.swn` container, and what a policy switch does to an MDP's events. `build/` writes all of it ([build.md](build.md)); `app.py`, `cli.py` and `cloud/` read it through `document/`, which is torch- and mjlab-free so they need neither. `document/manifest.py` holds the constants `build/` writes and `app.py` / `cloud/` read: `DOCUMENT_FORMAT`, `MANIFEST_NAME` and the slot defaults.
+`document/` and the rules of what a build writes: the tree, `manifest.json`, ids, the policy slot tables, `format` versus `version`, the `.swn` container, and what a policy switch does to an MDP's events. `build/` writes all of it ([build.md](build.md)); `app.py`, `cli.py` and `cloud/` read it through `document/`, which is torch- and mjlab-free so they need neither. `document/manifest.py` holds the constants both sides share: `DOCUMENT_FORMAT`, `MANIFEST_NAME` and the slot defaults.
 
 ## The tree is the document
 
@@ -46,11 +46,11 @@ Every id is `name2id(name)` (`document/ids.py`): lowercased, every run of charac
 | scene | its project (`licenses` is reserved: it is the project's license directory) |
 | mdp, policy, splat, skin | its scene |
 
-A collision is **not** an error: two scenes called "Flat Terrain" is a reasonable thing to write. The second becomes "Flat Terrain_1" with id `flat_terrain_1`, with a RuntimeWarning naming both (`assign_name`). The rename reaches the name as well as the id: renaming only the id left two entries alike in the viewer's lists, which its select refuses (the page rendered nothing), and broke "every id is `name2id(name)`". A policy's motions, which have no id, are renamed the same way. `unique_id` is the scoped `_N` suffix underneath; MDP ids take the id-only form, `assign_id` ([object-model.md](object-model.md) has how an MDP id is chosen).
+A collision is **not** an error: two scenes called "Flat Terrain" is a reasonable thing to write. The second becomes "Flat Terrain_1" with id `flat_terrain_1`, with a RuntimeWarning naming both (`assign_name`). The rename reaches the name as well as the id, so every id stays `name2id(name)` and no two entries in the viewer's lists are alike (its select refuses that, and the page renders nothing). A policy's motions, which have no id, are renamed the same way. `unique_id` is the scoped `_N` suffix underneath; MDP ids take the id-only form, `assign_id` ([object-model.md](object-model.md) has how an MDP id is chosen).
 
 The URL parameters `?project=`, `?scene=`, `?policy=` and `?skin=` take ids only (an empty `?skin=` is the Skin menu's None). The frontend's `sanitizeName` mirrors `name2id` character for character, and `src/mjswan/template/src/manifest/name2id_cases.json` pins the pair from both test suites: a case they disagree on (an apostrophe, parentheses, an accent) is a link that opens the wrong scene.
 
-Generated ids (UUIDs) were rejected: a URL is a sharing surface and `?project=g1_locomotion&scene=flat_terrain` has to be readable by a person, and mjswan Cloud simulations are immutable once published, so the link stability UUIDs would buy is stability the system already has.
+Generated ids (UUIDs) are rejected: a URL is a sharing surface and `?project=g1_locomotion&scene=flat_terrain` has to be readable by a person, and mjswan Cloud simulations are immutable once published, so the link stability UUIDs would buy is stability the system already has.
 
 ## The policy slot tables: `in_keys` and `out_keys`
 
@@ -59,7 +59,7 @@ Generated ids (UUIDs) were rejected: a URL is a sharing surface and `?project=g1
 - The defaults are `DEFAULT_IN_KEYS = ("actor",)`, mjlab's own name for the group its actor network reads, and `DEFAULT_OUT_KEYS = ("action",)` (`document/manifest.py`). The TypeScript copy is pinned to the Python one by `core/policy/default_slots.json`: changing either alone breaks every policy that declares no `in_keys`.
 - A single-input network needs no `in_keys`: its one input is the default slot. A network with several inputs **must** declare it (`check_slot_tables` raises at `add_policy`), since nothing else records where the runtime-synthesized tensors sit relative to the observation groups. A table whose length differs from the network's inputs or outputs is refused at `add_policy`, not discovered at playback.
 - Several outputs with no `out_keys` warn rather than raise, since which one is the action is unknowable; a multi-output network driven from the wrong output does not fail, the robot just falls.
-- The tables are declared on `add_policy` and written into the manifest's policy entry. A `config_path` sidecar's tables are ignored with a warning ([build.md](build.md)). A table in the script is verbose where a sidecar hid it, and that is the point: a positional table nobody can see is how a checkpoint declared the wrong input name for a long time without anyone noticing.
+- The tables are declared on `add_policy` and written into the manifest's policy entry. A `config_path` sidecar's tables are ignored with a warning ([build.md](build.md)). A table in the script is verbose where a sidecar hid it, and that is the point: a positional table nobody sees can stay wrong unnoticed.
 
 ## An MDP owns its events; a policy switch is an MDP switch
 
@@ -78,7 +78,7 @@ Clearing the policy still restores, so a scene with no policy is as compiled. Th
 - **`version`** is the mjswan release that wrote the document. The release workflow sets `_version.py` and the template's `package.json` from one input, so the Python version and the npm engine version are the same string and `https://cdn.jsdelivr.net/npm/mjswan@<version>/dist/mjswan.js` resolves for every released version. A **host** uses `version` to select the engine.
 - **`format`** (`DOCUMENT_FORMAT` in `document/manifest.py`) is an integer describing the document's structure, bumped by hand **only** when an engine reading the old structure would misread the new one. The **engine** uses it to protect itself: `parseManifest` refuses a document whose `format` exceeds `MAX_DOCUMENT_FORMAT` (`template/src/manifest/index.ts`), naming both and the document's `version`, and refuses a document with no `format` (the pre-manifest layout, a root `assets/config.json`). Every earlier format still parses.
 
-They are read by different parties for different decisions, so a document carries both. When you add something an older engine would ignore and so run wrong, bump both constants together and add a line to each saying what the format adds. The history:
+They are read by different parties for different decisions, so a document carries both. When you add something an older engine would ignore and so run wrong, bump `DOCUMENT_FORMAT` and `MAX_DOCUMENT_FORMAT` together, say beside each what the format adds, and add a row here:
 
 | format | adds | an older engine would |
 |---|---|---|
@@ -95,7 +95,7 @@ They are read by different parties for different decisions, so a document carrie
 
 The frontend still runs a few older documents' native markers (a pre-format-4 `time_out`, a pre-format-5 `prev_action` and model-field descriptor: [frontend.md](frontend.md)).
 
-No `min_viewer` key and no per-feature table. A per-feature minimum-viewer computation was designed and dropped: it only helps the "old engine, new document" pair, which engine selection eliminates for hosted cases, and it costs a hand-maintained table that must stay correct forever. Adding it later is backward compatible (an old engine ignores an unknown key) but cannot help engines already shipped. A host that selects an engine can keep a version override table (`{"0.9.3": "0.9.7"}`, resolution `overrides[version] ?? version`) for a published engine that turns out broken.
+No `min_viewer` key and no per-feature minimum-viewer table: it would only help the "old engine, new document" pair, which engine selection eliminates for hosted cases, at the cost of a hand-maintained table that must stay correct forever. Adding it later is backward compatible (an old engine ignores an unknown key) but cannot help engines already shipped. A host that selects an engine can keep a version override table (`{"0.9.3": "0.9.7"}`, resolution `overrides[version] ?? version`) for a published engine that turns out broken.
 
 ### Traced graphs and stored documents
 
@@ -113,7 +113,7 @@ A ZIP whose entries are the tree's own paths (`document/container.py`): a direct
 Two output modes:
 
 - **Document**: `<name>.swn`, the deliverable (`MjswanApp.save_document()`).
-- **App**: a directory holding the engine plus the *expanded* tree, not the zip. This is what `mjswan serve` runs and what GitHub Pages hosts unchanged. Embedding the zip would make the page unpack it before the first byte of a scene could load, for no benefit where the files can simply be served.
+- **App**: a directory holding the engine plus the *expanded* tree, not the zip. This is what `mjswan serve` runs and what GitHub Pages hosts unchanged. Embedding the zip would make the page unpack it before a scene could load, for no benefit where the files can simply be served.
 
 ## `app.py`: `MjswanApp`
 
@@ -121,6 +121,6 @@ Wraps a built `dist/`: the engine plus the expanded document. `from_document()` 
 
 ## Rejected
 
-- **A config JSON per policy, graphs scoped per policy.** Fixed path collisions but kept the policy as the MDP's owner, so every checkpoint of a task traced and wrote its own copy, and events had no owner.
+- **A config JSON per policy, graphs scoped per policy.** Fixes path collisions but keeps the policy as the MDP's owner, so every checkpoint of a task traces and writes its own copy, and events have no owner.
 - **Content-addressed graphs** (`graphs/<sha256>.onnx`, every config pointing in). Deduplicates checkpoints without a new unit, but makes every path opaque, so nothing can be found or diffed by hand and the unzipped tree is unreadable, and it leaves events unowned. Deduplication is a consequence worth having, not a thing to organize the document around.
 - **UUIDs** and **`min_viewer`**: above. **Uploading a `.swn` to Cloud as one file**: [cloud.md](cloud.md).

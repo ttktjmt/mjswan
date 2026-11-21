@@ -166,8 +166,8 @@ def _add_tracking_scene(
     scene = project.add_scene_mjlab(TRACKING_TASK, env_cfg=env_cfg)
 
     # Slot tables are positional and the export's own tensor names do not say which
-    # slot is which. Only `action` is read; the six after it are the
-    # reference pose the clip already carries, named so the table lines up.
+    # slot is which. Only `action` is read; the six after it are the reference pose the
+    # clip already carries, named so the table lines up.
     policies = scene.add_policy_hf(
         HF_REPO,
         filename=checkpoints,
@@ -402,11 +402,11 @@ def _add_myofinger(project: mjswan.ProjectHandle) -> None:
     )
 
 
-# Skins. Each file sits under `skins/` in HF_REPO with its license; the
-# repository's README says where it came from. AvatarSample_A to C are not CC0: pixiv's
-# terms let anyone use and redistribute them as distributed, but never relabelled as
-# CC0, sold, behind a paywall, with an editor for their looks, or shown as if pixiv or
-# VRoid endorse mjswan.
+# Skins. Each file sits under `skins/` in HF_REPO with its license; the repository's
+# README says where it came from. AvatarSample_A to C are not CC0: pixiv's terms let
+# anyone use and redistribute them as distributed, but never relabelled as CC0, sold,
+# behind a paywall, with an editor for their looks, or shown as if pixiv or VRoid
+# endorse mjswan.
 
 #: The G1 body each VRM humanoid bone follows. The waist's yaw and roll go to spine and
 #: its pitch to chest; the G1 has no neck, so neck and head follow the torso.

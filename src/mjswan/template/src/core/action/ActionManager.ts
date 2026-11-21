@@ -2,8 +2,8 @@
  * The action terms of one policy, run as mjlab's `ActionManager` runs them: `process`
  * once per control step, `apply` once per substep, `reset` at an episode's start.
  *
- * A native term processes in `processAction`; a traced one in its
- * `OnnxActionProcess`, which this awaits. Either way `applyAction` takes it from there.
+ * A native term processes in `processAction`; a traced one in its `OnnxActionProcess`,
+ * which this awaits. Either way `applyAction` takes it from there.
  */
 
 import { inHold, processAction, type ProcessContext, type ResolvedActionTerm } from './applyAction';

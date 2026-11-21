@@ -1,7 +1,7 @@
 /**
  * `entity_write` apply primitive.
  *
- * Take a value an ONNX graph already computed and write it into mjData — the
+ * Take a value an ONNX graph already computed and write it into mjData: the
  * graph owns the sampling, so this side only applies. The write kinds, the output
  * naming (`"<entity>__<kind>__<field>"`, or `"<kind>__<field>"` from a bundle built
  * before a term could write two entities) and the world-frame velocity convention

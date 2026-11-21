@@ -1,6 +1,6 @@
 /**
- * The handles a host can put on the preview: arrows that resize it and rings that
- * turn it, along and about its own axes, and arrows that move it along the world's (x red,
+ * The handles a host can put on the preview: arrows that resize it and rings that turn
+ * it, along and about its own axes, and arrows that move it along the world's (x red,
  * y green, z blue). They are drawn a fixed size on screen and over everything else, as an
  * editor's gizmo is, and the math of a drag on them is here too, in MuJoCo's axes.
  */

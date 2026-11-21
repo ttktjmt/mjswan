@@ -1516,8 +1516,8 @@ it could reorder the observation the policy reads: a subclass's own field (PAC-M
 ## Output structure
 
 `builder.build()` writes a fully static site: the engine, plus the **simulation document**
-— one `manifest.json` describing every project, scene, MDP, policy and splat, and one
-directory per project with its data.
+(one `manifest.json` describing every project, scene, MDP, policy and splat, and one
+directory per project with its data).
 
 ```
 dist/
@@ -1551,14 +1551,14 @@ dist/
 ```
 
 Copy `dist/` to any static host (GitHub Pages, Netlify, S3, …) and it works without a server.
-License files are not manifest keys:
-`manifest.json` is the same with and without them.
+License texts stay in their files; `manifest.json` only names them (a project's `work`, a
+scene's `credits`), since a static host lists no directory.
 
 Every key in `manifest.json` is `snake_case`, and every path under a scene entry resolves
 against that scene's directory, so a policy entry reads `"onnx": "policy/walk.onnx"` and
 its MDP's fused group `"mdp/walk/obs/actor.onnx"`. A key carrying its default is omitted
 — `in_keys` when it is `["actor"]`, `out_keys` when it is `["action"]`. The manifest also
-stamps `format` (the layout's version, currently 2; an engine refuses a document newer than
+stamps `format` (the layout's version, currently 10; an engine refuses a document newer than
 it knows) and `version` (the mjswan release that wrote it), independently.
 
 `MjswanApp.save_document()` packs the document — the manifest and the project directories,

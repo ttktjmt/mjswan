@@ -1,6 +1,6 @@
 /**
- * Termination terms: traced-ONNX bodies, the legacy native `time_out`,
- * and the manager's OR-reduce with truncation split out.
+ * Termination terms: traced-ONNX bodies, the legacy native `time_out`, and the manager's
+ * OR-reduce with truncation split out.
  *
  * The graph's math is validated Python-side by the parity harness; what matters
  * here is the native half: bool decoding, a verdict that is this step's rather than the

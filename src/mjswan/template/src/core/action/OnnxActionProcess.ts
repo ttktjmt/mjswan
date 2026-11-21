@@ -1,7 +1,6 @@
 /**
- * A traced action term's `process`: its own `process_actions` and `reset`,
- * exported as graphs with the term's state promoted to explicit I/O, as a traced command's
- * is:
+ * A traced action term's `process`: its own `process_actions` and `reset`, exported as
+ * graphs with the term's state promoted to explicit I/O, as a traced command's is:
  *
  *     process: (raw, slots..., prev_<f>..., [rand]) -> (next_<f>..., processed, [processed_from])
  *     reset:   (slots..., prev_<f>..., [rand])      -> (next_<f>...)

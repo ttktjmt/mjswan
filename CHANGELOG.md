@@ -348,8 +348,8 @@ shortcuts.
   source. Additive: the runtime ignores the keys, which exist for readers of the
   document, mjswan Cloud's inspector first.
 - **The build output is a simulation document:** one `manifest.json` at the
-  root — `{format, version, uses_custom_js, plugins?, projects}`, every key `snake_case`
-  — over `<project-id>/<scene-id>/{scene.mjz, mdp/<mdp-id>/…, policy/<policy-id>.onnx,
+  root (`{format, version, uses_custom_js, plugins?, projects}`, every key `snake_case`)
+  over `<project-id>/<scene-id>/{scene.mjz, mdp/<mdp-id>/…, policy/<policy-id>.onnx,
   assets/…}`. Every path under a scene entry resolves against the scene directory. The
   `format` integer versions the layout (an engine refuses a newer document, naming both
   values); `version` is the release that wrote it, and never a gate.
@@ -907,8 +907,9 @@ shortcuts.
   `mjswan.publish` / `auth` → `mjswan.cloud.publish` / `auth`; `mjswan.licenses` →
   `mjswan.license`; `mjswan.document` is a package; `mjswan._cli` → `mjswan.cli`;
   `ActionTermCfg` is defined in `mjswan.managers.action_manager`, as mjlab's is. The
-  full old → new table is in [context/package-layout.md](context/package-layout.md). No
-  compatibility shims: old module paths do not import.
+  full old → new table is in
+  [context/package-layout.md](context/package-layout.md#old--new). No compatibility
+  shims: old module paths do not import.
 
 - **The engine bundle fetches ONNX Runtime Web's wasm from within its own `dist/`**
   ([#123](https://github.com/ttktjmt/mjswan/issues/123)): `dist/mjswan.js` pointed

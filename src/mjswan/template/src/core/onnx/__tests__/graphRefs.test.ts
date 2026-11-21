@@ -1,9 +1,9 @@
 /**
  * Which traced term graphs a config refers to.
  *
- * Getting this wrong is quiet: a ref that is missed means no session, which means
- * the manager warns and drops that term — a policy that runs with a hole in its
- * observation vector, or a termination that never fires.
+ * Getting this wrong is quiet: a ref that is missed means no session, so the manager
+ * warns and drops that term, leaving a policy that runs with a hole in its observation
+ * vector, or a termination that never fires.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -11,8 +11,8 @@ import { policyGraphRefs } from '../graphRefs';
 
 describe('policyGraphRefs', () => {
   it('collects refs from observations, terminations, commands and events', () => {
-    // Events are one of the sections because they travel inside the MDP,
-    // and a native event carries no graph to collect.
+    // Events are one of the sections because they travel inside the MDP, and a native
+    // event carries no graph to collect.
     expect(
       policyGraphRefs({
         onnx: 'policy/walk.onnx',

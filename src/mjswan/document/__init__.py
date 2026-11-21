@@ -1,5 +1,5 @@
-"""The ``.swn`` simulation document: what the manifest says, how the tree is
-named, the container that packages it as one file, and the skin files it may carry.
+"""The ``.swn`` simulation document: what the manifest says, how the tree is named, the
+container that packages it as one file, and the skin files it may carry.
 
 Torch- and mjlab-free, so ``app``, ``cli`` and ``cloud`` can read what ``build`` writes
 without them.

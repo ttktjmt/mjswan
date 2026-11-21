@@ -3,7 +3,7 @@
 The one place that knows the shape of a project, scene, MDP and policy entry.
 Every key is ``snake_case``; a path resolves against the directory of the level that
 declares it: the scene directory for everything under a scene entry, the document root
-for the top-level ``plugins`` (manifest rules 1 and 2).
+for the top-level ``plugins``.
 """
 
 from __future__ import annotations
@@ -85,8 +85,8 @@ def _strip_slot_tables(sidecar: dict, config_src: Path) -> dict:
     """Drop a sidecar's ``onnx`` block and slot tables; those are declared in Python.
 
     ``in_keys``/``out_keys``, top-level or under ``onnx.meta``, belong on ``add_policy``
-    where the build checks them against the network. Found here they are
-    ignored with a warning, so a stale table cannot quietly win over the code.
+    where the build checks them against the network. Found here they are ignored with a
+    warning, so a stale table cannot quietly win over the code.
     """
     onnx_block = sidecar.get("onnx")
     meta = (onnx_block.get("meta") or {}) if isinstance(onnx_block, dict) else {}

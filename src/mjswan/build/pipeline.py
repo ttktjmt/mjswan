@@ -13,7 +13,7 @@ Output structure::
         │   └── LICENSE.<component>, NOTICE.<component>  (third-party, once per text)
         └── <scene-id>/
             ├── scene.mjz | scene.mjb
-            ├── mdp/<mdp-id>/{obs,term,command,event}/<name>.onnx
+            ├── mdp/<mdp-id>/{obs,term,command,event,action}/<name>.onnx
             ├── policy/<policy-id>.onnx
             └── assets/    (<motion>.npz, <splat>.spz, <skin>.vrm | .glb)
 """

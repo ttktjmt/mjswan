@@ -22,12 +22,11 @@ reset, and the commands a user steers with. In mjlab those are Python functions 
 PyTorch tensors. In a browser there is no Python and no PyTorch.
 
 mjswan's answer is to **trace those functions to ONNX at build time** and run them with
-ONNX Runtime Web — the same runtime that already runs the policy network.
+ONNX Runtime Web, the same runtime that already runs the policy network.
 
 !!! info "Why not a DSL"
-    Earlier versions of mjswan interpreted a hand-written JSON DSL in TypeScript
-    instead; that required a second implementation of every mjlab operation, kept
-    numerically in lockstep by hand.
+    A hand-written JSON DSL interpreted in TypeScript would need a second implementation
+    of every mjlab operation, kept numerically in lockstep by hand.
 
 ## What that buys you
 

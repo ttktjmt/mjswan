@@ -181,8 +181,8 @@ def _adapt_obs_group(group: Any, name: str | None = None) -> MjswanObservationGr
 _TRAINING_ONLY_OBS_GROUPS = frozenset({"critic"})
 
 #: The slot a single observation group lands under: the runtime's default ``in_keys``,
-#: which is mjlab's name for the actor's group, so the common case needs no key
-#:. The TypeScript copy is pinned to this one by ``default_slots.json``.
+#: which is mjlab's name for the actor's group, so the common case needs no key. The
+#: TypeScript copy is pinned to this one by ``default_slots.json``.
 DEFAULT_OBS_GROUP_KEY = DEFAULT_IN_KEYS[0]
 
 #: mjlab's name for the exported policy's network, a key of ``rl_cfg.obs_groups``. Same

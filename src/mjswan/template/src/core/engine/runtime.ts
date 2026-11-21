@@ -435,8 +435,8 @@ export class mjswanRuntime {
   private policyGraphs: OnnxSessionCache;
   /**
    * The compiled values of every `mjModel` field a startup randomization has touched, for
-   * the life of the model. Restored before the next MDP's startup pass, so
-   * randomizations never compound across a policy switch.
+   * the life of the model. Restored before the next MDP's startup pass, so randomizations
+   * never compound across a policy switch.
    */
   private modelFieldDefaults: ModelFieldDefaults | null;
   /**
@@ -1576,10 +1576,10 @@ export class mjswanRuntime {
     this.cameraFeeds.clear();
     this.debugVizSet.clear();
 
-    // An MDP switch, in order: restore every model field the previous
-    // startup pass touched, reseed, then apply the incoming MDP's startup events over the
-    // compiled values. Restoring runs even with no policy following, so clearing the
-    // policy leaves the scene as compiled.
+    // An MDP switch, in order: restore every model field the previous startup pass
+    // touched, reseed, then apply the incoming MDP's startup events over the compiled
+    // values. Restoring runs even with no policy following, so clearing the policy leaves
+    // the scene as compiled.
     const restored = this.modelFieldDefaults?.restore() ?? false;
     if (restored && this.mjModel && this.mjData) {
       this.mujoco.mj_setConst(this.mjModel, this.mjData);

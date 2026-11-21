@@ -1,10 +1,9 @@
 """mjlab action terms as mjswan's.
 
 mjlab's own action classes run natively in the browser, matched by class name; a task's
-own class is traced at build time. The regex scale/offset patterns, and the
-PD gains and command delays mjlab keeps on the actuator config, are resolved against the
-policy's joint names, or a command term's own, since the browser looks joints up by
-exact name.
+own class is traced at build time. The regex scale/offset patterns, and the PD gains and
+command delays mjlab keeps on the actuator config, are resolved against the policy's
+joint names, or a command term's own, since the browser looks joints up by exact name.
 """
 
 from __future__ import annotations

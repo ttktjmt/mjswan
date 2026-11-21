@@ -89,10 +89,9 @@ class MjswanApp:
     def from_document(cls, source: str | Path) -> "MjswanApp":
         """The app for a built directory, or for a ``.swn`` document.
 
-        A directory is already an app and is served where it sits. A document is only
-        the tree, so one is assembled: unpacked into a temporary directory
-        with the packaged engine laid over it, removed when the process exits. The engine
-        is built first if no matching SPA is cached, exactly as a build would.
+        A directory is already an app and is served where it sits. A document carries no
+        engine, so it is unpacked into a temporary directory (removed at exit) with the
+        packaged engine laid over it, built first if no matching SPA is cached.
         """
         import atexit
         import shutil

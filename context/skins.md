@@ -1,6 +1,6 @@
 # Skins
 
-A skin is a rigged character drawn over the robot, posed from the robot's bodies every frame. It is **never part of the model**: physics, collision and the policy stay the robot's, and a hidden robot is still simulated, collides and can be grabbed. A scene's look is therefore no longer its model's; Debug Viz's Xray switch is how to see the model. Python side: `skin.py`, `rig/`, `document/skin.py`, `build/skin.py`; browser side: `core/skin/`.
+A skin is a rigged character drawn over the robot, posed from the robot's bodies every frame. It is **never part of the model**: physics, collision and the policy stay the robot's, and a hidden robot is still simulated, collides and can be grabbed. So a scene's look is not its model's; Debug Viz's Xray switch shows the model. Python side: `skin.py`, `rig/`, `document/skin.py`, `build/skin.py`; browser side: `core/skin/`.
 
 ## `skin.py`: `SkinConfig` / `SkinHandle`
 
@@ -20,7 +20,7 @@ Every name is resolved to a node index at build time. The browser poses a VRM th
 
 ### Fitted to the robot at build time
 
-- **`rest_pose`** names the robot's pose while the character holds its own rest pose: a keyframe, or hinge and slide joints. Each bone's rest offset is the turn that undoes its body's from the zero pose to that pose, relative to the root body. A VRM rests in a T-pose; a humanoid robot's arms hang, so its rest pose holds them out. Hand-written per-bone offsets in degrees were rejected: `rest_pose` reproduces such tables within 0.05° and reads as the pose it is.
+- **`rest_pose`** names the robot's pose while the character holds its own rest pose: a keyframe, or hinge and slide joints. Each bone's rest offset is the turn that undoes its body's from the zero pose to that pose, relative to the root body. A VRM rests in a T-pose; a humanoid robot's arms hang, so its rest pose holds them out. Rejected: hand-written per-bone offsets in degrees, since `rest_pose` reproduces such tables within 0.05° and reads as the pose it is.
 - **`root_height`** (the root's height above the robot's soles at that pose) is measured; **`hips_offset`**, unless set, centres the character's limb roots over the robot's across the floor.
 - **`retarget`** defaults to `"hybrid"`: each bone turns as its body has, keeping the character's proportions, then each limb is bent (two-bone IK) so its hand or foot lands where the robot's is. `"rotation"` only turns; `"position"` fixes each bone to its body and warns when the limbs are more than 10% off the robot's (`STRETCH_TOLERANCE`).
 
@@ -34,7 +34,7 @@ A `ModelledSkinConfig` is the other kind: a `.glb` modelled on the robot itself,
 
 ### Publishing
 
-`mjswan publish` uploads skins as data and refuses what mjswan Cloud would ([cloud.md](cloud.md)): a file the engine cannot draw, and a VRM whose license forbids redistribution. A `.glb` carries its license as any component does, as `LICENSE.skin-<id>` and `NOTICE.skin-<id>` ([licenses.md](licenses.md)), and a scene's `credits` summarise each VRM skin's `meta`. Converting every glTF to a VRM at build time was rejected: it rewrites the author's file, and a VRM's license fields would then be mjswan's, not theirs.
+`mjswan publish` uploads skins as data and refuses what mjswan Cloud would ([cloud.md](cloud.md)): a file the engine cannot draw, and a VRM whose license forbids redistribution. A `.glb` carries its license as any component does, as `LICENSE.skin-<id>` and `NOTICE.skin-<id>` ([licenses.md](licenses.md)), and a scene's `credits` summarise each VRM skin's `meta`. Rejected: converting every glTF to a VRM at build time, which rewrites the author's file and makes a VRM's license fields mjswan's, not theirs.
 
 ## `core/skin/`: the browser side
 

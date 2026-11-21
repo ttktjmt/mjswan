@@ -2,10 +2,10 @@
  * `CommandManager`: `OnnxCommand` registration.
  *
  * `OnnxCommand` bypasses the class registry the same way `OnnxEvent` bypasses
- * `EventManager`'s — it needs a session + rng the registry's
- * `new Term(name, config, context)` shape has no room for. These tests pin
- * that bypass and its failure mode (missing session/rng warns and skips
- * rather than throwing and taking down every other command).
+ * `EventManager`'s: it needs a session and rng the registry's
+ * `new Term(name, config, context)` shape has no room for. These tests pin that bypass
+ * and its failure mode (missing session/rng warns and skips rather than throwing and
+ * taking down every other command).
  */
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';

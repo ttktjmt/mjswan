@@ -47,9 +47,9 @@ def check_slot_tables(
     ``in_keys[i]`` fills the *i*-th input and ``out_keys[i]`` names the *i*-th output, so
     each table must be exactly as long as what it indexes. A network with several inputs
     must declare ``in_keys``: nothing else records where the runtime-synthesized tensors
-    sit relative to the observation groups. Several *outputs* cannot be
-    refused the same way, since which one is the action is unknowable here, so the
-    default (the first) is announced instead.
+    sit relative to the observation groups. Several *outputs* cannot be refused the same
+    way, since which one is the action is unknowable here, so the default (the first) is
+    announced instead.
     """
     inputs, outputs = onnx_io_names(model)
     if in_keys is None:
@@ -174,8 +174,8 @@ def action_term_joint_names(
 
     What an mjlab export's ``joint_names`` would say, recovered from the action terms.
     ``actuator_names`` holds *joint* patterns despite its name (``JointPositionAction``
-    matches them against joint names), so each term's patterns
-    are matched against the actuated joints in joint order, term by term.
+    matches them against joint names), so each term's patterns are matched against the
+    actuated joints in joint order, term by term.
 
     ``None`` unless every term answers: a muscle term names actuators rather than joints,
     a pattern may match nothing, and two terms may claim one joint. A command term takes
@@ -230,9 +230,9 @@ class PolicyConfig:
 
     mdp: MdpConfig = field(default_factory=MdpConfig)
     """The MDP this policy runs against: its observations, actions, terminations,
-    commands and events as one unit. Two policies given the same object
-    share one MDP: one set of traced graphs, one ``mdp/<id>/`` directory. The five
-    read-only properties below are views onto it."""
+    commands and events as one unit. Two policies given the same object share one MDP:
+    one set of traced graphs, one ``mdp/<id>/`` directory. The five read-only properties
+    below are views onto it."""
 
     policy_joint_names: list[str] | None = None
     """Ordered list of joint names controlled by the policy.

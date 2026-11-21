@@ -4,10 +4,10 @@
 
 ## `pipeline.py`: `write_app`
 
-The order, and why each step sits where it does:
+The order, and why each step sits there:
 
 1. Refuse two siblings both marked default (`_check_defaults`), then wipe the output directory.
-2. Build the frontend first (`ClientBuilder`, reusing a cached SPA when it matches) and lay the engine down (`install_spa`). The SPA is project-independent, so it is the same for every build with the same options.
+2. Build the frontend (`ClientBuilder`, reusing a cached SPA when it matches) and lay the engine down (`install_spa`). The SPA is project-independent, so it is the same for every build with the same options.
 3. Compile author TypeScript terms to `assets/plugins.js` when `uses_custom_js()` is true ([frontend.md](frontend.md) has why it is a separate module).
 4. `write_mt_headers` writes the COOP/COEP `_headers` file for `mt=True`.
 5. Per project: write the work's `LICENSE` / `NOTICE` and the project's `licenses/`. Then per scene: run pending checkpoint conversions (first, since they create the scene's policies and hand over the trace env); validate muscle action terms against the model's actuators; write the scene as DEFLATE-compressed `scene.mjz` (`mjz.to_zip_deflated`, since `mujoco.to_zip` stores entries uncompressed) or `.mjb`; copy clips, splats and skins into the scene's `assets/` (`asset.py`; motion clips deduplicated by content, and a tracking task's env pointed at the bundled clip before it is built); build or reuse the trace env; trace each `MdpConfig` once into `mdp/<mdp-id>/` (keyed on the config's identity, so a run's checkpoints share one trace); write `policy/<policy-id>.onnx`.
@@ -28,7 +28,7 @@ A project's `work` and a scene's `credits` (`credit.py`) name the license files,
 
 One module per term kind (`observation`, `termination`, `event`, `command`, `action`), each tracing plain-callable bodies via `compile/` against the scene's live env, writing `.onnx` bytes under `<scene_dir>/mdp/<mdp-id>/{obs,term,command,event,action}/` and returning the manifest-shaped entry.
 
-- **`graph.py`** owns the path convention and the one write. The ref the manifest carries *is* the path on disk, relative to the scene directory, and is scoped by MDP: term and group names are unique within an MDP but not within a scene, so two MDPs' `actor` groups would otherwise collide (and the second write used to win silently, every config still pointing at the first loading the wrong graph). The write refuses to replace a *different* graph already at one path; the guard stays as a backstop although the layout makes a collision impossible within an MDP. `stamp_provenance` writes who traced a graph into the model's own `metadata_props`, since a `.onnx` travels without the manifest that names it.
+- **`graph.py`** owns the path convention and the one write. The ref the manifest carries *is* the path on disk, relative to the scene directory, and is scoped by MDP: term and group names are unique within an MDP but not within a scene, so two MDPs' `actor` groups would otherwise collide. As a backstop, the write refuses to replace a *different* graph already at one path. `stamp_provenance` writes who traced a graph into its own `metadata_props`, since a `.onnx` travels without the manifest that names it.
 - **Fusion**: one graph per observation group (clip-then-scale folded in, mjlab's order) and one per termination group (a bool lane per term, so per-term reset reasons survive). A group with a `*Binding` term or per-term history does not fuse; a lone traced termination is deliberately left unfused. Why, and what is never fused: [tracing.md](tracing.md).
 - **Events that write `mjModel`** (mjlab's `dr.*`: `geom_friction`, `body_com_offset`, `geom_size`, ...) trace like any other, their model reads and writes keyed by element *names*, since the browser compiles its own model. `event.py` marks one `set_const` when the write leaves MuJoCo's derived constants stale.
 - **`provenance.py`** records which function each entry came from (`func` as `module:qualname`, the first line of its `doc`, its resolved `params`), and the `kind` / `term` / `func` stamped into the graph. A `SceneEntityCfg` param travels as its declared name patterns only: its resolved ids are build-env indices and mean nothing to a reader.
@@ -41,10 +41,10 @@ One module per term kind (`observation`, `termination`, `event`, `command`, `act
 
 `template/` stays where npm, Vite, CI and hatch expect it; this module drives it.
 
-- Manages a local `nodeenv` if Node isn't available system-wide, and runs the Vite build.
+- Runs the Vite build, with a local `nodeenv` when Node is not installed system-wide.
 - Caches the built SPA by a key of the mjswan version, the build options (`base_path`, `gtm_id`, `mt`, `debug`) and a SHA-256 fingerprint of the app's sources, config and declared dependencies (not `node_modules`, `dist`, `package-lock.json` or the tests the wheel leaves out). The SPA carries no project data and no author code, so any build with a matching key can reuse it.
 - `install_spa` copies the built engine and its `LICENSE` / `NOTICE` into an app directory, for the builder and for `MjswanApp.from_document` alike.
-- `build_plugins_module` bundles author `ts_src` terms into `plugins.js` with esbuild: it aliases every `mjswan/<sub>` subpath of `package.json`'s `exports` to its engine source, and `three` to `src/engine/plugin-three-shim.cjs`, which reads the engine's own three.js instance so `instanceof` and shared scene objects work across the two modules. The engine is never rebuilt for it; only this module needs Node at all for a custom-TS build.
+- `build_plugins_module` bundles author `ts_src` terms into `plugins.js` with esbuild, aliasing every `mjswan/<sub>` subpath of `package.json`'s `exports` to its engine source and `three` to `src/engine/plugin-three-shim.cjs` (why: [frontend.md](frontend.md)). The engine is never rebuilt for it.
 - `uses_custom_js()` is what the manifest's flag reads: whether any observation, termination, event or command binding registered a `ts_src`. Actions have no `ts_src` path.
 
 ## `mjz.py`
