@@ -148,10 +148,11 @@ manifest's MDP entry, and the browser's slot reader serves each one, mostly from
 ]
 ```
 
-Seven slot namespaces exist: an entity `data` field (as above), a named MuJoCo sensor's
+Eight slot namespaces exist: an entity `data` field (as above), a named MuJoCo sensor's
 `sensordata` window, a live command's state field, the episode step counter mjlab's
 `time_out` reads (`{"env": "episode_length_buf"}`), the policy's last action mjlab's
-`last_action` reads (`{"action": "action"}`), the rows of an `mjModel` field an event
+`last_action` reads (`{"action": "action"}`), an action term's internals (a traced term's
+state field, or any term's `_processed_actions`), the rows of an `mjModel` field an event
 reads (below), and a raw `mjData` field:
 
 ```json
