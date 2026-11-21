@@ -59,7 +59,7 @@ from .manifest import (
     scene_entry,
     write_manifest,
 )
-from .mjz import collect_spec_assets, to_zip_deflated
+from .mjz import to_zip_deflated
 
 if TYPE_CHECKING:
     from ..project import ProjectConfig
@@ -185,7 +185,6 @@ def write_app(
                 steps.on("packaging scene")
                 if scene.spec is not None:
                     graphics = graphics_entry(scene.viewer, scene.spec)
-                    scene.spec.assets.update(collect_spec_assets(scene.spec))
                     to_zip_deflated(scene.spec, str(scene_path))
                     scene.spec = None
                 else:
