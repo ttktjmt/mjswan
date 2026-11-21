@@ -1062,6 +1062,20 @@ shortcuts.
 
 ### Fixed
 
+- **A scene of attached models packs as a `.mjz` that loads, with its own files.** Models
+  attached with an empty prefix bring same-named default classes that MuJoCo writes but
+  cannot read back, and under MuJoCo 3.11 an element on `main` inside another
+  `childclass` silently took that class on reload. When the written defaults would not
+  come back as they were, every element is now written on the root class with its values
+  spelled out; other scenes, mjlab's included, keep their classes. A mesh or texture of a
+  model attached from another directory was left out, or replaced by the file under the
+  same path in the scene's own directory: every file is now checked against MuJoCo's
+  encoder (`MjSpec.encode`), and one nothing finds stops the build with
+  `FileNotFoundError`.
+
+- **An mjlab scene whose entities ship different files under one relative path draws each
+  with its own.** One entity's file stood in for both.
+
 - **A scene without a policy holds its keyframe's controls.** The engine zeroed `ctrl`
   before every physics step even with no action term, so position actuators drove every
   joint toward 0 (MuJoCo Menagerie's Unitree Go1 flipped onto its back within a second).

@@ -2,7 +2,8 @@
 
 ``mujoco.to_zip`` stores entries uncompressed, so this is the DEFLATE-compressed
 equivalent, with the model's mesh and texture paths rewritten to the flat layout inside
-the archive. Buffer-only textures, which have no file to copy, are encoded to PNG.
+the archive. Buffer-only textures, which have no file to copy, are encoded to PNG, and
+default classes MuJoCo could not read back are written out on each element.
 """
 
 from __future__ import annotations
@@ -10,11 +11,13 @@ from __future__ import annotations
 import os
 import posixpath
 import struct
+import tempfile
+import warnings
 import xml.etree.ElementTree as ET
 import zipfile
 import zlib
 from pathlib import Path
-from typing import IO, Union
+from typing import IO, Any, Union
 
 import mujoco
 
@@ -112,8 +115,7 @@ def _iter_asset_lookup_candidates(path: str) -> list[str]:
     - a normalized ZIP-safe path (leading ``..`` stripped), or
     - only the basename when the source spec used an absolute meshdir/texturedir.
 
-    MyoSuite scenes hit the third case after mjlab attaches child specs into the
-    final scene spec, so we try progressively looser matches in that order.
+    A child spec mjlab attaches into a scene can hit the third case.
     """
     posix_path = path.replace("\\", "/")
     candidates: list[str] = []
@@ -174,36 +176,9 @@ def collect_spec_assets(spec: mujoco.MjSpec) -> dict[str, bytes]:
     return assets
 
 
-def _rewrite_xml_paths(
-    xml_str: str,
-    mesh_dir: str,
-    texture_dir: str,
-    absolute_names: dict[str, str] | None = None,
-) -> str:
-    """Rewrite asset paths in MuJoCo XML so the file is self-contained.
-
-    Resolves ``meshdir``/``texturedir`` + ``file`` into a single normalised
-    path (with leading ``..`` stripped), then removes the directory hints
-    from ``<compiler>`` elements. ``absolute_names`` is what
-    :func:`_absolute_entry_names` gave the archive's entries.
-    """
-    names = absolute_names or {}
-    root = ET.fromstring(xml_str)
-
-    # Rewrite <compiler> meshdir / texturedir
-    for compiler in root.iter("compiler"):
-        compiler.attrib.pop("meshdir", None)
-        compiler.attrib.pop("texturedir", None)
-
-    # Rewrite <mesh file="...">
-    for mesh in root.iter("mesh"):
-        f = mesh.get("file")
-        if f:
-            rel = posixpath.join(mesh_dir, f) if mesh_dir else f
-            mesh.set("file", _entry_name(rel, names))
-
-    # Rewrite <texture file/cube-map="...">
-    _TEX_FILE_ATTRS = (
+_FILE_ATTRS = {
+    "mesh": ("file",),
+    "texture": (
         "file",
         "fileup",
         "fileback",
@@ -211,53 +186,366 @@ def _rewrite_xml_paths(
         "filefront",
         "fileleft",
         "fileright",
-    )
-    for tex in root.iter("texture"):
-        for attr in _TEX_FILE_ATTRS:
-            f = tex.get(attr)
-            if f:
-                rel = posixpath.join(texture_dir, f) if texture_dir else f
-                tex.set(attr, _entry_name(rel, names))
+    ),
+    "hfield": ("file",),
+    "skin": ("file",),
+}
 
-    # Rewrite <hfield file="..."> and <skin file="...">
-    for tag in ("hfield", "skin"):
-        for elem in root.iter(tag):
-            f = elem.get("file")
-            if f:
-                elem.set("file", _entry_name(f, names))
 
-    # Fix <default> hierarchy errors from spec.to_xml():
-    # 1. Remove classless nested defaults ("empty class name" error).
-    # 2. Merge same-named nested defaults ("repeated default class name" error).
-    def _fix_default_tree(elem: ET.Element) -> None:
-        # Don't remove classless root <default> (direct child of <mujoco>).
-        parent_is_default = elem.tag == "default"
-        for child in list(elem):
-            if child.tag != "default":
+def _file_elements(root: ET.Element) -> list[ET.Element]:
+    """The elements of a model XML that name an asset file, in document order."""
+    return [
+        elem
+        for elem in root.iter()
+        if any(elem.get(attr) for attr in _FILE_ATTRS.get(elem.tag, ()))
+    ]
+
+
+def _referenced_path(tag: str, file: str, mesh_dir: str, texture_dir: str) -> str:
+    """A file attribute joined to the directory hint its element takes."""
+    dir_hint = {"mesh": mesh_dir, "texture": texture_dir}.get(tag, "")
+    return posixpath.join(dir_hint, file) if dir_hint else file
+
+
+def _rewrite_xml_paths(
+    xml_str: str,
+    mesh_dir: str,
+    texture_dir: str,
+    absolute_names: dict[str, str] | None = None,
+    recovered: dict[tuple[int, str], str] | None = None,
+) -> str:
+    """Rewrite asset paths in MuJoCo XML so the file is self-contained.
+
+    Resolves ``meshdir``/``texturedir`` + ``file`` into a single normalised
+    path (with leading ``..`` stripped), then removes the directory hints
+    from ``<compiler>`` elements. ``absolute_names`` is what
+    :func:`_absolute_entry_names` gave the archive's entries. ``recovered``
+    names the entry of each file MuJoCo's encoder found, by the element's
+    index in :func:`_file_elements` and the attribute.
+    """
+    names = absolute_names or {}
+    recovered = recovered or {}
+    root = ET.fromstring(xml_str)
+
+    for compiler in root.iter("compiler"):
+        compiler.attrib.pop("meshdir", None)
+        compiler.attrib.pop("texturedir", None)
+
+    for index, elem in enumerate(_file_elements(root)):
+        for attr in _FILE_ATTRS[elem.tag]:
+            file = elem.get(attr)
+            if not file:
                 continue
-            cls = child.get("class")
-            if not cls and parent_is_default:
-                # Rule 1: remove classless nested defaults
-                elem.remove(child)
-                continue
-            if cls:
-                # Rule 2: merge same-named direct children into this element
-                same_named = [
-                    gc for gc in child if gc.tag == "default" and gc.get("class") == cls
-                ]
-                for dup in same_named:
-                    insert_pos = list(child).index(dup)
-                    for grandchild in list(dup):
-                        child.insert(insert_pos, grandchild)
-                        insert_pos += 1
-                    child.remove(dup)
-            # Recurse after fixing this level
-            _fix_default_tree(child)
-
-    _fix_default_tree(root)
+            entry = recovered.get((index, attr))
+            if entry is None:
+                path = _referenced_path(elem.tag, file, mesh_dir, texture_dir)
+                entry = _entry_name(path, names)
+            elem.set(attr, entry)
 
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="unicode", xml_declaration=True) + "\n"
+
+
+# MuJoCo 3.11's writer never writes class="main", so a root-class element inside another
+# childclass takes that class when the XML is loaded back.
+_ROOT_CLASS = "main"
+_CLASSED = (
+    "bodies",
+    "frames",
+    "geoms",
+    "joints",
+    "sites",
+    "cameras",
+    "lights",
+    "actuators",
+    "meshes",
+    "materials",
+    "equalities",
+    "pairs",
+    "flexes",
+)
+_LIMITED = {0: "false", 1: "true", 2: "auto"}
+# A tendon's fields, as MJCF attribute and MjsTendon field. All of them are written,
+# since which ones a class may set varies with the MuJoCo version.
+_TENDON_FIELDS = {
+    "group": "group",
+    "limited": "limited",
+    "actuatorfrclimited": "actfrclimited",
+    "range": "range",
+    "actuatorfrcrange": "actfrcrange",
+    "solreflimit": "solref_limit",
+    "solimplimit": "solimp_limit",
+    "solreffriction": "solref_friction",
+    "solimpfriction": "solimp_friction",
+    "frictionloss": "frictionloss",
+    "springlength": "springlength",
+    "width": "width",
+    "margin": "margin",
+    "stiffness": "stiffness",
+    "damping": "damping",
+    "armature": "armature",
+    "rgba": "rgba",
+    "material": "material",
+    "user": "userdata",
+}
+_TENDON_PATH_ATTRS = ("width", "rgba", "material")  # a fixed tendon draws no path
+
+
+def _drop_empty_nameless_defaults(parent: ET.Element) -> None:
+    """Remove nested classes with neither a name nor contents, children first. The writer
+    leaves one for each model attached with an empty prefix (mjlab's terrain)."""
+    for child in parent.findall("default"):
+        _drop_empty_nameless_defaults(child)
+        if parent.tag == "default" and not child.get("class") and len(child) == 0:
+            parent.remove(child)
+
+
+def _defaults_unreadable(root: ET.Element) -> bool:
+    """Whether MuJoCo would refuse these defaults: a nested class without a name, or one
+    named twice (models attached with an empty prefix)."""
+    seen: set[str] = set()
+    for default in root.iter("default"):
+        for child in default.findall("default"):
+            name = child.get("class")
+            if not name or name in seen:
+                return True
+            seen.add(name)
+    return False
+
+
+def _enclosing_class(element: Any, world: Any) -> str:
+    """The childclass an element of the spec takes from the frames and bodies around it."""
+    frame, body = element.frame, element.parent
+    while True:
+        while frame is not None:
+            if frame.childclass:
+                return frame.childclass
+            frame = frame.frame
+        if body is world or body.childclass:
+            return body.childclass
+        frame, body = body.frame, body.parent
+
+
+def _root_class_dropped(spec: mujoco.MjSpec) -> bool:
+    """Whether the spec puts a root-class element inside another childclass."""
+    scopes = [*spec.bodies, *spec.frames]
+    if all(s.childclass in ("", _ROOT_CLASS) for s in scopes):
+        return False
+    world = spec.worldbody
+
+    def dropped(element: Any) -> bool:
+        return _enclosing_class(element, world) not in ("", _ROOT_CLASS)
+
+    if any(
+        s is not world and s.childclass == _ROOT_CLASS and dropped(s) for s in scopes
+    ):
+        return True
+    return any(
+        e.classname.name == _ROOT_CLASS and dropped(e)
+        for kind in ("geoms", "joints", "sites", "cameras", "lights")
+        for e in getattr(spec, kind)
+    )
+
+
+def _numbers(value: Any) -> str:
+    try:
+        return " ".join(repr(float(x)) for x in value)
+    except TypeError:
+        return repr(float(value))
+
+
+def _spell_out_tendons(root: ET.Element, tendons: list[Any]) -> None:
+    """Write each tendon's fields on the tendon: Python cannot move it to another class."""
+    elems = [
+        e for s in root.findall("tendon") for e in s if e.tag in ("spatial", "fixed")
+    ]
+    if len(elems) != len(tendons):
+        raise RuntimeError("the written tendons do not match the spec's")
+    for elem, tendon in zip(elems, tendons):
+        if tendon.name and elem.get("name") != tendon.name:
+            raise RuntimeError(f"tendon {tendon.name!r} was written out of order")
+        elem.attrib.pop("class", None)
+        for attr, field in _TENDON_FIELDS.items():
+            if elem.tag == "fixed" and attr in _TENDON_PATH_ATTRS:
+                continue
+            value = getattr(tendon, field)
+            if attr == "group":
+                elem.set(attr, str(int(value)))
+            elif attr in ("limited", "actuatorfrclimited"):
+                elem.set(attr, _LIMITED[int(value)])
+            elif attr == "material":
+                if value:
+                    elem.set(attr, value)
+            elif attr == "user":
+                if len(value):
+                    elem.set(attr, _numbers(value))
+            else:
+                elem.set(attr, _numbers(value))
+
+
+def _flat_xml(spec: mujoco.MjSpec) -> str:
+    """The spec's XML with every element on the root class and its values written out.
+
+    Each element keeps the values it took from its class, so moving it to the root class
+    makes the writer spell them out. The spec is restored afterwards.
+    """
+    root_default = spec.default
+    undo: list[tuple[Any, str, Any]] = []
+    try:
+        for kind in _CLASSED:
+            for element in getattr(spec, kind):
+                if isinstance(getattr(element, "classname", None), mujoco.MjsDefault):
+                    undo.append((element, "classname", element.classname))
+                    element.classname = root_default
+                if kind in ("bodies", "frames") and element.childclass:
+                    undo.append((element, "childclass", element.childclass))
+                    element.childclass = ""
+        xml_str = spec.to_xml()
+    finally:
+        for element, attr, value in reversed(undo):
+            setattr(element, attr, value)
+
+    root = ET.fromstring(xml_str)
+    _spell_out_tendons(root, list(spec.tendons))
+    for default in root.findall("default"):
+        for nested in default.findall("default"):
+            default.remove(nested)
+    left = next(
+        (
+            e
+            for e in root.iter()
+            if e.tag != "default" and ({"class", "childclass"} & e.attrib.keys())
+        ),
+        None,
+    )
+    if left is not None:
+        raise RuntimeError(
+            f"cannot write the default class of <{left.tag} name={left.get('name')!r}>"
+        )
+    return ET.tostring(root, encoding="unicode")
+
+
+def _encode(
+    spec: mujoco.MjSpec, extra_assets: dict[str, bytes]
+) -> tuple[ET.Element, dict[str, bytes]]:
+    """The model XML and the files MuJoCo's own ``.mjz`` encoder packs for the spec.
+
+    ``extra_assets`` (the buffer textures' PNGs) are lent to ``spec.assets`` for the call.
+    """
+    lent = [name for name in extra_assets if name not in spec.assets]
+    for name in lent:
+        spec.assets[name] = extra_assets[name]
+    try:
+        spec.compile()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "scene.mjz")
+            spec.encode(path)
+            with zipfile.ZipFile(path) as zf:
+                files = {name: zf.read(name) for name in zf.namelist()}
+    finally:
+        for name in lent:
+            del spec.assets[name]
+    xml_names = [name for name in files if name.endswith(".xml")]
+    if len(xml_names) != 1:
+        raise RuntimeError(f"MuJoCo's encoder wrote {len(xml_names)} XML files")
+    return ET.fromstring(files.pop(xml_names[0])), files
+
+
+def _unused_entry(name: str, data: bytes, files: dict[str, bytes | str]) -> str:
+    stem, ext = posixpath.splitext(name)
+    entry, n = name, 0
+    while entry in files and files[entry] != data:
+        n += 1
+        entry = f"{stem}_{n}{ext}"
+    return entry
+
+
+def _check_with_encoder(
+    spec: mujoco.MjSpec,
+    xml_str: str,
+    missing: set[str],
+    *,
+    mesh_dir: str,
+    texture_dir: str,
+    absolute_names: dict[str, str],
+    files_to_zip: dict[str, bytes | str],
+    extra_assets: dict[str, bytes],
+) -> dict[tuple[int, str], str]:
+    """Pack the encoder's file wherever this module's differs or is missing.
+
+    Only the encoder resolves a file of a spec attached from another directory: here it
+    is missing, or found under the same relative path in the scene's own directory. Both
+    XMLs come from the same writer, so their file elements pair up in order. Returns the
+    entries by element index and attribute, for :func:`_rewrite_xml_paths`.
+    """
+    try:
+        encoded_root, encoded = _encode(spec, extra_assets)
+    except (ValueError, RuntimeError, mujoco.FatalError) as e:
+        if missing:
+            raise FileNotFoundError(_missing_message(missing)) from e
+        warnings.warn(
+            f"the scene's asset files were not checked against MuJoCo's encoder: {e}",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return {}
+    ours = _file_elements(ET.fromstring(xml_str))
+    theirs = _file_elements(encoded_root)
+    if [e.tag for e in ours] != [e.tag for e in theirs]:
+        if missing:
+            raise FileNotFoundError(_missing_message(missing))
+        raise RuntimeError("MuJoCo's encoder wrote the scene's files in another order")
+    compiler = encoded_root.find("compiler")
+    packed_dirs = (
+        ("", "")
+        if compiler is None
+        else (compiler.get("meshdir", ""), compiler.get("texturedir", ""))
+    )
+
+    def packed_entry(elem: ET.Element, attr: str) -> str:
+        # Under the encoder's meshdir, except a renamed file, whose attribute is the entry.
+        file = elem.get(attr)
+        if not file:
+            return ""
+        joined = _referenced_path(elem.tag, file, *packed_dirs)
+        return next((e for e in (joined, file) if e in encoded), "")
+
+    recovered: dict[tuple[int, str], str] = {}
+    found: set[str] = set()
+    kept: set[str] = set()
+    left: set[str] = set()
+    for index, (mine, packed) in enumerate(zip(ours, theirs)):
+        for attr in _FILE_ATTRS[mine.tag]:
+            file = mine.get(attr)
+            if not file:
+                continue
+            path = _referenced_path(mine.tag, file, mesh_dir, texture_dir)
+            default = _entry_name(path, absolute_names)
+            entry = packed_entry(packed, attr)
+            data = encoded.get(entry)
+            if data is None or (
+                path not in missing and files_to_zip.get(default) == data
+            ):
+                kept.add(default)
+                continue
+            entry = _unused_entry(entry, data, files_to_zip)
+            files_to_zip[entry] = data
+            recovered[(index, attr)] = entry
+            if path in missing:
+                found.add(path)
+            else:
+                left.add(default)
+    for entry in left - kept:
+        del files_to_zip[entry]
+    if missing - found:
+        raise FileNotFoundError(_missing_message(missing - found))
+    return recovered
+
+
+def _missing_message(missing: set[str]) -> str:
+    listed = ", ".join(sorted(missing)[:5])
+    more = f" and {len(missing) - 5} more" if len(missing) > 5 else ""
+    return f"cannot find the scene's asset files {listed}{more}"
 
 
 def _buffer_texture_to_png(data: bytes | bytearray, width: int, height: int) -> bytes:
@@ -307,15 +595,11 @@ def _buffer_texture_to_png(data: bytes | bytearray, width: int, height: int) -> 
 
 
 def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
-    """Save an MjSpec as a ZIP file with DEFLATE compression.
+    """Save ``spec`` as a self-contained, DEFLATE-compressed ``.mjz``.
 
-    This is a compressed alternative to ``mujoco.to_zip`` which stores
-    entries uncompressed.  The output is a standard ZIP that JSZip (and
-    other readers) can decompress transparently.
-
-    The function collects asset files from disk, normalises all relative
-    paths (stripping leading ``..`` components) so that the resulting ZIP
-    is self-contained.
+    Asset paths lose their leading ``..``, and every file is checked against MuJoCo's own
+    encoder. A file neither this module nor the encoder finds raises
+    ``FileNotFoundError``.
     """
     base_dir = spec.modelfiledir or ""
     mesh_dir = spec.meshdir or ""
@@ -327,6 +611,8 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
     # Collect assets from disk, falling back to spec.assets with suffix matching
     # (mjlab stores assets under prefixed keys like "assets/robot/model.stl").
     files_to_zip: dict[str, bytes | str] = {}
+    missing: set[str] = set()
+    referenced: list[str] = []
 
     def _read_asset(rel: str) -> bytes | None:
         """Return asset bytes from disk or spec.assets, or None if not found."""
@@ -349,42 +635,37 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
                     return data
         return None
 
-    for mesh in spec.meshes:
-        if not mesh.file:
-            continue
-        rel = posixpath.join(mesh_dir, mesh.file) if mesh_dir else mesh.file
+    def _add_asset(rel: str) -> None:
+        referenced.append(rel)
         data = _read_asset(rel)
-        if data is not None:
+        if data is None:
+            missing.add(rel)
+        else:
             files_to_zip[_entry_name(rel, absolute_names)] = data
+
+    for mesh in spec.meshes:
+        if mesh.file:
+            _add_asset(_referenced_path("mesh", mesh.file, mesh_dir, texture_dir))
 
     for texture in spec.textures:
         for fname in [texture.file] + [
             texture.cubefiles[i] for i in range(len(texture.cubefiles))
         ]:
-            if not fname:
-                continue
-            rel = posixpath.join(texture_dir, fname) if texture_dir else fname
-            data = _read_asset(rel)
-            if data is not None:
-                files_to_zip[_entry_name(rel, absolute_names)] = data
+            if fname:
+                _add_asset(_referenced_path("texture", fname, mesh_dir, texture_dir))
 
     for hfield in spec.hfields:
-        if not hfield.file:
-            continue
-        data = _read_asset(hfield.file)
-        if data is not None:
-            files_to_zip[_entry_name(hfield.file, absolute_names)] = data
+        if hfield.file:
+            _add_asset(hfield.file)
 
     for skin in spec.skins:
-        if not skin.file:
-            continue
-        data = _read_asset(skin.file)
-        if data is not None:
-            files_to_zip[_entry_name(skin.file, absolute_names)] = data
+        if skin.file:
+            _add_asset(skin.file)
 
-    # Buffer textures have no backing file and cause spec.to_xml() to raise FatalError.
-    # Temporarily assign each one a filename and restore after to_xml().
+    # A buffer texture has no file, and spec.to_xml() raises FatalError on it: each gets a
+    # filename until the archive's contents are settled.
     _buffer_tex_restore: list[tuple[mujoco.MjsTexture, str]] = []
+    buffer_pngs: dict[str, bytes] = {}
     for i, texture in enumerate(spec.textures):
         if texture.file:
             continue  # file-backed texture already collected above
@@ -405,17 +686,39 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
             continue
         rel = posixpath.join(texture_dir, png_filename) if texture_dir else png_filename
         files_to_zip[_make_zip_safe_path(rel)] = png_bytes
+        buffer_pngs[rel] = buffer_pngs[png_filename] = png_bytes
         _buffer_tex_restore.append((texture, texture.file))
         texture.file = png_filename
 
-    # Generate XML and rewrite paths
-    xml_str = spec.to_xml()
+    try:
+        root = ET.fromstring(spec.to_xml())
+        _drop_empty_nameless_defaults(root)
+        if _defaults_unreadable(root) or _root_class_dropped(spec):
+            xml_str = _flat_xml(spec)
+        else:
+            xml_str = ET.tostring(root, encoding="unicode")
+        recovered = (
+            _check_with_encoder(
+                spec,
+                xml_str,
+                missing,
+                mesh_dir=mesh_dir,
+                texture_dir=texture_dir,
+                absolute_names=absolute_names,
+                files_to_zip=files_to_zip,
+                extra_assets=buffer_pngs,
+            )
+            if referenced
+            else {}
+        )
+    finally:
+        # Restore spec to avoid mutating the caller's object
+        for texture, orig_file in _buffer_tex_restore:
+            texture.file = orig_file
 
-    # Restore spec to avoid mutating the caller's object
-    for texture, orig_file in _buffer_tex_restore:
-        texture.file = orig_file
-
-    xml_str = _rewrite_xml_paths(xml_str, mesh_dir, texture_dir, absolute_names)
+    xml_str = _rewrite_xml_paths(
+        xml_str, mesh_dir, texture_dir, absolute_names, recovered
+    )
     files_to_zip[spec.modelname + ".xml"] = xml_str
 
     # Write the ZIP
