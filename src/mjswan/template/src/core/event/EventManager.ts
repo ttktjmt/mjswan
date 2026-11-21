@@ -7,6 +7,13 @@ import { applyModelFieldDr, isModelFieldDrConfig, type ModelFieldDrConfig } from
 import { ModelFieldDefaults } from './modelWrite';
 import { OnnxEvent, isOnnxEventConfig } from './OnnxEvent';
 import { IntervalTrigger, ResetTrigger, StartupTrigger } from './triggers';
+import {
+  DEFAULT_EVENT,
+  mergeEvent,
+  type ActivityListener,
+  type EventOverride,
+  type EventOverridePatch,
+} from '../mdp/operator';
 
 /** Deps for constructing ONNX-backed event terms; omit if a scene has none. */
 export interface EventManagerDeps {
@@ -27,10 +34,37 @@ export interface EventControl {
   armed: boolean;
 }
 
+/** The episode clock that times each write, and where activity goes. */
+export interface EventManagerHooks {
+  /** Episode time, in seconds. */
+  now?: () => number;
+  onActivity?: ActivityListener;
+}
+
+/**
+ * One term the operator can switch off or trigger by hand, and when it last wrote. A manual
+ * term has no switch, since nothing but a press fires it: its `enabled` stays true.
+ */
+export interface EventTermReport extends EventOverride {
+  name: string;
+  label: string;
+  /** Startup terms have run before an operator could reach them, so they are not listed. */
+  mode: 'reset' | 'interval' | 'manual';
+  /** Episode time its write last landed this episode. */
+  firedAt: number | null;
+}
+
 /** A plugin-supplied event class — reset-only, no traced graph. */
-type PluginTerm = { kind: 'plugin'; term: EventBase; trigger: ResetTrigger };
-type OnnxResetTerm = { kind: 'onnx'; term: OnnxEvent; trigger: ResetTrigger };
+type PluginTerm = { kind: 'plugin'; name: string; term: EventBase; trigger: ResetTrigger };
+type OnnxResetTerm = { kind: 'onnx'; name: string; term: OnnxEvent; trigger: ResetTrigger };
 type ResetEntry = PluginTerm | OnnxResetTerm;
+
+type TermState = {
+  label: string;
+  mode: EventTermReport['mode'];
+  override: EventOverride;
+  firedAt: number | null;
+};
 
 /**
  * Mode-aware event dispatch: `mode="reset"` terms fire on episode reset behind a
@@ -48,11 +82,14 @@ export class EventManager {
   private startupTerms: Array<{ term: OnnxEvent; trigger: StartupTrigger }> = [];
   /** Legacy model-field descriptors, applied once by `startup()` (see `modelFieldDr`). */
   private modelFieldTerms: Array<{ config: ModelFieldDrConfig; trigger: StartupTrigger }> = [];
+  /** The reset, interval and manual terms, in config order. */
+  private readonly states = new Map<string, TermState>();
 
   constructor(
     configs: EventConfig[],
     registry: Record<string, EventConstructor>,
     private readonly deps?: EventManagerDeps,
+    private readonly hooks: EventManagerHooks = {},
   ) {
     for (const config of configs) {
       if (isModelFieldDrConfig(config)) {
@@ -73,6 +110,10 @@ export class EventManager {
           continue;
         }
         const term = new OnnxEvent(config, { session, rng: deps.rng, readSlot: deps.readSlot });
+        if (config.mode !== 'startup') {
+          const mode = config.mode === 'manual' || config.mode === 'interval' ? config.mode : 'reset';
+          this.track(config.name, config.label, mode);
+        }
         switch (config.mode) {
           case 'manual':
             this.manualTerms.push(term);
@@ -96,6 +137,7 @@ export class EventManager {
           default:
             this.resetTerms.push({
               kind: 'onnx',
+              name: config.name,
               term,
               trigger: new ResetTrigger({
                 minStepCountBetweenReset: config.min_step_count_between_reset,
@@ -114,8 +156,33 @@ export class EventManager {
         console.warn(`[EventManager] Unknown event type: ${config.name}`);
         continue;
       }
-      this.resetTerms.push({ kind: 'plugin', term: new EventClass(config), trigger: new ResetTrigger() });
+      this.track(config.name, config.label, 'reset');
+      this.resetTerms.push({
+        kind: 'plugin',
+        name: config.name,
+        term: new EventClass(config),
+        trigger: new ResetTrigger(),
+      });
     }
+  }
+
+  private track(name: string, label: string | undefined, mode: TermState['mode']): void {
+    this.states.set(name, { label: label ?? name, mode, override: { ...DEFAULT_EVENT }, firedAt: null });
+  }
+
+  private now(): number {
+    return this.hooks.now?.() ?? 0;
+  }
+
+  /** Note a write that landed, for the operator. */
+  private wrote(name: string, byHand = false): void {
+    const state = this.states.get(name);
+    if (state) state.firedAt = this.now();
+    this.hooks.onActivity?.({ kind: 'event', name, what: 'fired', time: this.now(), ...(byHand ? { byHand } : {}) });
+  }
+
+  private isEnabled(name: string): boolean {
+    return this.states.get(name)?.override.enabled ?? true;
   }
 
   /**
@@ -158,7 +225,9 @@ export class EventManager {
   async tick(dt: number, context: EventContext): Promise<void> {
     for (const { trigger } of this.resetTerms) trigger.step();
     for (const { term, trigger } of this.intervalTerms) {
-      if (trigger.tick(dt)) await term.fire(context);
+      if (!trigger.tick(dt)) continue;
+      await term.fire(context);
+      this.wrote(term.name);
     }
   }
 
@@ -186,15 +255,66 @@ export class EventManager {
       );
       return;
     }
+    // A press the graph is still busy with is dropped, as it always was, and shows as nothing.
+    if (term.busy) return;
     await term.fire(context);
+    this.wrote(name, true);
+  }
+
+  /**
+   * Run one listed term's write now, whatever its mode and its switch: a reset term
+   * re-randomizes mid-episode, an interval term fires off its schedule, a manual term as
+   * {@link fire}. Its gate and its schedule are left as they were.
+   */
+  async trigger(name: string, context: EventContext): Promise<void> {
+    const mode = this.states.get(name)?.mode;
+    if (mode === 'manual') return this.fire(name, context);
+    if (mode === 'interval') {
+      const entry = this.intervalTerms.find(({ term }) => term.name === name);
+      if (!entry || entry.term.busy) return;
+      await entry.term.fire(context);
+    } else if (mode === 'reset') {
+      const entry = this.resetTerms.find((reset) => reset.name === name);
+      if (!entry) return;
+      if (entry.kind === 'plugin') entry.term.onReset(context);
+      else if (entry.term.busy) return;
+      else await entry.term.fire(context);
+    } else {
+      console.warn(`[EventManager] No reset, interval or manual event named "${name}".`);
+      return;
+    }
+    this.wrote(name, true);
   }
 
   /** Start or stop one `mode="interval"` term's schedule. False if there is no such term. */
   setArmed(name: string, armed: boolean): boolean {
-    const entry = this.intervalTerms.find(({ term }) => term.name === name);
-    if (!entry) return false;
-    entry.trigger.setArmed(armed);
+    if (this.states.get(name)?.mode !== 'interval') return false;
+    return this.setOverride(name, { enabled: armed });
+  }
+
+  /**
+   * Switch a reset or interval term on or off; for an interval term it is the schedule's
+   * arm switch. False for a manual term, which has none, and for a name not listed.
+   */
+  setOverride(name: string, patch: EventOverridePatch): boolean {
+    const state = this.states.get(name);
+    if (!state || state.mode === 'manual') return false;
+    state.override = mergeEvent(state.override, patch);
+    if (state.mode === 'interval') {
+      this.intervalTerms.find(({ term }) => term.name === name)?.trigger.setArmed(state.override.enabled);
+    }
     return true;
+  }
+
+  /** The reset, interval and manual terms, in config order, as the operator sees them. */
+  describe(): EventTermReport[] {
+    return [...this.states].map(([name, state]) => ({
+      name,
+      label: state.label,
+      mode: state.mode,
+      ...state.override,
+      firedAt: state.firedAt,
+    }));
   }
 
   controls(): EventControl[] {
@@ -218,12 +338,17 @@ export class EventManager {
    * Fire every `mode="reset"` term whose gate allows it, **in config order**. Sequential
    * rather than `Promise.all`: every write is an assignment over `default_*`, so the
    * order decides which value survives an overlap.
+   *
+   * A term switched off leaves its gate as it was: it did not fire.
    */
   async onReset(context: EventContext): Promise<void> {
+    for (const state of this.states.values()) state.firedAt = null;
     for (const entry of this.resetTerms) {
+      if (!this.isEnabled(entry.name)) continue;
       if (!entry.trigger.take()) continue;
       if (entry.kind === 'onnx') await entry.term.fire(context);
       else entry.term.onReset(context);
+      this.wrote(entry.name);
     }
     for (const { trigger } of this.intervalTerms) trigger.onReset();
   }

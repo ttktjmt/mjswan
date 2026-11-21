@@ -85,7 +85,7 @@ import { applyResetTerms } from './resetChain';
 import { ControlStep } from './controlStep';
 import { decimationFor } from './decimation';
 import { yieldToBrowser } from './yieldToBrowser';
-import { TerminationManager } from '../termination/TerminationManager';
+import { TerminationManager, type TerminationTermReport } from '../termination/TerminationManager';
 import type * as ort from 'onnxruntime-web/wasm';
 import { getOrt } from '../onnx/ortEnv';
 import { BufferBudget, reserveTermFeeds } from '../policy/bufferBudget';
@@ -97,7 +97,17 @@ import { TrackingPolicy } from '../policy/modules/TrackingPolicy';
 import { LocomotionPolicy } from '../policy/modules/LocomotionPolicy';
 import { CommandManager, type CommandTermContext, type CommandsConfig } from '../command';
 import { DebugViz, type ViewerSwitch } from '../debugViz/DebugViz';
-import { EventManager, type EventControl } from '../event/EventManager';
+import { EventManager, type EventControl, type EventTermReport } from '../event/EventManager';
+import {
+  ActivityLog,
+  DEFAULT_EVENT,
+  DEFAULT_TERMINATION,
+  TermOverrides,
+  type EventOverridePatch,
+  type LoggedActivity,
+  type TermActivity,
+  type TerminationOverridePatch,
+} from '../mdp/operator';
 import { ModelFieldDefaults } from '../event/modelWrite';
 import type { EventContext, TerrainData } from '../event/EventBase';
 import { OnnxSessionCache, type SlotReader } from '../onnx/session';
@@ -162,6 +172,23 @@ const MAX_XR_FRAME_SECONDS = 0.1;
 
 /** mjlab's viewer stops a physics burst after one frame, so the renderer gets its turn. */
 const BURST_MS = 1000 / 60;
+/** The most often a host hears that the MDP changed: a held reset's countdown asks every step. */
+const MDP_NOTIFY_MS = 100;
+
+/** The operator's view of the running MDP's terminations and events (ADR 0012). */
+export interface MdpReport {
+  /** Resets since the engine started. */
+  episode: number;
+  /** Episode time, in seconds, as of this report. */
+  time: number;
+  terminations: TerminationTermReport[];
+  events: EventTermReport[];
+  /** The soonest reset a delayed termination holds. */
+  pendingReset: { term: string; at: number } | null;
+  /** The term whose Stop paused the simulation, until it plays or resets. */
+  stoppedBy: { term: string; at: number } | null;
+  activity: ReadonlyArray<LoggedActivity>;
+}
 
 /** Keyed by joint name: the slot reader needs entity-joint order, not action order. */
 function buildJointBias(config: PolicyConfig): Map<string, number> {
@@ -328,6 +355,7 @@ export class mjswanRuntime {
     physics: (from, to) => this.executeSimulationSteps(from, to),
     end: (diverged) => this.endControlStep(diverged),
     snapshot: () => this.updateCachedState(),
+    halted: () => !this.running,
   });
   /** Null for a policy-less scene. */
   private controlDt: number | null;
@@ -388,6 +416,18 @@ export class mjswanRuntime {
   private enteringXr = false;
   /** Called when `xrSessions()` or `handTrackingReport()` may have changed. */
   onXrChange: (() => void) | null = null;
+  /** Called, at most every `MDP_NOTIFY_MS` and never inside a step, when `mdpReport()` may have changed. */
+  onMdpChange: (() => void) | null = null;
+  private mdpNotify: ReturnType<typeof setTimeout> | null = null;
+  private lastMdpNotify = 0;
+  /** The operator's switches and delays, by term name, outliving the MDP they were set on. */
+  private readonly termOverrides = new TermOverrides();
+  private readonly mdpActivity = new ActivityLog();
+  /** Resets since the engine started, so an activity names its episode. */
+  private episodeCount = 0;
+  private stoppedBy: MdpReport['stoppedBy'] = null;
+  /** Called when a termination's Stop paused the loop, which no verb of the host's did. */
+  onStop: (() => void) | null = null;
   /** The scene MJCF as shipped, so a rebuild can add or drop the hands. Null for `.mjb`. */
   private sceneXml: { file: string; text: string } | null = null;
   /** When the last model's files were dated (`resetWorking`). */
@@ -1099,13 +1139,102 @@ export class mjswanRuntime {
     }
   }
 
-  /** Start or stop one `mode="interval"` term's schedule. */
+  /** Start or stop one `mode="interval"` term's schedule: the term's own on/off switch. */
   setEventArmed(name: string, armed: boolean): void {
-    this.eventManager?.setArmed(name, armed);
+    const term = this.eventManager?.describe().find((entry) => entry.name === name);
+    if (term?.mode === 'interval') this.setEventOverride(name, { enabled: armed });
+  }
+
+  // ── operator overrides of MDP terms (ADR 0012) ─────────────────────────
+  /** Control steps since the reset, in seconds: the clock every override's delay runs on. */
+  private episodeTime(): number {
+    return this.episodeLength * this.timestep * this.decimation;
+  }
+
+  private onTermActivity = (activity: TermActivity): void => {
+    this.mdpActivity.push(activity, this.episodeCount);
+    this.notifyMdp();
+  };
+
+  /** Deferred, so a listener never reads a manager mid-step, and throttled for the countdowns. */
+  private notifyMdp(): void {
+    if (this.mdpNotify !== null || !this.onMdpChange) return;
+    const wait = Math.max(0, this.lastMdpNotify + MDP_NOTIFY_MS - performance.now());
+    this.mdpNotify = setTimeout(() => {
+      this.mdpNotify = null;
+      this.lastMdpNotify = performance.now();
+      if (!this.disposed) this.onMdpChange?.();
+    }, wait);
+  }
+
+  /**
+   * Switch, delay or set Stop on a termination term, kept by name: a name the loaded MDP
+   * lacks applies to the next one that has it.
+   */
+  setTerminationOverride(name: string, patch: TerminationOverridePatch): void {
+    this.terminationManager?.setOverride(name, this.termOverrides.setTermination(name, patch));
+    this.notifyMdp();
+  }
+
+  /** Switch a reset or interval event term on or off, kept by name. */
+  setEventOverride(name: string, patch: EventOverridePatch): void {
+    this.eventManager?.setOverride(name, this.termOverrides.setEvent(name, patch));
+    this.notifyMdp();
+  }
+
+  /** Run one event term's write now, whatever its mode or switch. */
+  async triggerEvent(name: string): Promise<void> {
+    if (!this.eventManager || !this.mjModel || !this.mjData) return;
+    try {
+      await this.eventManager.trigger(name, this.eventContext());
+    } catch (error) {
+      console.warn(`[mjswanRuntime] triggering event "${name}" failed:`, error);
+      return;
+    }
+    // Publish the write even while paused, so the operator sees what they asked for.
+    if (!this.running && this.mjModel && this.mjData) {
+      this.mujoco.mj_forward(this.mjModel, this.mjData);
+      this.updateCachedState();
+    }
+  }
+
+  /** Every term back to the MDP as built. */
+  clearTermOverrides(): void {
+    this.termOverrides.clear();
+    for (const { name } of this.terminationManager?.describe() ?? []) {
+      this.terminationManager?.setOverride(name, DEFAULT_TERMINATION);
+    }
+    for (const { name } of this.eventManager?.describe() ?? []) {
+      this.eventManager?.setOverride(name, DEFAULT_EVENT);
+    }
+    this.notifyMdp();
+  }
+
+  mdpReport(): MdpReport {
+    const terminations = this.terminationManager?.describe() ?? [];
+    let pendingReset: MdpReport['pendingReset'] = null;
+    for (const { name, resetAt } of terminations) {
+      if (resetAt !== null && (pendingReset === null || resetAt < pendingReset.at)) {
+        pendingReset = { term: name, at: resetAt };
+      }
+    }
+    return {
+      episode: this.episodeCount,
+      time: this.episodeTime(),
+      terminations,
+      events: this.eventManager?.describe() ?? [],
+      pendingReset,
+      stoppedBy: this.stoppedBy,
+      activity: this.mdpActivity.list(),
+    };
   }
 
   /** Resume the physics loop (rendering runs continuously regardless). */
   play(): void {
+    if (this.stoppedBy) {
+      this.stoppedBy = null;
+      this.notifyMdp();
+    }
     this.running = true;
     void this.startLoop();
   }
@@ -1292,7 +1421,7 @@ export class mjswanRuntime {
 
   /**
    * Recompile the loaded scene with or without the hand bones, keeping the policy, motion,
-   * command values, debug drawings, event schedules, splat and camera. The simulation
+   * command values, debug drawings, term overrides, splat and camera. The simulation
    * restarts as after a reset. The hands are appended, so original body ids (and a camera
    * tracking one) stay valid.
    */
@@ -1303,7 +1432,6 @@ export class mjswanRuntime {
     const motion = this.getSelectedMotionName();
     const values = this.commandManager.getValues();
     const drawings = this.debugVizSet.entries();
-    const schedules = this.eventManager?.controls().filter((c) => c.kind === 'interval') ?? [];
     const kept = { module: this.onnxModule };
 
     // Drop everything holding the old model before freeing it: command terms read it every frame.
@@ -1337,7 +1465,6 @@ export class mjswanRuntime {
     if (motion !== null) await this.setSelectedMotion(motion);
     for (const [id, value] of Object.entries(values)) this.commandManager.setValue(id, value);
     for (const { id, enabled } of drawings) this.debugVizSet.set(id, enabled);
-    for (const { name, armed } of schedules) this.setEventArmed(name, armed);
 
     if (wasRunning) {
       this.running = true;
@@ -1515,9 +1642,18 @@ export class mjswanRuntime {
     let autoReset = diverged;
     // Held across the awaits below: `setPolicy` can null the field mid-step.
     const terminations = this.terminationManager;
+    let stopBy: string | undefined;
     if (!autoReset && terminations && this.policyStateBuilder) {
       const postState = this.policyStateBuilder.build();
-      autoReset = (await terminations.evaluate(postState)).done;
+      const verdict = await terminations.evaluate(postState);
+      autoReset = verdict.done;
+      stopBy = verdict.stopped[0];
+    }
+    if (stopBy !== undefined) {
+      // The frame that made it fire stays on screen; a reset it owes waits for play.
+      this.resetRequested = this.resetRequested || autoReset;
+      autoReset = false;
+      this.stopOnTerm(stopBy);
     }
     if (autoReset) {
       // Awaited so the writes precede the forward; caught so a failure costs a reset.
@@ -1542,6 +1678,16 @@ export class mjswanRuntime {
     } catch (error) {
       console.warn('[mjswanRuntime] interval events failed:', error);
     }
+    if (this.terminationManager?.holding) this.notifyMdp();
+  }
+
+  /** A termination's Stop: the loop ends after this step, as `pause` would end it. */
+  private stopOnTerm(term: string): void {
+    this.running = false;
+    this.interaction.cancel();
+    this.stoppedBy = { term, at: this.episodeTime() };
+    this.onTermActivity({ kind: 'termination', name: term, what: 'stopped', time: this.episodeTime() });
+    this.onStop?.();
   }
 
   /** `kept` holds a rebuild's ONNX sessions: bound to no model, they are reused, not rebuilt. */
@@ -1627,7 +1773,11 @@ export class mjswanRuntime {
             rng: this.termRng,
             readSlot: this.readOnnxSlot,
           },
+          { now: () => this.episodeTime(), onActivity: this.onTermActivity },
         );
+        for (const [name, override] of this.termOverrides.eventEntries()) {
+          this.eventManager.setOverride(name, override);
+        }
         console.log(
           `[EventManager] ${this.eventManager.size} event term(s) loaded ` +
             `(${this.policyGraphs.size} traced graph(s) in this MDP)`,
@@ -1762,8 +1912,12 @@ export class mjswanRuntime {
             readOnnxSlot: this.readOnnxSlot,
             episodeLength: () => this.episodeLength,
             stepDt: this.timestep * this.decimation,
+            onActivity: this.onTermActivity,
           }
         );
+        for (const [name, override] of this.termOverrides.terminationEntries()) {
+          this.terminationManager.setOverride(name, override);
+        }
         console.log(`[TerminationManager] ${this.terminationManager.size} termination term(s) loaded`);
       }
 
@@ -2158,6 +2312,9 @@ export class mjswanRuntime {
     // terms run, and zeroing after them would drop that step. No reset term reads it: the
     // build refuses a traced action reset that does.
     this.episodeLength = 0;
+    this.episodeCount += 1;
+    this.stoppedBy = null;
+    this.notifyMdp();
     // A reset landing between two slices drops the rest of the control step.
     this.controlStep.restart();
     this.lastSimState.bodies.clear();
@@ -2612,6 +2769,7 @@ export class mjswanRuntime {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    if (this.mdpNotify !== null) clearTimeout(this.mdpNotify);
     navigator.xr?.removeEventListener('devicechange', this.onXrDeviceChange);
     // The headset would otherwise stay on a scene nothing renders any more.
     void this.xrSession?.end().catch(() => {});

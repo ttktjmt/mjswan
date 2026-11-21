@@ -11,12 +11,23 @@ import { TimeOutTermination, type TimeOutTerminationConfig } from './TimeOutTerm
 import type { OnnxSessionCache, SlotReader } from '../onnx/session';
 import type { PolicyState, TerminationConfigEntry } from '../policy/types';
 import type { PolicyRunner } from '../policy/PolicyRunner';
+import {
+  DEFAULT_TERMINATION,
+  delayOf,
+  elapsed,
+  mergeTermination,
+  type ActivityListener,
+  type TerminationOverride,
+  type TerminationOverridePatch,
+} from '../mdp/operator';
 
 export type TerminationResult = {
   done: boolean;
   terminated: boolean;
   truncated: boolean;
   reasons: string[];
+  /** Terms whose Stop is on and whose condition turned true this step. */
+  stopped: string[];
 };
 
 /** Absent for a policy whose terminations are all plugin terms. */
@@ -25,8 +36,33 @@ export type TerminationManagerDeps = {
   readOnnxSlot?: SlotReader;
   /** mjlab's `episode_length_buf`, for a pre-format-4 `time_out`. */
   episodeLength?: () => number;
-  /** The control period, for a pre-format-4 `time_out`'s step limit. */
+  /** The control period: a pre-format-4 `time_out`'s step limit, and the operator's delays. */
   stepDt?: number;
+  onActivity?: ActivityListener;
+};
+
+/** One term as the operator sees it: its override, and what it did this episode. */
+export interface TerminationTermReport extends TerminationOverride {
+  name: string;
+  /** mjlab's `time_out`: a truncation rather than a failure. */
+  timeOut: boolean;
+  /** Its condition held at the last control step. */
+  active: boolean;
+  /** Episode time its condition last turned true this episode. */
+  firedAt: number | null;
+  /** Episode time the reset it holds lands at; null unless it fired with a delay while on. */
+  resetAt: number | null;
+}
+
+type TermEntry = {
+  name: string;
+  term: TerminationBase;
+  isTimeOut: boolean;
+  override: TerminationOverride;
+  active: boolean;
+  firedAt: number | null;
+  /** When the reset this term owes started counting down; null when it owes none. */
+  heldSince: number | null;
 };
 
 /** Whether an entry names a traced-ONNX termination. */
@@ -42,7 +78,7 @@ function isNativeTimeOutEntry(
 }
 
 export class TerminationManager {
-  private terms: { name: string; term: TerminationBase; isTimeOut: boolean }[] = [];
+  private terms: TermEntry[] = [];
   /** Every graph, fused or not, run before any term is read. */
   private graphs: (OnnxTermination | FusedTermination)[] = [];
 
@@ -50,7 +86,7 @@ export class TerminationManager {
     config: Record<string, TerminationConfigEntry>,
     registry: Record<string, TerminationConstructor>,
     runner: PolicyRunner,
-    deps: TerminationManagerDeps = {},
+    private readonly deps: TerminationManagerDeps = {},
   ) {
     for (const [name, entry] of Object.entries(config)) {
       if (isFusedTerminationConfig(entry)) {
@@ -61,21 +97,21 @@ export class TerminationManager {
         const term = this.buildOnnxTermination(name, entry, runner, deps);
         if (term) {
           this.graphs.push(term);
-          this.terms.push({ name, term, isTimeOut: entry.time_out ?? false });
+          this.add(name, term, entry.time_out ?? false);
         }
         continue;
       }
       if (isNativeTimeOutEntry(entry)) {
-        this.terms.push({
+        this.add(
           name,
-          term: new TimeOutTermination(
+          new TimeOutTermination(
             runner,
             { ...entry, name },
             deps.episodeLength ?? (() => 0),
             deps.stepDt ?? 0,
           ),
-          isTimeOut: entry.time_out ?? false,
-        });
+          entry.time_out ?? false,
+        );
         continue;
       }
       const TermClass = registry[entry.name];
@@ -89,12 +125,20 @@ export class TerminationManager {
         params: entry.params,
         time_out: entry.time_out,
       };
-      this.terms.push({
-        name,
-        term: new TermClass(runner, termConfig),
-        isTimeOut: entry.time_out ?? false,
-      });
+      this.add(name, new TermClass(runner, termConfig), entry.time_out ?? false);
     }
+  }
+
+  private add(name: string, term: TerminationBase, isTimeOut: boolean): void {
+    this.terms.push({
+      name,
+      term,
+      isTimeOut,
+      override: { ...DEFAULT_TERMINATION },
+      active: false,
+      firedAt: null,
+      heldSince: null,
+    });
   }
 
   /**
@@ -118,11 +162,7 @@ export class TerminationManager {
     const group = new FusedTermination(entry, { session, readSlot });
     this.graphs.push(group);
     entry.lanes.forEach((lane, index) => {
-      this.terms.push({
-        name: lane.name,
-        term: new FusedLane(runner, { name: lane.name }, group, index),
-        isTimeOut: lane.time_out ?? false,
-      });
+      this.add(lane.name, new FusedLane(runner, { name: lane.name }, group, index), lane.time_out ?? false);
     });
   }
 
@@ -148,24 +188,50 @@ export class TerminationManager {
     return new OnnxTermination(runner, { ...entry, name }, { session, readSlot });
   }
 
+  /** Episode time, as the graphs count it; zero without a clock. */
+  private now(): number {
+    return (this.deps.episodeLength?.() ?? 0) * (this.deps.stepDt ?? 0);
+  }
+
   /**
    * OR-reduce every term to one verdict, `time_out` split out. Every graph is awaited
    * first, so a verdict is this step's, as in mjlab.
+   *
+   * A term the operator turned off is still evaluated, so its firing shows, but ends
+   * nothing. One with a delay holds the reset from the step it fires, whatever its
+   * condition does meanwhile: the point is to watch what made it fire. One set to stop is
+   * named in `stopped` on that step, on or off, and owes its reset at once; the caller
+   * pauses and lands it on play.
    */
   async evaluate(state: PolicyState): Promise<TerminationResult> {
     await Promise.all(this.graphs.map((graph) => graph.step()));
+    const now = this.now();
+    // Without a control period no delay can be measured, and one never measured never ends.
+    const timed = (this.deps.stepDt ?? 0) > 0;
     let terminated = false;
     let truncated = false;
     const reasons: string[] = [];
+    const stopped: string[] = [];
 
-    for (const { name, term, isTimeOut } of this.terms) {
-      if (term.evaluate(state)) {
-        reasons.push(name);
-        if (isTimeOut) {
-          truncated = true;
-        } else {
-          terminated = true;
-        }
+    for (const entry of this.terms) {
+      const active = entry.term.evaluate(state);
+      if (active && !entry.active) {
+        entry.firedAt = now;
+        this.emit(entry, 'fired', now);
+        if (entry.override.onFire === 'stop') stopped.push(entry.name);
+      }
+      entry.active = active;
+      if (active && entry.override.enabled && entry.heldSince === null) entry.heldSince = now;
+      if (entry.heldSince === null) continue;
+      if (timed && !elapsed(now, entry.heldSince, delayOf(entry.override.onFire))) continue;
+      // Delivered: without a reset after it, the next step's verdict is that step's alone.
+      entry.heldSince = null;
+      reasons.push(entry.name);
+      this.emit(entry, 'reset', now);
+      if (entry.isTimeOut) {
+        truncated = true;
+      } else {
+        terminated = true;
       }
     }
 
@@ -174,14 +240,55 @@ export class TerminationManager {
       terminated,
       truncated,
       reasons,
+      stopped,
     };
+  }
+
+  private emit(entry: TermEntry, what: 'fired' | 'reset', time: number): void {
+    this.deps.onActivity?.({
+      kind: 'termination',
+      name: entry.name,
+      what,
+      time,
+      ...(entry.override.enabled ? {} : { off: true }),
+    });
   }
 
   reset(): void {
     for (const graph of this.graphs) graph.reset();
-    for (const { term } of this.terms) {
-      term.reset?.();
+    for (const entry of this.terms) {
+      entry.term.reset?.();
+      entry.active = false;
+      entry.firedAt = null;
+      entry.heldSince = null;
     }
+  }
+
+  /** Change one term's override. False when no term has that name. */
+  setOverride(name: string, patch: TerminationOverridePatch): boolean {
+    const entry = this.terms.find((term) => term.name === name);
+    if (!entry) return false;
+    entry.override = mergeTermination(entry.override, patch);
+    // Off cancels the reset it owed; a new delay re-times it from when it fired.
+    if (!entry.override.enabled) entry.heldSince = null;
+    return true;
+  }
+
+  /** Whether a term is holding a reset back, so a host's countdown needs refreshing. */
+  get holding(): boolean {
+    return this.terms.some((entry) => entry.heldSince !== null);
+  }
+
+  /** Every term, in config order, as the operator sees it. */
+  describe(): TerminationTermReport[] {
+    return this.terms.map((entry) => ({
+      name: entry.name,
+      timeOut: entry.isTimeOut,
+      ...entry.override,
+      active: entry.active,
+      firedAt: entry.firedAt,
+      resetAt: entry.heldSince === null ? null : entry.heldSince + delayOf(entry.override.onFire),
+    }));
   }
 
   get size(): number {

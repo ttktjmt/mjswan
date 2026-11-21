@@ -28,6 +28,7 @@ import type {
   EventControls,
   GraphicsControls,
   InteractionControls,
+  MdpControls,
   MjswanEngine,
   InteractionModeId,
   MjswanEngineState,
@@ -121,6 +122,7 @@ class Engine implements MjswanEngine {
   readonly debugVis: DebugVisControls;
   readonly cameraFeeds: CameraFeedControls;
   readonly events: EventControls;
+  readonly mdp: MdpControls;
   readonly interaction: InteractionControls;
   readonly xr: XrControls;
   readonly preview: PreviewControls;
@@ -132,6 +134,13 @@ class Engine implements MjswanEngine {
     this.runtime.commands.addEventListener(this.onCommandEvent);
     // Device support resolves late, and sessions start and end outside any verb.
     this.runtime.onXrChange = () => this.refresh();
+    // Terms fire and resets land inside the loop; the runtime throttles these.
+    this.runtime.onMdpChange = () => this.refresh();
+    // A termination's Stop pauses the loop with no verb of the host's behind it.
+    this.runtime.onStop = () => {
+      this.phase = 'paused';
+      this.refresh();
+    };
 
     this.camera = {
       set: (view) => {
@@ -187,6 +196,27 @@ class Engine implements MjswanEngine {
         this.refresh();
       },
     };
+    this.mdp = {
+      terminations: {
+        set: (name, patch) => {
+          this.runtime.setTerminationOverride(name, patch);
+          this.refresh();
+        },
+      },
+      events: {
+        set: (name, patch) => {
+          this.runtime.setEventOverride(name, patch);
+          this.refresh();
+        },
+        trigger: (name) => {
+          void this.runtime.triggerEvent(name);
+        },
+      },
+      clear: () => {
+        this.runtime.clearTermOverrides();
+        this.refresh();
+      },
+    };
     this.interaction = {
       // The setters refresh the snapshot themselves: the runtime emits no event for them.
       setMode: (id) => {
@@ -236,6 +266,7 @@ class Engine implements MjswanEngine {
       graphics: this.runtime.getGraphics(),
       graphicsAvailable: this.runtime.getGraphicsAvailable(),
       events: this.runtime.eventControls(),
+      mdp: this.runtime.mdpReport(),
       interactions: this.runtime.interactionModes().map((mode) => ({
         ...mode,
         params: INTERACTION_MODES.find((spec) => spec.id === mode.id)?.params ?? [],
