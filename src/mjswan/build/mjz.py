@@ -267,6 +267,15 @@ _CLASSED = (
 _LIMITED = {0: "false", 1: "true", 2: "auto"}
 
 
+def _drop_empty_nameless_defaults(root: ET.Element) -> None:
+    """Remove nested classes with neither a name nor contents. The writer leaves one for
+    each model attached with an empty prefix (mjlab's terrain), and it sets nothing."""
+    for default in list(root.iter("default")):
+        for child in default.findall("default"):
+            if not child.get("class") and len(child) == 0:
+                default.remove(child)
+
+
 def _defaults_unreadable(root: ET.Element) -> bool:
     """Whether MuJoCo would refuse these defaults: a nested class without a name, or one
     named twice (models attached with an empty prefix, as MyoSuite attaches its arms)."""
@@ -638,9 +647,12 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
         texture.file = png_filename
 
     try:
-        xml_str = spec.to_xml()
-        if _defaults_unreadable(ET.fromstring(xml_str)) or _root_class_dropped(spec):
+        root = ET.fromstring(spec.to_xml())
+        _drop_empty_nameless_defaults(root)
+        if _defaults_unreadable(root) or _root_class_dropped(spec):
             xml_str = _flat_xml(spec)
+        else:
+            xml_str = ET.tostring(root, encoding="unicode")
         recovered = (
             _recover_missing(
                 spec,

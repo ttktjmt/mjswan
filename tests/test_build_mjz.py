@@ -588,6 +588,29 @@ class TestDefaultClasses:
             root = ET.fromstring(zf.read(f"{scene.modelname}.xml"))
         assert [d.get("class") for d in root.iter("default")] == [None, "arm"]
 
+    def test_an_empty_class_left_by_an_unprefixed_attach_is_dropped(
+        self, tmp_path: Path
+    ):
+        """mjlab attaches its terrain so; the classes that do load back stay."""
+        scene = mujoco.MjSpec.from_string(
+            ARM_WITH_CLASS.format(side="r", group=1, rgba="1 0 0 1", stiffness=5)
+        )
+        floor = mujoco.MjSpec.from_string(
+            '<mujoco><worldbody><geom name="floor" type="plane" size="1 1 0.1"/>'
+            "</worldbody></mujoco>"
+        )
+        scene.attach(floor, prefix="", suffix="", frame=scene.worldbody.add_frame())
+        reference = scene.compile()
+        out = tmp_path / "scene.mjz"
+
+        to_zip_deflated(scene, str(out))
+
+        with zipfile.ZipFile(out) as zf:
+            root = ET.fromstring(zf.read(f"{scene.modelname}.xml"))
+        assert [d.get("class") for d in root.iter("default")] == [None, "arm"]
+        model = mujoco.MjSpec.from_zip(str(out)).compile()
+        assert model.geom("g_r").group == reference.geom("g_r").group
+
 
 # ===========================================================================
 # L2: collect_spec_assets (synthetic MjSpec)
