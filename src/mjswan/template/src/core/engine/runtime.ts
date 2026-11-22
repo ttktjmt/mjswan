@@ -381,8 +381,17 @@ export class mjswanRuntime {
   private policyStateBuilder: PolicyStateBuilder | null;
   private initialQpos: number[] | null;
   private initialQvel: number[] | null;
-  /** A UI reset waiting for the step boundary (`resetSimulation`). */
+  /**
+   * A reset waiting for the step boundary: the UI's (`resetSimulation`), or the one a stopped
+   * termination owes. Any reset meets it.
+   */
   private resetRequested = false;
+  /**
+   * Event triggers that came while the loop ran, applied at the end of a control step: an
+   * event graph runs one call at a time, so one in flight across the reset chain would drop
+   * the reset's own write.
+   */
+  private pendingTriggers: string[] = [];
   private actionManager: ActionManager | null;
   private onnxModule: OnnxModule | null;
   private onnxInputDict: Record<string, ort.Tensor> | null;
@@ -1182,16 +1191,23 @@ export class mjswanRuntime {
     this.notifyMdp();
   }
 
-  /** Run one event term's write now, whatever its mode or switch. */
+  /** Run one event term's write, whatever its mode or switch: now while paused, else at the step's end. */
   async triggerEvent(name: string): Promise<void> {
     if (!this.eventManager || !this.mjModel || !this.mjData) return;
-    try {
-      await this.eventManager.trigger(name, this.eventContext());
-    } catch (error) {
-      console.warn(`[mjswanRuntime] triggering event "${name}" failed:`, error);
-      return;
+    this.pendingTriggers.push(name);
+    if (!this.running) await this.applyPendingTriggers();
+  }
+
+  private async applyPendingTriggers(): Promise<void> {
+    if (this.pendingTriggers.length === 0) return;
+    for (const name of this.pendingTriggers.splice(0)) {
+      try {
+        await this.eventManager?.trigger(name, this.eventContext());
+      } catch (error) {
+        console.warn(`[mjswanRuntime] triggering event "${name}" failed:`, error);
+      }
     }
-    // Publish the write even while paused, so the operator sees what they asked for.
+    // Publish the writes even while paused, so the operator sees what they asked for.
     if (!this.running && this.mjModel && this.mjData) {
       this.mujoco.mj_forward(this.mjModel, this.mjData);
       this.updateCachedState();
@@ -1243,7 +1259,8 @@ export class mjswanRuntime {
   pause(): void {
     // A held body would otherwise keep its force the moment play resumes.
     this.interaction.cancel();
-    void this.stop();
+    // A trigger queued for a step the pause cut short lands now, as one sent while paused does.
+    void this.stop().then(() => this.applyPendingTriggers());
   }
 
   // ── pointer interaction ───────────────────────────────────────────────
@@ -1678,6 +1695,8 @@ export class mjswanRuntime {
     } catch (error) {
       console.warn('[mjswanRuntime] interval events failed:', error);
     }
+    // Where an interval event writes, after the reset chain.
+    await this.applyPendingTriggers();
     if (this.terminationManager?.holding) this.notifyMdp();
   }
 
@@ -1696,6 +1715,8 @@ export class mjswanRuntime {
     kept?: { module: OnnxModule | null },
   ): Promise<void> {
     const outgoing = this.onnxModule;
+    // Named for the outgoing MDP's events.
+    this.pendingTriggers = [];
     this.currentPolicy = policy;
     this.sceneHasPolicy = policy !== null;
     this.policyPlugins = policy?.plugins ?? {};
@@ -2314,6 +2335,8 @@ export class mjswanRuntime {
     this.episodeLength = 0;
     this.episodeCount += 1;
     this.stoppedBy = null;
+    // This reset meets one already asked for: a stopped term's would otherwise follow a load.
+    this.resetRequested = false;
     this.notifyMdp();
     // A reset landing between two slices drops the rest of the control step.
     this.controlStep.restart();

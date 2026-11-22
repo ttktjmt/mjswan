@@ -284,8 +284,9 @@ export interface MdpEventControls {
   /** Switch a reset or interval term off, kept by name. A manual term has no switch. */
   set(name: string, patch: EventOverridePatch): void;
   /**
-   * Run a term's write now, whatever its mode or switch: a reset term re-randomizes
-   * mid-episode, an interval term fires off its schedule. Lands while paused too.
+   * Run a term's write, whatever its mode or switch: a reset term re-randomizes mid-episode,
+   * an interval term fires off its schedule, a manual term as {@link EventControls.fire},
+   * `disabled_when` included. At once while paused, else at the end of the control step.
    */
   trigger(name: string): void;
 }
@@ -310,7 +311,7 @@ export interface EventDescriptor {
   label: string;
   kind: 'manual' | 'interval';
   /** `interval`: its schedule is running. `manual`: its button can fire — false while
-   * the term is switched off or its `disabled_when` schedule owns the job. */
+   * the term's `disabled_when` schedule owns the job. */
   armed: boolean;
 }
 

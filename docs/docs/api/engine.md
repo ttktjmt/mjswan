@@ -252,16 +252,20 @@ engine.mdp.clear();                                                       // bac
 | Term | Off (`enabled: false`) | What follows a firing (`onFire`) | `events.trigger(name)` |
 |---|---|---|---|
 | termination | Still evaluated and reported; never ends the episode. | `'reset'` (the default): at once, as mjlab's. `{ delay: d }`: the reset lands `d` seconds of episode time after the condition turned true, whatever it does meanwhile; `d` is clamped to 0 to 60, and 0 is `'reset'`. `'stop'`: the simulation pauses on the step it fired, and `play` lands the reset. | |
-| reset event | No write at the reset. | | The write lands now, mid-episode, paused or not. |
-| interval event | The schedule stops: the same switch as `events.setArmed`. | | The write lands now; the timer is left alone. |
+| reset event | No write at the reset. | | The write lands mid-episode: at once while paused, else at the end of the control step. |
+| interval event | The schedule stops: the same switch as `events.setArmed`. | | As a reset event's; the timer is left alone. |
 | manual event | No switch. | | The same as `events.fire`. |
 
 Startup events are not listed: they have run before anyone could reach them.
 
 - `onFire` is one value, so a delay and a stop never combine. A held reset is latched when
   the term fires: its condition clearing does not cancel it, switching the term off does,
-  and a new delay re-times it from the firing. Off and `'stop'` do combine: the simulation
-  pauses where the term fires and plays on without a reset.
+  and a new delay re-times it from the firing. A stop pauses only on the step a term fires:
+  switching a held term to `'stop'` or `'reset'` lands its reset on the next step. Off and
+  `'stop'` do combine: the simulation pauses where the term fires and plays on without a
+  reset.
+- While the simulation runs, a trigger lands at the end of the control step, where an
+  interval event writes, so it never meets the reset chain's own writes.
 - Every time is episode time, `episode_length_buf × timestep × decimation`. It stands still
   while paused, so a delay is the same simulated span on any machine.
 - An override is kept by kind and term name for the engine's life, across resets, policy
@@ -291,8 +295,8 @@ interface MdpState {
 | `EventTermDescriptor` | `name`, `label`, `mode` (`'reset'`, `'interval'` or `'manual'`), `enabled`, and `firedAt`, when its write last landed this episode. |
 | `MdpActivity` | `kind` (`'termination'` or `'event'`), `name`, `what` (`'fired'`, `'stopped'` or `'reset'`), `time`, `off` (a termination that was off, so no reset followed), `byHand` (an event triggered by hand), `episode`, and `seq`, which rises across the engine's life for a host to key on. |
 
-The engine notifies at most every 100 ms and never inside a step, and every step while a
-reset is held, so a countdown to `pendingReset.at` moves. `stoppedBy` clears on `play`,
+The engine notifies at most every 100 ms and never inside a step, and keeps notifying while
+a reset is held, so a countdown to `pendingReset.at` moves. `stoppedBy` clears on `play`,
 which also lands the reset the term owes, or on a reset.
 
 ### Pointer interaction

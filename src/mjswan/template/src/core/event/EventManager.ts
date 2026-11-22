@@ -226,8 +226,7 @@ export class EventManager {
     for (const { trigger } of this.resetTerms) trigger.step();
     for (const { term, trigger } of this.intervalTerms) {
       if (!trigger.tick(dt)) continue;
-      await term.fire(context);
-      this.wrote(term.name);
+      if (await term.fire(context)) this.wrote(term.name);
     }
   }
 
@@ -256,9 +255,7 @@ export class EventManager {
       return;
     }
     // A press the graph is still busy with is dropped, as it always was, and shows as nothing.
-    if (term.busy) return;
-    await term.fire(context);
-    this.wrote(name, true);
+    if (await term.fire(context)) this.wrote(name, true);
   }
 
   /**
@@ -269,21 +266,22 @@ export class EventManager {
   async trigger(name: string, context: EventContext): Promise<void> {
     const mode = this.states.get(name)?.mode;
     if (mode === 'manual') return this.fire(name, context);
+    let wrote = false;
     if (mode === 'interval') {
       const entry = this.intervalTerms.find(({ term }) => term.name === name);
-      if (!entry || entry.term.busy) return;
-      await entry.term.fire(context);
+      wrote = (await entry?.term.fire(context)) ?? false;
     } else if (mode === 'reset') {
       const entry = this.resetTerms.find((reset) => reset.name === name);
-      if (!entry) return;
-      if (entry.kind === 'plugin') entry.term.onReset(context);
-      else if (entry.term.busy) return;
-      else await entry.term.fire(context);
+      if (entry?.kind === 'plugin') {
+        entry.term.onReset(context);
+        wrote = true;
+      } else {
+        wrote = (await entry?.term.fire(context)) ?? false;
+      }
     } else {
       console.warn(`[EventManager] No reset, interval or manual event named "${name}".`);
-      return;
     }
-    this.wrote(name, true);
+    if (wrote) this.wrote(name, true);
   }
 
   /** Start or stop one `mode="interval"` term's schedule. False if there is no such term. */
@@ -346,8 +344,8 @@ export class EventManager {
     for (const entry of this.resetTerms) {
       if (!this.isEnabled(entry.name)) continue;
       if (!entry.trigger.take()) continue;
-      if (entry.kind === 'onnx') await entry.term.fire(context);
-      else entry.term.onReset(context);
+      if (entry.kind === 'plugin') entry.term.onReset(context);
+      else if (!(await entry.term.fire(context))) continue;
       this.wrote(entry.name);
     }
     for (const { trigger } of this.intervalTerms) trigger.onReset();

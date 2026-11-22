@@ -157,7 +157,8 @@ describe('OnnxEvent: entity_write hand-off', () => {
       joint_state__position: { data: new Float32Array([0.5]), dims: [1, 1] },
     }));
     const event = new OnnxEvent(cfg, { session, rng: new SeededRng(1) });
-    await expect(event.fire({ mjModel: null, mjData: null })).resolves.toBeUndefined();
+    // The graph ran; with no model there is nothing to write to.
+    await expect(event.fire({ mjModel: null, mjData: null })).resolves.toBe(true);
   });
 });
 
@@ -170,11 +171,12 @@ describe('OnnxEvent: async in-flight guard', () => {
     );
     const first = event.fire({ mjModel: null, mjData: null });
     expect(event.busy).toBe(true);
-    await event.fire({ mjModel: null, mjData: null }); // returns immediately, no-op
+    // Returns at once, and says it wrote nothing, so no caller reports a write.
+    expect(await event.fire({ mjModel: null, mjData: null })).toBe(false);
     expect(session.calls.length).toBe(1);
 
     session.flush();
-    await first;
+    expect(await first).toBe(true);
     expect(event.busy).toBe(false);
   });
 });

@@ -81,9 +81,9 @@ export class OnnxEvent {
     return this.inFlight;
   }
 
-  /** Run the graph once and apply its writes. */
-  async fire(context: EventContext): Promise<void> {
-    if (this.inFlight) return;
+  /** Run the graph once and apply its writes; false when a run already in flight drops it. */
+  async fire(context: EventContext): Promise<boolean> {
+    if (this.inFlight) return false;
     this.inFlight = true;
     try {
       const { feeds } = buildFeeds(this.config.input_slots, this.deps.readSlot);
@@ -94,6 +94,7 @@ export class OnnxEvent {
 
       const outputs = await this.deps.session.run(declaredFeeds(this.deps.session, feeds));
       this.applyWrites(context, outputs);
+      return true;
     } finally {
       this.inFlight = false;
     }

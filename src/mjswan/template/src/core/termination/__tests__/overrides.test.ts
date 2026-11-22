@@ -181,6 +181,15 @@ describe('TerminationManager overrides', () => {
     expect(await step()).toMatchObject({ done: false, stopped: [] });
   });
 
+  it('lands a held reset on the next step when switched to stop or reset: a stop pauses only on a firing', async () => {
+    const { verdicts, manager, step } = rig();
+    manager.setOverride('fell', { onFire: { delay: 1 } });
+    verdicts.fell = true;
+    await step();
+    manager.setOverride('fell', { onFire: 'stop' });
+    expect(await step()).toMatchObject({ done: true, reasons: ['fell'], stopped: [] });
+  });
+
   it('cannot time a delay without a control period, so it does not hold one', async () => {
     let fell = false;
     class Scripted extends TerminationBase {

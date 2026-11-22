@@ -152,4 +152,28 @@ describe('EventManager overrides', () => {
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
+
+  it('reports a write only when it landed: a reset meeting a trigger still in flight reports one', async () => {
+    // The runtime keeps a trigger out of the reset chain; this is what the manager says if not.
+    let runs = 0;
+    const pending: Array<() => void> = [];
+    const sessions = new OnnxSessionCache(() =>
+      Promise.resolve({
+        run: () => {
+          runs += 1;
+          return new Promise<Record<string, OnnxTensorLike>>((resolve) => pending.push(() => resolve({})));
+        },
+      }),
+    );
+    await sessions.load([{ name: 'event/reset_base.onnx', data: new ArrayBuffer(0) }]);
+    const activity: TermActivity[] = [];
+    const manager = new EventManager([CONFIGS[0]], {}, { sessions, rng: new SeededRng(1) }, { onActivity: (a) => activity.push(a) });
+    const byHand = manager.trigger('reset_base', NO_MODEL);
+    const reset = manager.onReset(NO_MODEL);
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    while (pending.length > 0) pending.shift()!();
+    await Promise.all([byHand, reset]);
+    expect(runs).toBe(1);
+    expect(activity.filter(({ what }) => what === 'fired')).toHaveLength(1);
+  });
 });
