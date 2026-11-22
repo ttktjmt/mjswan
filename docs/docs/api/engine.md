@@ -93,7 +93,8 @@ that renders documents of different authors gives each document its own engine.
 | `commands` | `CommandControls` | `set(id, value)`, `trigger(id)`. |
 | `debugVis` | `DebugVisControls` | `set(id, enabled)` for one drawing, `setEnabled(enabled)` for mjlab's Debug Viz **Enabled** over all of them. See [Debug Viz](#debug-viz). |
 | `cameraFeeds` | `CameraFeedControls` | `attach(id, canvas)` draws a camera sensor's images into a canvas and returns the detach; `setFrustum(id, shown)` is mjlab's **Frustum** switch. See [Camera feeds](#camera-feeds). |
-| `events` | `EventControls` | `fire(name)` for a `manual` term, `setArmed(name, armed)` for an `interval` one. |
+| `events` | `EventControls` | `fire(name)` for a `manual` term, `setArmed(name, armed)` for an `interval` one. `setArmed` is that term's `mdp.events` switch, so it is kept by name across policy loads. |
+| `mdp` | `MdpControls` | `terminations.set(name, patch)`, `events.set(name, patch)`, `events.trigger(name)` and `clear()`: the viewer's overrides of the running MDP's terminations and events. See [Operating the MDP](#operating-the-mdp). |
 | `interaction` | `InteractionControls` | `setMode(id)`, `getMode()`, `setParam(mode, name, value)`, `getParams(mode)`, `cancel()`. See [Pointer interaction](#pointer-interaction). |
 | `xr` | `XrControls` | `enter(id)`, `exit()`, `setHandTracking(enabled)`. See [WebXR](#webxr). |
 | `pick` | `(clientX, clientY) => PickHit \| null` | The surface under a point of the canvas, and the geom it belongs to. See [Placing a geom](#placing-a-geom). |
@@ -129,6 +130,8 @@ interface MjswanEngineState {
   graphicsAvailable: { shadows: boolean; reflections: boolean; haze: boolean };
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
+  /** The loaded MDP's terminations and events, their overrides, and what they did. */
+  mdp: MdpState;
   /** Every pointer mode, with whether this scene can run it. */
   interactions: ReadonlyArray<InteractionModeDescriptor>;
   interactionMode: InteractionModeId;
@@ -229,6 +232,68 @@ policy reads into it, the last one held while paused; enlarge it in CSS with
 `image-rendering: pixelated`. It is the observation's own render, so the image on show is
 exactly what the policy got. A canvas stays attached across a policy load while the new
 policy reads a sensor of that name; call the returned detach when it goes.
+
+### Operating the MDP
+
+A browser episode ends on the step a termination fires, as mjlab's does, so a fall resets
+before anyone sees why. `engine.mdp` lets whoever watches change that: switch a termination
+or event term off, choose what follows a termination's firing, or trigger an event by hand.
+The bundled app's panel does not draw it; a host does.
+
+```ts
+engine.mdp.terminations.set('bad_orientation', { onFire: { delay: 2 } }); // keep the fall on screen
+engine.mdp.terminations.set('time_out', { enabled: false });              // never time out
+engine.mdp.terminations.set('illegal_contact', { onFire: 'stop' });       // freeze the frame it fires on
+engine.mdp.events.set('push_robot', { enabled: false });                  // stop an interval push
+engine.mdp.events.trigger('reset_base');                                  // re-randomize now
+engine.mdp.clear();                                                       // back to the MDP as built
+```
+
+| Term | Off (`enabled: false`) | What follows a firing (`onFire`) | `events.trigger(name)` |
+|---|---|---|---|
+| termination | Still evaluated and reported; never ends the episode. | `'reset'` (the default): at once, as mjlab's. `{ delay: d }`: the reset lands `d` seconds of episode time after the condition turned true, whatever it does meanwhile; `d` is clamped to 0 to 60, and 0 is `'reset'`. `'stop'`: the simulation pauses on the step it fired, and `play` lands the reset. | |
+| reset event | No write at the reset. | | The write lands now, mid-episode, paused or not. |
+| interval event | The schedule stops: the same switch as `events.setArmed`. | | The write lands now; the timer is left alone. |
+| manual event | No switch. | | The same as `events.fire`. |
+
+Startup events are not listed: they have run before anyone could reach them.
+
+- `onFire` is one value, so a delay and a stop never combine. A held reset is latched when
+  the term fires: its condition clearing does not cancel it, switching the term off does,
+  and a new delay re-times it from the firing. Off and `'stop'` do combine: the simulation
+  pauses where the term fires and plays on without a reset.
+- Every time is episode time, `episode_length_buf × timestep × decimation`. It stands still
+  while paused, so a delay is the same simulated span on any machine.
+- An override is kept by kind and term name for the engine's life, across resets, policy
+  loads and scene loads, and a name the loaded MDP lacks applies to the next one that has
+  it. `clear()` drops them all. Nothing reaches the document, the URL or the manifest; with
+  no override, every termination and event behaves as mjlab's.
+- Overrides change the trajectory, and an event switched off draws nothing from the term
+  PRNG, so a recorded `termSeed` replays a session only with the same overrides.
+
+`state.mdp` reports what the terms did:
+
+```ts
+interface MdpState {
+  episode: number;                                        // resets since the engine started
+  time: number;                                           // episode time, in seconds
+  terminations: ReadonlyArray<TerminationTermDescriptor>; // config order; empty without a policy
+  events: ReadonlyArray<EventTermDescriptor>;             // reset, interval and manual terms
+  pendingReset: { term: string; at: number } | null;      // the soonest reset a delay holds
+  stoppedBy: { term: string; at: number } | null;         // the term whose stop paused it
+  activity: ReadonlyArray<MdpActivity>;                   // the latest 32, oldest first
+}
+```
+
+| Type | Fields |
+|---|---|
+| `TerminationTermDescriptor` | `name`; `timeOut` (mjlab's `time_out`, a truncation rather than a failure); `enabled` and `onFire`, the override; `active`, its condition at the last control step; `firedAt`, when it last turned true this episode; `resetAt`, when the reset it holds lands. |
+| `EventTermDescriptor` | `name`, `label`, `mode` (`'reset'`, `'interval'` or `'manual'`), `enabled`, and `firedAt`, when its write last landed this episode. |
+| `MdpActivity` | `kind` (`'termination'` or `'event'`), `name`, `what` (`'fired'`, `'stopped'` or `'reset'`), `time`, `off` (a termination that was off, so no reset followed), `byHand` (an event triggered by hand), `episode`, and `seq`, which rises across the engine's life for a host to key on. |
+
+The engine notifies at most every 100 ms and never inside a step, and every step while a
+reset is held, so a countdown to `pendingReset.at` moves. `stoppedBy` clears on `play`,
+which also lands the reset the term owes, or on a reset.
 
 ### Pointer interaction
 
