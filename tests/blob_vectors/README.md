@@ -1,8 +1,7 @@
 # The cutter's test files
 
-What `cut` in [../src/index.ts](../src/index.ts) returns for each file here, and what
-mjswan's Python cutter must return too. mjswan copies this directory into its tests, so a
-change here is made there too.
+What mjswan's cutter (`cut` in `src/mjswan/cloud/blob.py`) must return for each file
+here. mjswan Cloud's cutter is held to the same files, so a change here is made there too.
 
 `vectors.json` lists the cases:
 

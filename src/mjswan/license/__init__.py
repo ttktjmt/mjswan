@@ -1,9 +1,8 @@
 """License files in a build: where they sit, what they say, and what ``publish`` does
 about them.
 
-The naming rule, identifier and tier table mirror mjswan Cloud's ``@mjswan/licenses``
-and are kept in step by hand; the platform's copy decides what a publish is accepted
-with.
+The naming rule, identifier and tier table mirror mjswan Cloud's and are kept in step by
+hand; the platform's copy decides what a publish is accepted with.
 
 See ``context/licenses.md``.
 """

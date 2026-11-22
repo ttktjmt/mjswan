@@ -42,7 +42,7 @@ A build from an unknown model with no file beside it carries nothing, silently, 
 
 A file mjswan *generates* begins with the tag; a file mjswan *copies* is copied verbatim, with no line added: prepending would alter a text the license asks to be reproduced, and the header match identifies the standard texts anyway. The tag is for what a header cannot settle.
 
-The tier table, kept in step by hand with mjswan Cloud's `@mjswan/licenses` (the platform's copy decides what a publish is accepted with):
+The tier table, kept in step by hand with mjswan Cloud's (the platform's copy decides what a publish is accepted with):
 
 - **`notice`**: everything permissive; printed.
 - **`restricted`**: the CC NC / SA / ND family and the GPL family; `publish` warns, naming the file and the clause, before any network call. There is no acknowledgement flag to pass.
