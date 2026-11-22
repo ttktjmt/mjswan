@@ -13,6 +13,8 @@ mjlab's do. Example::
             use_default_offset=True,
         ),
     }
+
+See ``context/tracing.md``.
 """
 
 from __future__ import annotations

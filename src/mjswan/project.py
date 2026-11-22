@@ -2,6 +2,8 @@
 
 This module defines the ProjectConfig dataclass and ProjectHandle class for
 managing projects containing multiple scenes.
+
+See ``context/object-model.md``.
 """
 
 from __future__ import annotations

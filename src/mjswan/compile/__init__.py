@@ -4,8 +4,10 @@ harness validating the exported graphs against the live mjlab env.
 One pass records what a term reads (:mod:`.record`), a second replays those reads
 while torch traces the body (:mod:`.replay`); :mod:`.slot` names the reads and
 :mod:`.export` holds the mechanics every tracer shares. :mod:`.term`, :mod:`.event`,
-:mod:`.command` and :mod:`.group` trace one kind of term each, and :mod:`.native` names
-the terms that need no graph. Files are written by :mod:`mjswan.build.mdp`.
+:mod:`.command`, :mod:`.action` and :mod:`.group` trace one kind of term each. Files are
+written by :mod:`mjswan.build.mdp`.
+
+See ``context/tracing.md``.
 """
 
 from __future__ import annotations

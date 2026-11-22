@@ -8,7 +8,9 @@ MANIFEST_NAME = "manifest.json"
 #: The structure a build writes: what files exist, where they sit, and what the manifest
 #: says about them. Bumped by hand, only when an engine reading the old structure would
 #: misread the new one. Distinct from ``version``, the mjswan release: a host picks an
-#: engine by ``version``, an engine protects itself by ``format``.
+#: engine by ``version``, an engine protects itself by ``format``. Bump it with
+#: ``MAX_DOCUMENT_FORMAT`` (``template/src/manifest/index.ts``) and add a row to the
+#: format table in ``context/document.md``.
 #:
 #: 2: ``input_slots`` may carry a raw ``mjData`` field (``{"sim": ...}``), narrowed to
 #: ``rows``. A format-1 engine accepts the entry, cannot serve it, and freezes the

@@ -2,6 +2,8 @@
  * Public API surface for the headless engine. One simulation at a time, bytes in directly
  * rather than fetched, and verbs named for their cost: `loadScene` rebuilds, as does `xr.enter`
  * when the hand-tracking switch disagrees with the model; the rest are live.
+ *
+ * See context/frontend.md.
  */
 import type { CameraView, ViewerConfig } from '../core/engine/viewer_config';
 import type { TerrainData } from '../core/event/EventBase';

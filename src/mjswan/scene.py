@@ -2,6 +2,8 @@
 
 This module defines the SceneConfig dataclass and SceneHandle class for
 managing MuJoCo scenes and their associated policies.
+
+See ``context/object-model.md``.
 """
 
 from __future__ import annotations

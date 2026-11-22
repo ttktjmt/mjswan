@@ -3,6 +3,8 @@
  * go before it adds one, and how it edits one. Parented to the three.js scene, as the
  * mode gizmos are, so a scene load keeps it, `frameCamera` never frames it, and the
  * pointer's raycast skips it.
+ *
+ * See context/frontend.md.
  */
 import * as THREE from 'three';
 

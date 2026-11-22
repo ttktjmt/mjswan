@@ -17,6 +17,8 @@ submodules carry only the ``*Binding`` escape hatch and its ``register_*`` regis
 ``commands`` is the exception: it carries the operator-driven command presets, binds
 mjlab's command classes by cfg name, and rewrites the reset jitter of the one it keeps
 native (``MotionCommand``).
+
+See ``context/mdp.md``.
 """
 
 from . import actions, commands, observations, terminations

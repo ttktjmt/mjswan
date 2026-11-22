@@ -2,6 +2,8 @@
 
 This module defines the PolicyConfig dataclass and PolicyHandle class for
 ONNX policy configuration and command management.
+
+See ``context/document.md``.
 """
 
 from __future__ import annotations

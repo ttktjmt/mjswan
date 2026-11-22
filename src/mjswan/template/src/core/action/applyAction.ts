@@ -10,6 +10,8 @@
  *
  * Free functions over `mjData`, not methods on the DOM-bound runtime, so the parity tests
  * can drive them in Node.
+ *
+ * See context/tracing.md.
  */
 
 import { CommandDelay, resolveDelays, type DelayConfigEntry, type DelayRng } from './commandDelay';

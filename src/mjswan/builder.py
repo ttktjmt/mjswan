@@ -2,6 +2,8 @@
 
 This module provides the main Builder class which serves as the entry point
 for programmatically creating interactive MuJoCo simulations.
+
+See ``context/object-model.md``.
 """
 
 from __future__ import annotations

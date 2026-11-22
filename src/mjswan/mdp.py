@@ -8,6 +8,8 @@ Identity is by object: two policies handed the *same* config share one MDP, mean
 ``mdp/<id>/`` directory and one set of traced graphs, while two equal but separate
 configs are two MDPs. The per-manager keyword arguments on
 :meth:`~mjswan.scene.SceneHandle.add_policy` construct an anonymous one.
+
+See ``context/object-model.md``.
 """
 
 from __future__ import annotations

@@ -3,6 +3,8 @@
 A term of an mjlab class mjswan runs natively serializes its own config. A task's own
 class (:class:`TracedActionCfg`) is built on the trace env and its ``process_actions``
 and ``reset`` traced; its entry names the native apply and its options.
+
+See ``context/tracing.md``.
 """
 
 from __future__ import annotations

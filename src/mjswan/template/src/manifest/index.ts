@@ -7,6 +7,8 @@
  * The manifest is the one descriptor of a document: every key `snake_case`, every path
  * under a scene entry relative to `<project-id>/<scene-id>/`, under a project's `work`
  * relative to `<project-id>/`, the top-level `plugins` relative to the document root.
+ *
+ * See context/document.md.
  */
 import { resolveBytes, type Bytes } from '../core/utils/bytes';
 import type { ViewerConfig } from '../core/engine/viewer_config';
@@ -299,7 +301,9 @@ export function sanitizeName(name: string): string {
  * scene's `skins`; 8 a motion's `frame_fields`; 9 a camera sensor's descriptor, an
  * image-shaped policy input, a skin modelled on the robot (`fit: 'modelled'`), with
  * `align`, `rest_qpos`, a solid material and `hide_tendons`, and a scene's `graphics`;
- * 10 an action term's DC motor `saturation_effort` and `velocity_limit`.
+ * 10 an action term's DC motor `saturation_effort` and `velocity_limit`. Bump it with
+ * `DOCUMENT_FORMAT` (`document/manifest.py`) and add a row to the format table in
+ * context/document.md.
  */
 export const MAX_DOCUMENT_FORMAT = 10;
 

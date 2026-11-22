@@ -1579,7 +1579,7 @@ export class mjswanRuntime {
     // An MDP switch, in order: restore every model field the previous startup pass
     // touched, reseed, then apply the incoming MDP's startup events over the compiled
     // values. Restoring runs even with no policy following, so clearing the policy leaves
-    // the scene as compiled.
+    // the scene as compiled. See context/document.md.
     const restored = this.modelFieldDefaults?.restore() ?? false;
     if (restored && this.mjModel && this.mjData) {
       this.mujoco.mj_setConst(this.mjModel, this.mjData);

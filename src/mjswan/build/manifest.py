@@ -4,6 +4,8 @@ The one place that knows the shape of a project, scene, MDP and policy entry.
 Every key is ``snake_case``; a path resolves against the directory of the level that
 declares it: the scene directory for everything under a scene entry, the document root
 for the top-level ``plugins``.
+
+See ``context/document.md``.
 """
 
 from __future__ import annotations

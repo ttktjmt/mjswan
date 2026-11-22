@@ -2,6 +2,8 @@
 
 This module defines the MjswanApp class which represents a built application
 that can be saved to disk or launched in a web browser.
+
+See ``context/document.md``.
 """
 
 from __future__ import annotations

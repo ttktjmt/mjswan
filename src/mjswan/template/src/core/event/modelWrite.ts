@@ -1,6 +1,8 @@
 /**
  * Applies a traced event's `kind: "model"` write targets to `mjModel`. The graph did the
  * sampling and the math, so this only puts each value in its element's cell.
+ *
+ * See context/document.md.
  */
 
 import {

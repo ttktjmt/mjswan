@@ -1,6 +1,8 @@
 """The Python side of ``template/``: its nodeenv Node.js, the SPA build, ``plugins.js``.
 
 ``template/`` sits in the package root, where npm, Vite, CI and hatch expect it.
+
+See ``context/build.md``.
 """
 
 from __future__ import annotations
