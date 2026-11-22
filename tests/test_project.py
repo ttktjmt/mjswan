@@ -56,7 +56,7 @@ def _install_fake_mjlab(monkeypatch, minimal_spec) -> tuple[list[tuple], _FakeEn
             self.terrain = None
 
     class FakeManagerBasedRlEnv:
-        """Stands in for mjlab's real env: ADR 0005 traces term bodies against a live
+        """Stands in for mjlab's real env: the build traces term bodies against a live
         env, which `mjswan.build.pipeline` builds lazily."""
 
         def __init__(self, env_cfg, device: str):
@@ -86,7 +86,7 @@ def _install_fake_mjlab(monkeypatch, minimal_spec) -> tuple[list[tuple], _FakeEn
 
 
 # ===========================================================================
-# License files (ADR 0007 §2): detection and the known-assets table
+# License files: detection and the known-assets table
 # ===========================================================================
 class TestSceneAttributions:
     def test_a_license_beside_the_model_is_detected_at_add_scene(
@@ -818,7 +818,7 @@ class TestPolicyTermsDerivedFromEnvCfg:
 
         cfg = scene.add_policy(name="Policy", policy=minimal_onnx)._config
 
-        # The actor group under the default slot; critic dropped (ADR 0006 §5).
+        # The actor group under the default slot; critic dropped.
         assert cfg.observations is not None
         assert list(cfg.observations) == ["actor"]
         assert cfg.observations["actor"] is env_cfg.observations["actor"]

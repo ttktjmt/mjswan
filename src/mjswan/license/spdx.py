@@ -1,9 +1,9 @@
 """Which license a text is, what tier that puts it in, and the standard texts mjswan can
-write itself (ADR 0007).
+write itself.
 
-The identifier and tier table mirror mjswan Cloud's ``@mjswan/licenses`` and are kept in
-step by hand; the platform's copy decides what a publish is accepted with. Nothing here
-verifies a claim: a text is classified when it can be and otherwise left alone.
+The identifier and tier table mirror mjswan Cloud's and are kept in step by hand; the
+platform's copy decides what a publish is accepted with. Nothing here verifies a claim:
+a text is classified when it can be and otherwise left alone.
 """
 
 from __future__ import annotations

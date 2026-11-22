@@ -3,7 +3,7 @@
 The term runs a second time inside an ``nn.Module``'s ``forward``, against stand-ins
 that answer every read from the dynamic inputs and baked constants the discovery pass
 classified. A read the discovery pass never saw raises: the term's control flow would
-be input-dependent, which is not traceable (ADR 0005 §Consequences).
+be input-dependent, which is not traceable.
 """
 
 from __future__ import annotations
@@ -165,7 +165,7 @@ class _ReplayData:
         raise AttributeError(
             f"Term read undeclared slot {key!r} during tracing. This field "
             "was not seen in the discovery pass: the term's control flow is "
-            "input-dependent, which is not traceable (ADR 0005 §Consequences)."
+            "input-dependent, which is not traceable."
         )
 
 
@@ -256,7 +256,7 @@ class _ReplayCommandManager:
             raise AttributeError(
                 f"Term read command {name!r} during tracing that the discovery pass "
                 "never saw: the term's control flow is input-dependent, which is "
-                "not traceable (ADR 0005 §Consequences)."
+                "not traceable."
             )
         return _command_proxy(
             real, lambda attr, _v: self._slots[(_COMMAND_NS, f"{name}.{attr}")]
@@ -286,7 +286,7 @@ class _ReplayActionManager:
                 raise AttributeError(
                     f"Term read action term {name!r}'s {attr} during tracing, which the "
                     "discovery pass never saw: the term's control flow is "
-                    "input-dependent, which is not traceable (ADR 0005 §Consequences)."
+                    "input-dependent, which is not traceable."
                 )
             return value.to(real.dtype)
 
@@ -303,7 +303,7 @@ class _ReplayActionManager:
             raise AttributeError(
                 "Term read the last action during tracing, which the discovery pass "
                 "never saw: the term's control flow is input-dependent, which is not "
-                "traceable (ADR 0005 §Consequences)."
+                "traceable."
             )
         return value
 
@@ -340,7 +340,7 @@ class _ReplayEnv:
                 raise AttributeError(
                     f"Term read env.{name} during tracing that the discovery pass "
                     "never saw: the term's control flow is input-dependent, which is "
-                    "not traceable (ADR 0005 §Consequences).",
+                    "not traceable.",
                     name=name,
                 )
             return value.to(_ENV_SLOT_DTYPES[name])

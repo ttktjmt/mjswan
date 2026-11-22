@@ -1,4 +1,4 @@
-"""A task's own action term traced to ONNX (ADR 0009).
+"""A task's own action term traced to ONNX.
 
 Layer: L3 (builds a small mjlab env on the CPU).
 

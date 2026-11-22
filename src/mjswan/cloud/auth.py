@@ -5,8 +5,7 @@ never holds a long-lived secret: it drives the same Supabase GitHub OAuth the
 web app uses, captures the resulting session on a transient ``127.0.0.1``
 listener, and persists the ``access_token`` + ``refresh_token`` locally. Because
 Supabase access tokens are short-lived (~1h) and the refresh token rotates on
-use, subsequent commands refresh the access token transparently. See
-mjswan-cloud ADR 0001 §6.1.
+use, subsequent commands refresh the access token transparently.
 
 The flow (PKCE):
 
@@ -22,7 +21,7 @@ The flow (PKCE):
 
 The Supabase **publishable key** is public (published with the web app), so it
 is embedded here; no secret is exposed. The loopback ``redirect_to`` must be in
-the Supabase project's Redirect URLs allowlist (mjswan-cloud ADR 0006).
+the Supabase project's Redirect URLs allowlist.
 """
 
 from __future__ import annotations

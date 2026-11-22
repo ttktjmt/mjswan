@@ -1,7 +1,7 @@
 """Trace a task-defined ``ActionTerm``'s ``process_actions`` and ``reset`` to ONNX.
 
-ADR 0009. The term's state, every tensor attribute either body writes, is promoted to
-explicit graph I/O, as a stateful command's is (ADR 0005 §3)::
+The term's state, every tensor attribute either body writes, is promoted to explicit
+graph I/O, as a stateful command's is::
 
     process(raw, slots..., prev_<f>..., [rand]) -> (next_<f>..., processed, [processed_from])
     reset(slots..., prev_<f>..., [rand])        -> (next_<f>...)

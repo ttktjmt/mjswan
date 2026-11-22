@@ -193,7 +193,7 @@ function SliderControl({
   const dependencyDisabled = command.enabledWhen !== undefined && (enabledWhenValue ?? 0) < 0.5;
   const isDisabled = disabled || dependencyDisabled;
 
-  // A companion "Max <label>" slider, when the build asked for one (brief §3a).
+  // A companion "Max <label>" slider, when the build asked for one.
   // Presentational only: it rescales how far *this* slider can be dragged and is
   // never sent to the engine, matching mjlab's play GUI. Symmetric around zero.
   const range = command.adjustableRange;

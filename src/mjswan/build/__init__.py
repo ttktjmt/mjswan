@@ -5,4 +5,6 @@
 its terms to ``.onnx`` graphs; :mod:`.manifest` assembles the entries and writes
 ``manifest.json``. Only :mod:`.mjz` is imported with the object model; the rest loads
 when a build runs, and the tracer (:mod:`mjswan.compile`) only when a term is traced.
+
+See ``context/build.md``.
 """

@@ -1,10 +1,10 @@
 /**
- * Input-slot naming contract (ADR 0005).
+ * Input-slot naming contract.
  *
  * The build decides each slot's graph input name and ships it in the slot's own
- * `input` field (`mjswan.compile.tracer.slot_to_json`), so the runtime never has
- * to reproduce the naming scheme — which it could not do for sensor slots, whose
- * MJCF-path names get folded to identifiers at build time.
+ * `input` field (`mjswan.compile.slot.slot_to_json`), so the runtime never has to
+ * reproduce the naming scheme, which it could not for sensor slots, whose MJCF-path
+ * names get folded to identifiers at build time.
  */
 import { describe, expect, it } from 'vitest';
 

@@ -111,7 +111,7 @@ class TestAddSceneHf:
         assert fake_hub["allow_patterns"] == ["scenes/*", "shared/meshes/*"]
 
     def test_a_license_beside_the_model_is_detected(self, project, fake_hub):
-        """`add_scene(spec=)`'s ADR 0007 detection works on a downloaded tree too."""
+        """`add_scene(spec=)`'s license detection works on a downloaded tree too."""
         scene = project.add_scene_hf("org/assets", "scenes/unitree_g1/scene.xml")
 
         assert [a.component for a in scene._config.attributions] == ["unitree_g1"]

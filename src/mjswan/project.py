@@ -2,6 +2,8 @@
 
 This module defines the ProjectConfig dataclass and ProjectHandle class for
 managing projects containing multiple scenes.
+
+See ``context/object-model.md``.
 """
 
 from __future__ import annotations
@@ -47,8 +49,8 @@ class ProjectConfig:
 
     id: str = ""
     """Sanitized name, unique within the document: the project's directory in the build
-    and its ``?project=`` value (ADR 0006 §4). Assigned by :meth:`Builder.add_project`;
-    defaults to ``name2id(name)``."""
+    and its ``?project=`` value. Assigned by :meth:`Builder.add_project`; defaults to
+    ``name2id(name)``."""
 
     scenes: list[SceneConfig] = field(default_factory=list)
     """List of scenes in the project."""
@@ -58,7 +60,7 @@ class ProjectConfig:
     the first added is the default."""
 
     license: bytes | None = field(default=None, repr=False)
-    """The work's ``LICENSE``, written to the project directory (ADR 0007 §1)."""
+    """The work's ``LICENSE``, written to the project directory."""
 
     notice: bytes | None = field(default=None, repr=False)
     """The work's ``NOTICE``, beside it."""
@@ -92,7 +94,7 @@ class ProjectHandle:
     def set_license(
         self, license: str | os.PathLike[str], *, copyright: str | None = None
     ) -> ProjectHandle:
-        """Set the work's license, written as ``<project-id>/LICENSE`` (ADR 0007 §1).
+        """Set the work's license, written as ``<project-id>/LICENSE``.
 
         Args:
             license: A generatable SPDX id (one of
@@ -141,24 +143,23 @@ class ProjectHandle:
             model: MuJoCo model for the scene (saved as .mjb).
             spec: MuJoCo spec for the scene (saved as .mjz).
             metadata: Optional metadata dictionary for the scene.
-            control_dt: Seconds per control step — the rate the policy acts at,
-                mjlab's ``timestep * decimation``. Required once the scene carries a
-                policy: the model supplies only the physics ``timestep``, so nothing
-                else can supply this, and a wrong control rate produces no error at
-                playback — only a policy running at a speed it was not trained for.
-                :meth:`add_scene_mjlab` fills it in from the task.
+            control_dt: Seconds per control step, the rate the policy acts at (mjlab's
+                ``timestep * decimation``). Required once the scene carries a policy:
+                the model supplies only the physics ``timestep``, and a wrong control
+                rate raises no error at playback, it only runs the policy at a speed it
+                was not trained for. :meth:`add_scene_mjlab` fills it in from the task.
             events: Optional dict of ``EventTermCfg`` instances (mjswan or mjlab).
                 Equivalent to calling :meth:`~mjswan.scene.SceneHandle.set_events`
                 afterwards: the default every policy's MDP on this scene takes for its
-                events (ADR 0006 §3).
+                events.
 
         Returns:
             SceneHandle for adding policies and further configuration.
 
         For a ``spec`` loaded from disk, ``LICENSE*`` / ``NOTICE*`` files beside the
         model or its meshes and textures are copied verbatim into the project's
-        ``licenses/`` as ``LICENSE.<component>`` (ADR 0007 §2); a model in the known-assets table gets a
-        generated file when none is found. Adjust with
+        ``licenses/`` as ``LICENSE.<component>``; a model in the known-assets table gets
+        a generated file when none is found. Adjust with
         :meth:`~mjswan.scene.SceneHandle.add_attribution` and
         :meth:`~mjswan.scene.SceneHandle.clear_attributions`.
 
@@ -233,7 +234,7 @@ class ProjectHandle:
         textures relative to it (for an XML at the root, the whole repository), and the
         spec is compiled in place. It is then added as by :meth:`add_scene` with
         ``spec=``, license detection included: a ``LICENSE`` beside the model is copied
-        into the project's ``licenses/`` (ADR 0007 §2).
+        into the project's ``licenses/``.
 
         Args:
             repo_id: Hub repository, ``"<owner>/<name>"``.
@@ -383,7 +384,7 @@ class ProjectHandle:
         handle._config.mjlab_env_cfg = env_cfg
         handle._config.mjlab_task_id = task_id
         # The composed scene spec has no directory; the entities' specs do, and the
-        # task id names the robot when nothing sits beside them (ADR 0007 §2).
+        # task id names the robot when nothing sits beside them.
         if not handle._config.attributions:
             handle._config.attributions = detect_attributions(
                 d

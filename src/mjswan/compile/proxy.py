@@ -280,9 +280,9 @@ def _action_term_proxy(
 
     A native term (*traced* ``None``) serves ``raw_action`` from ``raw_action()``, a
     traced one its state fields (*traced*) through ``read_state``, and either its
-    processed action through ``read_state`` (ADR 0009 §5). Any other tensor, or a live
-    object such as its entity, raises: the browser holds neither, so its value would
-    bake. A property runs on the stand-in, so what it reads comes back through here.
+    processed action through ``read_state``. Any other tensor, or a live object such as
+    its entity, raises: the browser holds neither, so its value would bake. A property
+    runs on the stand-in, so what it reads comes back through here.
     """
 
     sim = _sim_memory(getattr(real, "_env", None))

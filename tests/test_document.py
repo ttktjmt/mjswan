@@ -1,4 +1,4 @@
-"""The `.swn` simulation document (ADR 0006 §8).
+"""The `.swn` simulation document.
 
 Layer: L1, a built tree on disk with the Node build and template copy mocked. Pins that a
 document is the manifest plus the project trees and nothing of the engine, that it unpacks

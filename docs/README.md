@@ -21,7 +21,7 @@ Or directly, e.g. to pick a different port:
 uv run --with-requirements requirements.txt --directory docs zensical serve -a localhost:8123
 ```
 
-The build validates internal links and reports broken ones as warnings — treat them as
+The build validates internal links and reports broken ones as warnings; treat them as
 errors.
 
 ## Layout
@@ -31,7 +31,6 @@ docs/
 ├── zensical.toml          site config: nav, theme, markdown extensions
 ├── requirements.txt       docs build dependencies (zensical)
 ├── .readthedocs.yaml      Read the Docs build definition
-├── adr/                   architecture decision records (not part of the site)
 └── docs/
     ├── index.md
     ├── getting-started/   installation, quickstart, core concepts, examples, CLI
@@ -40,9 +39,6 @@ docs/
     ├── api/               Python and TypeScript API reference
     └── resources.md
 ```
-
-`adr/` is deliberately outside the site: ADRs are design records for contributors, and the
-guides link into them on GitHub where that context belongs.
 
 A new skill takes a page in `docs/skills/`, a row in the table on `skills/index.md`, and an
 entry under `Skills` in the nav.

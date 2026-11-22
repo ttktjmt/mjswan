@@ -1,6 +1,6 @@
-"""The third-party components a scene carries, and how a build declares them (ADR 0007
-§2): files detected beside a model, a table of models that ship without one, and what
-``publish`` and ``info`` read back from a built tree."""
+"""The third-party components a scene carries, and how a build declares them: files
+detected beside a model, a table of models that ship without one, and what ``publish``
+and ``info`` read back from a built tree."""
 
 from __future__ import annotations
 

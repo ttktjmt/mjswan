@@ -1,9 +1,12 @@
-"""A scene's ``credits`` and a project's ``work``: the license files written beside them
-(ADR 0007), named in the manifest because a static host lists no directory. The texts
-stay in the files.
+"""A scene's ``credits`` and a project's ``work``: the license files written beside them,
+named in the manifest because a static host lists no directory. The texts stay in the
+files.
 
-A project's third-party texts sit together in ``<project>/licenses/``, each written once
-(mjswan-cloud ADR 0017 §2.7), so a component every scene carries is one file."""
+A project's third-party texts sit together in ``<project>/licenses/``, each written once,
+so a component every scene carries is one file.
+
+See ``context/licenses.md``.
+"""
 
 from __future__ import annotations
 

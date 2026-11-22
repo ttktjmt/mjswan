@@ -85,14 +85,14 @@ export class MyObservation extends ObservationBase {
 }
 ```
 
-The build step bundles your source into the engine. See
+The build compiles your source into `plugins.js`, a module of its own that the app hands
+to the engine. See
 [How the Build Works](https://mjswan.readthedocs.io/en/latest/guides/how-it-works/#a-term-cannot-be-traced)
 for when a term needs one, and how a binding's `ts_src` names the file.
 
 > Subpath exports point at TypeScript source (not compiled `.d.ts`), so consumers need a
 > bundler that handles TypeScript. Vite does; plain `tsc` does not. This keeps full IDE
-> IntelliSense without a separate types package — see
-> [ADR 0001](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0001-npm-self-reference-for-custom-mdp-imports.md).
+> IntelliSense without a separate types package.
 
 ### Available subpaths
 

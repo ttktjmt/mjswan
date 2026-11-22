@@ -1,8 +1,8 @@
-"""ADR 0005 parity: exported ONNX term graphs vs the live mjlab env.
+"""Parity: exported ONNX term graphs vs the live mjlab env.
 
-Layer: L3 (requires the ``examples`` extras — mjlab / torch / onnxruntime — and a
-one-time warp CPU-kernel compile, so it is marked ``slow``/``mjlab`` and skipped
-when those deps are absent).
+Layer: L3. Requires the ``examples`` extras (mjlab / torch / onnxruntime) and a one-time
+warp CPU-kernel compile, so it is marked ``slow``/``mjlab`` and skipped when those deps
+are absent.
 
 Two scopes. **Cartpole** is asserted in detail (every observation term and ``time_out``
 traced, both reset Events replayed against recorded RNG draws) because it is small
@@ -14,7 +14,7 @@ Run the whole thing with::
     MUJOCO_GL=disable pytest tests/test_onnx_parity.py -m mjlab
 
 Note that the default CI job runs ``-m "not slow"`` *and* installs only the
-``dev`` extra, so nothing in this file runs there — the sweep has its own
+``dev`` extra, so nothing in this file runs there; the sweep has its own
 workflow (``.github/workflows/parity.yml``).
 """
 

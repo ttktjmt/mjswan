@@ -311,8 +311,7 @@ for. The switch stays as set, and applies again on a scene that can take the han
 
 ### Placing a geom
 
-For a host that adds geoms by pointing at the scene, as mjswan Cloud's Studio does
-([ADR 0011](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0011-pick-and-preview.md)).
+For a host that adds geoms by pointing at the scene, as mjswan Cloud's Studio does.
 
 `pick(clientX, clientY)` takes a pointer's client CSS pixels as a `PointerEvent` gives them,
 and casts MuJoCo's own ray (`mj_ray`) from the camera through that point. It returns the
@@ -358,8 +357,7 @@ keeps a fallback.
 ### Editing a geom
 
 The preview can carry handles that the pointer drags, so a host resizes, turns and moves a
-geom before anything is written to the model
-([ADR 0011](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0011-pick-and-preview.md)).
+geom before anything is written to the model.
 
 - `handles: 'size'`: an arrow per spatial `size` entry, along the geom's own axes (x red,
   y green, z blue). Dragging one moves the face under it with the pointer; the opposite face

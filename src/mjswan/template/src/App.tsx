@@ -57,7 +57,7 @@ async function loadCatalog(base: string): Promise<Catalog> {
 /**
  * Resolve a `?project=` / `?scene=` / `?policy=` / `?skin=` value against the entries'
  * ids. The query is sanitized too, so a hand-typed display name still lands, but nothing
- * matches on the raw name (ADR 0006 §4).
+ * matches on the raw name.
  */
 function pickById<T extends { id: string }>(
   items: T[],
@@ -87,7 +87,7 @@ function AppContent() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<MjswanEngine | null>(null);
   // Author custom-MDP terms (trusted contexts only). Passed to both scene and
-  // policy inputs; the engine registers each kind at the relevant load (ADR §10).
+  // policy inputs; the engine registers each kind at the relevant load.
   const pluginsRef = useRef<EnginePlugins | null>(null);
   const { showLoading, hideLoading, setLoadingMessage } = useLoading();
 
@@ -107,7 +107,7 @@ function AppContent() {
     loadCatalog(base)
       .then(async (cat) => {
         // Trusted-only: load the author plugin ESM before the first scene so the
-        // engine has the custom terms at registration time (ADR 0004 §10).
+        // engine has the custom terms at registration time.
         const url = pluginModuleUrl(base, cat.pluginsPath, window.location.search, window.location.href);
         if (url) {
           pluginsRef.current = (await import(/* @vite-ignore */ url)) as EnginePlugins;

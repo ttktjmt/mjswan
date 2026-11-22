@@ -6,15 +6,13 @@
  * cannot: that the semantics are *mjlab's*. The fixture is dumped from live,
  * stepped mjlab envs (`tests/dump_slot_fixture.py`) and carries both the raw
  * `mjModel`/`mjData` arrays the reader indexes and mjlab's own
- * `env.scene[entity].data.<field>` value for each one — every field
- * `READER_FIELDS` names — plus mjlab's `EntityIndexing`, the ids the reader must
- * resolve each entity to.
+ * `env.scene[entity].data.<field>` value for each one (every field `READER_FIELDS`
+ * names), plus mjlab's `EntityIndexing`, the ids the reader must resolve each entity to.
  *
- * This closes the last gap in the ADR 0005 verification chain: the Python parity
- * harness proves each traced graph reproduces mjlab's term, and this proves the
- * browser feeds that graph the same numbers mjlab would.
+ * The Python parity harness proves each traced graph reproduces mjlab's term; this
+ * proves the browser feeds that graph the same numbers mjlab would.
  *
- * Regenerate the fixture whenever a field is added to the reader — the coverage
+ * Regenerate the fixture whenever a field is added to the reader: the coverage
  * assertion at the bottom fails on a reader never compared, and every dumped field
  * must be readable.
  */

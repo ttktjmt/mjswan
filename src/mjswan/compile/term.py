@@ -52,8 +52,7 @@ class ConstantTerm(ValueError):
     def __init__(self, term: str):
         self.term = term
         super().__init__(
-            f"Term {term!r} reads no simulation state at all; its value is a "
-            "constant (ADR 0005)."
+            f"Term {term!r} reads no simulation state at all; its value is a constant."
         )
 
 

@@ -308,7 +308,7 @@ describe('isModelFieldDrConfig', () => {
   });
 });
 
-describe('ModelFieldDefaults across an MDP switch (ADR 0006 §9)', () => {
+describe('ModelFieldDefaults across an MDP switch', () => {
   it('restores every touched field to its compiled value', () => {
     const compiled = friction('robot/foot_collision')[0];
     const defaults = new ModelFieldDefaults(mjModel);

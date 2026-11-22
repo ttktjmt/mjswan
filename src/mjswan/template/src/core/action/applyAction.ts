@@ -1,5 +1,5 @@
 /**
- * Action terms in two halves, as mjlab splits them (ADR 0009):
+ * Action terms in two halves, as mjlab splits them:
  *
  * - `processAction`, once per control step: the policy's action, or a command's value,
  *   into the term's `processed` targets. A traced term's graph does this instead
@@ -10,6 +10,8 @@
  *
  * Free functions over `mjData`, not methods on the DOM-bound runtime, so the parity tests
  * can drive them in Node.
+ *
+ * See context/tracing.md.
  */
 
 import { CommandDelay, resolveDelays, type DelayConfigEntry, type DelayRng } from './commandDelay';
@@ -135,7 +137,7 @@ export function isTargetActuator(
   return mode === 1 || mode === 2;
 }
 
-/** What a manifest entry asks of the substeps (ADR 0009). */
+/** What a manifest entry asks of the substeps. */
 export interface SubstepConfig {
   interpolate?: boolean;
   hold_s?: number;

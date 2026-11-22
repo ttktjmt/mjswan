@@ -23,11 +23,11 @@ class EventTermCfg:
 
     ``func`` is either an :class:`EventBinding` (resolved to a TS class by name) or a
     plain ``func(env, env_ids, **params)`` writing via ``entity.write_*_to_sim``, which
-    the build traces to ONNX — see :func:`to_dict`.
+    the build traces to ONNX (see :func:`to_dict`).
     """
 
     func: EventBinding | Callable[..., Any]
-    """Event function — EventBinding sentinel (legacy) or a traceable mjlab-style body."""
+    """An :class:`EventBinding`, or a plain callable traced to ONNX."""
 
     mode: EventMode = "reset"
     """Event trigger mode: ``reset``, ``interval``, ``startup``, or ``manual`` — no

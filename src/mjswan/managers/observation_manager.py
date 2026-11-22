@@ -57,8 +57,7 @@ class ObservationTermCfg:
     """
 
     func: ObservationBinding | Callable[..., Any]
-    """Observation function — ObservationBinding sentinel (legacy) or a
-    plain callable traced to ONNX (ADR 0005)."""
+    """An :class:`ObservationBinding`, or a plain callable traced to ONNX."""
 
     params: dict[str, Any] = field(default_factory=dict)
     """Additional keyword arguments forwarded to the TS observation constructor."""

@@ -2,6 +2,8 @@
  * Public API surface for the headless engine. One simulation at a time, bytes in directly
  * rather than fetched, and verbs named for their cost: `loadScene` rebuilds, as does `xr.enter`
  * when the hand-tracking switch disagrees with the model; the rest are live.
+ *
+ * See context/frontend.md.
  */
 import type { CameraView, ViewerConfig } from '../core/engine/viewer_config';
 import type { TerrainData } from '../core/event/EventBase';
@@ -47,7 +49,7 @@ export type {
 
 // Bytes: asset bytes or a lazy loader. EnginePlugins: custom MDP terms, trusted-only.
 export type { Bytes, SplatTransform, ModelFormat, EnginePlugins, SkinConfig };
-// What a host previews, where it would go, and what it edits (ADR 0011).
+// What a host previews, where it would go, and what it edits.
 export type { PrimitiveType, GeomType, PreviewInput, PreviewGeom, HandleKind, PickHit };
 
 export interface SplatInput {
@@ -108,7 +110,7 @@ export interface SceneInput {
   graphics?: GraphicsInput;
   /**
    * Spawn positions (flat patches) any policy's event terms may draw from. The events
-   * themselves travel with the policy (ADR 0006 §3).
+   * themselves travel with the policy.
    */
   terrainData?: TerrainData;
   /** mjlab's `timestep * decimation`; the model carries only the physics timestep. */
@@ -388,9 +390,9 @@ export interface HandTrackingDescriptor {
 
 /**
  * One primitive geom drawn over the scene and never simulated: what a host shows where a
- * geom would go before it adds one, and while it edits one (ADR 0011). It is
- * built as the model's geoms are, casts a shadow, and survives a scene load; neither the
- * pointer modes nor `pick` hit it.
+ * geom would go before it adds one, and while it edits one. It is built as the model's
+ * geoms are, casts a shadow, and survives a scene load; neither the pointer modes nor
+ * `pick` hit it.
  */
 export interface PreviewControls {
   /** Draw it, or move and reshape the one on show. Live: the model is never touched. */
@@ -501,8 +503,8 @@ export interface MjswanEngine {
 
   /**
    * The surface under a point of the canvas, in client CSS pixels as a `PointerEvent`
-   * gives them, by MuJoCo's own ray (ADR 0011): what the simulation would hit, the floor
-   * included, and nothing only drawn. Null over empty space, or before a scene loads.
+   * gives them, by MuJoCo's own ray: what the simulation would hit, the floor included,
+   * and nothing only drawn. Null over empty space, or before a scene loads.
    */
   pick(clientX: number, clientY: number): PickHit | null;
 

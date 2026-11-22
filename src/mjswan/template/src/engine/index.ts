@@ -1,17 +1,16 @@
 /**
- * Public entry for the headless mjswan engine. See docs/adr/0004-headless-engine-core.md.
+ * Public entry for the headless mjswan engine. See context/frontend.md.
  *
  * `createEngine(element, options?)` prepares a pure-TS, instance-scoped engine
  * (MuJoCo WASM + WebGL, no React) and exposes bytes-in / snapshot-out verbs.
  */
 import * as THREE from 'three';
 
-// Expose this bundle's single three.js instance for author custom-MDP plugins
-// (ADR 0004 §10). Plugins are compiled to a *separate* ESM (plugins.js), so their
-// `import 'three'` is resolved — by the Builder's esbuild — to a shim that reads
-// this global. That keeps one three instance across the engine + plugin bundles,
-// so `instanceof THREE.Mesh` / shared scene objects / raycasting work. The engine
-// module must load before any plugin module (the app guarantees this ordering).
+// Expose this bundle's single three.js instance for author custom-MDP plugins. Plugins
+// are compiled to a *separate* ESM (plugins.js) whose `import 'three'` the Builder's
+// esbuild resolves to a shim reading this global, so the engine and plugin bundles share
+// one three instance and `instanceof THREE.Mesh`, shared scene objects and raycasting
+// work. The engine module must load before any plugin module (the app guarantees this).
 (globalThis as unknown as { __mjswanThree?: typeof THREE }).__mjswanThree = THREE;
 
 export * from './types';

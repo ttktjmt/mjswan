@@ -17,7 +17,7 @@ export interface HarnessOutcome {
   /** True if the captured frame has luminance spread (not a flat/blank canvas). */
   nonBlank?: boolean;
   luminanceRange?: [number, number];
-  /** The seed the engine reports back, for the ADR 0005 §2 replay path. */
+  /** The seed the engine reports back, for the replay path. */
   termSeed?: number;
 }
 

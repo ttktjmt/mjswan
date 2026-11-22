@@ -2,6 +2,8 @@
 
 This module defines the SceneConfig dataclass and SceneHandle class for
 managing MuJoCo scenes and their associated policies.
+
+See ``context/object-model.md``.
 """
 
 from __future__ import annotations
@@ -313,7 +315,7 @@ def _default_to_latest(
 
     Steps are read from ``names``, what the handles were asked to be called, where
     given: a collision's ``_1`` is no step. Skipped when the scene already has a
-    default, since the build refuses two (ADR 0006 §4).
+    default, since the build refuses two.
     """
     if not handles or any(policy.default for policy in scene.policies):
         return
@@ -358,8 +360,8 @@ class SceneConfig:
 
     id: str = ""
     """Sanitized name, unique within the project: the scene's directory in the build and
-    its ``?scene=`` value (ADR 0006 §4). Assigned by :meth:`ProjectHandle.add_scene`;
-    defaults to ``name2id(name)``."""
+    its ``?scene=`` value. Assigned by :meth:`ProjectHandle.add_scene`; defaults to
+    ``name2id(name)``."""
 
     model: mujoco.MjModel | None = None
     """MuJoCo model for the scene (saved as .mjb)."""
@@ -379,7 +381,7 @@ class SceneConfig:
 
     attributions: list[Attribution] = field(default_factory=list, repr=False)
     """The third-party components this scene contains, each written to the project's
-    ``licenses/`` as ``LICENSE.<component>`` / ``NOTICE.<component>`` (ADR 0007 §2)."""
+    ``licenses/`` as ``LICENSE.<component>`` / ``NOTICE.<component>``."""
 
     splats: list[SplatConfig] = field(default_factory=list)
     """Gaussian Splat backgrounds available for this scene."""
@@ -397,8 +399,8 @@ class SceneConfig:
     events: dict[str, Any] | None = None
     """The scene's event terms (mjswan or mjlab ``EventTermCfg``), adapted.
 
-    The default a policy's MDP takes when it says nothing about events (ADR 0006 §3).
-    Serialized at build time, when ONNX tracing has the live env and output directory."""
+    The default a policy's MDP takes when it says nothing about events. Serialized at
+    build time, when ONNX tracing has the live env and output directory."""
 
     events_explicit: bool = field(default=False, repr=False, compare=False)
     """Whether :attr:`events` were set by the author rather than inherited from a task's
@@ -425,7 +427,7 @@ class SceneConfig:
     read from a trace env, whose ``decimation=1`` is a tracing placeholder."""
 
     mjlab_env: Any = field(default=None, repr=False, compare=False)
-    """Live env the ONNX tracer (ADR 0005) runs term bodies against. Build-time only.
+    """Live env the ONNX tracer runs term bodies against. Build-time only.
 
     Built lazily from :attr:`mjlab_env_cfg` (see ``mjswan.build.pipeline``), so a
     tracking task's env exists only once its clip is bundled, unless
@@ -466,8 +468,8 @@ class SceneConfig:
     def mdp_id(self, mdp: MdpConfig, *, policy_id: str | None = None) -> str:
         """The id of ``mdp`` on this scene, registering it on first use.
 
-        By object identity, not equality (ADR 0006 §3): the same config on two policies
-        is one MDP, two equal configs are two.
+        By object identity, not equality: the same config on two policies is one MDP,
+        two equal configs are two.
 
         A named config takes ``name2id(name)``. One the term-set sugar built for a single
         policy takes that policy's id, so ``mdp/locomotion/`` sits beside
@@ -688,8 +690,8 @@ class SceneHandle:
         """Add an ONNX policy to this scene.
 
         The policy runs against an MDP: observations, actions, terminations, commands
-        and events (ADR 0006 §3). Pass one as ``mdp`` to share it between policies (the
-        checkpoints of one run), or pass the five term sets directly and an anonymous
+        and events. Pass one as ``mdp`` to share it between policies (the checkpoints of
+        one run), or pass the five term sets directly and an anonymous
         :class:`~mjswan.mdp.MdpConfig` is built from them; not both.
 
         Each term set defaults to the matching field of an mjlab env config, when one
@@ -1750,8 +1752,8 @@ class SceneHandle:
 
         Accepts mjswan or mjlab ``EventTermCfg`` instances in any of the four modes.
         ONNX tracing happens at build time, as for observations and terminations. Events
-        belong to an MDP (ADR 0006 §3), so a scene with events and no policy has nowhere
-        to put them, and the build says so.
+        belong to an MDP, so a scene with events and no policy has nowhere to put them,
+        and the build says so.
 
         Args:
             events: Dict mapping event names to ``EventTermCfg`` instances.
@@ -1792,7 +1794,7 @@ class SceneHandle:
         notice: str | os.PathLike[str] | None = None,
         copyright: str | None = None,
     ) -> SceneHandle:
-        """Declare a third-party component this scene contains (ADR 0007 §2).
+        """Declare a third-party component this scene contains.
 
         Written to the project's ``licenses/`` as ``LICENSE.<component>`` and
         ``NOTICE.<component>``, once however many scenes carry the same text, and shown
