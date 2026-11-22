@@ -1,10 +1,10 @@
 /**
- * Headless acceptance harness for `createEngine` (ADR 0004, issue #76 step 1i).
+ * Headless acceptance harness for `createEngine`.
  *
  * Imports ONLY the engine (no React, no Mantine) and drives the full lifecycle
- * — create → subscribe → loadScene(bytes) → play/pause → dispose — proving the
- * public API is sufficient to run a simulation React-free. Run it in a browser
- * context (WebGL + WASM required); it is not a Node unit test.
+ * (create → subscribe → loadScene(bytes) → play/pause → dispose), proving the public API
+ * is sufficient to run a simulation React-free. Run it in a browser context (WebGL +
+ * WASM required); it is not a Node unit test.
  *
  * Usage (browser context, importing the in-repo module):
  *   import { runHarness } from './engine/harness';

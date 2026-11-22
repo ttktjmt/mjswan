@@ -2,12 +2,14 @@
 
 mjlab keeps observations, actions, terminations, commands and events side by side on
 ``ManagerBasedRlEnvCfg`` and trains a checkpoint against all five at once, so
-:class:`MdpConfig` holds them together (ADR 0006 §3).
+:class:`MdpConfig` holds them together.
 
 Identity is by object: two policies handed the *same* config share one MDP, meaning one
 ``mdp/<id>/`` directory and one set of traced graphs, while two equal but separate
 configs are two MDPs. The per-manager keyword arguments on
 :meth:`~mjswan.scene.SceneHandle.add_policy` construct an anonymous one.
+
+See ``context/object-model.md``.
 """
 
 from __future__ import annotations

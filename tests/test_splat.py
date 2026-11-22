@@ -192,8 +192,8 @@ class TestBuildSplatConfigDict:
         assert "path" in d
 
     def test_source_splat_path_is_scene_relative_under_assets(self):
-        # Every path under a scene entry resolves against the scene directory
-        # (ADR 0006, manifest rule 2); the scene never appears in it.
+        # Every path under a scene entry resolves against the scene directory; the scene
+        # never appears in it.
         splat = SplatConfig(name="My Splat", source="bg.spz")
         d = splat_entry(splat)
         assert d["path"] == f"assets/{name2id('My Splat')}.spz"

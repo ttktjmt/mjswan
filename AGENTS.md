@@ -7,7 +7,12 @@ mjswan packages browser-based MuJoCo simulations with real-time policy control i
 - **Python** ([src/mjswan/](src/mjswan/)): `Builder` / `Project` / `Scene` API that bundles models, policies, and UI config into a static site.
 - **Frontend template** ([src/mjswan/template/](src/mjswan/template/)): TypeScript + three.js + mujoco-wasm client that the Python build step bundles.
 
-See [CONTEXT.md](CONTEXT.md) for a full codebase map, object model, module descriptions, and tooling reference.
+## Context
+
+Development context is kept in two levels: [CONTEXT.md](CONTEXT.md), the codebase map, and [context/](context/), one file per area with its rules, their reasons and the options already rejected. Read the area's file before changing it.
+
+- Keep it to what development needs, in brief, and to what holds now: no history, plans or open questions.
+- A change's design decision (an ADR, a design note) is not a file of its own. Fold what holds into the area's `context/` file in the same change. A draft may live in the working environment or on the feature branch, never on `main`: squash-merge, so no commit of it lands there.
 
 ## Philosophy
 
@@ -19,7 +24,7 @@ See [CONTEXT.md](CONTEXT.md) for a full codebase map, object model, module descr
 
 ## Layout
 
-- [src/mjswan/](src/mjswan/): package source, with the object model at the root (`Builder`, the `*Handle` / `*Config` pairs, `cli.py`) over one package per layer (`build/`, `compile/`, `mjlab/`, `source/`, `document/`, `cloud/`, `license/`, `rig/`, and the mjlab-mirror `managers/` / `envs/mdp/`). [docs/adr/0008](docs/adr/0008-package-layout.md) gives the rules: imports point downward, mjswan's own names are singular, a file never repeats its package's name.
+- [src/mjswan/](src/mjswan/): package source, with the object model at the root (`Builder`, the `*Handle` / `*Config` pairs, `cli.py`) over one package per layer (`build/`, `compile/`, `mjlab/`, `source/`, `document/`, `cloud/`, `license/`, `rig/`, and the mjlab-mirror `managers/` / `envs/mdp/`). [context/package-layout.md](context/package-layout.md) gives the rules: imports point downward, mjswan's own names are singular, a file never repeats its package's name.
 - [src/mjswan/template/](src/mjswan/template/): frontend source (Vite + React + three.js + mujoco-wasm).
 - [examples/](examples/): runnable examples, `demo` and `colab`.
   Python only: assets are fetched at run time rather than committed.

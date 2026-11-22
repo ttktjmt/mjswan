@@ -3,7 +3,7 @@
 This module extracts the **data files** from a local build (manifest.json plus
 scene/policy/motion/splat/skin assets, traced MDP graphs and license files; never
 HTML/JS/WASM) and publishes them as mjswan Cloud stores them: each file once, by the
-SHA-256 of its bytes, cut into pieces where :mod:`.blob` says (mjswan-cloud ADR 0017):
+SHA-256 of its bytes, cut into pieces where :mod:`.blob` says:
 
 1. ``POST {base}/api/simulations/upload-session`` with the parsed ``manifest.json`` and
    the file map → a presigned ``PUT`` for each piece or license text the platform does
@@ -14,11 +14,8 @@ SHA-256 of its bytes, cut into pieces where :mod:`.blob` says (mjswan-cloud ADR 
 4. ``POST {base}/api/simulations/commit`` with the ``upload_id`` → the sim id.
 
 The platform renders only **declarative** builds (no author-supplied code), so
-``publish`` refuses any build whose ``manifest.json`` reports
-``uses_custom_js: true`` — a fast, local UX gate that prevents a guaranteed
-server-side rejection and the broken render it would otherwise produce. See
-mjswan ADR 0003 for the declarative/custom-TS split and the ``uses_custom_js``
-marker.
+``publish`` refuses any build whose ``manifest.json`` reports ``uses_custom_js: true``
+locally, before the server would reject it.
 """
 
 from __future__ import annotations
@@ -53,10 +50,10 @@ from .transport import USER_AGENT
 # ── Client-side constraints (mirror the server's; fail fast and locally) ──────
 
 #: File extensions uploaded as simulation *data*. Everything else in ``dist/``
-#: (``.html`` / ``.js`` / ``.css`` / ``.wasm`` / fonts / images) is the engine
-#: shell and is never sent — the platform loads a pinned engine from its CDN.
-#: ``LICENSE`` / ``NOTICE`` files are admitted by name instead, in the project
-#: directory and the directory below it only (ADR 0007 §1).
+#: (``.html`` / ``.js`` / ``.css`` / ``.wasm`` / fonts / images) is the engine shell and
+#: is never sent: the platform loads a pinned engine from its CDN. ``LICENSE`` /
+#: ``NOTICE`` files are admitted by name instead, in the project directory and the
+#: directory below it only.
 DATA_EXTENSIONS: frozenset[str] = frozenset(
     {".json", ".mjz", ".onnx", ".npz", ".ply", ".spz", ".vrm", ".glb"}
 )
@@ -69,7 +66,7 @@ VRM_URL_MAX: int = 2048
 VRM_AUTHORS_MAX: int = 32
 
 #: Caps on what a build holds, not on what it packs to: a ``.mjz`` entry counts
-#: inflated, and a piece two files share counts once (mjswan-cloud ADR 0017 §2.5).
+#: inflated, and a piece two files share counts once.
 MAX_FILE_BYTES: int = 50 * 1024 * 1024
 MAX_TOTAL_BYTES: int = 128 * 1024 * 1024
 MAX_FILES: int = 200
@@ -221,7 +218,7 @@ class PublishPlan:
     vrms: dict[str, VrmLicense] = field(default_factory=dict)
     #: The file map upload-session takes, and the platform keeps as ``files.json``: every
     #: file but the descriptor as its pieces, a ``.mjz`` entry by entry, and each license
-    #: file as the hash of its text (mjswan-cloud ADR 0017 §2.2).
+    #: file as the hash of its text.
     file_map: dict = field(
         default_factory=lambda: {"format": 1, "files": {}, "licenses": {}}
     )
@@ -265,8 +262,8 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
     Raises :class:`PublishError` on any client-side constraint violation:
     missing/invalid config, custom-TS build, a ``.mjb`` scene, too many/too-large
     files, a path that escapes the upload root, a license file whose terms forbid
-    redistribution (ADR 0007 §3), or a skin the engine cannot draw or whose VRM license
-    forbids redistribution.
+    redistribution, or a skin the engine cannot draw or whose VRM license forbids
+    redistribution.
     """
     dist_dir = Path(dist_dir).expanduser().resolve()
     if not dist_dir.is_dir():
@@ -287,7 +284,7 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
             "This build uses custom-TS MDP terms (uses_custom_js: true) and "
             "cannot be published to mjswan Cloud, which renders only declarative "
             "builds. Re-author the custom terms declaratively, or request the "
-            "missing capability as an engine built-in. See mjswan ADR 0003.",
+            "missing capability as an engine built-in.",
             file="manifest.json",
         )
 
@@ -304,8 +301,6 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
 
     plan = PublishPlan(dist_dir=dist_dir, config=config)
 
-    # `manifest.json` already sits at the root, where every path under a scene entry
-    # resolves against `<project-id>/<scene-id>/`; nothing to hoist (ADR 0006 §8).
     for path in sorted(dist_dir.rglob("*")):
         if not path.is_file():
             continue
@@ -580,8 +575,8 @@ def publish_dist(
         on_progress: Optional callback invoked with human-readable status lines,
             among them one per license file the build declares.
         on_warning: Optional callback for the warning a restricted license or a
-            VRM only for non-commercial use earns (ADR 0007 §3); defaults to
-            :func:`warnings.warn`. The publish proceeds.
+            non-commercial VRM earns; defaults to :func:`warnings.warn`. The publish
+            proceeds.
         attest: Asked, for each VRM only its author or someone they licensed may use
             as an avatar, whether the publisher is one of them. The VRM is published
             only on ``True``, and the page shows that it was on their word. ``None``
@@ -609,9 +604,9 @@ def publish_dist(
     def warn(msg: str) -> None:
         caution(_printable(msg))
 
-    # A document uploads exactly the file set its directory would, so the server never
-    # needs to know it existed (ADR 0006 §8). The upload runs inside the context: a
-    # document's tree is a temporary directory, and `plan.files` point into it.
+    # A `.swn` uploads exactly the file set its directory would, so the server never
+    # sees the container. The upload runs inside the context: a document's tree is a
+    # temporary directory, and `plan.files` point into it.
     try:
         with as_directory(Path(dist_dir)) as tree:
             plan = plan_publish(tree)
@@ -692,7 +687,7 @@ def publish_dist(
             send(session.get("uploads", []))
             commit_resp = commit_upload()
             # A piece another simulation's takedown released since upload-session goes
-            # again, once (mjswan-cloud ADR 0017 §2.3).
+            # again, once.
             released = _released(commit_resp)
             if released is not None:
                 send(released)

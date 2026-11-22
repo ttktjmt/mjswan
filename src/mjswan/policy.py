@@ -2,6 +2,8 @@
 
 This module defines the PolicyConfig dataclass and PolicyHandle class for
 ONNX policy configuration and command management.
+
+See ``context/document.md``.
 """
 
 from __future__ import annotations
@@ -47,9 +49,9 @@ def check_slot_tables(
     ``in_keys[i]`` fills the *i*-th input and ``out_keys[i]`` names the *i*-th output, so
     each table must be exactly as long as what it indexes. A network with several inputs
     must declare ``in_keys``: nothing else records where the runtime-synthesized tensors
-    sit relative to the observation groups (ADR 0006 §5). Several *outputs* cannot be
-    refused the same way, since which one is the action is unknowable here, so the
-    default (the first) is announced instead.
+    sit relative to the observation groups. Several *outputs* cannot be refused the same
+    way, since which one is the action is unknowable here, so the default (the first) is
+    announced instead.
     """
     inputs, outputs = onnx_io_names(model)
     if in_keys is None:
@@ -74,7 +76,7 @@ def check_slot_tables(
                 f"Policy {name!r} has {len(outputs)} ONNX outputs ({outputs}) but "
                 f"declares no out_keys, so the runtime drives the actuators from the "
                 f"first one, {outputs[0]!r}. If the action is a different output, pass "
-                "out_keys naming each output in order (ADR 0006 §5).",
+                "out_keys naming each output in order.",
                 category=RuntimeWarning,
                 stacklevel=3,
             )
@@ -173,9 +175,9 @@ def action_term_joint_names(
     """The joints an adapted action-term set drives, in the order the actions come out.
 
     What an mjlab export's ``joint_names`` would say, recovered from the action terms.
-    ``actuator_names`` holds *joint* patterns despite its name (ADR 0006;
-    ``JointPositionAction`` matches them against joint names), so each term's patterns
-    are matched against the actuated joints in joint order, term by term.
+    ``actuator_names`` holds *joint* patterns despite its name (``JointPositionAction``
+    matches them against joint names), so each term's patterns are matched against the
+    actuated joints in joint order, term by term.
 
     ``None`` unless every term answers: a muscle term names actuators rather than joints,
     a pattern may match nothing, and two terms may claim one joint. A command term takes
@@ -216,7 +218,7 @@ class PolicyConfig:
 
     id: str = ""
     """Sanitized name, unique within the scene: the ``.onnx`` file's stem and the
-    ``?policy=`` value (ADR 0006 §4). Assigned by :meth:`~mjswan.scene.SceneHandle.add_policy`;
+    ``?policy=`` value. Assigned by :meth:`~mjswan.scene.SceneHandle.add_policy`;
     defaults to ``name2id(name)``."""
 
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -230,9 +232,9 @@ class PolicyConfig:
 
     mdp: MdpConfig = field(default_factory=MdpConfig)
     """The MDP this policy runs against: its observations, actions, terminations,
-    commands and events as one unit (ADR 0006 §3). Two policies given the same object
-    share one MDP: one set of traced graphs, one ``mdp/<id>/`` directory. The five
-    read-only properties below are views onto it."""
+    commands and events as one unit. Two policies given the same object share one MDP:
+    one set of traced graphs, one ``mdp/<id>/`` directory. The five read-only properties
+    below are views onto it."""
 
     policy_joint_names: list[str] | None = None
     """Ordered list of joint names controlled by the policy.
@@ -270,7 +272,7 @@ class PolicyConfig:
     network's *i*-th input, an observation group or one the runtime synthesizes
     (:data:`RUNTIME_INPUT_SLOTS`). The mapping is positional, so the network's own input
     names never matter. ``None`` for a single-input policy, whose one input takes its one
-    observation group; required beyond one input (ADR 0006 §5)."""
+    observation group; required beyond one input."""
 
     out_keys: list[str | list[str]] | None = None
     """The ONNX output slot table, positional like ``in_keys``: ``out_keys[i]`` names the

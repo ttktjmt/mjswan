@@ -115,6 +115,6 @@ __all__ = [
     "register_command",
     "ui_command",
     "velocity_command",
-    # ONNX tracing (ADR 0005)
+    # ONNX tracing
     "build_single_entity_trace_env",
 ]

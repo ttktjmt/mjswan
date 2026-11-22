@@ -14,6 +14,8 @@ here is specific to one of mjlab's own tasks. Three kinds of things live here:
 
 ``mjswan.managers`` and ``mjswan.envs.mdp`` instead *mirror* mjlab's import paths, so
 they stay where mjlab has them.
+
+See ``context/mjlab.md``.
 """
 
 from .action import (

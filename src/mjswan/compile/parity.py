@@ -156,9 +156,9 @@ def _iter_event_terms(
 
 
 def _trace_action_terms(env: Any) -> tuple[list[TermReport], dict[str, list[str]]]:
-    """Trace each action term the build traces (ADR 0009), which checks both graphs
-    against the term's own bodies. Returns the reports, and each term's state for the
-    observations that read it."""
+    """Trace each action term the build traces, which checks both graphs against the
+    term's own bodies. Returns the reports, and each term's state for the observations
+    that read it."""
     reports: list[TermReport] = []
     state: dict[str, list[str]] = {}
     manager = env.action_manager
@@ -199,7 +199,7 @@ def run_parity(
 
     ``env`` must be a freshly constructed mjlab env; this function resets it.
     Observation and termination terms are checked every step; ``reset``-mode Event
-    terms are checked by replaying ``n_event_draws`` fresh recorded RNG draws (§2b). As
+    terms are checked by replaying ``n_event_draws`` fresh recorded RNG draws. As
     in the build, a registered override is traced in place of its term and checked
     against mjlab's own, a TS binding goes unchecked, and a task's own action term is
     traced, its state served to the observations that read it.
@@ -362,7 +362,7 @@ def run_command_parity(
     atol: float = 1e-5,
     rtol: float = 1e-4,
 ) -> TermReport:
-    """Trace a stateful CommandTerm and check live-vs-ONNX parity (brief §3).
+    """Trace a stateful CommandTerm and check live-vs-ONNX parity.
 
     Traces ``_resample_command``+``_update_command`` once, then for ``n_draws`` random
     draws runs a resample step through ONNX Runtime and through the live term, chaining

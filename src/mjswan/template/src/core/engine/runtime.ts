@@ -370,7 +370,7 @@ export class mjswanRuntime {
   /** A late async XR support check must not report after teardown. */
   private disposed = false;
   private readonly passthrough: Passthrough;
-  /** What a host shows before it adds a geom, and where it would go (ADR 0011). */
+  /** What a host shows before it adds a geom, and where it would go. */
   private readonly preview: GeomPreview;
   /** The host's rules for a `.mjz` it did not build; none for one it did. */
   private readonly archive: ArchiveLimits | undefined;
@@ -435,8 +435,8 @@ export class mjswanRuntime {
   private policyGraphs: OnnxSessionCache;
   /**
    * The compiled values of every `mjModel` field a startup randomization has touched, for
-   * the life of the model (ADR 0006 §9). Restored before the next MDP's startup pass, so
-   * randomizations never compound across a policy switch.
+   * the life of the model. Restored before the next MDP's startup pass, so randomizations
+   * never compound across a policy switch.
    */
   private modelFieldDefaults: ModelFieldDefaults | null;
   /**
@@ -1576,10 +1576,10 @@ export class mjswanRuntime {
     this.cameraFeeds.clear();
     this.debugVizSet.clear();
 
-    // An MDP switch, in order (ADR 0006 §9): restore every model field the previous
-    // startup pass touched, reseed, then apply the incoming MDP's startup events over the
-    // compiled values. Restoring runs even with no policy following, so clearing the
-    // policy leaves the scene as compiled.
+    // An MDP switch, in order: restore every model field the previous startup pass
+    // touched, reseed, then apply the incoming MDP's startup events over the compiled
+    // values. Restoring runs even with no policy following, so clearing the policy leaves
+    // the scene as compiled. See context/document.md.
     const restored = this.modelFieldDefaults?.restore() ?? false;
     if (restored && this.mjModel && this.mjData) {
       this.mujoco.mj_setConst(this.mjModel, this.mjData);
@@ -2567,7 +2567,7 @@ export class mjswanRuntime {
    * Capture the current view as a JPEG Blob. Renders one frame and immediately
    * copies it into a 2D canvas in the same synchronous turn, so it works without
    * `preserveDrawingBuffer`: the WebGL drawing buffer is still intact before the
-   * browser composites. Used by the upload preview's "Scan thumbnail" (ADR 0005).
+   * browser composites. Used by the upload preview's "Scan thumbnail".
    */
   async captureThumbnail(options: { maxDim?: number; quality?: number } = {}): Promise<Blob> {
     const { maxDim = 1280, quality = 0.85 } = options;

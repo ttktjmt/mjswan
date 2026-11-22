@@ -1,6 +1,8 @@
 /**
  * Applies a traced event's `kind: "model"` write targets to `mjModel`. The graph did the
  * sampling and the math, so this only puts each value in its element's cell.
+ *
+ * See context/document.md.
  */
 
 import {
@@ -35,9 +37,9 @@ export function isModelWriteTarget(t: WriteTarget | ModelWriteTarget): t is Mode
  * The compiled field values, snapshotted on first touch, so a second `add`/`scale` event
  * on one axis offsets the compiled value rather than the first event's output.
  *
- * One per model, not per pass (ADR 0006 §9): an MDP switch re-runs `mode="startup"`
- * randomization, which must start from the compiled values rather than from what the
- * previous MDP left behind, so `restore()` puts every touched field back first.
+ * One per model, not per pass: an MDP switch re-runs `mode="startup"` randomization,
+ * which must start from the compiled values rather than from what the previous MDP left
+ * behind, so `restore()` puts every touched field back first.
  */
 export class ModelFieldDefaults {
   private readonly snapshots = new Map<string, Float64Array>();

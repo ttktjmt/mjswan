@@ -79,7 +79,7 @@ def _two_input_onnx() -> onnx.ModelProto:
 
 
 class TestProjectIdAssignment:
-    """A project's id is `name2id(name)`, unique in the document (ADR 0006 §4)."""
+    """A project's id is `name2id(name)`, unique in the document."""
 
     def test_first_project_gets_its_sanitized_name(self):
         project = Builder().add_project(name="Main Demo")
@@ -327,8 +327,8 @@ class TestBuilderGtmId:
 
 
 class TestClientBuilderCustomTerms:
-    """Custom terms are runtime plugins (ADR 0004 §10): author TS is collected for
-    esbuild into a standalone ESM the engine loads at runtime."""
+    """Custom terms are runtime plugins: author TS is collected for esbuild into a
+    standalone ESM the engine loads at runtime."""
 
     def test_collect_custom_terms_gathers_ts_src_by_kind(self, tmp_path, monkeypatch):
         src = tmp_path / "FooTerm.ts"
@@ -623,7 +623,7 @@ class TestSaveConfigJson:
         self, tmp_path, minimal_model, build_manifest
     ):
         # `format` is the structure, `version` the release: a reader gates on the first
-        # only (ADR 0006 §7), so both travel and neither stands in for the other.
+        # only, so both travel and neither stands in for the other.
         from mjswan.document import DOCUMENT_FORMAT
 
         builder = Builder()
@@ -803,7 +803,7 @@ class TestSaveConfigJson:
 
 
 # ===========================================================================
-# L1 — uses_custom_js manifest flag (ADR 0003)
+# L1: uses_custom_js manifest flag
 # ===========================================================================
 class TestUsesCustomJsFlag:
     """Builds with any `ts_src`-bearing sentinel must mark themselves
@@ -1131,7 +1131,7 @@ class TestSaveWebPolicyJson:
         assert "actions" in data
         assert "terminations" in data
         assert data["actions"]["effort"]["type"] == "torque"
-        # A term reading dynamic entity state is traced to ONNX (ADR 0005).
+        # A term reading dynamic entity state is traced to ONNX.
         fallen = data["terminations"]["fallen"]
         assert fallen["onnx"] == "mdp/policy/term/fallen.onnx"
         assert (out / "p" / "s" / fallen["onnx"]).exists()
@@ -1671,7 +1671,7 @@ class TestSaveWebPolicyJson:
         out = self._run(builder, tmp_path)
         data = self._policy_json(out, "Policy")
         assert "terminations" in data
-        # A term reading dynamic entity state is traced to ONNX (ADR 0005).
+        # A term reading dynamic entity state is traced to ONNX.
         fallen = data["terminations"]["fallen"]
         assert fallen["onnx"] == "mdp/policy/term/fallen.onnx"
         assert (out / "p" / "s" / fallen["onnx"]).exists()
@@ -1706,7 +1706,7 @@ class TestSaveWebPolicyJson:
         data = self._policy_json(out, "Policy")
         assert data["actions"]["effort"]["type"] == "torque"
         assert data["actions"]["effort"]["scale"] == 1.5
-        # A term reading dynamic entity state is traced to ONNX (ADR 0005).
+        # A term reading dynamic entity state is traced to ONNX.
         height_entry = data["terminations"]["height"]
         assert height_entry["onnx"] == "mdp/policy/term/height.onnx"
         assert (out / "p" / "s" / height_entry["onnx"]).exists()
@@ -1792,8 +1792,8 @@ class TestSaveWebPolicyJson:
     ):
         """A sidecar's `onnx` block never reaches the output, and its tables are not read.
 
-        The slot tables are declared on `add_policy` now (ADR 0006 §5); a sidecar still
-        carrying one is told so rather than silently obeyed.
+        The slot tables are declared on `add_policy`; a sidecar carrying one is told so
+        rather than silently obeyed.
         """
         config_file = tmp_path / "policy_cfg.json"
         config_file.write_text(

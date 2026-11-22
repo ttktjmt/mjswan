@@ -304,8 +304,7 @@ policy.add_motion_hf(
 
 ## Licenses
 
-A build carries its license files as files, beside the data they cover
-([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)).
+A build carries its license files as files, beside the data they cover.
 There are two kinds. `manifest.json` lists both (a project's `work`, a scene's
 `credits`), since a static host cannot list a directory for the viewer to look in:
 

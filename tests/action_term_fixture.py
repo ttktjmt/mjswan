@@ -1,4 +1,4 @@
-"""Task-defined action terms shaped like the ones ADR 0009 targets, on a 3-joint arm.
+"""Task-defined action terms on a 3-joint arm, modelled on real tasks' own classes.
 
 ``DeltaAction`` is in-hand-rotation-mjlab's ``JointPositionDeltaAction``, trimmed;
 ``HeldAction`` is luwu_mjlab's ``HeldJointPositionAction``; ``EmaAction`` smooths the

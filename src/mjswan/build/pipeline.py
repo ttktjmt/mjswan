@@ -1,7 +1,6 @@
 """What ``Builder.build()`` does: write the engine and the expanded document as one app.
 
-Output structure (ADR 0006 §2; license files ADR 0007 §1, gathered in ``licenses/`` by
-mjswan-cloud ADR 0017 §2.7)::
+Output structure::
 
     dist/
     ├── index.html, logo.svg, robots.txt
@@ -14,7 +13,7 @@ mjswan-cloud ADR 0017 §2.7)::
         │   └── LICENSE.<component>, NOTICE.<component>  (third-party, once per text)
         └── <scene-id>/
             ├── scene.mjz | scene.mjb
-            ├── mdp/<mdp-id>/{obs,term,command,event}/<name>.onnx
+            ├── mdp/<mdp-id>/{obs,term,command,event,action}/<name>.onnx
             ├── policy/<policy-id>.onnx
             └── assets/    (<motion>.npz, <splat>.spz, <skin>.vrm | .glb)
 """
@@ -214,7 +213,7 @@ def write_app(
                 if scene.events and not scene.policies and scene.events_explicit:
                     warnings.warn(
                         f"Scene {scene.name!r} has events but no policy. Events "
-                        "belong to a policy's MDP (ADR 0006 §3), so with no policy "
+                        "belong to a policy's MDP, so with no policy "
                         "to carry them they are not written.",
                         category=RuntimeWarning,
                         stacklevel=2,
@@ -314,7 +313,7 @@ class _SceneSteps:
 
 
 def _check_defaults(projects: list[ProjectConfig]) -> None:
-    """Refuse two siblings both marked default (ADR 0006, manifest rule 3).
+    """Refuse two siblings both marked default.
 
     None set is fine: the first in document order is then the default.
     """

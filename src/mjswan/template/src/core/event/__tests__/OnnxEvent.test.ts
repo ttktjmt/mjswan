@@ -1,5 +1,5 @@
 /**
- * `OnnxEvent`: the generic ONNX-backed event handler (ADR 0005 §3/§4, brief §3).
+ * `OnnxEvent`: the generic ONNX-backed event handler.
  *
  * The graph's math is validated Python-side; what needs testing here is the
  * native half: seeded `rand`, the `entity_write` hand-off, and the async

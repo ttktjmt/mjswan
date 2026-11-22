@@ -506,7 +506,7 @@ def info_cmd(
 
 
 def _describe_licenses(node, root: Path, directory: Path) -> None:
-    """One line per license file in ``directory`` (ADR 0007 §4), identifier included."""
+    """One line per license file in ``directory``, identifier included."""
     from mjswan.license import declare
 
     for path in sorted(directory.iterdir()) if directory.is_dir() else []:

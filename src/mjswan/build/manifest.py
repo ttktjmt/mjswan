@@ -1,9 +1,11 @@
 """The manifest entries below the document header, and the write of ``manifest.json``.
 
-The one place that knows the shape of a project, scene, MDP and policy entry (ADR 0006).
+The one place that knows the shape of a project, scene, MDP and policy entry.
 Every key is ``snake_case``; a path resolves against the directory of the level that
 declares it: the scene directory for everything under a scene entry, the document root
-for the top-level ``plugins`` (manifest rules 1 and 2).
+for the top-level ``plugins``.
+
+See ``context/document.md``.
 """
 
 from __future__ import annotations
@@ -85,8 +87,8 @@ def _strip_slot_tables(sidecar: dict, config_src: Path) -> dict:
     """Drop a sidecar's ``onnx`` block and slot tables; those are declared in Python.
 
     ``in_keys``/``out_keys``, top-level or under ``onnx.meta``, belong on ``add_policy``
-    where the build checks them against the network (ADR 0006 §5). Found here they are
-    ignored with a warning, so a stale table cannot quietly win over the code.
+    where the build checks them against the network. Found here they are ignored with a
+    warning, so a stale table cannot quietly win over the code.
     """
     onnx_block = sidecar.get("onnx")
     meta = (onnx_block.get("meta") or {}) if isinstance(onnx_block, dict) else {}
@@ -95,7 +97,7 @@ def _strip_slot_tables(sidecar: dict, config_src: Path) -> dict:
         warnings.warn(
             f"{config_src.name} carries {found}; slot tables in a config_path sidecar "
             "are ignored. Declare them on add_policy(in_keys=..., out_keys=...); a "
-            "single-input policy needs neither (ADR 0006 §5).",
+            "single-input policy needs neither.",
             category=RuntimeWarning,
             stacklevel=2,
         )
@@ -148,8 +150,7 @@ def mdp_entry(
             f"MDP {mdp_id!r} on scene {scene_dir.name!r} has observation/termination "
             "terms to trace, but the scene has no trace env to trace them against. "
             "`add_scene_mjlab` supplies one; a plain `add_scene` scene needs it "
-            "explicitly: `scene.set_trace_env(build_single_entity_trace_env(spec_fn))` "
-            "(ADR 0005 §6)."
+            "explicitly: `scene.set_trace_env(build_single_entity_trace_env(spec_fn))`."
         )
 
     entry: dict = {"id": mdp_id}
@@ -267,7 +268,7 @@ def policy_entry(
     The sidecar's keys pass through except the MDP sections, which
     :func:`mdp_entry` merges; Python-side fields win over it. ``mdp`` is the MDP's
     entry, which the slot table and the motions are checked against. A table equal to
-    the runtime's default is omitted (ADR 0006 §5).
+    the runtime's default is omitted.
     """
     _check_motion_fields(policy, mdp)
     entry: dict = {

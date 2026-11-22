@@ -299,7 +299,7 @@ class ModelReplay:
                 raise AttributeError(
                     f"Event term read model field {name!r} during tracing, which the "
                     "discovery pass never saw: the term's control flow is "
-                    "input-dependent, which is not traceable (ADR 0005 §Consequences)."
+                    "input-dependent, which is not traceable."
                 )
             value = torch.zeros(layout.shape, dtype=layout.dtype)
             ids = self._plan.read.get(key)

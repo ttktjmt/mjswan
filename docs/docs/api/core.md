@@ -33,7 +33,7 @@ Top-level builder that orchestrates projects, scenes, policies, and splats and p
 | `gtm_id` | `str \| None` | `None` | Google Tag Manager container ID (e.g. `"GTM-XXXXXXX"`). When provided, the GTM snippet is injected into the built HTML. |
 | `mt` | `bool` | `False` | Enable multi-threaded MuJoCo WASM. Requires Cross-Origin Isolation; mjswan emits a `_headers` file (Netlify / Cloudflare Pages / Vercel) and a `coi-serviceworker.js` (required for GitHub Pages, which cannot set response headers). |
 | `debug` | `bool` | `False` | Keep browser console messages in the built application. Defaults to stripping them from the production bundle. |
-| `license` | `str \| PathLike \| None` | `None` | The work's license for every project that does not set its own, written as `<project-id>/LICENSE` ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)). A generatable SPDX id (`"Apache-2.0"`, `"MIT"`, `"BSD-3-Clause"`, `"BSD-2-Clause"`, `"CC-BY-4.0"`, `"CC0-1.0"`) writes the standard text with an `SPDX-License-Identifier` tag on its first line; a path copies the file verbatim. A bad id or a missing file fails here, not at build. |
+| `license` | `str \| PathLike \| None` | `None` | The work's license for every project that does not set its own, written as `<project-id>/LICENSE`. A generatable SPDX id (`"Apache-2.0"`, `"MIT"`, `"BSD-3-Clause"`, `"BSD-2-Clause"`, `"CC-BY-4.0"`, `"CC0-1.0"`) writes the standard text with an `SPDX-License-Identifier` tag on its first line; a path copies the file verbatim. A bad id or a missing file fails here, not at build. |
 | `copyright` | `str \| None` | `None` | The holder line of a generated license text, e.g. `"2026 Example Lab"`. |
 
 ### Builder.from_mjlab
@@ -542,7 +542,7 @@ The viewer panel's **Graphics** section copies this call, with the settings chan
 def add_skin(name: str, config: SkinConfig | ModelledSkinConfig) -> SkinHandle
 ```
 
-Add a rigged character (a `.vrm`, or a `.glb`), posed every frame from the robot's bodies, to the scene's **Skin** menu (ADR 0010). The scene's physics, collision and policy are unchanged: the skin's spring bones (hair, a tail) swing by three-vrm, or with `mujoco_springs` in a MuJoCo model of their own, and the scene's model sees neither. A scene may carry several skins; the viewer shows one at a time, the first added by default, and the menu can clear it. `name` is shown in the menu; its id, `name2id(name)`, is unique within the scene (a clash is suffixed, with a warning) and is the `?skin=` value that opens the scene on it.
+Add a rigged character (a `.vrm`, or a `.glb`), posed every frame from the robot's bodies, to the scene's **Skin** menu. The scene's physics, collision and policy are unchanged: the skin's spring bones (hair, a tail) swing by three-vrm, or with `mujoco_springs` in a MuJoCo model of their own, and the scene's model sees neither. A scene may carry several skins; the viewer shows one at a time, the first added by default, and the menu can clear it. `name` is shown in the menu; its id, `name2id(name)`, is unique within the scene (a clash is suffixed, with a warning) and is the `?skin=` value that opens the scene on it.
 
 The skin is resolved here, so a mistake surfaces at once: a URL `source` is downloaded, the file is checked, every bone is found in it and every body in the scene's model, and its rest offsets, root height and hips placement are measured against the robot at `rest_pose`. A missing file raises `FileNotFoundError`, a URL that does not download `urllib.error.URLError`, and anything that does not fit `ValueError`: a `.gltf` (export it as glTF Binary), a file pointing outside itself, a compressed one (Draco, meshopt, KTX2/Basis: export it again without compression), a bone, node, body, joint or keyframe that is not there. The build copies the file unmodified to `assets/<skin-id>.vrm` or `.glb`, so a VRM's embedded license ships as its author wrote it; a `.glb`'s `license` and `notice` are written to the project's `licenses/` as `LICENSE.skin-<skin-id>` and `NOTICE.skin-<skin-id>`. With `hide_robot`, Debug Viz lists an **Xray** switch that draws the robot see-through over the skin, and `?xray=1` opens with it on; Debug Viz's **Enabled** hides it, never the skin. While a skin with `hide_tendons` is on show, the model's tendons are not drawn. See [`SkinConfig`](#skinconfig).
 
@@ -578,8 +578,7 @@ def add_attribution(
 ) -> SceneHandle
 ```
 
-Declare a third-party component this scene contains
-([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)).
+Declare a third-party component this scene contains.
 Written to the project's `licenses/` as `LICENSE.<component>` and `NOTICE.<component>`, once
 however many scenes carry the same text (another text under the same name becomes `-2`,
 `-3`, …), and shown on mjswan Cloud beside the work's own license. `add_scene(spec=...)` detects these for a
@@ -1269,48 +1268,17 @@ Two things to register:
 
 A term that fails to trace and has neither of these fails the build, with a message naming both options. It is never silently dropped — a missing observation shortens the vector the policy was trained on, and a missing termination or event leaves the browser without a reset condition the task is configured to have.
 
-Three event terms are exempt, because there is provably nothing for the browser to write:
+Four event terms are exempt, because there is provably nothing for the browser to write:
 `randomize_terrain` (one baked terrain, one origin), `encoder_bias` (the runtime applies it
-from the policy config), and a root-state write onto a **fixed-base** entity (which cannot
-move in mjlab either — mjlab's manipulation tasks configure `reset_base` on their arms
-regardless). Randomization that perturbs `mjModel` rather than `mjData` (geom friction,
+from the policy config), `reset_scene_to_default` (the runtime's own reset already does
+it), and a root-state write onto a **fixed-base** entity (which cannot move in mjlab
+either: mjlab's manipulation tasks configure `reset_base` on their arms regardless).
+Randomization that perturbs `mjModel` rather than `mjData` (geom friction,
 body COM, geom colors) traces like any other event: its `env.sim.model` writes become
 graph outputs the browser writes into its own model.
 
 See [How the Build Works](../guides/how-it-works.md#a-term-cannot-be-traced) for the
 decision procedure.
-
----
-
-## Removed pre-0.8 names
-
-The pre-0.8 aliases are gone, together with the compatibility layer that carried them:
-the old names no longer import. What each became:
-
-| Pre-0.8 | Current |
-|---|---|
-| `ProjectHandle.add_mjlab_scene` | [`add_scene_mjlab`](#projecthandleadd_scene_mjlab) |
-| `SceneHandle.add_policy_from_wandb` | [`add_policy_wandb`](#scenehandleadd_policy_wandb) |
-| `SceneHandle.set_viewer_config` | [`set_viewer`](#scenehandleset_viewer) |
-| `SceneHandle.add_splat_section` | [`enable_splat_section`](#scenehandleenable_splat_section) |
-| `mjswanApp` | [`MjswanApp`](#mjswanapp) |
-| `register_obs_func` | [`register_observation`](#mdp-extension-registries) |
-| `register_termination_func` | [`register_termination`](#mdp-extension-registries) |
-| `register_event_func` | [`register_event`](#mdp-extension-registries) |
-| `register_command_term` | [`register_command`](#register_command) |
-| `ObsBinding`, `ObsFunc` | `ObservationBinding` |
-| `TermBinding`, `TermFunc` | `TerminationBinding` |
-| `EventFunc` | `EventBinding` |
-| `MjlabMdpBinding` | `MdpBinding` |
-| `CommandTermSpec` | `CommandBinding` |
-| `PolicyHandle.add_motion_from_wandb(wandb_run_path=)` | [`add_motion_wandb(run_path=)`](#policyhandleadd_motion_wandb) |
-
-The two renamed modules' old paths are gone with them: `mjswan.viewer_config` is
-`mjswan.viewer`, and `mjswan.wandb_utils` (0.8's `mjswan.wandb_io`) is split into
-`mjswan.source.wandb`, which downloads, and `mjswan.mjlab.runner`, which exports a `.pt`
-to ONNX. Every other module moved when the package was laid out by layer, with no alias
-left behind; [ADR 0008](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0008-package-layout.md)
-maps each old path to its new one.
 
 ---
 
@@ -1516,8 +1484,8 @@ it could reorder the observation the policy reads: a subclass's own field (PAC-M
 ## Output structure
 
 `builder.build()` writes a fully static site: the engine, plus the **simulation document**
-— one `manifest.json` describing every project, scene, MDP, policy and splat, and one
-directory per project with its data (ADR 0006).
+(one `manifest.json` describing every project, scene, MDP, policy and splat, and one
+directory per project with its data).
 
 ```
 dist/
@@ -1551,14 +1519,14 @@ dist/
 ```
 
 Copy `dist/` to any static host (GitHub Pages, Netlify, S3, …) and it works without a server.
-License files are not manifest keys ([ADR 0007](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0007-license-files-in-the-build.md)):
-`manifest.json` is the same with and without them.
+License texts stay in their files; `manifest.json` only names them (a project's `work`, a
+scene's `credits`), since a static host lists no directory.
 
 Every key in `manifest.json` is `snake_case`, and every path under a scene entry resolves
 against that scene's directory, so a policy entry reads `"onnx": "policy/walk.onnx"` and
 its MDP's fused group `"mdp/walk/obs/actor.onnx"`. A key carrying its default is omitted
 — `in_keys` when it is `["actor"]`, `out_keys` when it is `["action"]`. The manifest also
-stamps `format` (the layout's version, currently 2; an engine refuses a document newer than
+stamps `format` (the layout's version, currently 10; an engine refuses a document newer than
 it knows) and `version` (the mjswan release that wrote it), independently.
 
 `MjswanApp.save_document()` packs the document — the manifest and the project directories,

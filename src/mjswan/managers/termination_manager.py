@@ -39,8 +39,7 @@ class TerminationTermCfg:
     """
 
     func: TerminationBinding | Callable[..., Any]
-    """Termination function — TerminationBinding sentinel (legacy) or a
-    plain callable traced to ONNX (ADR 0005)."""
+    """A :class:`TerminationBinding`, or a plain callable traced to ONNX."""
 
     params: dict[str, Any] = field(default_factory=dict)
     """Additional keyword arguments forwarded to the function or TS constructor."""

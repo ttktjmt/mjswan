@@ -322,7 +322,7 @@ class JointEffortActionCfg(BaseActionCfg):
 
 @dataclass(kw_only=True)
 class TracedActionCfg(BaseActionCfg):
-    """A task's own mjlab action term, traced at build time (ADR 0009).
+    """A task's own mjlab action term, traced at build time.
 
     The adapter makes one for a task's own action class mjswan has no class of its own
     for: its ``process_actions`` and ``reset`` become graphs, and its ``apply_actions`` is
@@ -372,8 +372,7 @@ class MuscleActivationActionCfg(BaseActionCfg):
       ``ctrlrange`` is ``[-1, 1]`` really does use the negative half, so this is not
       ``"excitation"`` by another name.
 
-    Semantics mirror myosuite4 ``MyoMuscleActivationActionCfg.action_mode``; see
-    ``docs/adr/0002-muscle-action-term-aligned-with-myomuscleactivationactioncfg.md``.
+    Semantics mirror myosuite4 ``MyoMuscleActivationActionCfg.action_mode``.
     """
 
     normalize: bool = True

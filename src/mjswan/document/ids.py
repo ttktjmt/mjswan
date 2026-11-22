@@ -1,5 +1,5 @@
 """Identifiers in the document: sanitized names, unique within the level that owns the
-directory (ADR 0006 §4)."""
+directory."""
 
 from __future__ import annotations
 
@@ -29,8 +29,8 @@ def name2id(name: str) -> str:
 def unique_id(base: str, taken: Collection[str]) -> str:
     """``base`` if free, else the first of ``base_1``, ``base_2``, … not in ``taken``.
 
-    ``taken`` is the level that owns the directory (ADR 0006 §4): a project id is unique
-    in the document, a scene id in its project, a policy/mdp/asset id in its scene. Two
+    ``taken`` is the level that owns the directory: a project id is unique in the
+    document, a scene id in its project, a policy/mdp/asset id in its scene. Two
     siblings that sanitize to one id are both kept, the second renamed rather than
     refused, since two scenes called "Flat Terrain" is a reasonable thing to write.
     """

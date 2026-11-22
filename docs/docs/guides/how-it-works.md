@@ -22,14 +22,11 @@ reset, and the commands a user steers with. In mjlab those are Python functions 
 PyTorch tensors. In a browser there is no Python and no PyTorch.
 
 mjswan's answer is to **trace those functions to ONNX at build time** and run them with
-ONNX Runtime Web — the same runtime that already runs the policy network.
+ONNX Runtime Web, the same runtime that already runs the policy network.
 
-!!! info "Design record"
-    The reasoning behind this, including the alternatives that were rejected, is
-    [ADR 0005](https://github.com/ttktjmt/mjswan/blob/main/docs/adr/0005-onnx-traced-terms-superseding-the-declarative-dsl.md){:target="_blank"}.
-    Earlier versions of mjswan interpreted a hand-written JSON DSL in TypeScript
-    instead; that required a second implementation of every mjlab operation, kept
-    numerically in lockstep by hand.
+!!! info "Why not a DSL"
+    A hand-written JSON DSL interpreted in TypeScript would need a second implementation
+    of every mjlab operation, kept numerically in lockstep by hand.
 
 ## What that buys you
 
@@ -150,10 +147,11 @@ manifest's MDP entry, and the browser's slot reader serves each one, mostly from
 ]
 ```
 
-Seven slot namespaces exist: an entity `data` field (as above), a named MuJoCo sensor's
+Eight slot namespaces exist: an entity `data` field (as above), a named MuJoCo sensor's
 `sensordata` window, a live command's state field, the episode step counter mjlab's
 `time_out` reads (`{"env": "episode_length_buf"}`), the policy's last action mjlab's
-`last_action` reads (`{"action": "action"}`), the rows of an `mjModel` field an event
+`last_action` reads (`{"action": "action"}`), an action term's internals (a traced term's
+state field, or any term's `_processed_actions`), the rows of an `mjModel` field an event
 reads (below), and a raw `mjData` field:
 
 ```json
@@ -260,7 +258,7 @@ dist/
 ├── manifest.json                        # the one descriptor: format, version, projects → scenes → mdps / policies
 └── mjlab_tasks/                         # <project-id>
     ├── licenses/
-    │   └── LICENSE.unitree_g1           # the robot's license (ADR 0007), once a project
+    │   └── LICENSE.unitree_g1           # the robot's license, once a project
     └── mjlab_velocity_flat_unitree_g1/  # <scene-id>
         ├── scene.mjz                    # the MuJoCo model
         ├── mdp/mdp_0/                   # the run's MDP, traced once for all eleven checkpoints

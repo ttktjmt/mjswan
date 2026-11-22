@@ -2,6 +2,8 @@
 
 This module provides the main Builder class which serves as the entry point
 for programmatically creating interactive MuJoCo simulations.
+
+See ``context/object-model.md``.
 """
 
 from __future__ import annotations
@@ -45,7 +47,7 @@ class Builder:
             debug: Keep browser console messages in the built app. Defaults to False
                 (console messages are stripped from the production bundle).
             license: The work's license, written as ``<project-id>/LICENSE`` for every
-                project that does not set its own (ADR 0007 §1): a generatable SPDX id
+                project that does not set its own: a generatable SPDX id
                 (``"Apache-2.0"``, ``"MIT"``, ``"BSD-3-Clause"``, ``"BSD-2-Clause"``,
                 ``"CC-BY-4.0"``, ``"CC0-1.0"``) for the standard text, or the path to a
                 license text, copied verbatim.
@@ -198,8 +200,7 @@ class Builder:
 
         The project's id (its directory in the build and its ``?project=`` value) is
         ``name2id(name)``, made unique within the document: a second project that
-        sanitizes to the same id is renamed ``<name>_1``, id ``<id>_1``, with a warning
-        (ADR 0006 §4).
+        sanitizes to the same id is renamed ``<name>_1``, id ``<id>_1``, with a warning.
 
         Args:
             name: Name for the project (displayed in the UI).

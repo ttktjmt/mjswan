@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { applyUrlState, pluginModuleUrl, type UrlState } from './urlState';
 
-// The URL carries ids, not display names (ADR 0006 §4).
+// The URL carries ids, not display names.
 const SELECTED: UrlState = {
   project: 'demo_two',
   scene: 'humanoid',

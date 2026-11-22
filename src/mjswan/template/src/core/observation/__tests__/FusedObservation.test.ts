@@ -1,11 +1,11 @@
 /**
- * `FusedObservation`: one graph per observation group (ADR 0005 §4, brief §4b).
+ * `FusedObservation`: one graph per observation group.
  *
  * The graph's math is validated Python-side against
- * `ObservationManager.compute_group`. What matters here is the native half — that
- * declared slots and native inputs both reach the feeds under the names the build
- * chose, that the output is served as the group vector, and that an unreadable
- * slot holds the last vector rather than handing the policy a partly-zero input.
+ * `ObservationManager.compute_group`. What matters here is the native half: declared
+ * slots and native inputs both reach the feeds under the names the build chose, the
+ * output is served as the group vector, and an unreadable slot holds the last vector
+ * rather than handing the policy a partly-zero input.
  */
 import { describe, expect, it, vi } from 'vitest';
 

@@ -1,10 +1,10 @@
-"""Command-term parity: traced graph vs the live mjlab term (ADR 0005 §3).
+"""Command-term parity: traced graph vs the live mjlab term.
 
 Layer: L3 (needs the ``examples`` extras and a warp CPU-kernel compile, so
 ``slow``/``mjlab``).
 
-Commands are the most randomness-heavy layer in the system — `lift_height` draws 7
-values per resample, the tracking RSI graph 41 — so every one runs through the RNG
+Commands are the most randomness-heavy layer in the system (`lift_height` draws 7
+values per resample, the tracking RSI graph 41), so every one runs through the RNG
 spy/replay harness.
 
 The resolution follows the Builder's own path: the registry's `CommandBinding`
@@ -41,7 +41,7 @@ pytestmark = [pytest.mark.slow, pytest.mark.mjlab]
 # RSI jitter traced, as a reset graph (see `test_onnx_command_config.py`), and its clip is
 # a W&B artifact the env cannot be built offline without.
 COMMAND_TASKS = [
-    # Stateful, with an `entity_write` side effect on the cube (§3b).
+    # Stateful, with an `entity_write` side effect on the cube.
     pytest.param("Mjlab-Lift-Cube-Yam", "lift_height", id="lift-cube-yam"),
     # mjlab's own body: heading tracking as a dynamic slot, draw-selected envs gated.
     pytest.param("Mjlab-Velocity-Flat-Unitree-G1", "twist", id="velocity-flat-g1"),
@@ -165,10 +165,10 @@ def test_every_draw_was_actually_replayed(command_report):
 
 @pytest.mark.parametrize("command_report", _PARAMS, indirect=True)
 def test_the_command_actually_draws_randomness(command_report):
-    """§2b is about terms *with* randomness; a `rand_dim` of 0 would be vacuous.
+    """A `rand_dim` of 0 would leave the draw replay nothing to check.
 
-    Both of these resample from a range, so a zero here means the tracer stopped
-    seeing the draws — which would make the replay above compare nothing.
+    Both of these resample from a range, so a zero here means the tracer stopped seeing
+    the draws, and the replay above would compare nothing.
     """
     assert command_report.rand_dim and command_report.rand_dim > 0, (
         f"{command_report.name} traced with rand_dim={command_report.rand_dim}; "

@@ -2,7 +2,9 @@
 
 A term of an mjlab class mjswan runs natively serializes its own config. A task's own
 class (:class:`TracedActionCfg`) is built on the trace env and its ``process_actions``
-and ``reset`` traced (ADR 0009); its entry names the native apply and its options.
+and ``reset`` traced; its entry names the native apply and its options.
+
+See ``context/tracing.md``.
 """
 
 from __future__ import annotations
@@ -116,7 +118,7 @@ def traced_action_entry(
         raise ValueError(
             f"Action term {name!r} ({cls_name}) is a task's own action class, which the "
             "build traces against the scene's trace env. `add_scene_mjlab` supplies "
-            "one; a plain scene needs `scene.set_trace_env(...)` (ADR 0005 §6)."
+            "one; a plain scene needs `scene.set_trace_env(...)`."
         )
     term = cfg.mjlab_cfg.build(env)
     joint_targets(term, name)
@@ -132,7 +134,7 @@ def traced_action_entry(
             "which runs every physics substep, so the browser runs it natively and "
             "needs to know what it does. Name it with mjswan.register_action("
             f"'{cls_name}', ActionBinding(apply='joint_position', ...)), adding "
-            "`hold_s` or `interpolate` where it holds or ramps the target (ADR 0009)."
+            "`hold_s` or `interpolate` where it holds or ramps the target."
         )
     interpolate = bool(_resolve(binding.interpolate, cfg.mjlab_cfg))
     hold_s = _resolve(binding.hold_s, cfg.mjlab_cfg)

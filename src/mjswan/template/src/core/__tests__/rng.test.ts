@@ -1,5 +1,5 @@
 /**
- * Orchestrator-owned seeded PRNG (ADR 0005 §2).
+ * Orchestrator-owned seeded PRNG.
  *
  * The point of these tests is the *replay guarantee*: a recorded session must
  * reproduce bit-for-bit, so the sequence has to be a pure function of the seed

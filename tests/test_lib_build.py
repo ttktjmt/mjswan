@@ -12,7 +12,7 @@ load-bearing invariants:
     data URLs) and referenced relative to the bundle,
   - ONNX Runtime Web is pointed at the co-located copy, so a host serving `dist/`
     from its own origin fetches nothing third-party (issue #123).
-See vite.lib.config.ts and docs/adr/0004-headless-engine-core.md.
+See vite.lib.config.ts.
 """
 
 from __future__ import annotations
@@ -245,7 +245,7 @@ class TestLibBuild:
 
     def test_no_bundled_react_or_mantine(self, lib_dist: Path):
         # The engine entry drops the React/Mantine chrome; the CDN bundle must
-        # not carry it (ADR 0004 §11). A cheap proxy: React's dev-warning prefix.
+        # not carry it. A cheap proxy: React's dev-warning prefix.
         code = (lib_dist / "mjswan.js").read_text()
         assert "Warning: React" not in code and "@mantine" not in code
 
@@ -275,14 +275,13 @@ class TestLibBuild:
     def test_no_unfolded_process_env_node_env(self, lib_dist: Path):
         """The bundle must be browser-self-contained: no unfolded `process`.
 
-        mjswan Cloud loads this bundle straight from a CDN with `@vite-ignore`,
-        so the consuming bundler never substitutes globals away. An eager,
-        unguarded `process.env.NODE_ENV` (shipped by React/Mantine dev checks)
-        therefore throws `ReferenceError: process is not defined` at mount time
-        in the browser. `vite.lib.config.ts` statically folds it to
-        "production"; this asserts none survives. The engine — not the host —
-        owns this invariant (the host must not need a `process` shim). See
-        vite.lib.config.ts `define` and mjswan-cloud ADR 0001.
+        mjswan Cloud loads this bundle straight from a CDN with `@vite-ignore`, so the
+        consuming bundler never substitutes globals away. An eager, unguarded
+        `process.env.NODE_ENV` (shipped by React/Mantine dev checks) therefore throws
+        `ReferenceError: process is not defined` at mount time in the browser.
+        `vite.lib.config.ts` statically folds it to "production" (its `define`); this
+        asserts none survives, since the engine, not the host, owns this invariant (the
+        host must not need a `process` shim).
 
         Residual `process.*` references (e.g. setimmediate's `process.nextTick`)
         are allowed only because they sit behind runtime guards and never
@@ -410,7 +409,7 @@ def manifest_dist() -> Path:
 
 @pytest.mark.slow
 class TestManifestBuild:
-    """`dist/manifest.js` is a standalone, CDN-loadable parser (ADR 0004 §9/§11).
+    """`dist/manifest.js` is a standalone, CDN-loadable parser.
 
     mjswan Cloud imports it from jsDelivr alongside the engine bundle, so it must
     be self-contained (no bare imports) and export `parseManifest`.

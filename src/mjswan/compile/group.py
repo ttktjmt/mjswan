@@ -1,7 +1,7 @@
 """Fuse an observation group, or a set of terminations, into one ONNX graph.
 
 One graph per group rather than one per term, since a per-term graph can be a single
-node and the fixed per-``ort.run()`` cost then dominates (ADR 0005 §4).
+node and the fixed per-``ort.run()`` cost then dominates.
 """
 
 from __future__ import annotations

@@ -13,6 +13,8 @@ mjlab's do. Example::
             use_default_offset=True,
         ),
     }
+
+See ``context/tracing.md``.
 """
 
 from __future__ import annotations
@@ -65,7 +67,7 @@ ApplyKind = Literal[
 
 @dataclass(frozen=True)
 class ActionBinding:
-    """How the browser runs a task's own mjlab action class (ADR 0009).
+    """How the browser runs a task's own mjlab action class.
 
     The build traces a task's own action class mjswan has no class of its own for: its
     ``process_actions`` and ``reset`` become graphs. Its ``apply_actions`` runs every

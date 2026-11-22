@@ -116,7 +116,7 @@ describe('OnnxCommand: state threading and command output', () => {
     expect(session.calls[0].prev_vel_command_b.dims).toEqual([1, 3]);
   });
 
-  it('seeds state from the declared init (ADR 0005 §3)', async () => {
+  it('seeds state from the declared init', async () => {
     // A term whose first resample skips a field starts where the build found it.
     const session = new FakeSession(() => velocityOutputs(0, 0, 0));
     const cmd = new OnnxCommand(
@@ -195,7 +195,7 @@ describe('OnnxCommand: state threading and command output', () => {
   });
 });
 
-describe('OnnxCommand: resample timer (scalar, ADR §5)', () => {
+describe('OnnxCommand: resample timer (scalar)', () => {
   it('resamples on the first frame, then not until the timer expires', async () => {
     const session = new FakeSession(() => velocityOutputs(0, 0, 0));
     const cmd = new OnnxCommand(
@@ -289,7 +289,7 @@ describe('OnnxCommand: resample timer (scalar, ADR §5)', () => {
   });
 });
 
-describe('OnnxCommand: seeded rand (ADR §2)', () => {
+describe('OnnxCommand: seeded rand', () => {
   it('feeds rand_dim draws from the orchestrator PRNG', async () => {
     const session = new FakeSession(() => velocityOutputs(0, 0, 0));
     const cmd = new OnnxCommand('twist', VELOCITY_CFG, null, {
@@ -347,7 +347,7 @@ describe('OnnxCommand: seeded rand (ADR §2)', () => {
   });
 });
 
-describe('OnnxCommand: UI override (mjlab play parity, §3a)', () => {
+describe('OnnxCommand: UI override (mjlab play parity)', () => {
   const UI_CFG: OnnxCommandConfig = {
     ...VELOCITY_CFG,
     ui: {
@@ -423,7 +423,7 @@ describe('OnnxCommand: UI override (mjlab play parity, §3a)', () => {
   });
 });
 
-describe('OnnxCommand: entity_write hand-off (§3b)', () => {
+describe('OnnxCommand: entity_write hand-off', () => {
   function fakeModelData(): { mjModel: MjModel; mjData: MjData } {
     const mjModel = {
       njnt: 1,

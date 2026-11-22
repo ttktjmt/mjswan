@@ -53,13 +53,13 @@ export type ActionConfigEntry = {
   velocity_limit?: number | number[] | Record<string, number>;
   actuator_names?: string[];
   clip?: Record<string, readonly number[]>;
-  /** Ramp each target across the substeps, from the previous processed action (ADR 0009). */
+  /** Ramp each target across the substeps, from the previous processed action. */
   interpolate?: boolean;
   /** Seconds from an episode's start during which every target is the measured position. */
   hold_s?: number;
   /** mjlab's actuator command delays (`ActuatorCfg.delay_*`) on the term's joints. */
   delay?: DelayConfigEntry[];
-  /** A traced term's `process_actions`, which replaces the native formula (ADR 0009). */
+  /** A traced term's `process_actions`, which replaces the native formula. */
   process?: OnnxActionProcessConfig;
   /** A traced term's `reset`, present when it writes the term's state. */
   reset?: OnnxActionGraphConfig;
@@ -90,9 +90,9 @@ export type PolicyConfig = {
    */
   clip_actions?: number;
   /**
-   * The ONNX input slot table (ADR 0006 §5): `in_keys[i]` names the tensor that fills the
-   * network's i-th input, an observation group or one the runtime synthesizes. Absent
-   * for the common single-input policy, whose one input takes the `actor` group.
+   * The ONNX input slot table: `in_keys[i]` names the tensor that fills the network's
+   * i-th input, an observation group or one the runtime synthesizes. Absent for the
+   * common single-input policy, whose one input takes the `actor` group.
    */
   in_keys?: string[];
   /** The output slot table, positional like `in_keys`; absent means `['action']`. */
@@ -111,7 +111,7 @@ export type PolicyConfig = {
   observations?: Record<string, ObservationGroupConfig>;
   actions?: Record<string, ActionConfigEntry>;
   terminations?: Record<string, TerminationConfigEntry>;
-  /** The MDP's event terms, switched with the policy rather than held by the scene (ADR 0006 §3). */
+  /** The MDP's event terms, switched with the policy rather than held by the scene. */
   events?: EventConfig[];
   /** The sensors and reward terms Debug Viz draws beside the command terms. */
   debug_vis?: DebugVisConfig;

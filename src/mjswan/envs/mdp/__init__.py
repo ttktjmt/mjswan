@@ -6,8 +6,8 @@ configs, same import pattern as mjlab::
 
     from mjswan.envs.mdp.actions import JointPositionActionCfg
 
-A task's own action class is traced instead (ADR 0009); ``mjswan.register_action`` names
-what its ``apply_actions`` does when it overrides it.
+A task's own action class is traced instead; ``mjswan.register_action`` names what its
+``apply_actions`` does when it overrides it.
 
 ``observations`` / ``terminations`` / ``events`` are different: mjswan reimplements
 none of mjlab's term functions. Pass mjlab's own straight to
@@ -17,6 +17,8 @@ submodules carry only the ``*Binding`` escape hatch and its ``register_*`` regis
 ``commands`` is the exception: it carries the operator-driven command presets, binds
 mjlab's command classes by cfg name, and rewrites the reset jitter of the one it keeps
 native (``MotionCommand``).
+
+See ``context/mdp.md``.
 """
 
 from . import actions, commands, observations, terminations
