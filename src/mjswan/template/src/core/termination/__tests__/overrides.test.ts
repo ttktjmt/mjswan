@@ -1,8 +1,8 @@
 /**
- * The operator's overrides of termination terms (ADR 0012): a term turned off still shows
- * its firing but ends nothing; what follows a firing is one of the reset at once, the reset
- * a delay later (held from the step the term fires, whatever its condition does meanwhile),
- * or a stop, which names the term on that step so the runtime pauses there.
+ * The operator's overrides of termination terms: a term turned off still shows its firing
+ * but ends nothing; what follows a firing is one of the reset at once, the reset a delay
+ * later (held from the step the term fires, whatever its condition does meanwhile), or a
+ * stop, which names the term on that step so the runtime pauses there.
  */
 import { describe, expect, it } from 'vitest';
 

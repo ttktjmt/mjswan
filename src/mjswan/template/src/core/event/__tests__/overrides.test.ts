@@ -1,7 +1,7 @@
 /**
- * The operator's overrides of event terms (ADR 0012): a reset or interval term switched off
- * makes no write at its trigger, and any listed term can be triggered by hand, whatever its
- * mode or switch.
+ * The operator's overrides of event terms: a reset or interval term switched off makes no
+ * write at its trigger, and any listed term can be triggered by hand, whatever its mode or
+ * switch.
  */
 import { describe, expect, it, vi } from 'vitest';
 

@@ -1,7 +1,7 @@
 /**
  * What an operator may change about a running MDP's terms, and what the terms report back.
- * mjlab's timing is the default; an override is the viewer's, never the document's
- * (ADR 0012).
+ * mjlab's timing is the default; an override is the viewer's, never the document's.
+ * See context/frontend.md.
  */
 
 export type OverridableKind = 'termination' | 'event';

@@ -14,17 +14,16 @@ shortcuts.
 
 ### Added
 
-- **`engine.mdp`: operate a running MDP's terminations and events** (ADR 0012). A
-  termination can be switched off (still evaluated and reported, but it never ends the
-  episode) and given what follows its firing (`onFire`): the reset at once, as mjlab does;
-  the reset a delay later, so the failure stays on screen; or a stop, which pauses the
-  simulation on the step it fires and lands the reset on `play`. A reset or interval event
-  can be switched off, and any listed event triggered by hand, whatever its mode. The
-  state's `mdp` reports each term's override, when it last fired this episode, the reset it
-  holds, the term that stopped the simulation, and the last 32 things any term did.
-  Overrides are kept by term name across resets and policy switches; `engine.mdp.clear()`
-  drops them. An interval term's switch is `engine.events.setArmed`'s, which now persists
-  the same way.
+- **`engine.mdp`: operate a running MDP's terminations and events.** A termination can be
+  switched off (still evaluated and reported, but it never ends the episode) and given
+  what follows its firing (`onFire`): the reset at once, as mjlab does; the reset a delay
+  later, so the failure stays on screen; or a stop, which pauses the simulation on the
+  step it fires and lands the reset on `play`. A reset or interval event can be switched
+  off, and any listed event triggered by hand, whatever its mode. The state's `mdp`
+  reports each term's override, when it last fired this episode, the reset it holds, the
+  term that stopped the simulation, and the last 32 things any term did. Overrides are
+  kept by term name across resets and policy switches; `engine.mdp.clear()` drops them. An
+  interval term's switch is `engine.events.setArmed`'s, which now persists the same way.
 
 - **A DC motor's torque-speed curve runs in the browser** (**document format 10**). Action
   terms gain `saturation_effort` and `velocity_limit`, filled from mjlab's

@@ -222,16 +222,16 @@ export interface CameraFeedControls {
 }
 
 /**
- * A termination term as the operator sees it (ADR 0012): `enabled` and `onFire` are the
- * operator's, `active`, `firedAt` and `resetAt` what the term did this episode. Times are
- * episode time, in seconds, which stands still while paused.
+ * A termination term as the operator sees it: `enabled` and `onFire` are the operator's,
+ * `active`, `firedAt` and `resetAt` what the term did this episode. Times are episode time,
+ * in seconds, which stands still while paused.
  */
 export type TerminationTermDescriptor = Readonly<TerminationTermReport>;
 
 /**
- * A reset, interval or manual event term as the operator sees it (ADR 0012). Startup terms
- * have run before anyone could reach them, so they are not listed; a manual term has no
- * switch, only {@link MdpEventControls.trigger}.
+ * A reset, interval or manual event term as the operator sees it. Startup terms have run
+ * before anyone could reach them, so they are not listed; a manual term has no switch, only
+ * {@link MdpEventControls.trigger}.
  */
 export type EventTermDescriptor = Readonly<EventTermReport>;
 
@@ -291,8 +291,9 @@ export interface MdpEventControls {
 }
 
 /**
- * Operator overrides of the running MDP's terms, per kind (ADR 0012). They change what the
- * viewer sees, never the document; mjlab's behaviour is what {@link clear} returns to.
+ * Operator overrides of the running MDP's terms, per kind. They change what the viewer
+ * sees, never the document; mjlab's behaviour is what {@link clear} returns to. See
+ * context/frontend.md.
  */
 export interface MdpControls {
   readonly terminations: MdpTerminationControls;

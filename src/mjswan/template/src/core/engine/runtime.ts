@@ -175,7 +175,7 @@ const BURST_MS = 1000 / 60;
 /** The most often a host hears that the MDP changed: a held reset's countdown asks every step. */
 const MDP_NOTIFY_MS = 100;
 
-/** The operator's view of the running MDP's terminations and events (ADR 0012). */
+/** The operator's view of the running MDP's terminations and events. */
 export interface MdpReport {
   /** Resets since the engine started. */
   episode: number;
@@ -1145,7 +1145,7 @@ export class mjswanRuntime {
     if (term?.mode === 'interval') this.setEventOverride(name, { enabled: armed });
   }
 
-  // ── operator overrides of MDP terms (ADR 0012) ─────────────────────────
+  // ── operator overrides of MDP terms ────────────────────────────────────
   /** Control steps since the reset, in seconds: the clock every override's delay runs on. */
   private episodeTime(): number {
     return this.episodeLength * this.timestep * this.decimation;
