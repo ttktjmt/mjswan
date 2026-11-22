@@ -24,6 +24,10 @@ shortcuts.
   term that stopped the simulation, and the last 32 things any term did. Overrides are
   kept by term name across resets and policy switches; `engine.mdp.clear()` drops them. An
   interval term's switch is `engine.events.setArmed`'s, which now persists the same way.
+  The viewer's panel draws it in an **MDP** section, in place of Events: each termination
+  with Reset / Delay / Stop and, under Delay, its delay in a box that fills as the held
+  reset counts down; each event with its switch and a trigger button. The viewer names the
+  term that stopped it, or the reset it is holding.
 
 - **A DC motor's torque-speed curve runs in the browser** (**document format 10**). Action
   terms gain `saturation_effort` and `velocity_limit`, filled from mjlab's

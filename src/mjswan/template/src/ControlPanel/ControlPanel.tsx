@@ -28,6 +28,7 @@ import { MJSWAN_VERSION, GITHUB_CONTRIBUTORS, type Contributor } from '../Versio
 import { aboutButton } from './ControlPanel.css';
 import { CreditsPanel, type SceneCredits } from './CreditsPanel';
 import FloatingPanel from './FloatingPanel';
+import { MdpSection, type MdpHandlers } from './MdpSection';
 import { LabeledInput } from './LabeledInput';
 import { CommandSection } from './CommandSection';
 import { CameraFeedsSection } from './CameraFeedsSection';
@@ -48,6 +49,7 @@ import type {
   GraphicsInput,
   GraphicsSettings,
   HandTrackingDescriptor,
+  MdpState,
   InteractionModeDescriptor,
   InteractionModeId,
   XrSessionDescriptor,
@@ -98,12 +100,11 @@ interface ControlPanelProps {
   onCommandChange: (id: string, value: number) => void;
   /** Press a button command (engine.commands.trigger). */
   onCommandTrigger?: (id: string) => void;
-  /** Event terms the operator can drive: manual buttons, interval schedules. */
+  /** Event controls: read only for which manual terms their `disabled_when` schedule holds off. */
   events?: EventDescriptor[];
-  /** Fire a `mode="manual"` event term (engine.events.fire). */
-  onEventFire?: (name: string) => void;
-  /** Start or stop a `mode="interval"` term's schedule (engine.events.setArmed). */
-  onEventArmedChange?: (name: string, armed: boolean) => void;
+  /** The MDP's terminations and events (engine.state.mdp). */
+  mdp?: MdpState;
+  mdpHandlers?: MdpHandlers;
   /** Drawings to toggle: command terms, raycast sensors, reward terms. */
   debugVis?: DebugVisDescriptor[];
   /** Show or hide one drawing (engine.debugVis.set). */
@@ -295,8 +296,8 @@ function ControlPanel(props: ControlPanelProps) {
     onCommandChange,
     onCommandTrigger,
     events = [],
-    onEventFire,
-    onEventArmedChange,
+    mdp,
+    mdpHandlers,
     debugVis = [],
     onDebugVisChange,
     debugVisEnabled = true,
@@ -796,41 +797,12 @@ function ControlPanel(props: ControlPanelProps) {
             </CommandSection>
           )}
 
-          {/* Events: a button fires one, a checkbox lets its schedule run — scene-level,
-              so no policy has to be loaded for either. */}
-          {events.length > 0 && (
-            <CommandSection label="Events" expandByDefault={true}>
-              {events
-                .filter((event) => event.kind === 'manual')
-                .map((event) => (
-                  <Box key={event.name} px="xs" pb="0.5em">
-                    <Button
-                      size="sm"
-                      fullWidth
-                      style={{ height: '2em' }}
-                      onClick={() => onEventFire?.(event.name)}
-                      disabled={!onEventFire || !event.armed}
-                    >
-                      {event.label}
-                    </Button>
-                  </Box>
-                ))}
-              {events
-                .filter((event) => event.kind === 'interval')
-                .map((event) => (
-                  <LabeledInput key={event.name} id={`event:${event.name}`} label={event.label}>
-                    <Checkbox
-                      id={`event:${event.name}`}
-                      checked={event.armed}
-                      onChange={(changed) =>
-                        onEventArmedChange?.(event.name, changed.currentTarget.checked)
-                      }
-                      disabled={!onEventArmedChange}
-                      size="xs"
-                    />
-                  </LabeledInput>
-                ))}
-            </CommandSection>
+          {mdp && mdpHandlers && mdp.terminations.length + mdp.events.length > 0 && (
+            <MdpSection
+              mdp={mdp}
+              gated={new Set(events.filter((e) => e.kind === 'manual' && !e.armed).map((e) => e.name))}
+              handlers={mdpHandlers}
+            />
           )}
 
           {/* mjlab's Scene section, as the build recorded its declaration. */}
