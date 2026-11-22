@@ -199,8 +199,11 @@ class Engine implements MjswanEngine {
     this.mdp = {
       terminations: {
         set: (name, patch) => {
+          const lifts = patch.onFire !== undefined && patch.onFire !== 'stop' && this.stoppedBy() === name;
           this.runtime.setTerminationOverride(name, patch);
-          this.refresh();
+          // Lifting the stop that paused the simulation lands the reset it owes, which ends the stop.
+          if (lifts) this.play();
+          else this.refresh();
         },
       },
       events: {
@@ -213,8 +216,10 @@ class Engine implements MjswanEngine {
         },
       },
       clear: () => {
+        const lifts = this.stoppedBy() !== null;
         this.runtime.clearTermOverrides();
-        this.refresh();
+        if (lifts) this.play();
+        else this.refresh();
       },
     };
     this.interaction = {
@@ -418,7 +423,14 @@ class Engine implements MjswanEngine {
   }
 
   reset(): void {
+    // A reset ends a termination's stop. Playing first leaves the reset to the loop's step boundary.
+    if (this.stoppedBy() !== null) this.play();
     this.runtime.resetSimulation();
+  }
+
+  /** The termination whose stop holds the simulation paused, if one does. */
+  private stoppedBy(): string | null {
+    return this.runtime.mdpReport().stoppedBy?.term ?? null;
   }
 
   getState(): MjswanEngineState {

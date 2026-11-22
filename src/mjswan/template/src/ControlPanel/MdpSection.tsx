@@ -1,7 +1,9 @@
-import { ActionIcon, Box, Button, Checkbox, Flex, Group, Paper, SegmentedControl, Select, Text, Tooltip } from '@mantine/core';
-import { IconBolt, IconChevronDown, IconClock, IconPlayerPause, IconRefresh } from '@tabler/icons-react';
+import { useEffect, useRef, useState } from 'react';
+import { ActionIcon, Box, Button, Checkbox, Flex, Group, SegmentedControl, Text, TextInput, Tooltip } from '@mantine/core';
+import { IconBolt, IconClock, IconPlayerPause, IconRefresh } from '@tabler/icons-react';
 import type { EventTermDescriptor, MdpState, OnFire, TerminationTermDescriptor } from '../engine';
 import { CommandSection } from './CommandSection';
+import { heldProgress, parseDelayMs, toMs } from './mdpDelay';
 
 export interface MdpHandlers {
   onTermination(name: string, patch: { enabled?: boolean; onFire?: OnFire }): void;
@@ -19,19 +21,11 @@ const titleCase = (name: string) =>
     .join(' ');
 const labelOf = (term: { name: string; label?: string }) =>
   term.label && term.label !== term.name ? term.label : titleCase(term.name);
-const seconds = (value: number) => `${Number(value.toFixed(2))} s`;
 const kindOf = (onFire: OnFire): OnFireKind => (typeof onFire === 'object' ? 'delay' : onFire);
 
-const DELAYS = [0.5, 1, 2, 5];
 const DEFAULT_DELAY = 1;
-const BOX_WIDTH = 64;
+const BOX_WIDTH = 80;
 const BOX_HEIGHT = 22;
-
-const delayOptions = (current: number) =>
-  (DELAYS.includes(current) ? DELAYS : [...DELAYS, current].sort((a, b) => a - b)).map((d) => ({
-    value: String(d),
-    label: seconds(d),
-  }));
 
 // The delay a term last had, so Reset or Stop and back to Delay brings it back.
 const lastDelay: Record<string, number> = {};
@@ -48,8 +42,7 @@ const ON_FIRE = [
 ] as const;
 
 const nameStyle = { fontSize: '0.875em', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as const;
-const mono = { fontFamily: 'var(--mantine-font-family-monospace)' } as const;
-const monoStyle = { ...mono, fontSize: '0.8em' } as const;
+const monoStyle = { fontFamily: 'var(--mantine-font-family-monospace)', fontSize: '0.8em' } as const;
 
 /** Whether the termination's condition held at the last control step. */
 function Lamp({ lit }: { lit: boolean }) {
@@ -72,25 +65,52 @@ function Lamp({ lit }: { lit: boolean }) {
   );
 }
 
-/** The delay, its box filling left to right while the reset it holds counts down. */
+/**
+ * The delay in milliseconds, typed and kept on Enter or blur (Escape drops the edit), its box
+ * filling left to right while the reset it holds counts down. 0 is the reset at once.
+ */
 function DelayBox({ term, delay, time, handlers }: { term: TerminationTermDescriptor; delay: number; time: number; handlers: MdpHandlers }) {
+  const ms = toMs(delay);
+  const [draft, setDraft] = useState(String(ms));
+  const editing = useRef(false);
+  const dropped = useRef(false);
+  useEffect(() => {
+    if (!editing.current) setDraft(String(ms));
+  }, [ms]);
+  const keep = () => {
+    const next = parseDelayMs(draft);
+    setDraft(String(next ?? ms));
+    if (next !== null && next !== ms) handlers.onTermination(term.name, { onFire: { delay: next / 1000 } });
+  };
   const held = term.resetAt !== null;
-  const progress = held ? Math.min(1, Math.max(0, 1 - (term.resetAt! - time) / delay)) : 0;
   return (
-    <Box pos="relative" style={{ width: BOX_WIDTH, flexShrink: 0 }} title={held ? `Reset in ${Math.max(0, term.resetAt! - time).toFixed(1)} s` : undefined}>
-      <Select
+    <Box pos="relative" style={{ width: BOX_WIDTH, flexShrink: 0 }}>
+      <TextInput
         size="xs"
         radius="xs"
-        aria-label={`${labelOf(term)} delay`}
-        data={delayOptions(delay)}
-        value={String(delay)}
-        onChange={(value) => value && handlers.onTermination(term.name, { onFire: { delay: Number(value) } })}
-        allowDeselect={false}
-        withCheckIcon={false}
-        rightSection={<IconChevronDown size={12} />}
-        rightSectionWidth={18}
+        inputMode="numeric"
+        aria-label={`${labelOf(term)} delay (ms)`}
+        value={draft}
+        onChange={(e) => setDraft(e.currentTarget.value)}
+        onFocus={() => {
+          editing.current = true;
+        }}
+        onBlur={() => {
+          editing.current = false;
+          if (dropped.current) dropped.current = false;
+          else keep();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          if (e.key === 'Escape') {
+            dropped.current = true;
+            setDraft(String(ms));
+            e.currentTarget.blur();
+          }
+        }}
+        rightSection={<Text c="dimmed" style={monoStyle}>ms</Text>}
+        rightSectionWidth={24}
         rightSectionPointerEvents="none"
-        comboboxProps={{ zIndex: 1000 }}
         styles={{
           input: {
             ...monoStyle,
@@ -98,6 +118,7 @@ function DelayBox({ term, delay, time, handlers }: { term: TerminationTermDescri
             minHeight: BOX_HEIGHT,
             lineHeight: `${BOX_HEIGHT - 2}px`,
             paddingInlineStart: 6,
+            textAlign: 'right',
           },
         }}
       />
@@ -109,11 +130,10 @@ function DelayBox({ term, delay, time, handlers }: { term: TerminationTermDescri
         <Box
           style={{
             height: '100%',
+            width: `${heldProgress(term, time) * 100}%`,
             background: 'color-mix(in srgb, var(--mantine-primary-color-filled) 20%, transparent)',
-            transformOrigin: 'left',
-            transform: `scaleX(${progress})`,
             // The snapshot moves every 100 ms; the transition fills between, and a reset empties it at once.
-            transition: held ? 'transform 100ms linear' : 'none',
+            transition: held ? 'width 100ms linear' : 'none',
           }}
         />
       </Box>
@@ -221,47 +241,5 @@ export function MdpSection({ mdp, gated, handlers }: { mdp: MdpState; gated: Rea
         </Button>
       </Box>
     </CommandSection>
-  );
-}
-
-/** The term that stopped the simulation, or the reset a delayed termination holds, over the viewer. */
-export function MdpStageNotice({ mdp }: { mdp: MdpState }) {
-  const { stoppedBy, pendingReset } = mdp;
-  if (!stoppedBy && !pendingReset) return null;
-  return (
-    <Paper
-      shadow="sm"
-      style={{
-        position: 'absolute',
-        top: 12,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        padding: '4px 12px',
-        zIndex: 10,
-        pointerEvents: 'none',
-        background: 'rgba(0, 0, 0, 0.75)',
-        color: '#fff',
-        fontSize: '0.85em',
-      }}
-    >
-      <Group gap={8} wrap="nowrap">
-        {stoppedBy ? (
-          <>
-            <IconPlayerPause size={14} />
-            <span>Stopped</span>
-            <span>{titleCase(stoppedBy.term)}</span>
-            <span style={mono}>{seconds(stoppedBy.at)}</span>
-          </>
-        ) : (
-          <>
-            <IconClock size={14} />
-            <span>
-              Reset in <span style={mono}>{Math.max(0, pendingReset!.at - mdp.time).toFixed(1)} s</span>
-            </span>
-            <span>{titleCase(pendingReset!.term)}</span>
-          </>
-        )}
-      </Group>
-    </Paper>
   );
 }

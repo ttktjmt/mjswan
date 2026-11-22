@@ -8,7 +8,7 @@ import { signalReady, signalError } from './core/utils/readySignal';
 import { createEngine } from './engine';
 import type { EnginePlugins, MjswanEngine, MjswanEngineState, SceneInput } from './engine';
 import { parseManifest, sanitizeName, type Catalog, type ProjectCatalog, type ByteSource } from './manifest';
-import { MdpStageNotice, type MdpHandlers } from './ControlPanel/MdpSection';
+import type { MdpHandlers } from './ControlPanel/MdpSection';
 import {
   applyUrlState,
   DEBUG_PARAM,
@@ -477,7 +477,6 @@ function AppContent() {
           />
         )}
         <div ref={containerRef} className="viewer" />
-        {engineState?.mdp && <MdpStageNotice mdp={engineState.mdp} />}
       </div>
     </MantineProvider>
   );

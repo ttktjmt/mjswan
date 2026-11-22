@@ -264,7 +264,8 @@ export interface MdpState {
   pendingReset: Readonly<{ term: string; at: number }> | null;
   /**
    * The termination whose stop paused the simulation, and when: the frame it fired on is on
-   * show. Cleared by {@link MjswanEngine.play}, which also lands the reset it owes, or a reset.
+   * show. A reset ends it and plays: {@link MjswanEngine.play}, which lands the reset it owes,
+   * {@link MjswanEngine.reset}, or lifting the stop (a reset or a delay for the term, or `clear`).
    */
   stoppedBy: Readonly<{ term: string; at: number }> | null;
   /** The latest activity, oldest first, at most 32 entries. */
@@ -275,7 +276,8 @@ export interface MdpTerminationControls {
   /**
    * Switch a term off, or choose what follows its firing ({@link OnFire}): a delay is
    * counted from when its condition turned true. Kept by name across resets and policy
-   * loads, so a name the loaded MDP lacks applies to the next one that has it.
+   * loads, so a name the loaded MDP lacks applies to the next one that has it. Lifting the
+   * stop that paused the simulation lands the reset it owes and plays.
    */
   set(name: string, patch: TerminationOverridePatch): void;
 }
@@ -489,6 +491,7 @@ export interface MjswanEngine {
   // playback
   play(): void;
   pause(): void;
+  /** Reset the episode; while a termination's stop holds the simulation, also play. */
   reset(): void;
 
   // subsystems

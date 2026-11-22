@@ -18,16 +18,17 @@ shortcuts.
   switched off (still evaluated and reported, but it never ends the episode) and given
   what follows its firing (`onFire`): the reset at once, as mjlab does; the reset a delay
   later, so the failure stays on screen; or a stop, which pauses the simulation on the
-  step it fires and lands the reset on `play`. A reset or interval event can be switched
-  off, and any listed event triggered by hand, whatever its mode. The state's `mdp`
-  reports each term's override, when it last fired this episode, the reset it holds, the
-  term that stopped the simulation, and the last 32 things any term did. Overrides are
-  kept by term name across resets and policy switches; `engine.mdp.clear()` drops them. An
-  interval term's switch is `engine.events.setArmed`'s, which now persists the same way.
-  The viewer's panel draws it in an **MDP** section, in place of Events: each termination
-  with Reset / Delay / Stop and, under Delay, its delay in a box that fills as the held
-  reset counts down; each event with its switch and a trigger button. The viewer names the
-  term that stopped it, or the reset it is holding.
+  step it fires. A reset ends a stop and plays: `play`, `reset()`, or switching the term
+  from its stop to a reset or a delay, which lands the reset it owes. A reset or interval
+  event can be switched off, and any listed event triggered by hand, whatever its mode.
+  The state's `mdp` reports each term's override, when it last fired this episode, the
+  reset it holds, the term that stopped the simulation, and the last 32 things any term
+  did. Overrides are kept by term name across resets and policy switches;
+  `engine.mdp.clear()` drops them. An interval term's switch is
+  `engine.events.setArmed`'s, which now persists the same way. The viewer's panel draws it
+  in an **MDP** section, in place of Events: each termination with Reset / Delay / Stop
+  and, under Delay, its delay in milliseconds, typed into a box that fills as the held
+  reset counts down; each event with its switch and a trigger button.
 
 - **A DC motor's torque-speed curve runs in the browser** (**document format 10**). Action
   terms gain `saturation_effort` and `velocity_limit`, filled from mjlab's

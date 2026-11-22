@@ -251,7 +251,7 @@ engine.mdp.clear();                                                       // bac
 
 | Term | Off (`enabled: false`) | What follows a firing (`onFire`) | `events.trigger(name)` |
 |---|---|---|---|
-| termination | Still evaluated and reported; never ends the episode. | `'reset'` (the default): at once, as mjlab's. `{ delay: d }`: the reset lands `d` seconds of episode time after the condition turned true, whatever it does meanwhile; `d` is clamped to 0 to 60, and 0 is `'reset'`. `'stop'`: the simulation pauses on the step it fired, and `play` lands the reset. | |
+| termination | Still evaluated and reported; never ends the episode. | `'reset'` (the default): at once, as mjlab's. `{ delay: d }`: the reset lands `d` seconds of episode time after the condition turned true, whatever it does meanwhile; `d` is clamped to 0 to 60, and 0 is `'reset'`. `'stop'`: the simulation pauses on the step it fired, until a reset ends it and plays: `play`, `reset()`, or switching the term to `'reset'` or a delay (or `clear()`), each landing the reset it owes. | |
 | reset event | No write at the reset. | | The write lands mid-episode: at once while paused, else at the end of the control step. |
 | interval event | The schedule stops: the same switch as `events.setArmed`. | | As a reset event's; the timer is left alone. |
 | manual event | No switch. | | The same as `events.fire`. |
@@ -296,8 +296,8 @@ interface MdpState {
 | `MdpActivity` | `kind` (`'termination'` or `'event'`), `name`, `what` (`'fired'`, `'stopped'` or `'reset'`), `time`, `off` (a termination that was off, so no reset followed), `byHand` (an event triggered by hand), `episode`, and `seq`, which rises across the engine's life for a host to key on. |
 
 The engine notifies at most every 100 ms and never inside a step, and keeps notifying while
-a reset is held, so a countdown to `pendingReset.at` moves. `stoppedBy` clears on `play`,
-which also lands the reset the term owes, or on a reset.
+a reset is held, so a countdown to `pendingReset.at` moves. `stoppedBy` clears with the
+reset that ends the stop.
 
 ### Pointer interaction
 
