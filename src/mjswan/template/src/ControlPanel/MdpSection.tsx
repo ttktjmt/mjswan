@@ -24,8 +24,7 @@ const kindOf = (onFire: OnFire): OnFireKind => (typeof onFire === 'object' ? 'de
 
 const DELAYS = [0.5, 1, 2, 5];
 const DEFAULT_DELAY = 1;
-// Wide enough for the delay box, so switching to Delay moves nothing else on the row.
-const SLOT_WIDTH = 64;
+const BOX_WIDTH = 64;
 const BOX_HEIGHT = 22;
 
 const delayOptions = (current: number) =>
@@ -52,28 +51,24 @@ const nameStyle = { fontSize: '0.875em', minWidth: 0, overflow: 'hidden', textOv
 const mono = { fontFamily: 'var(--mantine-font-family-monospace)' } as const;
 const monoStyle = { ...mono, fontSize: '0.8em' } as const;
 
+/** Whether the termination's condition held at the last control step. */
 function Lamp({ lit }: { lit: boolean }) {
   return (
-    <Box
-      title={lit ? 'Condition holds' : 'Condition does not hold'}
-      style={{
-        width: 8,
-        height: 8,
-        flexShrink: 0,
-        borderRadius: '50%',
-        border: '1px solid',
-        borderColor: lit ? 'var(--mantine-color-text)' : 'var(--mantine-color-default-border)',
-        background: lit ? 'var(--mantine-color-text)' : 'transparent',
-      }}
-    />
-  );
-}
-
-function Fired({ at, width }: { at: number | null; width?: number }) {
-  return (
-    <Text c="dimmed" title="Last fired this episode" style={{ ...monoStyle, flexShrink: 0, width, minWidth: '3.2em', textAlign: 'right' }}>
-      {at === null ? '–' : seconds(at)}
-    </Text>
+    <Tooltip label={lit ? 'Active' : 'Inactive'} withArrow openDelay={300}>
+      <Box
+        role="img"
+        aria-label={lit ? 'Active' : 'Inactive'}
+        style={{
+          width: 8,
+          height: 8,
+          flexShrink: 0,
+          borderRadius: '50%',
+          border: '1px solid',
+          borderColor: lit ? 'var(--mantine-color-text)' : 'var(--mantine-color-default-border)',
+          background: lit ? 'var(--mantine-color-text)' : 'transparent',
+        }}
+      />
+    </Tooltip>
   );
 }
 
@@ -82,7 +77,7 @@ function DelayBox({ term, delay, time, handlers }: { term: TerminationTermDescri
   const held = term.resetAt !== null;
   const progress = held ? Math.min(1, Math.max(0, 1 - (term.resetAt! - time) / delay)) : 0;
   return (
-    <Box pos="relative" style={{ width: SLOT_WIDTH, flexShrink: 0 }} title={held ? `Reset in ${Math.max(0, term.resetAt! - time).toFixed(1)} s` : undefined}>
+    <Box pos="relative" style={{ width: BOX_WIDTH, flexShrink: 0 }} title={held ? `Reset in ${Math.max(0, term.resetAt! - time).toFixed(1)} s` : undefined}>
       <Select
         size="xs"
         radius="xs"
@@ -144,15 +139,12 @@ function TerminationRow({ term, time, handlers }: { term: TerminationTermDescrip
           aria-label={labelOf(term)}
           onChange={(e) => handlers.onTermination(term.name, { enabled: e.currentTarget.checked })}
         />
-        <Text style={{ ...nameStyle, flex: 1 }} c={term.enabled ? undefined : 'dimmed'} title={term.name}>
+        <Text style={nameStyle} c={term.enabled ? undefined : 'dimmed'} title={term.name}>
           {labelOf(term)}
         </Text>
         <Lamp lit={term.active} />
-        {typeof term.onFire === 'object' ? (
-          <DelayBox term={term} delay={term.onFire.delay} time={time} handlers={handlers} />
-        ) : (
-          <Fired at={term.firedAt} width={SLOT_WIDTH} />
-        )}
+        <Box style={{ flex: 1 }} />
+        {typeof term.onFire === 'object' && <DelayBox term={term} delay={term.onFire.delay} time={time} handlers={handlers} />}
       </Flex>
       <Box pl={24} pt={6}>
         <SegmentedControl
@@ -193,8 +185,7 @@ function EventRow({ term, gated, handlers }: { term: EventTermDescriptor; gated:
       <Text style={{ ...nameStyle, flex: 1 }} c={term.enabled ? undefined : 'dimmed'} title={term.name}>
         {labelOf(term)}
       </Text>
-      <Fired at={term.firedAt} />
-      <Tooltip label="Trigger now" withArrow openDelay={300}>
+      <Tooltip label="Trigger" withArrow openDelay={300}>
         <ActionIcon
           variant="default"
           size="sm"
