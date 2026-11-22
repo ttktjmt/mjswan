@@ -7,7 +7,12 @@ mjswan packages browser-based MuJoCo simulations with real-time policy control i
 - **Python** ([src/mjswan/](src/mjswan/)): `Builder` / `Project` / `Scene` API that bundles models, policies, and UI config into a static site.
 - **Frontend template** ([src/mjswan/template/](src/mjswan/template/)): TypeScript + three.js + mujoco-wasm client that the Python build step bundles.
 
-[CONTEXT.md](CONTEXT.md) is the codebase map; [context/](context/) has one file per area with its rules, their reasons and the options already rejected. Read the area's file before changing it.
+## Context
+
+Development context is kept in two levels: [CONTEXT.md](CONTEXT.md), the codebase map, and [context/](context/), one file per area with its rules, their reasons and the options already rejected. Read the area's file before changing it.
+
+- Keep it to what development needs, in brief, and to what holds now: no history, plans or open questions.
+- A change's design decision (an ADR, a design note) is not a file of its own. Fold what holds into the area's `context/` file in the same change. A draft may live in the working environment or on the feature branch, never on `main`: squash-merge, so no commit of it lands there.
 
 ## Philosophy
 
