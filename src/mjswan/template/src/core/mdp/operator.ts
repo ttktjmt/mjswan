@@ -77,9 +77,8 @@ export interface TermActivity {
   kind: OverridableKind;
   name: string;
   /**
-   * A termination `fired` when its condition turned true, `stopped` the simulation when
-   * its Stop was on, and `reset` when it ended the episode. An event `fired` when its
-   * write landed.
+   * A termination `fired` when its condition turned true, `stopped` the simulation when set
+   * to stop, and `reset` when it ended the episode. An event `fired` when its write landed.
    */
   what: 'fired' | 'stopped' | 'reset';
   /** Episode time, in seconds. */

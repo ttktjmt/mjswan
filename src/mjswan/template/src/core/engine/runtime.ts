@@ -185,7 +185,7 @@ export interface MdpReport {
   events: EventTermReport[];
   /** The soonest reset a delayed termination holds. */
   pendingReset: { term: string; at: number } | null;
-  /** The term whose Stop paused the simulation, until it plays or resets. */
+  /** The term whose stop paused the simulation, until it plays or resets. */
   stoppedBy: { term: string; at: number } | null;
   activity: ReadonlyArray<LoggedActivity>;
 }
@@ -429,13 +429,13 @@ export class mjswanRuntime {
   onMdpChange: (() => void) | null = null;
   private mdpNotify: ReturnType<typeof setTimeout> | null = null;
   private lastMdpNotify = 0;
-  /** The operator's switches and delays, by term name, outliving the MDP they were set on. */
+  /** The operator's overrides, by term name, outliving the MDP they were set on. */
   private readonly termOverrides = new TermOverrides();
   private readonly mdpActivity = new ActivityLog();
   /** Resets since the engine started, so an activity names its episode. */
   private episodeCount = 0;
   private stoppedBy: MdpReport['stoppedBy'] = null;
-  /** Called when a termination's Stop paused the loop, which no verb of the host's did. */
+  /** Called when a termination's stop paused the loop, which no verb of the host's did. */
   onStop: (() => void) | null = null;
   /** The scene MJCF as shipped, so a rebuild can add or drop the hands. Null for `.mjb`. */
   private sceneXml: { file: string; text: string } | null = null;
@@ -1176,10 +1176,7 @@ export class mjswanRuntime {
     }, wait);
   }
 
-  /**
-   * Switch, delay or set Stop on a termination term, kept by name: a name the loaded MDP
-   * lacks applies to the next one that has it.
-   */
+  /** Override a termination term, kept by name: one the loaded MDP lacks applies to the next that has it. */
   setTerminationOverride(name: string, patch: TerminationOverridePatch): void {
     this.terminationManager?.setOverride(name, this.termOverrides.setTermination(name, patch));
     this.notifyMdp();
@@ -1700,7 +1697,7 @@ export class mjswanRuntime {
     if (this.terminationManager?.holding) this.notifyMdp();
   }
 
-  /** A termination's Stop: the loop ends after this step, as `pause` would end it. */
+  /** A termination's stop: the loop ends after this step, as `pause` would end it. */
   private stopOnTerm(term: string): void {
     this.running = false;
     this.interaction.cancel();
@@ -1715,7 +1712,7 @@ export class mjswanRuntime {
     kept?: { module: OnnxModule | null },
   ): Promise<void> {
     const outgoing = this.onnxModule;
-    // Named for the outgoing MDP's events.
+    // Queued for the outgoing MDP's events.
     this.pendingTriggers = [];
     this.currentPolicy = policy;
     this.sceneHasPolicy = policy !== null;
@@ -2335,7 +2332,7 @@ export class mjswanRuntime {
     this.episodeLength = 0;
     this.episodeCount += 1;
     this.stoppedBy = null;
-    // This reset meets one already asked for: a stopped term's would otherwise follow a load.
+    // Meets a reset already asked for, so a stopped term's does not follow a load.
     this.resetRequested = false;
     this.notifyMdp();
     // A reset landing between two slices drops the rest of the control step.

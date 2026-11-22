@@ -254,7 +254,7 @@ export class EventManager {
       );
       return;
     }
-    // A press the graph is still busy with is dropped, as it always was, and shows as nothing.
+    // A press while the graph still runs is dropped, and reports nothing.
     if (await term.fire(context)) this.wrote(name, true);
   }
 

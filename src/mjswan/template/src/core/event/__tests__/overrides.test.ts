@@ -154,7 +154,7 @@ describe('EventManager overrides', () => {
   });
 
   it('reports a write only when it landed: a reset meeting a trigger still in flight reports one', async () => {
-    // The runtime keeps a trigger out of the reset chain; this is what the manager says if not.
+    // The runtime keeps triggers out of the reset chain; were one to meet it, one write is reported.
     let runs = 0;
     const pending: Array<() => void> = [];
     const sessions = new OnnxSessionCache(() =>

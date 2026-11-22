@@ -31,7 +31,7 @@ const NO_DEADLINE = Infinity;
 
 describe('ControlStep', () => {
   it('spends no more once a step that ended has halted the loop', async () => {
-    // A termination's Stop: the frame it fired on stays the last one drawn.
+    // A termination's stop: the frame it fired on stays the last one drawn.
     const calls: string[] = [];
     const step = new ControlStep({
       decimation: () => 2,

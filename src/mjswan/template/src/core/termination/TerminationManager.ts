@@ -26,7 +26,7 @@ export type TerminationResult = {
   terminated: boolean;
   truncated: boolean;
   reasons: string[];
-  /** Terms whose Stop is on and whose condition turned true this step. */
+  /** Terms set to stop whose condition turned true this step. */
   stopped: string[];
 };
 
@@ -197,11 +197,10 @@ export class TerminationManager {
    * OR-reduce every term to one verdict, `time_out` split out. Every graph is awaited
    * first, so a verdict is this step's, as in mjlab.
    *
-   * A term the operator turned off is still evaluated, so its firing shows, but ends
-   * nothing. One with a delay holds the reset from the step it fires, whatever its
-   * condition does meanwhile: the point is to watch what made it fire. One set to stop is
-   * named in `stopped` on that step, on or off, and owes its reset at once; the caller
-   * pauses and lands it on play.
+   * A term switched off is still evaluated, so its firing shows, but ends nothing. One with
+   * a delay holds the reset from the step it fires, whatever its condition does meanwhile.
+   * One set to stop is named in `stopped` on that step, on or off, and owes its reset at
+   * once; the caller pauses and lands it on play.
    */
   async evaluate(state: PolicyState): Promise<TerminationResult> {
     await Promise.all(this.graphs.map((graph) => graph.step()));

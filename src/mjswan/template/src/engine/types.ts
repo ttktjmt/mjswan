@@ -237,9 +237,9 @@ export type EventTermDescriptor = Readonly<EventTermReport>;
 
 /**
  * Something a term did. A termination `fired` when its condition turned true (with `off`
- * when it was switched off, so no reset followed), `stopped` the simulation when its Stop
- * was on, and `reset` when it ended the episode; an event `fired` when its write landed,
- * with `byHand` when it was triggered.
+ * when it was switched off, so no reset followed), `stopped` the simulation when set to
+ * stop, and `reset` when it ended the episode; an event `fired` when its write landed, with
+ * `byHand` when it was triggered.
  */
 export type MdpActivity = Readonly<LoggedActivity>;
 
@@ -263,8 +263,8 @@ export interface MdpState {
   /** The soonest reset a delayed termination holds: which term, and when it lands. */
   pendingReset: Readonly<{ term: string; at: number }> | null;
   /**
-   * The termination whose Stop paused the simulation, and when: the frame it fired on is on
-   * show. Cleared by {@link MjswanEngine.play}, which also lands a reset it owes, or a reset.
+   * The termination whose stop paused the simulation, and when: the frame it fired on is on
+   * show. Cleared by {@link MjswanEngine.play}, which also lands the reset it owes, or a reset.
    */
   stoppedBy: Readonly<{ term: string; at: number }> | null;
   /** The latest activity, oldest first, at most 32 entries. */
