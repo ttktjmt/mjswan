@@ -119,7 +119,7 @@ reset(slots..., prev_<f>..., [rand])        -> (next_<f>...)
 - Ragged structures and string manipulation on the traced path.
 - A read that is neither a slot nor a forwarded constant (`UnsupportedEnvRead`), and state the tracer cannot turn into an input (`UntraceableTerm`): baking its trace-time value would freeze a time-varying input.
 
-Such a term **fails the build loudly and names itself**: never force-traced, never silently dropped, and its Python source never ships to the browser. The message names the ways out: a trace-friendly replacement registered with `register_observation` / `register_termination` / `register_event` / `register_command`, a hand-written TypeScript class named by a `*Binding`'s `ts_src` (trusted contexts only: [frontend.md](frontend.md)), or, for an observation, dropping the term and retraining. Three event terms are exempt because there is provably nothing to write: `randomize_terrain`, `encoder_bias`, and a root-state write onto a fixed-base entity. mjlab's `reset_root_state_from_flat_patches` (it draws with `torch.randint` and indexes per-env terrain tensors) is swapped for mjswan's traceable `reset_root_state_on_flat_patch` ([mjlab.md](mjlab.md)).
+Such a term **fails the build loudly and names itself**: never force-traced, never silently dropped, and its Python source never ships to the browser. The message names the ways out: a trace-friendly replacement registered with `register_observation` / `register_termination` / `register_event` / `register_command`, a hand-written TypeScript class named by a `*Binding`'s `ts_src` (trusted contexts only: [frontend.md](frontend.md)), or, for an observation, dropping the term and retraining. Four event terms are exempt because there is provably nothing to write: `randomize_terrain`, `encoder_bias`, `reset_scene_to_default` (the runtime's own reset already does it) and a root-state write onto a fixed-base entity (`EVENTS_WITH_NOTHING_TO_WRITE` in `compile/event.py`). mjlab's `reset_root_state_from_flat_patches` (it draws with `torch.randint` and indexes per-env terrain tensors) is swapped for mjswan's traceable `reset_root_state_on_flat_patch` ([mjlab.md](mjlab.md)).
 
 ## Parity
 
@@ -127,7 +127,7 @@ Numeric parity is mandatory: every traced graph is checked against the live mjla
 
 | Check | What it proves |
 |---|---|
-| `tests/test_onnx_parity.py` | each traced graph reproduces its mjlab term (7 tasks, 73 terms, worst max\|Δ\|≈9e-08) |
+| `tests/test_onnx_parity.py` | each traced graph reproduces its mjlab term, every term at every step, over the reference tasks in `SWEEP_TASKS` |
 | `tests/test_onnx_command_parity.py` | every reference task's traced command over 16 replayed draws |
 | `core/onnx/__tests__/slotReaderParity.test.ts` | the reader hands those graphs mjlab's numbers, for every `EntityData` property and each entity's `EntityIndexing` (fixture from `dump_slot_fixture.py`: two tasks and a synthetic tendon-driven entity) |
 | `core/engine/__tests__/rolloutParity.test.ts` | the layers **composed**: state → reader → real ORT session → fused obs → group vector (fixture from `dump_rollout_fixture.py`) |

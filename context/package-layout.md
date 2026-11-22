@@ -16,7 +16,7 @@ A module imports from its own layer or below. An import that would point up (a m
 - **The root** is the object model an author holds: `builder.py`, `app.py`, `project.py`, `scene.py`, `policy.py`, `motion.py`, `splat.py`, `skin.py`, `viewer.py`, `mdp.py`, plus `cli.py`. `Builder.build()` delegates to `build.pipeline`, and `add_policy_wandb` / `add_policy_hf` to `source/` and `mjlab/`, both lazily. The only underscore module is `_version.py`, which hatch reads.
 - **`build/`** writes every file of a document and is the one place that knows the shape of a manifest entry ([build.md](build.md)).
 - **`compile/`** traces a term body to ONNX bytes against an env it is handed. It writes no file and imports nothing from `mjlab/`; its only mjswan imports are the `envs/mdp/` registries its parity harness resolves terms through ([tracing.md](tracing.md)).
-- **Leaves**: `mjlab/`, `source/`, `rig/`, `managers/`, `envs/mdp/`, `document/`, `license/`. Each depends on the object model at most through `TYPE_CHECKING` imports.
+- **Leaves**: `mjlab/`, `source/`, `rig/`, `managers/`, `envs/mdp/`, `document/`, `license/`. Each depends on the object model at most through `TYPE_CHECKING` imports, but for one: `mjlab/task.py` imports `ViewerConfig`, which `adapt_viewer_config` builds from a task's viewer config.
 
 ### What `import mjswan` costs
 
@@ -29,13 +29,13 @@ One deliberate exception: with the `mjlab` extra installed, `envs/mdp/commands.p
 - **Packages and modules mjswan names are singular**: `build/`, `source/`, `license/`, `document/`, `build/asset.py`, `compile/slot.py`, `mjlab/observation.py`.
 - **mjlab-mirror paths keep mjlab's spelling**: `managers/observation_manager.py`, `envs/mdp/observations.py`, `envs/mdp/actions/`. Their import paths are a public contract (`from mjswan.managers.observation_manager import ObservationTermCfg` reads as mjlab's), so they are the one place plural names stay.
 - **A file never repeats its package's name**: `mjlab/observation.py`, not `adapters/mjlab_adapter.py`; `build/frontend.py`, not `build/build_client.py`. The same short name under `mjlab/`, `build/mdp/` and `compile/` (`observation`, `termination`, `event`, `command`, `action`) is intended: one module per manager kind per stage, always read qualified by its package.
-- **A name shared across modules is public.** Helpers a split exposes to siblings lose their underscore (`term_provenance`, `resolved_params`, `is_from_mjlab`) rather than being imported as private names. What one module keeps to itself stays private.
+- **An underscore does not mean module-private.** Some helpers lost theirs when a module split (`term_provenance`, `resolved_params`, `is_from_mjlab`), but many shared names keep one: `compile/`'s tracers import `export.py`'s `_export_onnx` and `_register_consts`, and `mjlab/`, `build/` and `compile/parity.py` read the term registries in `envs/mdp/` and `managers/` (`_custom_registry`, `_action_registry`).
 
 ## mjlab in three relations
 
 - **Mirror** (`managers/`, `envs/mdp/`): mjlab's import paths, mjswan's classes. `ActionTermCfg` lives in `managers/action_manager.py`, where mjlab defines its counterpart, and is re-exported from `envs/mdp/actions`. `CommandTermConfig` keeps mjswan's own name, since it is not mjlab's `CommandTermCfg` ([mdp.md](mdp.md)).
 - **Speak** (`mjlab/`): everything that reads mjlab's own objects, one module per concern, importing mjlab lazily inside the functions that need it ([mjlab.md](mjlab.md)).
-- **Use** (the root, `build/`): a lazy import of `mjlab/` at the point of need, never at module import time.
+- **Use** (the root, `build/`): `__init__.py`, `project.py`, `scene.py`, `build/manifest.py` and `build/pipeline.py` import `mjlab/` modules at module level. That costs nothing, since `mjlab/` imports the mjlab library only inside its functions.
 
 ## Where things live
 
