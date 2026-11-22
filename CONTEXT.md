@@ -12,7 +12,7 @@ The defining architectural fact: mjswan reimplements none of mjlab's MDP term fu
 
 | File | Covers |
 |---|---|
-| [package-layout.md](context/package-layout.md) | the layers and import direction, naming rules, mjlab's three relations, the old → new module table |
+| [package-layout.md](context/package-layout.md) | the layers and import direction, naming rules, mjlab's three relations, no compatibility layer |
 | [object-model.md](context/object-model.md) | `Builder` and the `*Handle` / `*Config` pairs: what each owns, `MdpConfig` identity and ids, the public API |
 | [build.md](context/build.md) | `build/`: the pipeline's order, manifest entries, where graphs land, `frontend.py` and the SPA cache, `scene.mjz` |
 | [tracing.md](context/tracing.md) | `compile/`: the two passes, slot namespaces, the trace env, stateful terms, randomness, fusion, traced action process and native apply, what cannot be traced, parity, declined and rejected options |
@@ -32,7 +32,7 @@ The defining architectural fact: mjswan reimplements none of mjlab's MDP term fu
 src/mjswan/          Python package: the object model at the root, one package per layer below
   __init__.py          The public API: Builder / MjswanApp, the *Handle / *Config pairs, cfgs
   builder.py           Builder: the fluent entry point; build() hands off to build/pipeline.py
-  app.py               MjswanApp: launch / serve / save_document / publish a built app
+  app.py               MjswanApp: a built app from a dist/ or a .swn; launch / save_document / publish
   project.py           ProjectConfig / ProjectHandle (add_scene, add_scene_mjlab, set_license)
   scene.py             SceneConfig / SceneHandle (add_policy, add_policy_wandb / _hf, splats)
   policy.py            PolicyConfig / PolicyHandle; the ONNX slot and width checks a policy passes
@@ -56,7 +56,7 @@ src/mjswan/          Python package: the object model at the root, one package p
     frontend.py          the Python side of template/: nodeenv + Vite build, install_spa
     mdp/                 one .onnx per traced term and the JSON entry that names it,
                          observation · termination · event · command · action, with graph.py
-                         (where a graph lands, the guarded write), provenance, sensor, binding
+                         (where a graph lands, the guarded write), provenance, sensor, binding, debug_vis
   compile/             ONNX tracing + numeric parity; returns bytes, writes no file
     slot · proxy · record · replay · export      the two passes and what they share
     term · event · command · action · group      one trace per term kind
@@ -112,7 +112,7 @@ skills/              Agent skills this repo publishes (mjlab-to-mjswan: port an 
 docs/                zensical (MkDocs-based) site → Read the Docs
 typings/             MuJoCo stub generator script
 scripts/             Maintenance scripts (sync_contributors.py)
-assets/              Demo GIF and banner SVG
+assets/              Demo animation (WebP) and banner SVG
 ```
 
 ## Python object model (fluent API)
@@ -150,7 +150,7 @@ MjswanApp.publish(title=..., tags=...)       # → mjswan Cloud; a .swn publishe
 ## Layering
 
 Imports only point downward ([package-layout.md](context/package-layout.md)):
-`cli.py` → `app.py` / `cloud/` → the object model at the root → `build/` → `compile/` →
+`cli.py` → the object model at the root (`app.py` included) → `build/` · `cloud/` → `compile/` →
 `mjlab/` · `source/` · `rig/` → `managers/` · `envs/mdp/` · `document/` · `license/`.
 `build/` alone knows the manifest's shape; `compile/` writes no file and never imports `mjlab/`; `cloud/` never imports `build/`; `import mjswan` costs no Node build and, in a core install, no source backend. mjswan's own names are singular; mjlab-mirror paths keep mjlab's spelling, since the import path is the contract.
 
@@ -165,7 +165,7 @@ The primary CLI is `mjswan` (Typer-based, defined in `cli.py:app`). Subcommands:
 | `mjswan new <name> [--template hello-world\|policy\|mjlab]` | Scaffold a new project from a template |
 | `mjswan demo [name]` | List the built-in demos, or run one (`main`, `simple`, `mujoco`, `playground`) |
 | `mjswan info <dist-dir \| document.swn>` | Show a tree of projects/scenes/policies and asset sizes, each license file and skin with its license |
-| `mjswan publish <dist-dir>` | Upload a built dist's data files to mjswan Cloud (rejects custom-TS builds) |
+| `mjswan publish <dist-dir \| document.swn>` | Upload a built dist's data files, or a document's, to mjswan Cloud (rejects custom-TS builds) |
 | `mjswan skin map <file> [--robot <xml \| mjb \| task>]` | Draft a skin's bone maps against a robot, as a `SkinConfig` (or a `ModelledSkinConfig`) to check |
 | `mjswan login` / `whoami` / `logout` | mjswan Cloud session |
 | `mjswan version` / `--version` | Print the installed mjswan version |
@@ -190,7 +190,7 @@ Key Makefile targets: `sync`, `format`, `type`, `check`, `test`, `test-all`, `do
 
 ## Dependencies
 
-Core: `mujoco==3.11.0` (exact, following mjlab's pin), `onnx`, `nodeenv`, `rich`, `typer`. One extra per source (`wandb`, `hf`), `mjlab` (mjlab + torch, needed at build time for any traced policy, never shipped to the browser), plus `check`, `dev`, `demo`, `examples`. The browser's MuJoCo is the template's `@ttktjmt/mujoco` alias, held to the same MuJoCo as the Python pin. Python 3.11 to 3.13. Details and reasons in [dependencies.md](context/dependencies.md).
+Core: `mujoco==3.11.0` (exact, following mjlab's pin), `onnx`, `nodeenv`, `rich`, `typer`. One extra per source (`wandb`, `hf`), `mjlab` (mjlab + torch, needed at build time for any traced policy, never shipped to the browser), plus `check`, `dev`, `demo`, `examples`. The browser's MuJoCo is the template's `@ttktjmt/mujoco` alias, held to the same MuJoCo as the Python pin. Python 3.11 and later (CI and the classifiers cover 3.11 to 3.13). Details and reasons in [dependencies.md](context/dependencies.md).
 
 ## Deployment
 

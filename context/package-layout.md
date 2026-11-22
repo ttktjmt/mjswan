@@ -5,15 +5,16 @@ How `src/mjswan/` splits into packages, which way imports point, and how modules
 ## Layers
 
 ```
-cli.py → app.py · cloud/ → the object model at the root → build/ → compile/
+cli.py → the object model at the root → build/ · cloud/ → compile/
        → mjlab/ · source/ · rig/ → managers/ · envs/mdp/ · document/ · license/
 ```
 
 A module imports from its own layer or below. An import that would point up (a manager cfg importing `build/`, say) means the code sits in the wrong package.
 
 - **`cli.py`** parses arguments and calls the layers below.
-- **`app.py` and `cloud/`** serve, package and publish a *built* document. They read `document/` and `license/` and never import `compile/`. `cloud/` never imports `build/` either; `app.py` reaches `build/frontend.py` (lazily) to lay the engine beside a `.swn`, building it when no matching one is cached.
 - **The root** is the object model an author holds: `builder.py`, `app.py`, `project.py`, `scene.py`, `policy.py`, `motion.py`, `splat.py`, `skin.py`, `viewer.py`, `mdp.py`, plus `cli.py`. `Builder.build()` delegates to `build.pipeline`, and `add_policy_wandb` / `add_policy_hf` to `source/` and `mjlab/`, both lazily. The only underscore module is `_version.py`, which hatch reads.
+- **`app.py`** serves, packages and publishes a *built* document: `Builder.build()` returns its `MjswanApp`, so `builder.py` imports it. It reaches `cloud/` and `build/frontend.py` lazily (the latter to lay the engine beside a `.swn`, building it when no matching one is cached) and never imports `compile/`.
+- **`cloud/`** publishes a built document. It reads `document/` and `license/` and imports neither `build/` nor `compile/`.
 - **`build/`** writes every file of a document and is the one place that knows the shape of a manifest entry ([build.md](build.md)).
 - **`compile/`** traces a term body to ONNX bytes against an env it is handed. It writes no file and imports nothing from `mjlab/`; its only mjswan imports are the `envs/mdp/` registries its parity harness resolves terms through ([tracing.md](tracing.md)).
 - **Leaves**: `mjlab/`, `source/`, `rig/`, `managers/`, `envs/mdp/`, `document/`, `license/`. Each depends on the object model at most through `TYPE_CHECKING` imports, but for one: `mjlab/task.py` imports `ViewerConfig`, which `adapt_viewer_config` builds from a task's viewer config.
@@ -48,7 +49,7 @@ One deliberate exception: with the `mjlab` extra installed, `envs/mdp/commands.p
 
 ## No compatibility layer
 
-Old module paths are not kept importable: no alias modules (`_compat.py` is gone) and no legacy console scripts (`main`, `simple`, `mjlab`, `serve`; `mjswan demo` and `mjswan serve` replace them). A shim would keep the layout it points at. The table below is the migration guide, and CHANGELOG points upgrading users at it.
+Only the current layout is supported. No old module path imports, nothing maps old paths to new ones, and there are no alias modules or legacy console scripts (`mjswan demo` and `mjswan serve` are the commands). A shim would keep the layout it points at.
 
 ## Rejected
 
@@ -61,44 +62,4 @@ Old module paths are not kept importable: no alias modules (`_compat.py` is gone
 | Rename `CommandTermConfig` to `UiCommandTermCfg` | It also carries traced mjlab commands (`pending_trace`), so "UI" would be wrong; and it is not mjlab's `CommandTermCfg`, so that name would mislead. |
 | Rename `mdp.py` to avoid the `envs/mdp/` clash | `MdpConfig` is the object model's unit and `envs/mdp/` is mjlab's path; both are right where they are. |
 | Move `template/` under `build/` | npm, Vite, CI and hatch all point at `src/mjswan/template`; its Python side is `build/frontend.py`. |
-| Keep `_compat.py` and old import paths as shims | See *No compatibility layer*. |
-
-## Old → new
-
-Where each module path from before the layered layout lives now. Older code, issues and changelog entries cite the left column.
-
-| Was | Is |
-|---|---|
-| `__init__.__version__` (defined there) | `_version.py` (re-exported from `__init__`) |
-| `_compat.py` | removed |
-| `_cli.py` | `cli.py` |
-| `_build_client.py` | `build/frontend.py` (+ `uses_custom_js`, from `builder.py`) |
-| `_graph_io.py` | `build/mdp/graph.py` |
-| `_onnx_build.py` | `build/mdp/{observation,termination,event,command,action}.py`, with `provenance.py`, `sensor.py`, `binding.py` |
-| `compile/serialize.py` | `build/mdp/command.py` |
-| `managers/action_manager.serialize_actions` | `build/mdp/action.py` |
-| `builder.py` (`_save_web`, `_SceneSteps`, validation, license writing, `_save_mt_headers`) | `build/pipeline.py` (`write_app`, `write_mt_headers`) |
-| `builder.py` (`_serialize_mdp`, `_serialize_policy_entry`, `_scene_entry`, `_save_manifest`, `_load_sidecar`, `_build_splat_config_dict`) | `build/manifest.py` (`mdp_entry`, `policy_entry`, `scene_entry`, `write_manifest`, `load_sidecar`, `splat_entry`) |
-| `builder.py` (`_write_scene_motions`, `_motion_key`, `_point_env_cfg_at_bundled_motion`, the splat copy) | `build/asset.py` |
-| `utils.py` (ZIP packing) | `build/mjz.py` |
-| `utils.py` (`name2id`, `unique_id`, `assign_id`) | `document/ids.py` |
-| `document.py` | `document/container.py`; `DOCUMENT_FORMAT`, `MANIFEST_NAME`, the slot defaults in `document/manifest.py` |
-| `policy.py` (`RUNTIME_INPUT_SLOTS`, `DEFAULT_IN_KEYS`, `DEFAULT_OUT_KEYS`) | `document/manifest.py` (re-exported from `policy.py`) |
-| `publish.py`, `auth.py` | `cloud/publish.py`, `cloud/auth.py` (+ `cloud/transport.py` for the user agent) |
-| `licenses/` | `license/{path,spdx,attribution}.py` |
-| `adapters/mjlab_adapter.py` | `mjlab/{observation,termination,command,action,event}.py`, `mjlab/task.py`, `mjlab/detect.py` |
-| `adapters/mjlab_compat.py` | `mjlab/sim.py` |
-| `adapters/gui_spy.py` | `mjlab/gui.py` |
-| `trace_env.py` | `mjlab/env.py` |
-| `mjlab_onnx_meta.py` | `mjlab/onnx_meta.py` |
-| `wandb_io.py` (downloads) | `source/wandb.py` (`resolve_run_path`, `fetch_onnx`, `fetch_motion_npz`, `fetch_checkpoints`) |
-| `wandb_io.py` (`.pt` → ONNX) | `mjlab/runner.py` (`create_pt_onnx_export_context`, `export_checkpoint`, `resolve_runner_defaults`) |
-| `hf_io.py` | `source/hf.py` (`fetch_onnx`, `fetch_motion_npz`, `fetch_file`) |
-| `command.py` (configs, `CommandBinding`, `register_command`) | `managers/command_manager.py` |
-| `command.py` (`ui_command`, `velocity_command`, the `MotionCommandCfg` binding) | `envs/mdp/commands.py` |
-| `command.py` (`default_viz`) | each binding's `viz` (`envs/mdp/commands.py`) |
-| `envs/mdp/events.apply_terrain_spawn` | `mjlab/event.py` |
-| `envs/mdp/actions/actions.ActionTermCfg` | `managers/action_manager.py` (re-exported from `envs/mdp/actions`) |
-| `scene.py` (ONNX slot / width checks) | `policy.py` |
-| `scene.py` (tracking-motion helpers) | `motion.py` |
-| `compile/tracer.py` | `compile/{slot,proxy,record,replay,export,term,event,command,group}.py` |
+| Keep old import paths as shims | See *No compatibility layer*. |

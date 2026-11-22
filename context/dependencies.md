@@ -11,7 +11,7 @@ Extras, one per asset source plus tooling: `wandb`, `hf` (`huggingface-hub`), `m
 
 **`mjlab` + `torch` are build-time requirements for any policy carrying traced MDP terms**: tracing runs `torch.onnx.export` against a live mjlab env. Neither ships to the browser, and a model-only scene needs neither. `onnxruntime` (not `onnxruntime-web`) is the parity harness's runtime.
 
-Python 3.11 to 3.13. The floor is 3.11 because Pillow 13 and filelock 4.2, the fixes for their advisories, require it.
+Python 3.11 and later (`requires-python = ">=3.11"`); CI and the classifiers cover 3.11 to 3.13. The floor is 3.11 because Pillow 13 and filelock 4.2, the fixes for their advisories, require it.
 
 ## MuJoCo, on both sides
 

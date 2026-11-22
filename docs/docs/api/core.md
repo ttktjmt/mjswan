@@ -1268,49 +1268,17 @@ Two things to register:
 
 A term that fails to trace and has neither of these fails the build, with a message naming both options. It is never silently dropped — a missing observation shortens the vector the policy was trained on, and a missing termination or event leaves the browser without a reset condition the task is configured to have.
 
-Three event terms are exempt, because there is provably nothing for the browser to write:
+Four event terms are exempt, because there is provably nothing for the browser to write:
 `randomize_terrain` (one baked terrain, one origin), `encoder_bias` (the runtime applies it
-from the policy config), and a root-state write onto a **fixed-base** entity (which cannot
-move in mjlab either — mjlab's manipulation tasks configure `reset_base` on their arms
-regardless). Randomization that perturbs `mjModel` rather than `mjData` (geom friction,
+from the policy config), `reset_scene_to_default` (the runtime's own reset already does
+it), and a root-state write onto a **fixed-base** entity (which cannot move in mjlab
+either: mjlab's manipulation tasks configure `reset_base` on their arms regardless).
+Randomization that perturbs `mjModel` rather than `mjData` (geom friction,
 body COM, geom colors) traces like any other event: its `env.sim.model` writes become
 graph outputs the browser writes into its own model.
 
 See [How the Build Works](../guides/how-it-works.md#a-term-cannot-be-traced) for the
 decision procedure.
-
----
-
-## Removed pre-0.8 names
-
-The pre-0.8 aliases are gone, together with the compatibility layer that carried them:
-the old names no longer import. What each became:
-
-| Pre-0.8 | Current |
-|---|---|
-| `ProjectHandle.add_mjlab_scene` | [`add_scene_mjlab`](#projecthandleadd_scene_mjlab) |
-| `SceneHandle.add_policy_from_wandb` | [`add_policy_wandb`](#scenehandleadd_policy_wandb) |
-| `SceneHandle.set_viewer_config` | [`set_viewer`](#scenehandleset_viewer) |
-| `SceneHandle.add_splat_section` | [`enable_splat_section`](#scenehandleenable_splat_section) |
-| `mjswanApp` | [`MjswanApp`](#mjswanapp) |
-| `register_obs_func` | [`register_observation`](#mdp-extension-registries) |
-| `register_termination_func` | [`register_termination`](#mdp-extension-registries) |
-| `register_event_func` | [`register_event`](#mdp-extension-registries) |
-| `register_command_term` | [`register_command`](#register_command) |
-| `ObsBinding`, `ObsFunc` | `ObservationBinding` |
-| `TermBinding`, `TermFunc` | `TerminationBinding` |
-| `EventFunc` | `EventBinding` |
-| `MjlabMdpBinding` | `MdpBinding` |
-| `CommandTermSpec` | `CommandBinding` |
-| `PolicyHandle.add_motion_from_wandb(wandb_run_path=)` | [`add_motion_wandb(run_path=)`](#policyhandleadd_motion_wandb) |
-
-The two renamed modules' old paths are gone with them: `mjswan.viewer_config` is
-`mjswan.viewer`, and `mjswan.wandb_utils` (0.8's `mjswan.wandb_io`) is split into
-`mjswan.source.wandb`, which downloads, and `mjswan.mjlab.runner`, which exports a `.pt`
-to ONNX. Every other module moved when the package was laid out by layer, with no alias
-left behind; the
-[package layout notes](https://github.com/ttktjmt/mjswan/blob/main/context/package-layout.md#old--new)
-map each old path to its new one.
 
 ---
 

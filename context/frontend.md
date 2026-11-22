@@ -4,7 +4,7 @@
 
 ## What the browser client does
 
-- Loads the MuJoCo WASM module and steps physics on the main thread against real time, a physics step at a time so the screen gets the poses between two policy steps (`engine/controlStep.ts`, mjlab's viewer budget), and yields to the browser (`engine/yieldToBrowser.ts`).
+- Loads the MuJoCo WASM module and steps physics on the main thread against real time, a physics step at a time so the screen gets the poses between two policy steps (`core/engine/controlStep.ts`, mjlab's viewer budget), and yields to the browser (`core/engine/yieldToBrowser.ts`).
 - Runs the policy **and every traced MDP term body** via onnxruntime-web's CPU build (`onnxruntime-web/wasm`), all on wasm: the build with WebGPU kernels is a 26.5 MiB wasm, over the 25 MiB per file Cloudflare Pages serves, and for graphs this small WebGPU's upload and download round trip loses anyway. Every inference in the page goes through one queue (`core/onnx/runQueue.ts`): ORT-Web's wasm binding keeps a module-global active-run slot, so overlapping `run()` calls throw even across sessions.
 - Renders via three.js (reflections, shadows, Gaussian Splat background).
 - Supports WebXR (VR and passthrough AR) through `engine.xr`; the host draws the buttons. Tracked hands join the sim as bodies, compiled in at the next model build after the switch is turned on.
@@ -44,7 +44,7 @@ Rejected for this API: additive controls on a React `mount()` (React stays in th
 
 The step loop follows mjlab's `ManagerBasedRlEnv.step` ordering exactly: forward → command → event → obs → action → physics → term → reset → forward, with **one** `mj_forward` per iteration (`runtime.ts`, `beginControlStep` / `endControlStep`). Do not "optimize" it into a forward after the substeps *and* after the reset. A traced command's update lands asynchronously, so a control step awaits the command manager before reading observations, as mjlab has it before the observation.
 
-The reset chain mirrors `_reset_idx` (`engine/resetChain.ts`): `event(mode="reset")` → observation / action reset → command resample, all awaited in config order, then the termination reset. Writes are last-writer-wins by config order, so concurrency would make the result machine-dependent; events before commands is load-bearing, since both write `qpos`. Terminations are awaited every step, so a reset lands on the step it does in mjlab; other traced calls skip a frame rather than block it while a previous run is in flight.
+The reset chain mirrors `_reset_idx` (`core/engine/resetChain.ts`): `event(mode="reset")` → observation / action reset → command resample, all awaited in config order, then the termination reset. Writes are last-writer-wins by config order, so concurrency would make the result machine-dependent; events before commands is load-bearing, since both write `qpos`. Terminations are awaited every step, so a reset lands on the step it does in mjlab; other traced calls skip a frame rather than block it while a previous run is in flight.
 
 ## `src/core/`
 

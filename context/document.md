@@ -48,7 +48,7 @@ Every id is `name2id(name)` (`document/ids.py`): lowercased, every run of charac
 
 A collision is **not** an error: two scenes called "Flat Terrain" is a reasonable thing to write. The second becomes "Flat Terrain_1" with id `flat_terrain_1`, with a RuntimeWarning naming both (`assign_name`). The rename reaches the name as well as the id, so every id stays `name2id(name)` and no two entries in the viewer's lists are alike (its select refuses that, and the page renders nothing). A policy's motions, which have no id, are renamed the same way. `unique_id` is the scoped `_N` suffix underneath; MDP ids take the id-only form, `assign_id` ([object-model.md](object-model.md) has how an MDP id is chosen).
 
-The URL parameters `?project=`, `?scene=`, `?policy=` and `?skin=` take ids only (an empty `?skin=` is the Skin menu's None). The frontend's `sanitizeName` mirrors `name2id` character for character, and `src/mjswan/template/src/manifest/name2id_cases.json` pins the pair from both test suites: a case they disagree on (an apostrophe, parentheses, an accent) is a link that opens the wrong scene.
+The URL parameters `?project=`, `?scene=`, `?policy=` and `?skin=` take ids. The app runs the value through `sanitizeName` first, so a name that sanitizes to an id opens that entry, and a value that matches nothing opens the default (an empty `?skin=` is the Skin menu's None). The frontend's `sanitizeName` mirrors `name2id` character for character, and `src/mjswan/template/src/manifest/name2id_cases.json` pins the pair from both test suites: a case they disagree on (an apostrophe, parentheses, an accent) is a link that opens the wrong scene.
 
 Generated ids (UUIDs) are rejected: a URL is a sharing surface and `?project=g1_locomotion&scene=flat_terrain` has to be readable by a person, and mjswan Cloud simulations are immutable once published, so the link stability UUIDs would buy is stability the system already has.
 
@@ -77,6 +77,8 @@ Clearing the policy still restores, so a scene with no policy is as compiled. Th
 
 - **`version`** is the mjswan release that wrote the document. The release workflow sets `_version.py` and the template's `package.json` from one input, so the Python version and the npm engine version are the same string and `https://cdn.jsdelivr.net/npm/mjswan@<version>/dist/mjswan.js` resolves for every released version. A **host** uses `version` to select the engine.
 - **`format`** (`DOCUMENT_FORMAT` in `document/manifest.py`) is an integer describing the document's structure, bumped by hand **only** when an engine reading the old structure would misread the new one. The **engine** uses it to protect itself: `parseManifest` refuses a document whose `format` exceeds `MAX_DOCUMENT_FORMAT` (`template/src/manifest/index.ts`), naming both and the document's `version`, and refuses a document with no `format` (the pre-manifest layout, a root `assets/config.json`). Every earlier format still parses.
+
+So no document is migrated from one format to the next: each format so far only adds, and a newer engine reads an older document as it is. A breaking change, after which an engine can no longer read an older format, also needs a migration that brings stored documents forward.
 
 They are read by different parties for different decisions, so a document carries both. When you add something an older engine would ignore and so run wrong, bump `DOCUMENT_FORMAT` and `MAX_DOCUMENT_FORMAT` together, say beside each what the format adds, and add a row here:
 
