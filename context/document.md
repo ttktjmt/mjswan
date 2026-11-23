@@ -93,7 +93,7 @@ They are read by different parties for different decisions, so a document carrie
 | 7 | a scene's `skins` | show the bare robot |
 | 8 | a motion's `frame_fields` | hold the reading graph's previous value |
 | 9 | camera sensors, image-shaped policy inputs, modelled skins, a scene's `graphics` | misread the camera, retarget a modelled skin as a character, draw every scene one way |
-| 10 | an action term's DC motor `saturation_effort` / `velocity_limit` | run those motors without the curve |
+| 10 | an action term's DC motor `saturation_effort` / `velocity_limit`; a scene's `term_defaults` | run those motors without the curve; start every term as mjlab's |
 
 The frontend still runs a few older documents' native markers (a pre-format-4 `time_out`, a pre-format-5 `prev_action` and model-field descriptor: [frontend.md](frontend.md)).
 

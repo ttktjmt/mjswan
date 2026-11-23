@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from .envs.mdp.actions.actions import ActionTermCfg
@@ -71,3 +71,64 @@ class MdpConfig:
 
 
 __all__ = ["MdpConfig"]
+
+
+#: Past a minute a delay or a timed freeze only means "off" or "until reset", which exist.
+MAX_WAIT_S = 60.0
+
+
+@dataclass(frozen=True)
+class TerminationDefault:
+    """What a termination does when the viewer opens, in place of mjlab's reset at once.
+
+    The viewer's MDP controls start here and their Reset MDP returns here. Nothing the build
+    traces changes, and neither does what the policy was trained on.
+
+    Args:
+        on_fire: ``"reset"``, mjlab's; ``"delay"``, the reset ``seconds`` of episode time
+            after the term fires, the simulation running on; ``"freeze"``, the simulation
+            stopped on the frame the term fires, for ``seconds`` of wall time or, with
+            ``seconds=None``, until a reset.
+        seconds: The wait, above 0 and at most 60. A delay needs it; a reset takes none.
+        enabled: ``False`` keeps the term evaluated and shown but never ending the episode.
+
+    Example::
+
+        scene.set_term_defaults(terminations={
+            "bad_orientation": mjswan.TerminationDefault("delay", seconds=0.2),
+            "illegal_contact": mjswan.TerminationDefault("freeze", seconds=3.0),
+            "time_out": mjswan.TerminationDefault(enabled=False),
+        })
+    """
+
+    on_fire: Literal["reset", "delay", "freeze"] = "reset"
+    seconds: float | None = None
+    enabled: bool = True
+
+    def __post_init__(self) -> None:
+        if self.on_fire not in ("reset", "delay", "freeze"):
+            raise ValueError(
+                f'on_fire must be "reset", "delay" or "freeze", not {self.on_fire!r}.'
+            )
+        if not isinstance(self.enabled, bool):
+            raise TypeError(f"enabled must be a bool, not {self.enabled!r}.")
+        if self.seconds is None:
+            if self.on_fire == "delay":
+                raise ValueError("A delay needs its seconds.")
+            return
+        if self.on_fire == "reset":
+            raise ValueError('A reset at once takes no seconds: use on_fire="delay".')
+        if isinstance(self.seconds, bool) or not isinstance(self.seconds, (int, float)):
+            raise TypeError(f"seconds must be a number, not {self.seconds!r}.")
+        if not 0 < self.seconds <= MAX_WAIT_S:
+            raise ValueError(
+                f"seconds must be above 0 and at most {MAX_WAIT_S:g}, not {self.seconds!r}."
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        """The manifest's form of the engine's override: ``enabled`` and ``on_fire``."""
+        if self.seconds is None:
+            on_fire: Any = self.on_fire
+        else:
+            on_fire = {self.on_fire: float(self.seconds)}
+        return {"enabled": self.enabled, "on_fire": on_fire}

@@ -406,9 +406,38 @@ def scene_entry(
             {"skins": [skin_entry(skin) for skin in scene.skins]} if scene.skins else {}
         ),
         **({"credits": credits} if (credits := scene_credits(scene, licenses)) else {}),
+        **(
+            {"term_defaults": term_defaults_entry(scene, mdps)}
+            if scene.term_defaults
+            else {}
+        ),
         "mdps": mdps,
         "policies": policies,
     }
+
+
+def term_defaults_entry(
+    scene: SceneConfig, mdps: list[dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    """A scene's ``term_defaults`` (format 10), warning for a name none of its MDPs has:
+    the viewer would carry it for nothing."""
+    for kind in ("terminations", "events"):
+        known = {name for mdp in mdps for name in _term_names(mdp.get(kind))}
+        for name in scene.term_defaults.get(kind, {}):
+            if name not in known:
+                warnings.warn(
+                    f"Scene {scene.name!r} sets a default for {kind[:-1]} {name!r}, which "
+                    f"none of its MDPs has (they have {sorted(known) or 'none'}).",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+    return scene.term_defaults
+
+
+def _term_names(terms: Any) -> list[str]:
+    if isinstance(terms, Mapping):
+        return list(terms)
+    return [t["name"] for t in terms or [] if isinstance(t, Mapping) and "name" in t]
 
 
 #: MuJoCo's Filament renderer's own values for the flags the build reads, and the one it

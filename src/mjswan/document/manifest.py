@@ -54,7 +54,9 @@ MANIFEST_NAME = "manifest.json"
 #: character, drawing it off the robot, and draw every scene its one way.
 #:
 #: 10: an action term may carry a DC motor's torque-speed curve (``saturation_effort``,
-#: ``velocity_limit``). An older engine would run those motors without it.
+#: ``velocity_limit``), and a scene ``term_defaults``, what its terms do when the viewer
+#: opens. An older engine would run those motors without it, and start every term as
+#: mjlab's.
 DOCUMENT_FORMAT = 10
 
 #: Input slots the runtime fills itself rather than from an observation group: the

@@ -15,6 +15,7 @@ import {
   DEFAULT_TERMINATION,
   delayOf,
   elapsed,
+  isFreeze,
   mergeTermination,
   type ActivityListener,
   type TerminationOverride,
@@ -26,8 +27,8 @@ export type TerminationResult = {
   terminated: boolean;
   truncated: boolean;
   reasons: string[];
-  /** Terms set to stop whose condition turned true this step. */
-  stopped: string[];
+  /** Terms set to freeze whose condition turned true this step. */
+  frozen: string[];
 };
 
 /** Absent for a policy whose terminations are all plugin terms. */
@@ -199,8 +200,8 @@ export class TerminationManager {
    *
    * A term switched off is still evaluated, so its firing shows, but ends nothing. One with
    * a delay holds the reset from the step it fires, whatever its condition does meanwhile.
-   * One set to stop is named in `stopped` on that step, on or off, and owes its reset at
-   * once; the caller pauses and lands it on play.
+   * One set to freeze is named in `frozen` on that step, on or off, and owes its reset at
+   * once; the caller pauses and lands it when the freeze ends.
    */
   async evaluate(state: PolicyState): Promise<TerminationResult> {
     await Promise.all(this.graphs.map((graph) => graph.step()));
@@ -210,14 +211,14 @@ export class TerminationManager {
     let terminated = false;
     let truncated = false;
     const reasons: string[] = [];
-    const stopped: string[] = [];
+    const frozen: string[] = [];
 
     for (const entry of this.terms) {
       const active = entry.term.evaluate(state);
       if (active && !entry.active) {
         entry.firedAt = now;
         this.emit(entry, 'fired', now);
-        if (entry.override.onFire === 'stop') stopped.push(entry.name);
+        if (isFreeze(entry.override.onFire)) frozen.push(entry.name);
       }
       entry.active = active;
       if (active && entry.override.enabled && entry.heldSince === null) entry.heldSince = now;
@@ -239,7 +240,7 @@ export class TerminationManager {
       terminated,
       truncated,
       reasons,
-      stopped,
+      frozen,
     };
   }
 

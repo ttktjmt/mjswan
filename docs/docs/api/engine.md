@@ -238,32 +238,36 @@ policy reads a sensor of that name; call the returned detach when it goes.
 A browser episode ends on the step a termination fires, as mjlab's does, so a fall resets
 before anyone sees why. `engine.mdp` lets whoever watches change that: switch a termination
 or event term off, choose what follows a termination's firing, or trigger an event by hand.
-The bundled app's panel draws it in its MDP section.
+The bundled app's panel draws it in its MDP section. A scene's `term_defaults`
+(`SceneHandle.set_term_defaults`, which `buildScene` passes as `SceneInput.termDefaults`)
+are where every term starts instead of mjlab's.
 
 ```ts
-engine.mdp.terminations.set('bad_orientation', { onFire: { delay: 2 } }); // keep the fall on screen
-engine.mdp.terminations.set('time_out', { enabled: false });              // never time out
-engine.mdp.terminations.set('illegal_contact', { onFire: 'stop' });       // freeze the frame it fires on
-engine.mdp.events.set('push_robot', { enabled: false });                  // stop an interval push
-engine.mdp.events.trigger('reset_base');                                  // re-randomize now
-engine.mdp.clear();                                                       // back to the MDP as built
+engine.mdp.terminations.set('bad_orientation', { onFire: { delay: 2 } });  // keep the fall on screen
+engine.mdp.terminations.set('time_out', { enabled: false });               // never time out
+engine.mdp.terminations.set('illegal_contact', { onFire: 'freeze' });      // hold the frame it fires on
+engine.mdp.terminations.set('illegal_contact', { onFire: { freeze: 3 } }); // hold it 3 s, then go on
+engine.mdp.events.set('push_robot', { enabled: false });                   // stop an interval push
+engine.mdp.events.trigger('reset_base');                                   // re-randomize now
+engine.mdp.clear();                                                        // back to the MDP as built
 ```
 
 | Term | Off (`enabled: false`) | What follows a firing (`onFire`) | `events.trigger(name)` |
 |---|---|---|---|
-| termination | Still evaluated and reported; never ends the episode. | `'reset'` (the default): at once, as mjlab's. `{ delay: d }`: the reset lands `d` seconds of episode time after the condition turned true, whatever it does meanwhile; `d` is clamped to 0 to 60, and 0 is `'reset'`. `'stop'`: the simulation pauses on the step it fired, until a reset ends it and plays: `play`, `reset()`, or switching the term to `'reset'` or a delay (or `clear()`), each landing the reset it owes. | |
+| termination | Still evaluated and reported; never ends the episode. | `'reset'` (the default): at once, as mjlab's. `{ delay: d }`: the reset lands `d` seconds of episode time after the condition turned true, whatever it does meanwhile; `d` is clamped to 0 to 60, and 0 is `'reset'`. `'freeze'`: the simulation pauses on the step it fired, until a reset ends it and plays: `play`, `reset()`, or switching the term to `'reset'` or a delay (or `clear()`), each landing the reset it owes. `{ freeze: d }`: the same, ended by the engine's own `reset()` after `d` seconds of wall time, clamped as a delay is. | |
 | reset event | No write at the reset. | | The write lands mid-episode: at once while paused, else at the end of the control step. |
 | interval event | The schedule stops: the same switch as `events.setArmed`. | | As a reset event's; the timer is left alone. |
 | manual event | No switch. | | The same as `events.fire`. |
 
 Startup events are not listed: they have run before anyone could reach them.
 
-- `onFire` is one value, so a delay and a stop never combine. A held reset is latched when
-  the term fires: its condition clearing does not cancel it, switching the term off does,
-  and a new delay re-times it from the firing. A stop pauses only on the step a term fires:
-  switching a held term to `'stop'` or `'reset'` lands its reset on the next step. Off and
-  `'stop'` do combine: the simulation pauses where the term fires and plays on without a
-  reset.
+- `onFire` is one value, so a delay and a freeze never combine. A held reset is latched
+  when the term fires: its condition clearing does not cancel it, switching the term off
+  does, and a new delay re-times it from the firing. A freeze pauses only on the step a term
+  fires: switching a held term to a freeze or `'reset'` lands its reset on the next step. A
+  timed freeze counts wall time, since episode time stands still while paused; a new length
+  is counted from when it froze, and `pause()` cancels it. Off and a freeze do combine: the
+  simulation pauses where the term fires and plays on without a reset.
 - While the simulation runs, a trigger lands at the end of the control step, where an
   interval event writes, so it never meets the reset chain's own writes.
 - Every time is episode time, `episode_length_buf × timestep × decimation`. It stands still
@@ -284,20 +288,22 @@ interface MdpState {
   terminations: ReadonlyArray<TerminationTermDescriptor>; // config order; empty without a policy
   events: ReadonlyArray<EventTermDescriptor>;             // reset, interval and manual terms
   pendingReset: { term: string; at: number } | null;      // the soonest reset a delay holds
-  stoppedBy: { term: string; at: number } | null;         // the term whose stop paused it
+  frozenBy: { term: string; at: number; resumesAt: number | null } | null; // the freeze in force
   activity: ReadonlyArray<MdpActivity>;                   // the latest 32, oldest first
 }
 ```
 
 | Type | Fields |
 |---|---|
-| `TerminationTermDescriptor` | `name`; `timeOut` (mjlab's `time_out`, a truncation rather than a failure); `enabled` and `onFire`, the override; `active`, its condition at the last control step; `firedAt`, when it last turned true this episode; `resetAt`, when the reset it holds lands. |
-| `EventTermDescriptor` | `name`, `label`, `mode` (`'reset'`, `'interval'` or `'manual'`), `enabled`, and `firedAt`, when its write last landed this episode. |
-| `MdpActivity` | `kind` (`'termination'` or `'event'`), `name`, `what` (`'fired'`, `'stopped'` or `'reset'`), `time`, `off` (a termination that was off, so no reset followed), `byHand` (an event triggered by hand), `episode`, and `seq`, which rises across the engine's life for a host to key on. |
+| `TerminationTermDescriptor` | `name`; `timeOut` (mjlab's `time_out`, a truncation rather than a failure); `enabled` and `onFire`, in force; `changed`, whether the operator moved them off the build's default; `active`, its condition at the last control step; `firedAt`, when it last turned true this episode; `resetAt`, when the reset it holds lands. |
+| `EventTermDescriptor` | `name`, `label`, `mode` (`'reset'`, `'interval'` or `'manual'`), `enabled`, `changed` (as a termination's), and `firedAt`, when its write last landed this episode. |
+| `MdpActivity` | `kind` (`'termination'` or `'event'`), `name`, `what` (`'fired'`, `'frozen'` or `'reset'`), `time`, `off` (a termination that was off, so no reset followed), `byHand` (an event triggered by hand), `episode`, and `seq`, which rises across the engine's life for a host to key on. |
 
 The engine notifies at most every 100 ms and never inside a step, and keeps notifying while
-a reset is held, so a countdown to `pendingReset.at` moves. `stoppedBy` clears with the
-reset that ends the stop.
+a reset is held, so a countdown to `pendingReset.at` moves. While frozen it sends nothing,
+so a host fills a timed freeze's countdown from `frozenBy.resumesAt` (`Date.now()`
+milliseconds; null for one that waits for a reset). `frozenBy` clears with the reset that
+ends the freeze.
 
 ### Pointer interaction
 
@@ -347,7 +353,7 @@ force.
 needs a weld the viewer injects into the scene MJCF, so a scene loaded as a compiled `.mjb`
 lacks it, and it is withheld from a policy scene whose model does not namespace its
 elements, where one more body would widen a traced graph's input. While the simulation is
-paused (by `pause()` or a termination's stop), every mode but View is unavailable too: each
+paused (by `pause()` or a termination's freeze), every mode but View is unavailable too: each
 acts through the physics step, so a press would draw and move nothing. The mode stays
 selected, its presses go to the camera, and it acts again once the simulation plays.
 

@@ -25,7 +25,7 @@ import numpy as np
 from .document.ids import assign_id, assign_name, name2id, unique_id
 from .envs.mdp.actions import CommandJointPositionActionCfg
 from .license import Attribution, resolve_license, resolve_notice
-from .mdp import MdpConfig
+from .mdp import MdpConfig, TerminationDefault
 from .mjlab import (
     adapt_actions,
     adapt_commands,
@@ -340,6 +340,11 @@ def _warn_resumed_checkpoint(name: str, run_path: str, *, stacklevel: int) -> No
     )
 
 
+def _check_term_name(name: Any) -> None:
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"A term is named by a non-empty string, not {name!r}.")
+
+
 @dataclass
 class PendingConversion:
     """One scene's W&B → ONNX conversion, held until the build reaches that scene.
@@ -391,6 +396,10 @@ class SceneConfig:
 
     viewer: ViewerConfig | None = None
     """Optional viewer configuration for this scene."""
+
+    term_defaults: dict[str, dict[str, Any]] = field(default_factory=dict)
+    """What terms do when the viewer opens, by name, in the manifest's form
+    (:meth:`SceneHandle.set_term_defaults`): ``terminations`` and ``events``."""
 
     skins: list[ResolvedSkin | ResolvedModelledSkin] = field(default_factory=list)
     """Skins, resolved against their files and the model when added; the viewer shows one
@@ -1699,6 +1708,55 @@ class SceneHandle:
             ))
         """
         self._config.viewer = config
+        return self
+
+    def set_term_defaults(
+        self,
+        *,
+        terminations: Mapping[str, TerminationDefault | bool] | None = None,
+        events: Mapping[str, bool] | None = None,
+    ) -> SceneHandle:
+        """Set what terms do when the viewer opens this scene, by name, in place of mjlab's.
+
+        The viewer's MDP controls start from these and their Reset MDP returns to them.
+        What the build traces is unchanged. A name applies to whichever of the scene's MDPs
+        has that term; one none of them has warns at build time. A second call replaces
+        the first.
+
+        Args:
+            terminations: Termination names to a :class:`TerminationDefault`, or to
+                ``False`` for one that starts switched off.
+            events: Reset or interval event names to whether they start switched on.
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            scene.set_term_defaults(
+                terminations={
+                    "bad_orientation": mjswan.TerminationDefault("delay", seconds=0.2),
+                    "illegal_contact": mjswan.TerminationDefault("freeze", seconds=3.0),
+                },
+                events={"push_robot": False},
+            )
+        """
+        entries: dict[str, dict[str, Any]] = {}
+        for name, value in (terminations or {}).items():
+            _check_term_name(name)
+            if isinstance(value, bool):
+                value = TerminationDefault(enabled=value)
+            if not isinstance(value, TerminationDefault):
+                raise TypeError(
+                    f"Termination {name!r}: give a TerminationDefault or a bool, not {value!r}."
+                )
+            entries.setdefault("terminations", {})[name] = value.to_dict()
+        for name, enabled in (events or {}).items():
+            _check_term_name(name)
+            if not isinstance(enabled, bool):
+                raise TypeError(f"Event {name!r}: give a bool, not {enabled!r}.")
+            entries.setdefault("events", {})[name] = {"enabled": enabled}
+        self._config.term_defaults = entries
         return self
 
     def add_skin(

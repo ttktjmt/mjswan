@@ -17,18 +17,26 @@ shortcuts.
 - **`engine.mdp`: operate a running MDP's terminations and events.** A termination can be
   switched off (still evaluated and reported, but it never ends the episode) and given
   what follows its firing (`onFire`): the reset at once, as mjlab does; the reset a delay
-  later, so the failure stays on screen; or a stop, which pauses the simulation on the
-  step it fires. A reset ends a stop and plays: `play`, `reset()`, or switching the term
-  from its stop to a reset or a delay, which lands the reset it owes. A reset or interval
-  event can be switched off, and any listed event triggered by hand, whatever its mode.
-  The state's `mdp` reports each term's override, when it last fired this episode, the
-  reset it holds, the term that stopped the simulation, and the last 32 things any term
-  did. Overrides are kept by term name across resets and policy switches;
-  `engine.mdp.clear()` drops them. An interval term's switch is
-  `engine.events.setArmed`'s, which now persists the same way. The viewer's panel draws it
-  in an **MDP** section, in place of Events: each termination with Reset / Delay / Stop
-  and, under Delay, its delay in milliseconds, typed into a box that fills as the held
-  reset counts down; each event with its switch and a trigger button.
+  later, so the failure stays on screen; or a freeze, which pauses the simulation on the
+  step it fires, until a reset or for a set time of wall clock. A reset ends a freeze and
+  plays: `play`, `reset()`, switching the term to a reset or a delay, or a timed freeze's
+  end, each landing the reset it owes. A reset or interval event can be switched off, and
+  any listed event triggered by hand, whatever its mode. The state's `mdp` reports each
+  term's override and whether it was changed, when it last fired this episode, the reset
+  it holds, the term that froze the simulation, and the last 32 things any term did.
+  Overrides are kept by term name across resets and policy switches; `engine.mdp.clear()`
+  drops them. An interval term's switch is `engine.events.setArmed`'s, which now persists
+  the same way. The viewer's panel draws it in an **MDP** section, in place of Events:
+  each termination with Reset / Delay / Freeze and, under Delay or Freeze, its wait in
+  milliseconds, typed into a box that fills as it runs (`∞ ms` for a freeze until reset);
+  each event with its switch and a trigger button.
+
+- **`SceneHandle.set_term_defaults` sets what terms do when the viewer opens** (**document
+  format 10**). By term name, a `mjswan.TerminationDefault` (`"reset"`, `"delay"` or
+  `"freeze"`, its `seconds`, and `enabled`) for a termination, and a bool for a reset or
+  interval event. The viewer starts there and its Reset MDP returns there; a name none of
+  the scene's MDPs has warns at build time. The manifest carries them as the scene's
+  `term_defaults`.
 
 - **A DC motor's torque-speed curve runs in the browser** (**document format 10**). Action
   terms gain `saturation_effort` and `velocity_limit`, filled from mjlab's

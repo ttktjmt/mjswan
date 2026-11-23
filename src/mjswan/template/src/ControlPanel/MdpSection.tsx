@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Box, Button, Checkbox, Flex, Group, SegmentedControl, Text, TextInput, Tooltip } from '@mantine/core';
-import { IconBolt, IconClock, IconPlayerPause, IconRefresh } from '@tabler/icons-react';
+import { IconBolt, IconClock, IconRefresh, IconSnowflake } from '@tabler/icons-react';
 import type { EventTermDescriptor, MdpState, OnFire, TerminationTermDescriptor } from '../engine';
 import { CommandSection } from './CommandSection';
-import { heldProgress, parseDelayMs, toMs } from './mdpDelay';
+import { freezeProgress, heldProgress, parseDelayMs, toMs } from './mdpDelay';
 
 export interface MdpHandlers {
   onTermination(name: string, patch: { enabled?: boolean; onFire?: OnFire }): void;
@@ -12,7 +12,7 @@ export interface MdpHandlers {
   onClear(): void;
 }
 
-type OnFireKind = 'reset' | 'delay' | 'stop';
+type OnFireKind = 'reset' | 'delay' | 'freeze';
 
 const titleCase = (name: string) =>
   name
@@ -21,24 +21,27 @@ const titleCase = (name: string) =>
     .join(' ');
 const labelOf = (term: { name: string; label?: string }) =>
   term.label && term.label !== term.name ? term.label : titleCase(term.name);
-const kindOf = (onFire: OnFire): OnFireKind => (typeof onFire === 'object' ? 'delay' : onFire);
+const kindOf = (onFire: OnFire): OnFireKind =>
+  typeof onFire === 'object' ? ('delay' in onFire ? 'delay' : 'freeze') : onFire;
 
-const DEFAULT_DELAY = 1;
 const BOX_WIDTH = 80;
 const BOX_HEIGHT = 22;
 
-// The delay a term last had, so Reset or Stop and back to Delay brings it back.
-const lastDelay: Record<string, number> = {};
+// What a term last had under Delay and under Freeze, so leaving and coming back brings it
+// back; a first Delay or Freeze is a second.
+const last: Record<'delay' | 'freeze', Record<string, OnFire>> = { delay: {}, freeze: {} };
+const FIRST: Record<'delay' | 'freeze', OnFire> = { delay: { delay: 1 }, freeze: { freeze: 1 } };
 
 function choose(handlers: MdpHandlers, term: TerminationTermDescriptor, kind: OnFireKind) {
-  if (typeof term.onFire === 'object') lastDelay[term.name] = term.onFire.delay;
-  handlers.onTermination(term.name, { onFire: kind === 'delay' ? { delay: lastDelay[term.name] ?? DEFAULT_DELAY } : kind });
+  const current = kindOf(term.onFire);
+  if (current !== 'reset') last[current][term.name] = term.onFire;
+  handlers.onTermination(term.name, { onFire: kind === 'reset' ? 'reset' : (last[kind][term.name] ?? FIRST[kind]) });
 }
 
 const ON_FIRE = [
   { value: 'reset', label: 'Reset', Icon: IconRefresh },
   { value: 'delay', label: 'Delay', Icon: IconClock },
-  { value: 'stop', label: 'Stop', Icon: IconPlayerPause },
+  { value: 'freeze', label: 'Freeze', Icon: IconSnowflake },
 ] as const;
 
 const nameStyle = { fontSize: '0.875em', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as const;
@@ -65,31 +68,65 @@ function Lamp({ lit }: { lit: boolean }) {
   );
 }
 
+/** `Date.now()` every frame while `on`: the engine sends nothing while frozen. */
+function useWallClock(on: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!on) return;
+    let frame = requestAnimationFrame(function tick() {
+      setNow(Date.now());
+      frame = requestAnimationFrame(tick);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [on]);
+  return now;
+}
+
 /**
- * The delay in milliseconds, typed and kept on Enter or blur (Escape drops the edit), its box
- * filling left to right while the reset it holds counts down. 0 is the reset at once.
+ * The wait in milliseconds, typed and kept on Enter or blur (Escape drops the edit), its box
+ * filling left to right as the wait runs: a delay's in episode time, a freeze's on the wall
+ * clock. 0 is the reset at once. An empty Freeze waits for a reset (∞); an empty Delay keeps
+ * the delay it had.
  */
-function DelayBox({ term, delay, time, handlers }: { term: TerminationTermDescriptor; delay: number; time: number; handlers: MdpHandlers }) {
-  const ms = toMs(delay);
-  const [draft, setDraft] = useState(String(ms));
+function WaitBox({
+  term,
+  kind,
+  seconds,
+  progress,
+  handlers,
+}: {
+  term: TerminationTermDescriptor;
+  kind: 'delay' | 'freeze';
+  seconds: number | null;
+  progress: number;
+  handlers: MdpHandlers;
+}) {
+  const shown = seconds === null ? '' : String(toMs(seconds));
+  const [draft, setDraft] = useState(shown);
   const editing = useRef(false);
   const dropped = useRef(false);
   useEffect(() => {
-    if (!editing.current) setDraft(String(ms));
-  }, [ms]);
+    if (!editing.current) setDraft(shown);
+  }, [shown]);
   const keep = () => {
+    if (draft.trim() === '' && kind === 'freeze') {
+      setDraft('');
+      if (seconds !== null) handlers.onTermination(term.name, { onFire: 'freeze' });
+      return;
+    }
     const next = parseDelayMs(draft);
-    setDraft(String(next ?? ms));
-    if (next !== null && next !== ms) handlers.onTermination(term.name, { onFire: { delay: next / 1000 } });
+    setDraft(next === null ? shown : String(next));
+    if (next === null || (seconds !== null && next === toMs(seconds))) return;
+    handlers.onTermination(term.name, { onFire: kind === 'delay' ? { delay: next / 1000 } : { freeze: next / 1000 } });
   };
-  const held = term.resetAt !== null;
   return (
-    <Box pos="relative" style={{ width: BOX_WIDTH, flexShrink: 0 }}>
+    <Box pos="relative" style={{ width: BOX_WIDTH, flexShrink: 0 }} title={kind === 'freeze' && seconds === null ? 'Until reset' : undefined}>
       <TextInput
         size="xs"
         radius="xs"
         inputMode="numeric"
-        aria-label={`${labelOf(term)} delay (ms)`}
+        aria-label={`${labelOf(term)} ${kind} (ms)`}
+        placeholder={kind === 'freeze' ? '∞' : undefined}
         value={draft}
         onChange={(e) => setDraft(e.currentTarget.value)}
         onFocus={() => {
@@ -104,7 +141,7 @@ function DelayBox({ term, delay, time, handlers }: { term: TerminationTermDescri
           if (e.key === 'Enter') e.currentTarget.blur();
           if (e.key === 'Escape') {
             dropped.current = true;
-            setDraft(String(ms));
+            setDraft(shown);
             e.currentTarget.blur();
           }
         }}
@@ -130,10 +167,10 @@ function DelayBox({ term, delay, time, handlers }: { term: TerminationTermDescri
         <Box
           style={{
             height: '100%',
-            width: `${heldProgress(term, time) * 100}%`,
+            width: `${progress * 100}%`,
             background: 'color-mix(in srgb, var(--mantine-primary-color-filled) 20%, transparent)',
-            // The snapshot moves every 100 ms; the transition fills between, and a reset empties it at once.
-            transition: held ? 'width 100ms linear' : 'none',
+            // A delay's snapshot moves every 100 ms: the transition fills between. A freeze's is per frame.
+            transition: kind === 'delay' && progress > 0 ? 'width 100ms linear' : 'none',
           }}
         />
       </Box>
@@ -149,7 +186,21 @@ function Subhead({ children }: { children: string }) {
   );
 }
 
-function TerminationRow({ term, time, handlers }: { term: TerminationTermDescriptor; time: number; handlers: MdpHandlers }) {
+function TerminationRow({
+  term,
+  time,
+  frozenBy,
+  handlers,
+}: {
+  term: TerminationTermDescriptor;
+  time: number;
+  frozenBy: MdpState['frozenBy'];
+  handlers: MdpHandlers;
+}) {
+  const kind = kindOf(term.onFire);
+  const counting = frozenBy?.term === term.name && frozenBy.resumesAt !== null;
+  const now = useWallClock(counting);
+  const onFire = term.onFire;
   return (
     <Box px="xs" pb="0.6em">
       <Flex align="center" gap={8} style={{ minHeight: BOX_HEIGHT }}>
@@ -164,7 +215,18 @@ function TerminationRow({ term, time, handlers }: { term: TerminationTermDescrip
         </Text>
         <Lamp lit={term.active} />
         <Box style={{ flex: 1 }} />
-        {typeof term.onFire === 'object' && <DelayBox term={term} delay={term.onFire.delay} time={time} handlers={handlers} />}
+        {kind === 'delay' && typeof onFire === 'object' && 'delay' in onFire && (
+          <WaitBox term={term} kind="delay" seconds={onFire.delay} progress={heldProgress(term, time)} handlers={handlers} />
+        )}
+        {kind === 'freeze' && (
+          <WaitBox
+            term={term}
+            kind="freeze"
+            seconds={typeof onFire === 'object' && 'freeze' in onFire ? onFire.freeze : null}
+            progress={freezeProgress(frozenBy, term.name, onFire, now)}
+            handlers={handlers}
+          />
+        )}
       </Flex>
       <Box pl={24} pt={6}>
         <SegmentedControl
@@ -172,7 +234,7 @@ function TerminationRow({ term, time, handlers }: { term: TerminationTermDescrip
           radius="xs"
           fullWidth
           aria-label={`What follows ${labelOf(term)}`}
-          value={kindOf(term.onFire)}
+          value={kind}
           onChange={(value) => choose(handlers, term, value as OnFireKind)}
           data={ON_FIRE.map(({ value, label, Icon }) => ({
             value,
@@ -229,7 +291,7 @@ export function MdpSection({ mdp, gated, handlers }: { mdp: MdpState; gated: Rea
     <CommandSection label="MDP" expandByDefault={false}>
       {mdp.terminations.length > 0 && <Subhead>Terminations</Subhead>}
       {mdp.terminations.map((term) => (
-        <TerminationRow key={term.name} term={term} time={mdp.time} handlers={handlers} />
+        <TerminationRow key={term.name} term={term} time={mdp.time} frozenBy={mdp.frozenBy} handlers={handlers} />
       ))}
       {mdp.events.length > 0 && <Subhead>Events</Subhead>}
       {mdp.events.map((term) => (

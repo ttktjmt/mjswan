@@ -153,41 +153,51 @@ describe('TerminationManager overrides', () => {
     expect(termNamed(manager, 'fell').onFire).toEqual({ delay: 60 });
   });
 
-  it('names a term with Stop on the step it fires, on or off, and only on that step', async () => {
+  it('names a term set to freeze on the step it fires, on or off, timed or not, and only on that step', async () => {
     const { verdicts, manager, step } = rig();
-    manager.setOverride('fell', { onFire: 'stop' });
+    manager.setOverride('fell', { onFire: 'freeze' });
     verdicts.fell = true;
-    expect(await step()).toMatchObject({ done: true, stopped: ['fell'] });
-    expect((await step()).stopped).toEqual([]);
-    manager.setOverride('time_out', { onFire: 'stop', enabled: false });
+    expect(await step()).toMatchObject({ done: true, frozen: ['fell'] });
+    expect((await step()).frozen).toEqual([]);
+    manager.setOverride('time_out', { onFire: { freeze: 3 }, enabled: false });
     verdicts.time_out = true;
-    expect(await step()).toMatchObject({ stopped: ['time_out'], truncated: false });
-    expect(termNamed(manager, 'time_out')).toMatchObject({ enabled: false, onFire: 'stop', active: true });
+    expect(await step()).toMatchObject({ frozen: ['time_out'], truncated: false });
+    expect(termNamed(manager, 'time_out')).toMatchObject({ enabled: false, onFire: { freeze: 3 }, active: true });
   });
 
-  it('holds a delay or a stop, never both: setting one replaces the other', async () => {
+  it('holds a delay or a freeze, never both: setting one replaces the other', async () => {
     const { verdicts, manager, step } = rig();
     manager.setOverride('fell', { onFire: { delay: 1 } });
-    manager.setOverride('fell', { onFire: 'stop' });
-    expect(termNamed(manager, 'fell').onFire).toBe('stop');
+    manager.setOverride('fell', { onFire: { freeze: 2 } });
+    expect(termNamed(manager, 'fell').onFire).toEqual({ freeze: 2 });
     verdicts.fell = true;
-    // Stopped, it owes its reset at once: the runtime lands it on play.
-    expect(await step()).toMatchObject({ done: true, stopped: ['fell'] });
+    // Frozen, it owes its reset at once: the runtime lands it when the freeze ends.
+    expect(await step()).toMatchObject({ done: true, frozen: ['fell'] });
     manager.reset();
     verdicts.fell = false;
     manager.setOverride('fell', { onFire: { delay: 0.04 } });
     expect(termNamed(manager, 'fell').onFire).toEqual({ delay: 0.04 });
     verdicts.fell = true;
-    expect(await step()).toMatchObject({ done: false, stopped: [] });
+    expect(await step()).toMatchObject({ done: false, frozen: [] });
   });
 
-  it('lands a held reset on the next step when switched to stop or reset: a stop pauses only on a firing', async () => {
+  it('keeps a freeze timed in seconds, clamped as a delay is, and a zero one as a reset', () => {
+    const { manager } = rig();
+    manager.setOverride('fell', { onFire: { freeze: 1e6 } });
+    expect(termNamed(manager, 'fell').onFire).toEqual({ freeze: 60 });
+    manager.setOverride('fell', { onFire: { freeze: 0 } });
+    expect(termNamed(manager, 'fell').onFire).toBe('reset');
+    manager.setOverride('fell', { onFire: { delay: 1, freeze: 1 } as never });
+    expect(termNamed(manager, 'fell').onFire).toBe('reset');
+  });
+
+  it('lands a held reset on the next step when switched to freeze or reset: a freeze pauses only on a firing', async () => {
     const { verdicts, manager, step } = rig();
     manager.setOverride('fell', { onFire: { delay: 1 } });
     verdicts.fell = true;
     await step();
-    manager.setOverride('fell', { onFire: 'stop' });
-    expect(await step()).toMatchObject({ done: true, reasons: ['fell'], stopped: [] });
+    manager.setOverride('fell', { onFire: 'freeze' });
+    expect(await step()).toMatchObject({ done: true, reasons: ['fell'], frozen: [] });
   });
 
   it('cannot time a delay without a control period, so it does not hold one', async () => {

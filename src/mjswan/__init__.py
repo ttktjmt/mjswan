@@ -38,7 +38,7 @@ from .managers.command_manager import (
 )
 from .managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from .managers.termination_manager import TerminationTermCfg
-from .mdp import MdpConfig
+from .mdp import MdpConfig, TerminationDefault
 from .mjlab.env import build_single_entity_trace_env
 from .motion import MotionConfig, MotionHandle
 from .policy import PolicyConfig, PolicyHandle
@@ -82,6 +82,7 @@ __all__ = [
     "SplatConfig",
     "PolicyConfig",
     "MdpConfig",
+    "TerminationDefault",
     "MotionConfig",
     # MDP bindings (mjlab-name → browser impl)
     "MdpBinding",

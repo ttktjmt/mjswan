@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { heldProgress, MAX_DELAY_MS, parseDelayMs, toMs } from '../mdpDelay';
+import { freezeProgress, heldProgress, MAX_DELAY_MS, parseDelayMs, toMs } from '../mdpDelay';
 
 describe('parseDelayMs', () => {
   it('reads whole milliseconds, with or without the unit', () => {
@@ -39,6 +39,22 @@ describe('heldProgress', () => {
 
   it('stays empty without a held reset or a delay', () => {
     expect(heldProgress({ ...term, resetAt: null }, 1.1)).toBe(0);
-    expect(heldProgress({ onFire: 'stop', resetAt: 1.6 }, 1.1)).toBe(0);
+    expect(heldProgress({ onFire: 'freeze', resetAt: 1.6 }, 1.1)).toBe(0);
+  });
+});
+
+describe('freezeProgress', () => {
+  const frozenBy = { term: 'fell', at: 0.84, resumesAt: 13_000 };
+
+  it('fills a timed freeze with the wall clock', () => {
+    expect(freezeProgress(frozenBy, 'fell', { freeze: 2 }, 11_000)).toBe(0);
+    expect(freezeProgress(frozenBy, 'fell', { freeze: 2 }, 12_000)).toBeCloseTo(0.5);
+    expect(freezeProgress(frozenBy, 'fell', { freeze: 2 }, 14_000)).toBe(1);
+  });
+
+  it('stays empty for another term, a freeze until reset, or none', () => {
+    expect(freezeProgress(frozenBy, 'other', { freeze: 2 }, 12_000)).toBe(0);
+    expect(freezeProgress({ ...frozenBy, resumesAt: null }, 'fell', 'freeze', 12_000)).toBe(0);
+    expect(freezeProgress(null, 'fell', { freeze: 2 }, 12_000)).toBe(0);
   });
 });
