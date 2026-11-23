@@ -28,8 +28,6 @@ from __future__ import annotations
 
 import os
 import posixpath
-import shutil
-import tempfile
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
@@ -40,7 +38,6 @@ from typing import Any
 
 import mujoco
 import numpy as np
-import onnx
 import torch
 from mjlab.actuator import XmlActuatorCfg
 from mjlab.entity import EntityArticulationInfoCfg, EntityCfg
@@ -59,7 +56,6 @@ from mjlab.utils.lab_api.math import matrix_from_quat
 from mjlab.viewer import ViewerConfig
 
 import mjswan
-from mjswan.source import hf
 
 #: Every file comes from one of these, at the commit given.
 MENAGERIE = (
@@ -183,6 +179,8 @@ def _so101() -> mujoco.MjSpec:
         actuator.forcerange = [-SO101_FORCE_LIMIT, SO101_FORCE_LIMIT]
         spec.joint(joint).armature = armature
         spec.joint(joint).frictionloss = frictionloss
+    # mjlab attaches the arm to a scene on default options; others would warn.
+    spec.option = mujoco.MjSpec().option
     return spec
 
 
@@ -628,7 +626,9 @@ def _scatter(
 def build_scene(arm: Arm, objects: tuple[Obj, ...], seed: int) -> mujoco.MjSpec:
     """One task's scene, opening on the arm's home pose with the objects scattered."""
     scene = _base_scene(arm)
-    scene.attach(arm.spec_fn(), prefix="robot/", frame=scene.worldbody.add_frame())
+    robot = arm.spec_fn()
+    robot.option = scene.option
+    scene.attach(robot, prefix="robot/", frame=scene.worldbody.add_frame())
 
     specs = {obj.name: obj.spec() for obj in objects}
     halves = {name: _bounds(spec.compile())[1] for name, spec in specs.items()}
@@ -663,7 +663,7 @@ def build_scene(arm: Arm, objects: tuple[Obj, ...], seed: int) -> mujoco.MjSpec:
 #: checked against.
 PICK_CUBE_POLICY = (
     "ttktjmt/so101-pick-cube",
-    "7dfa8ca85964949892ef97427f29c5e0dda0735d",
+    "fcdf0776a21b5f7560f129192e8a87907931e92f",
 )
 
 #: Playground's `TransformActions` scale: 12.5 times the torque limit over each joint's
@@ -696,11 +696,10 @@ def _pick_cube_cube() -> mujoco.MjSpec:
 
 def _pick_cube_world(spec: mujoco.MjSpec) -> None:
     """Playground's plane around mjlab's scene."""
-    spec.attach(
-        mujoco.MjSpec.from_string(PLANE_XML),
-        prefix="",
-        frame=spec.worldbody.add_frame(),
-    )
+    plane = mujoco.MjSpec.from_string(PLANE_XML)
+    # mjlab sets the options from `SimulationCfg`; the plane's would only conflict.
+    plane.option = spec.option
+    spec.attach(plane, prefix="", frame=spec.worldbody.add_frame())
     spec.stat.center = [0.25, 0.0, 0.15]
 
 
@@ -835,29 +834,12 @@ mjswan.register_command(
 )
 
 
-def _hub_policy(
-    source: tuple[str, str], files: tuple[str, ...] = ("policy.onnx",)
-) -> onnx.ModelProto:
-    """An exported actor, with any weights torch wrote beside it read in.
-
-    Copied out of the Hub's cache first: `onnx.load` will not read weights through its
-    symbolic links.
-    """
-    repo, revision = source
-    with tempfile.TemporaryDirectory() as tmp:
-        for name in files:
-            shutil.copyfile(
-                hf.fetch_file(repo, name, revision=revision), Path(tmp, name)
-            )
-        return onnx.load(str(Path(tmp, files[0])))
-
-
 # PickCube Vision: Playground's `SO101PickCubeVision`, the wrist camera for the cube
 
-#: The policy `so101_pick_cube.py --task vision` trained: 700 of its 3000 iterations.
+#: The policy `so101_pick_cube.py --task vision` trained: 1800 of its 3000 iterations.
 PICK_CUBE_VISION_POLICY = (
     "ttktjmt/so101-pick-cube-vision",
-    "3367267e868664af61a8f2e89d1aa6b8bc18ee1a",
+    "c1b4d112454275b54425b69f9e6c1e244a770a96",
 )
 
 #: Playground's `DeltaActions` for the SO-101: radians per unit of action, and the range
@@ -1028,53 +1010,63 @@ def _attribute(scene: mjswan.SceneHandle, arm: Arm, objects: tuple[Obj, ...]) ->
         licenses.append(("gso", ALOHA_SIM, f"{ALOHA_ASSETS}/gso/LICENSE"))
     for component, repo, path in licenses:
         scene.add_attribution(component, license=_fetch(repo, path))
+    _credit_playground(scene)
 
 
-def add_pick_cube(project: mjswan.ProjectHandle) -> mjswan.SceneHandle:
+def _credit_playground(scene: mjswan.SceneHandle) -> None:
+    """Playground's credit, stated by hand: it ships no NOTICE."""
+    scene.add_attribution(
+        "mujoco_playground", license="Apache-2.0", copyright="2026 Google LLC"
+    )
+
+
+def add_pick_cube(
+    project: mjswan.ProjectHandle,
+    task_id: str,
+    *,
+    scene_name: str,
+    env_cfg: ManagerBasedRlEnvCfg,
+    policy: tuple[str, str],
+    policy_name: str,
+    in_keys: list[str] | None = None,
+) -> mjswan.SceneHandle:
     """The SO-101 bringing the cube to a target that moves, driven by its policy."""
-    scene = project.add_scene_mjlab(
-        "SO101PickCube", name="SO-101", env_cfg=pick_cube_env_cfg()
-    )
-    # Not an mjlab export, so nothing in the file names the joints: one per actuator, in
-    # order, as `_contract` in so101_pick_cube.py records them.
-    scene.add_policy(
-        name="PickCube",
-        # Exported before the script wrote one file.
-        policy=_hub_policy(PICK_CUBE_POLICY, ("policy.onnx", "policy.onnx.data")),
-        policy_joint_names=scene.actuated_joint_names(),
-        default_joint_pos=list(ARMS[0].home.values()),
-    )
+    scene = project.add_scene_mjlab(task_id, name=scene_name, env_cfg=env_cfg)
+    repo, revision = policy
+    scene.add_policy_hf(repo, revision=revision, name=policy_name, in_keys=in_keys)
     scene.add_attribution(
         "robotstudio_so101", license=_fetch(MENAGERIE, "robotstudio_so101/LICENSE")
     )
-    return scene
-
-
-def add_pick_cube_vision(project: mjswan.ProjectHandle) -> mjswan.SceneHandle:
-    """PickCube with the arm finding the cube through its wrist camera."""
-    scene = project.add_scene_mjlab(
-        "SO101PickCubeVision", name="SO-101 Vision", env_cfg=pick_cube_vision_env_cfg()
-    )
-    scene.add_policy(
-        name="PickCube Vision",
-        policy=_hub_policy(PICK_CUBE_VISION_POLICY),
-        in_keys=["actor", "camera"],
-        policy_joint_names=scene.actuated_joint_names(),
-        default_joint_pos=list(ARMS[0].home.values()),
-    )
-    scene.add_attribution(
-        "robotstudio_so101", license=_fetch(MENAGERIE, "robotstudio_so101/LICENSE")
-    )
+    _credit_playground(scene)
     return scene
 
 
 def setup_builder() -> mjswan.Builder:
     """Return the configured builder, not yet built."""
-    builder = mjswan.Builder(base_path=os.getenv("MJSWAN_BASE_PATH", "/"))
+    builder = mjswan.Builder(
+        base_path=os.getenv("MJSWAN_BASE_PATH", "/"),
+        license="Apache-2.0",
+        copyright="mjswan Developers",
+    )
     project = builder.add_project(name="Playground PickCube")
     # The app opens on the first scene.
-    add_pick_cube_vision(project)
-    add_pick_cube(project)
+    add_pick_cube(
+        project,
+        "SO101PickCubeVision",
+        scene_name="SO-101 Vision",
+        env_cfg=pick_cube_vision_env_cfg(),
+        policy=PICK_CUBE_VISION_POLICY,
+        policy_name="PickCube Vision",
+        in_keys=["actor", "camera"],
+    )
+    add_pick_cube(
+        project,
+        "SO101PickCube",
+        scene_name="SO-101",
+        env_cfg=pick_cube_env_cfg(),
+        policy=PICK_CUBE_POLICY,
+        policy_name="PickCube",
+    )
     for arm in ARMS:
         project = builder.add_project(name=f"Playground Tabletop: {arm.name}")
         lookat, distance, azimuth, elevation = arm.overview
