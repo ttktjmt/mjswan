@@ -32,7 +32,7 @@ shortcuts.
   each event with its switch and a trigger button.
 
 - **`SceneHandle.set_term_defaults` sets what terms do when the viewer opens** (**document
-  format 10**). By term name, a `mjswan.TerminationDefault` (`"reset"`, `"delay"` or
+  format 11**). By term name, a `mjswan.TerminationDefault` (`"reset"`, `"delay"` or
   `"freeze"`, its `seconds`, and `enabled`) for a termination, and a bool for a reset or
   interval event. The viewer starts there and its Reset MDP returns there; a name none of
   the scene's MDPs has warns at build time. The manifest carries them as the scene's

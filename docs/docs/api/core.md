@@ -552,7 +552,7 @@ what the build traces is unchanged. A termination takes a
 [`TerminationDefault`](#terminationdefault), or `False` to start switched off; a reset or
 interval event takes whether it starts switched on. A name applies to whichever of the
 scene's MDPs has that term, and the build warns for one none of them has. A second call
-replaces the first. The manifest carries them as the scene's `term_defaults` (format 10).
+replaces the first. The manifest carries them as the scene's `term_defaults` (format 11).
 
 ```python
 scene.set_term_defaults(

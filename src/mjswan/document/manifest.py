@@ -6,8 +6,9 @@ from __future__ import annotations
 MANIFEST_NAME = "manifest.json"
 
 #: The structure a build writes: what files exist, where they sit, and what the manifest
-#: says about them. Bumped by hand, only when an engine reading the old structure would
-#: misread the new one. Distinct from ``version``, the mjswan release: a host picks an
+#: says about them. Bumped by hand when a released engine that reads the current format
+#: would ignore an addition and so run wrong; an addition to a format no release has
+#: written yet joins it. Distinct from ``version``, the mjswan release: a host picks an
 #: engine by ``version``, an engine protects itself by ``format``. Bump it with
 #: ``MAX_DOCUMENT_FORMAT`` (``template/src/manifest/index.ts``) and add a row to the
 #: format table in ``context/document.md``.
@@ -54,10 +55,11 @@ MANIFEST_NAME = "manifest.json"
 #: character, drawing it off the robot, and draw every scene its one way.
 #:
 #: 10: an action term may carry a DC motor's torque-speed curve (``saturation_effort``,
-#: ``velocity_limit``), and a scene ``term_defaults``, what its terms do when the viewer
-#: opens. An older engine would run those motors without it, and start every term as
-#: mjlab's.
-DOCUMENT_FORMAT = 10
+#: ``velocity_limit``). An older engine would run those motors without it.
+#:
+#: 11: a scene may carry ``term_defaults``, what its terms do when the viewer opens. An
+#: older engine would start every term as mjlab's.
+DOCUMENT_FORMAT = 11
 
 #: Input slots the runtime fills itself rather than from an observation group: the
 #: recurrent carry (``is_init``, ``adapt_hx``) and the step counter (``time_step``).

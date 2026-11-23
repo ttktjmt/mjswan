@@ -155,7 +155,7 @@ export interface ManifestScene {
   splats?: ManifestSplat[];
   skins?: ManifestSkin[];
   credits?: ManifestCredit[];
-  /** What each term does when the viewer opens, by name (format 10); absent, mjlab's. */
+  /** What each term does when the viewer opens, by name (format 11); absent, mjlab's. */
   term_defaults?: ManifestTermDefaults;
   mdps: ManifestMdp[];
   policies: ManifestPolicy[];
@@ -310,11 +310,11 @@ export function sanitizeName(name: string): string {
  * scene's `skins`; 8 a motion's `frame_fields`; 9 a camera sensor's descriptor, an
  * image-shaped policy input, a skin modelled on the robot (`fit: 'modelled'`), with
  * `align`, `rest_qpos`, a solid material and `hide_tendons`, and a scene's `graphics`;
- * 10 an action term's DC motor `saturation_effort` and `velocity_limit`, and a scene's
+ * 10 an action term's DC motor `saturation_effort` and `velocity_limit`; 11 a scene's
  * `term_defaults`. Bump it with `DOCUMENT_FORMAT` (`document/manifest.py`) and add a row
  * to the format table in context/document.md.
  */
-export const MAX_DOCUMENT_FORMAT = 10;
+export const MAX_DOCUMENT_FORMAT = 11;
 
 /**
  * Refuse a document this reader cannot read: one without a `format`, or one newer than it

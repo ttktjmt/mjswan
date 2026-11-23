@@ -419,7 +419,7 @@ def scene_entry(
 def term_defaults_entry(
     scene: SceneConfig, mdps: list[dict[str, Any]]
 ) -> dict[str, dict[str, Any]]:
-    """A scene's ``term_defaults`` (format 10), warning for a name none of its MDPs has:
+    """A scene's ``term_defaults`` (format 11), warning for a name none of its MDPs has:
     the viewer would carry it for nothing."""
     for kind in ("terminations", "events"):
         known = {name for mdp in mdps for name in _term_names(mdp.get(kind))}

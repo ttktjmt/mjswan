@@ -1,5 +1,5 @@
 """A scene's term defaults: what its terms do when the viewer opens, written as
-``term_defaults`` beside its MDPs (format 10)."""
+``term_defaults`` beside its MDPs (format 11)."""
 
 from __future__ import annotations
 
