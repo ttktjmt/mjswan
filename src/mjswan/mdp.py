@@ -73,7 +73,7 @@ class MdpConfig:
 __all__ = ["MdpConfig"]
 
 
-#: Past a minute a delay or a timed freeze only means "off" or "until reset", which exist.
+#: Past a minute a delay means "off" and a timed freeze "until reset", which both exist.
 MAX_WAIT_S = 60.0
 
 
@@ -81,8 +81,8 @@ MAX_WAIT_S = 60.0
 class TerminationDefault:
     """What a termination does when the viewer opens, in place of mjlab's reset at once.
 
-    The viewer's MDP controls start here and their Reset MDP returns here. Nothing the build
-    traces changes, and neither does what the policy was trained on.
+    Given to :meth:`SceneHandle.set_term_defaults`; it changes only the viewer, not what the
+    build traces.
 
     Args:
         on_fire: ``"reset"``, mjlab's; ``"delay"``, the reset ``seconds`` of episode time

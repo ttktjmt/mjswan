@@ -27,8 +27,7 @@ const kindOf = (onFire: OnFire): OnFireKind =>
 const BOX_WIDTH = 80;
 const BOX_HEIGHT = 22;
 
-// What a term last had under Delay and under Freeze, so leaving and coming back brings it
-// back; a first Delay or Freeze is a second.
+// The wait each term last had under Delay and under Freeze, restored on coming back; a first is a second.
 const last: Record<'delay' | 'freeze', Record<string, OnFire>> = { delay: {}, freeze: {} };
 const FIRST: Record<'delay' | 'freeze', OnFire> = { delay: { delay: 1 }, freeze: { freeze: 1 } };
 

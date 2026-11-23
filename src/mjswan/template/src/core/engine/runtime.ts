@@ -1230,7 +1230,7 @@ export class mjswanRuntime {
     }
   }
 
-  /** Every term back to the MDP as built, the build's defaults included. */
+  /** Every term back to the scene's defaults, mjlab's where it sets none. */
   clearTermOverrides(): void {
     this.termOverrides.clear();
     for (const { name } of this.terminationManager?.describe() ?? []) {

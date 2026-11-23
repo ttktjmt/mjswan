@@ -310,8 +310,8 @@ export interface MdpEventControls {
 
 /**
  * Operator overrides of the running MDP's terms, per kind. They change what the viewer
- * sees, never the document; {@link clear} returns to the MDP as built, the scene's
- * `term_defaults` included. See context/frontend.md.
+ * sees, never the document; {@link clear} returns to the scene's `term_defaults`,
+ * mjlab's where it sets none. See context/frontend.md.
  */
 export interface MdpControls {
   readonly terminations: MdpTerminationControls;

@@ -311,9 +311,8 @@ export function sanitizeName(name: string): string {
  * image-shaped policy input, a skin modelled on the robot (`fit: 'modelled'`), with
  * `align`, `rest_qpos`, a solid material and `hide_tendons`, and a scene's `graphics`;
  * 10 an action term's DC motor `saturation_effort` and `velocity_limit`, and a scene's
- * `term_defaults`. Bump it with
- * `DOCUMENT_FORMAT` (`document/manifest.py`) and add a row to the format table in
- * context/document.md.
+ * `term_defaults`. Bump it with `DOCUMENT_FORMAT` (`document/manifest.py`) and add a row
+ * to the format table in context/document.md.
  */
 export const MAX_DOCUMENT_FORMAT = 10;
 

@@ -32,7 +32,7 @@ export type EventOverridePatch = Partial<EventOverride>;
 export const DEFAULT_TERMINATION: Readonly<TerminationOverride> = { enabled: true, onFire: 'reset' };
 export const DEFAULT_EVENT: Readonly<EventOverride> = { enabled: true };
 
-/** Past a minute a delay or a timed freeze only means "off" or "until reset", which exist. */
+/** Past a minute a delay means "off" and a timed freeze "until reset", which both exist. */
 export const MAX_DELAY_S = 60;
 
 /** A build's starting overrides by term name (a scene's `term_defaults`). */
@@ -70,7 +70,7 @@ export function isFreeze(onFire: OnFire): boolean {
   return onFire === 'freeze' || (typeof onFire === 'object' && 'freeze' in onFire);
 }
 
-/** A freeze's wall-clock seconds; null until a reset (and for an `onFire` that is no freeze). */
+/** A timed freeze's wall-clock seconds; null for a freeze until reset, or no freeze. */
 export function freezeOf(onFire: OnFire): number | null {
   return typeof onFire === 'object' && 'freeze' in onFire ? onFire.freeze : null;
 }
