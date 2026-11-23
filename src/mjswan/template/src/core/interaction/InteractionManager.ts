@@ -35,7 +35,7 @@ export interface InteractionModeReport {
 }
 
 /** Why Pull, Push and Grab stand aside while the simulation is paused. */
-export const PAUSED_REASON = 'Acts only while the simulation runs.';
+export const PAUSED_REASON = 'Disabled when stopped';
 
 /**
  * Why a mode cannot act now, or null: the scene's own reason first, then a pause, since every
