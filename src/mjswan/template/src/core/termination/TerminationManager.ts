@@ -223,7 +223,7 @@ export class TerminationManager {
       if (active && entry.override.enabled && entry.heldSince === null) entry.heldSince = now;
       if (entry.heldSince === null) continue;
       if (timed && !elapsed(now, entry.heldSince, delayOf(entry.override.onFire))) continue;
-      // Delivered: without a reset after it, the next step's verdict is that step's alone.
+      // Released with the verdict, so a step that follows without a reset judges itself.
       entry.heldSince = null;
       reasons.push(entry.name);
       this.emit(entry, 'reset', now);

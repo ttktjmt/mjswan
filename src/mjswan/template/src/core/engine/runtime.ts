@@ -382,8 +382,8 @@ export class mjswanRuntime {
   private initialQpos: number[] | null;
   private initialQvel: number[] | null;
   /**
-   * A reset waiting for the step boundary: the UI's (`resetSimulation`), or the one a stopped
-   * termination owes. Any reset meets it.
+   * A reset waiting for the step boundary: one asked for (`resetSimulation`) or the one a
+   * stopped termination owes. Whichever reset lands first settles it.
    */
   private resetRequested = false;
   /**
@@ -2332,7 +2332,7 @@ export class mjswanRuntime {
     this.episodeLength = 0;
     this.episodeCount += 1;
     this.stoppedBy = null;
-    // Meets a reset already asked for, so a stopped term's does not follow a load.
+    // Settles a reset already asked for, so a stopped term's owed reset does not land again.
     this.resetRequested = false;
     this.notifyMdp();
     // A reset landing between two slices drops the rest of the control step.

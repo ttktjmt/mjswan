@@ -238,7 +238,7 @@ policy reads a sensor of that name; call the returned detach when it goes.
 A browser episode ends on the step a termination fires, as mjlab's does, so a fall resets
 before anyone sees why. `engine.mdp` lets whoever watches change that: switch a termination
 or event term off, choose what follows a termination's firing, or trigger an event by hand.
-The bundled app's panel does not draw it; a host does.
+The bundled app's panel draws it in its MDP section.
 
 ```ts
 engine.mdp.terminations.set('bad_orientation', { onFire: { delay: 2 } }); // keep the fall on screen

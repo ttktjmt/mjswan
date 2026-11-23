@@ -201,7 +201,7 @@ class Engine implements MjswanEngine {
         set: (name, patch) => {
           const lifts = patch.onFire !== undefined && patch.onFire !== 'stop' && this.stoppedBy() === name;
           this.runtime.setTerminationOverride(name, patch);
-          // Lifting the stop that paused the simulation lands the reset it owes, which ends the stop.
+          // Lifting the stop that paused the simulation plays, which lands the reset it owes.
           if (lifts) this.play();
           else this.refresh();
         },
@@ -423,7 +423,7 @@ class Engine implements MjswanEngine {
   }
 
   reset(): void {
-    // A reset ends a termination's stop. Playing first leaves the reset to the loop's step boundary.
+    // A reset ends a termination's stop. Play first, so the running loop lands the reset at its step boundary.
     if (this.stoppedBy() !== null) this.play();
     this.runtime.resetSimulation();
   }

@@ -263,9 +263,10 @@ export interface MdpState {
   /** The soonest reset a delayed termination holds: which term, and when it lands. */
   pendingReset: Readonly<{ term: string; at: number }> | null;
   /**
-   * The termination whose stop paused the simulation, and when: the frame it fired on is on
-   * show. A reset ends it and plays: {@link MjswanEngine.play}, which lands the reset it owes,
-   * {@link MjswanEngine.reset}, or lifting the stop (a reset or a delay for the term, or `clear`).
+   * The termination whose stop paused the simulation, and when; the frame it fired on stays on
+   * show. A reset ends the stop and plays: {@link MjswanEngine.play} (which lands the reset it
+   * owes), {@link MjswanEngine.reset}, or lifting the stop (the term set to a reset or a delay,
+   * or `clear`).
    */
   stoppedBy: Readonly<{ term: string; at: number }> | null;
   /** The latest activity, oldest first, at most 32 entries. */

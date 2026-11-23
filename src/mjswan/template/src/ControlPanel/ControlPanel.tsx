@@ -100,7 +100,7 @@ interface ControlPanelProps {
   onCommandChange: (id: string, value: number) => void;
   /** Press a button command (engine.commands.trigger). */
   onCommandTrigger?: (id: string) => void;
-  /** Event controls: read only for which manual terms their `disabled_when` schedule holds off. */
+  /** Event controls, read only for the manual terms a `disabled_when` schedule holds off. */
   events?: EventDescriptor[];
   /** The MDP's terminations and events (engine.state.mdp). */
   mdp?: MdpState;

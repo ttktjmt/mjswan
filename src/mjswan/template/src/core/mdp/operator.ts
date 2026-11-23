@@ -8,7 +8,7 @@ export type OverridableKind = 'termination' | 'event';
 
 /**
  * What follows a termination's firing, one at a time: the reset at once (mjlab's), the reset
- * `delay` seconds later, or a pause on the step it fired, the reset it owes landing on play.
+ * `delay` seconds later, or a pause on the step it fired.
  */
 export type OnFire = 'reset' | 'stop' | { delay: number };
 
