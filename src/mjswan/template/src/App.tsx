@@ -8,6 +8,7 @@ import { signalReady, signalError } from './core/utils/readySignal';
 import { createEngine } from './engine';
 import type { EnginePlugins, MjswanEngine, MjswanEngineState, SceneInput } from './engine';
 import { parseManifest, sanitizeName, type Catalog, type ProjectCatalog, type ByteSource } from './manifest';
+import type { MdpHandlers } from './ControlPanel/MdpSection';
 import {
   applyUrlState,
   DEBUG_PARAM,
@@ -86,6 +87,15 @@ function AppContent() {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<MjswanEngine | null>(null);
+  const mdpHandlers = useMemo<MdpHandlers>(
+    () => ({
+      onTermination: (name, patch) => engineRef.current?.mdp.terminations.set(name, patch),
+      onEvent: (name, enabled) => engineRef.current?.mdp.events.set(name, { enabled }),
+      onTrigger: (name) => engineRef.current?.mdp.events.trigger(name),
+      onClear: () => engineRef.current?.mdp.clear(),
+    }),
+    [],
+  );
   // Author custom-MDP terms (trusted contexts only). Passed to both scene and
   // policy inputs; the engine registers each kind at the relevant load.
   const pluginsRef = useRef<EnginePlugins | null>(null);
@@ -420,8 +430,8 @@ function AppContent() {
             onCommandChange={(id, value) => engineRef.current?.commands.set(id, value)}
             onCommandTrigger={(id) => engineRef.current?.commands.trigger(id)}
             events={engineState?.events ? [...engineState.events] : []}
-            onEventFire={(name) => engineRef.current?.events.fire(name)}
-            onEventArmedChange={(name, armed) => engineRef.current?.events.setArmed(name, armed)}
+            mdp={engineState?.mdp}
+            mdpHandlers={mdpHandlers}
             debugVis={engineState?.debugVis ? [...engineState.debugVis] : []}
             onDebugVisChange={handleDebugVisChange}
             debugVisEnabled={debugVisEnabled}

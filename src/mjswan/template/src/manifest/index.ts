@@ -25,6 +25,7 @@ import {
   type ToneMappingName,
 } from '../core/scene/graphicsSettings';
 import type { PolicyInput, SceneInput, SkinInput, SplatInput } from '../engine/types';
+import type { OnFire, TermDefaults } from '../core/mdp/operator';
 
 /** Maps a document-relative path (e.g. `demo/humanoid/scene.mjz`) to bytes. */
 export type ByteSource = (relPath: string) => Bytes;
@@ -154,8 +155,16 @@ export interface ManifestScene {
   splats?: ManifestSplat[];
   skins?: ManifestSkin[];
   credits?: ManifestCredit[];
+  /** What each term does when the viewer opens, by name (format 11); absent, mjlab's. */
+  term_defaults?: ManifestTermDefaults;
   mdps: ManifestMdp[];
   policies: ManifestPolicy[];
+}
+
+/** `SceneHandle.set_term_defaults`'s, the engine's override in snake_case. */
+export interface ManifestTermDefaults {
+  terminations?: Record<string, { enabled?: boolean; on_fire?: unknown }>;
+  events?: Record<string, { enabled?: boolean }>;
 }
 export interface ManifestProject {
   /** `name2id(name)`, unique in the document: the project's directory and `?project=` value. */
@@ -301,11 +310,11 @@ export function sanitizeName(name: string): string {
  * scene's `skins`; 8 a motion's `frame_fields`; 9 a camera sensor's descriptor, an
  * image-shaped policy input, a skin modelled on the robot (`fit: 'modelled'`), with
  * `align`, `rest_qpos`, a solid material and `hide_tendons`, and a scene's `graphics`;
- * 10 an action term's DC motor `saturation_effort` and `velocity_limit`. Bump it with
- * `DOCUMENT_FORMAT` (`document/manifest.py`) and add a row to the format table in
- * context/document.md.
+ * 10 an action term's DC motor `saturation_effort` and `velocity_limit`; 11 a scene's
+ * `term_defaults`. Bump it with `DOCUMENT_FORMAT` (`document/manifest.py`) and add a row
+ * to the format table in context/document.md.
  */
-export const MAX_DOCUMENT_FORMAT = 10;
+export const MAX_DOCUMENT_FORMAT = 11;
 
 /**
  * Refuse a document this reader cannot read: one without a `format`, or one newer than it
@@ -542,8 +551,20 @@ function toSceneEntry(
         graphics,
         terrainData: scene.terrain_data,
         controlDt: scene.control_dt,
+        termDefaults: toTermDefaults(scene.term_defaults),
       };
     },
+  };
+}
+
+/** The manifest's `term_defaults` as the engine takes them; the engine refuses an `on_fire` it cannot keep. */
+function toTermDefaults(defaults: ManifestTermDefaults | undefined): TermDefaults | undefined {
+  if (!defaults) return undefined;
+  const map = <T, U>(record: Record<string, T> | undefined, f: (value: T) => U): Record<string, U> =>
+    Object.fromEntries(Object.entries(record ?? {}).map(([name, value]) => [name, f(value)]));
+  return {
+    terminations: map(defaults.terminations, (t) => ({ enabled: t.enabled, onFire: t.on_fire as OnFire | undefined })),
+    events: map(defaults.events, (e) => ({ enabled: e.enabled })),
   };
 }
 

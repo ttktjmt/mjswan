@@ -211,6 +211,22 @@ describe('parseManifest', () => {
     expect(old.camera).toEqual({});
   });
 
+  it("hands a scene's term_defaults to the engine as overrides, and none without them", async () => {
+    const term_defaults = {
+      terminations: { bad_orientation: { enabled: true, on_fire: { delay: 0.2 } }, illegal_contact: { enabled: true, on_fire: 'freeze' } },
+      events: { push_robot: { enabled: false } },
+    };
+    const withDefaults = { ...MANIFEST.projects[0].scenes[0], term_defaults };
+    const manifest = { ...MANIFEST, format: 10, projects: [{ ...MANIFEST.projects[0], scenes: [withDefaults] }] };
+    const [scene] = parseManifest(manifest, fakeSource().source).projects[0].scenes;
+    expect((await scene.buildScene()).termDefaults).toEqual({
+      terminations: { bad_orientation: { enabled: true, onFire: { delay: 0.2 } }, illegal_contact: { enabled: true, onFire: 'freeze' } },
+      events: { push_robot: { enabled: false } },
+    });
+    const [plain] = parseManifest(MANIFEST, fakeSource().source).projects[0].scenes;
+    expect((await plain.buildScene()).termDefaults).toBeUndefined();
+  });
+
   it('turns an azimuth from before format 3, which pointed at the camera, to keep its view', () => {
     const azimuthIn = (format: number) => {
       const scene = { ...MANIFEST.projects[0].scenes[0], camera: { azimuth: 90 } };

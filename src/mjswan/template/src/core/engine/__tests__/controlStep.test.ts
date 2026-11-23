@@ -30,6 +30,21 @@ function recording(decimation: number, divergeAt = Infinity): { step: ControlSte
 const NO_DEADLINE = Infinity;
 
 describe('ControlStep', () => {
+  it('spends no more once a step that ended has halted the loop', async () => {
+    // A termination's stop: the frame it fired on stays the last one drawn.
+    const calls: string[] = [];
+    const step = new ControlStep({
+      decimation: () => 2,
+      begin: async () => void calls.push('begin'),
+      physics: (from, to) => (calls.push(`physics ${from}-${to}`), false),
+      end: async () => void calls.push('end'),
+      snapshot: () => void calls.push('snapshot'),
+      halted: () => calls.includes('end'),
+    });
+    expect(await step.spend(30, 5, NO_DEADLINE)).toBe(20);
+    expect(calls).toEqual(['begin', 'physics 0-2', 'end']);
+  });
+
   it('runs a control step as begin, its physics steps, then end', async () => {
     const { step, calls } = recording(4);
     expect(await step.spend(20, 5, NO_DEADLINE)).toBe(0);

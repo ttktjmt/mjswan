@@ -18,6 +18,8 @@ import type { CommandDefinition, CommandEventListener } from '../core/command';
 import type { PolicyConfig } from '../core/policy/types';
 import { INTERACTION_MODES, INTERACTION_MODE_IDS } from '../core/interaction/params';
 import { createSerial } from './serial';
+import { FreezeTimer } from '../core/mdp/freezeTimer';
+import { isFreeze, normalOnFire } from '../core/mdp/operator';
 import type {
   CameraControls,
   CameraFeedControls,
@@ -28,6 +30,7 @@ import type {
   EventControls,
   GraphicsControls,
   InteractionControls,
+  MdpControls,
   MjswanEngine,
   InteractionModeId,
   MjswanEngineState,
@@ -111,6 +114,10 @@ class Engine implements MjswanEngine {
    * others bind to the model, so they run one at a time, and `dispose` after them.
    */
   private readonly serial = createSerial();
+  /** A timed freeze ends in a reset, which plays. */
+  private readonly freezeTimer = new FreezeTimer(() => {
+    if (this.frozenBy() !== null) this.reset();
+  });
   private disposed = false;
   private state: MjswanEngineState;
   private readonly listeners = new Set<(state: MjswanEngineState) => void>();
@@ -121,6 +128,7 @@ class Engine implements MjswanEngine {
   readonly debugVis: DebugVisControls;
   readonly cameraFeeds: CameraFeedControls;
   readonly events: EventControls;
+  readonly mdp: MdpControls;
   readonly interaction: InteractionControls;
   readonly xr: XrControls;
   readonly preview: PreviewControls;
@@ -132,6 +140,14 @@ class Engine implements MjswanEngine {
     this.runtime.commands.addEventListener(this.onCommandEvent);
     // Device support resolves late, and sessions start and end outside any verb.
     this.runtime.onXrChange = () => this.refresh();
+    // Terms fire and resets land inside the loop; the runtime throttles these.
+    this.runtime.onMdpChange = () => this.refresh();
+    // A termination's freeze pauses the loop with no verb of the host's behind it.
+    this.runtime.onFreeze = (resumesAt) => {
+      this.phase = 'paused';
+      this.freezeTimer.set(resumesAt);
+      this.refresh();
+    };
 
     this.camera = {
       set: (view) => {
@@ -187,6 +203,33 @@ class Engine implements MjswanEngine {
         this.refresh();
       },
     };
+    this.mdp = {
+      terminations: {
+        set: (name, patch) => {
+          const next = patch.onFire === undefined ? null : normalOnFire(patch.onFire);
+          const lifts = next !== null && !isFreeze(next) && this.frozenBy() === name;
+          this.runtime.setTerminationOverride(name, patch);
+          // Lifting the freeze that paused the simulation plays, which lands the reset it owes.
+          if (lifts) this.play();
+          else this.refresh();
+        },
+      },
+      events: {
+        set: (name, patch) => {
+          this.runtime.setEventOverride(name, patch);
+          this.refresh();
+        },
+        trigger: (name) => {
+          void this.runtime.triggerEvent(name);
+        },
+      },
+      clear: () => {
+        const lifts = this.frozenBy() !== null;
+        this.runtime.clearTermOverrides();
+        if (lifts) this.play();
+        else this.refresh();
+      },
+    };
     this.interaction = {
       // The setters refresh the snapshot themselves: the runtime emits no event for them.
       setMode: (id) => {
@@ -236,6 +279,7 @@ class Engine implements MjswanEngine {
       graphics: this.runtime.getGraphics(),
       graphicsAvailable: this.runtime.getGraphicsAvailable(),
       events: this.runtime.eventControls(),
+      mdp: this.runtime.mdpReport(),
       interactions: this.runtime.interactionModes().map((mode) => ({
         ...mode,
         params: INTERACTION_MODES.find((spec) => spec.id === mode.id)?.params ?? [],
@@ -301,6 +345,7 @@ class Engine implements MjswanEngine {
         terrainData: input.terrainData ?? null,
         controlDt: input.controlDt ?? null,
         plugins: input.plugins,
+        termDefaults: input.termDefaults ?? null,
       };
       await this.exclusive(() => this.runtime.loadEnvironment(scene), undefined);
       this.phase = this.runtime.isRunning ? 'running' : 'paused';
@@ -375,19 +420,29 @@ class Engine implements MjswanEngine {
   }
 
   play(): void {
+    this.freezeTimer.cancel();
     this.runtime.play();
     this.phase = 'running';
     this.refresh();
   }
 
   pause(): void {
+    // A host's pause holds the frame: a timed freeze waits for play like any pause.
+    this.freezeTimer.cancel();
     this.runtime.pause();
     this.phase = 'paused';
     this.refresh();
   }
 
   reset(): void {
+    // A reset ends a freeze. Playing first lets the loop land the reset at its step boundary.
+    if (this.frozenBy() !== null) this.play();
     this.runtime.resetSimulation();
+  }
+
+  /** The termination whose freeze holds the simulation paused, if one does. */
+  private frozenBy(): string | null {
+    return this.runtime.mdpReport().frozenBy?.term ?? null;
   }
 
   getState(): MjswanEngineState {
@@ -407,6 +462,8 @@ class Engine implements MjswanEngine {
 
   dispose(): void {
     this.disposed = true;
+    this.freezeTimer.cancel();
+    this.runtime.onFreeze = null;
     this.runtime.onXrChange = null;
     this.runtime.commands.removeEventListener(this.onCommandEvent);
     this.listeners.clear();

@@ -18,6 +18,15 @@ import type { SkinConfig } from '../core/skin/config';
 import type { PrimitiveType } from '../core/scene/primitive';
 import type { HandleKind, PreviewGeom, PreviewInput } from '../core/scene/preview';
 import type { GeomType, PickHit } from '../core/interaction/pick';
+import type { TerminationTermReport } from '../core/termination/TerminationManager';
+import type { EventTermReport } from '../core/event/EventManager';
+import type {
+  EventOverridePatch,
+  LoggedActivity,
+  OnFire,
+  TermDefaults,
+  TerminationOverridePatch,
+} from '../core/mdp/operator';
 import type {
   ColorSpaceName,
   GraphicsAvailable,
@@ -109,6 +118,11 @@ export interface SceneInput {
   controlDt?: number;
   /** Scene-scoped custom terms (events). */
   plugins?: EnginePlugins;
+  /**
+   * What each term does when the scene opens (its `term_defaults`), by name, in place of
+   * mjlab's; {@link MdpControls.clear} returns to it. A name the loaded MDP lacks is ignored.
+   */
+  termDefaults?: TermDefaults;
 }
 
 /** Camera pose in spherical MuJoCo coordinates (x forward, y left, z up). */
@@ -211,6 +225,99 @@ export interface CameraFeedControls {
    */
   attach(id: string, canvas: HTMLCanvasElement): () => void;
   setFrustum(id: string, shown: boolean): void;
+}
+
+/**
+ * A termination term as the operator sees it: `enabled` and `onFire` are in force, `changed`
+ * when the operator moved them off the build's default; `active`, `firedAt` and `resetAt`
+ * are what the term did this episode. Times are episode time, in seconds, which stands still
+ * while paused.
+ */
+export type TerminationTermDescriptor = Readonly<TerminationTermReport & { changed: boolean }>;
+
+/**
+ * A reset, interval or manual event term as the operator sees it, `changed` as a
+ * termination's. Startup terms have run before anyone could reach them, so they are not
+ * listed; a manual term has no switch, only {@link MdpEventControls.trigger}.
+ */
+export type EventTermDescriptor = Readonly<EventTermReport & { changed: boolean }>;
+
+/**
+ * Something a term did. A termination `fired` when its condition turned true (with `off`
+ * when it was switched off, so no reset followed), `frozen` the simulation when set to
+ * freeze, and `reset` when it ended the episode; an event `fired` when its write landed, with
+ * `byHand` when it was triggered.
+ */
+export type MdpActivity = Readonly<LoggedActivity>;
+
+/**
+ * What follows a termination's firing, one at a time: the reset at once (mjlab's), the reset
+ * `delay` seconds of episode time later, or a freeze on the step it fired, until a reset
+ * (`'freeze'`) or for `freeze` seconds of wall time. Both times are clamped to 0..60, and 0
+ * is `'reset'`.
+ */
+export type { OnFire };
+
+/** A field left out keeps its value. */
+export type { TerminationOverridePatch, EventOverridePatch };
+
+/** A build's starting overrides by term name: a scene's `term_defaults`. */
+export type { TermDefaults };
+
+export interface MdpState {
+  /** Resets since the engine started; each activity names the episode it belongs to. */
+  episode: number;
+  /** Episode time, in seconds, as of this snapshot. */
+  time: number;
+  /** In config order; empty without a policy. */
+  terminations: ReadonlyArray<TerminationTermDescriptor>;
+  events: ReadonlyArray<EventTermDescriptor>;
+  /** The soonest reset a delayed termination holds: which term, and when it lands. */
+  pendingReset: Readonly<{ term: string; at: number }> | null;
+  /**
+   * The termination whose freeze paused the simulation, and when; the frame it fired on stays
+   * on show. A reset ends the freeze and plays: {@link MjswanEngine.play} (which lands the
+   * reset it owes), {@link MjswanEngine.reset}, lifting the freeze (the term set to a reset or
+   * a delay, or `clear`), or a timed freeze's end at `resumesAt` (`Date.now()` milliseconds;
+   * null for one that waits for a reset).
+   */
+  frozenBy: Readonly<{ term: string; at: number; resumesAt: number | null }> | null;
+  /** The latest activity, oldest first, at most 32 entries. */
+  activity: ReadonlyArray<MdpActivity>;
+}
+
+export interface MdpTerminationControls {
+  /**
+   * Switch a term off, or choose what follows its firing ({@link OnFire}): a delay is
+   * counted from when its condition turned true. Kept by name across resets and policy
+   * loads, so a name the loaded MDP lacks applies to the next one that has it. Lifting the
+   * freeze that paused the simulation lands the reset it owes and plays; a freeze set to
+   * another length is counted from when it froze.
+   */
+  set(name: string, patch: TerminationOverridePatch): void;
+}
+
+export interface MdpEventControls {
+  /** Switch a reset or interval term off, kept by name. A manual term has no switch. */
+  set(name: string, patch: EventOverridePatch): void;
+  /**
+   * Run a term's write, whatever its mode or switch: a reset term re-randomizes mid-episode,
+   * an interval term fires off its schedule, a manual term as {@link EventControls.fire},
+   * `disabled_when` included. At once while paused, else at the end of the control step.
+   */
+  trigger(name: string): void;
+}
+
+/**
+ * Operator overrides of the running MDP's terms, per kind. They change what the viewer
+ * sees, never the document; {@link clear} returns to the scene's `term_defaults`,
+ * mjlab's where it sets none. See context/frontend.md.
+ */
+export interface MdpControls {
+  readonly terminations: MdpTerminationControls;
+  /** An interval term's switch is {@link EventControls.setArmed}'s. */
+  readonly events: MdpEventControls;
+  clear(): void;
 }
 
 /** One event term the operator can drive: a `manual` button or an `interval` schedule. */
@@ -353,6 +460,8 @@ export interface MjswanEngineState {
   graphicsAvailable: GraphicsAvailable;
   /** Event terms the operator can drive; empty when the scene has none. */
   events: ReadonlyArray<EventDescriptor>;
+  /** The loaded MDP's terminations and events, their overrides, and what they did. */
+  mdp: MdpState;
   /** Every pointer mode, with whether this scene can run it. */
   interactions: ReadonlyArray<InteractionModeDescriptor>;
   interactionMode: InteractionModeId;
@@ -397,6 +506,7 @@ export interface MjswanEngine {
   // playback
   play(): void;
   pause(): void;
+  /** Reset the episode; while a termination's freeze holds the simulation, also play. */
   reset(): void;
 
   // subsystems
@@ -406,6 +516,7 @@ export interface MjswanEngine {
   readonly debugVis: DebugVisControls;
   readonly cameraFeeds: CameraFeedControls;
   readonly events: EventControls;
+  readonly mdp: MdpControls;
   readonly interaction: InteractionControls;
   readonly xr: XrControls;
   readonly preview: PreviewControls;

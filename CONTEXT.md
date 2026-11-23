@@ -22,7 +22,7 @@ The defining architectural fact: mjswan reimplements none of mjlab's MDP term fu
 | [licenses.md](context/licenses.md) | `license/`: file locations, detection, identification and tiers, why files |
 | [cloud.md](context/cloud.md) | `cloud/`: what `publish` sends and refuses, and login |
 | [skins.md](context/skins.md) | `skin.py`, `rig/`, `core/skin/`: characters drawn outside the model |
-| [frontend.md](context/frontend.md) | `template/`: the engine API, the step loop, `src/core/`, graphics, interaction with pick and preview, the three builds, plugins and custom TS |
+| [frontend.md](context/frontend.md) | `template/`: the engine API, the step loop, `src/core/`, graphics, interaction with pick and preview, operator overrides (`engine.mdp`), the three builds, plugins and custom TS |
 | [ci.md](context/ci.md) | tests, workflows, release, deployment |
 | [dependencies.md](context/dependencies.md) | pins and why, MuJoCo on both sides, how releases enter the lock |
 

@@ -536,6 +536,37 @@ scene.set_viewer(replace(scene.viewer, color_management="filament", tone_mapping
 
 The viewer panel's **Graphics** section copies this call, with the settings changed there, as **Copy as Python**.
 
+### SceneHandle.set_term_defaults
+
+```python
+def set_term_defaults(
+    *,
+    terminations: Mapping[str, TerminationDefault | bool] | None = None,
+    events: Mapping[str, bool] | None = None,
+) -> SceneHandle
+```
+
+Set what the scene's terms do when the viewer opens it, by name, in place of mjlab's. The
+viewer panel's **MDP** section starts from these, and its **Reset MDP** returns to them;
+what the build traces is unchanged. A termination takes a
+[`TerminationDefault`](#terminationdefault), or `False` to start switched off; a reset or
+interval event takes whether it starts switched on. A name applies to whichever of the
+scene's MDPs has that term, and the build warns for one none of them has. A second call
+replaces the first. The manifest carries them as the scene's `term_defaults` (format 11).
+
+```python
+scene.set_term_defaults(
+    terminations={
+        "bad_orientation": mjswan.TerminationDefault("delay", seconds=0.2),
+        "illegal_contact": mjswan.TerminationDefault("freeze", seconds=3.0),
+        "time_out": False,
+    },
+    events={"push_robot": False},
+)
+```
+
+Returns `self` for chaining.
+
 ### SceneHandle.add_skin
 
 ```python
@@ -1478,6 +1509,25 @@ it could reorder the observation the policy reads: a subclass's own field (PAC-M
 | `func` | `Callable \| TerminationBinding` | required | The term body. Any traceable `func(env, **params) -> Tensor` (mjlab's own included) or a binding naming a hand-written TypeScript class. |
 | `params` | `dict` | `{}` | Forwarded at trace time. |
 | `time_out` | `bool` | `False` | Marks this as a truncation rather than a terminal failure. |
+
+### TerminationDefault
+
+```python
+@dataclass(frozen=True)
+class mjswan.TerminationDefault:
+    on_fire: Literal["reset", "delay", "freeze"] = "reset"
+    seconds: float | None = None
+    enabled: bool = True
+```
+
+What a termination does when the viewer opens, for
+[`SceneHandle.set_term_defaults`](#scenehandleset_term_defaults). `"reset"` is mjlab's,
+the reset at once. `"delay"` lands the reset `seconds` of episode time after the term
+fires, the simulation running on. `"freeze"` stops the simulation on the frame the term
+fires, for `seconds` of wall time or, with `seconds=None`, until a reset; either way the
+reset follows and the simulation plays. `seconds` is above 0 and at most 60; a delay needs
+it, a reset takes none. `enabled=False` keeps the term evaluated and shown but never
+ending the episode.
 
 ---
 

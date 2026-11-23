@@ -34,6 +34,21 @@ export interface InteractionModeReport {
   reason?: string;
 }
 
+/** Why Pull, Push and Grab stand aside while the simulation is paused. */
+export const PAUSED_REASON = 'Disabled when stopped';
+
+/**
+ * Why a mode cannot act now, or null: the scene's own reason first, then a pause, since every
+ * mode but View acts through the physics step.
+ */
+export function unavailableReason(
+  mode: Pick<InteractionMode, 'id' | 'unavailable'>,
+  ctx: ModeContext,
+  paused: boolean,
+): string | null {
+  return mode.unavailable?.(ctx) ?? (paused && mode.id !== 'view' ? PAUSED_REASON : null);
+}
+
 export interface InteractionManagerOptions {
   scene: THREE.Scene;
   renderer: THREE.WebGLRenderer;
@@ -43,6 +58,8 @@ export interface InteractionManagerOptions {
   sim: () => InteractionSim;
   /** Shared with the XR hand, so one body is never held by two constraints. */
   weld: WeldHold;
+  /** Whether the physics loop is halted. */
+  paused?: () => boolean;
 }
 
 export class InteractionManager {
@@ -52,6 +69,7 @@ export class InteractionManager {
   private readonly wrench = new InteractionWrench();
   private readonly readSim: () => InteractionSim;
   private readonly weld: WeldHold;
+  private readonly paused: () => boolean;
   private readonly canvas: HTMLElement;
   private readonly modes = new Map<InteractionModeId, InteractionMode>();
   private readonly values = defaultParams();
@@ -63,6 +81,7 @@ export class InteractionManager {
   constructor(options: InteractionManagerOptions) {
     this.readSim = options.sim;
     this.weld = options.weld;
+    this.paused = options.paused ?? (() => false);
     this.canvas = options.renderer.domElement;
     this.arrow = new DragArrow(options.scene);
     this.ring = new PushRing(options.scene);
@@ -111,11 +130,12 @@ export class InteractionManager {
     this.values[id][name] = clampParam(spec, value);
   }
 
-  /** Every mode, with whether the loaded scene can run it. */
+  /** Every mode, with whether it can act now: in this scene, and not while paused. */
   report(): InteractionModeReport[] {
     return INTERACTION_MODES.map((spec) => {
-      const reason = this.modes.get(spec.id)?.unavailable?.(this.context()) ?? null;
-      const known = this.modes.has(spec.id);
+      const mode = this.modes.get(spec.id);
+      const reason = mode ? unavailableReason(mode, this.context(), this.paused()) : null;
+      const known = mode !== undefined;
       return {
         id: spec.id,
         label: spec.label,
@@ -190,7 +210,7 @@ export class InteractionManager {
     if (!mode) return 'none';
     const context = this.context();
     // An unavailable mode can stay selected; its presses go to the camera.
-    if (mode.unavailable?.(context)) return 'none';
+    if (unavailableReason(mode, context, this.paused()) !== null) return 'none';
     return mode.onDown(gesture, context);
   }
 

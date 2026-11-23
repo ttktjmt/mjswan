@@ -13,6 +13,8 @@ export interface ControlStepHooks {
   end(diverged: boolean): Promise<void>;
   /** The poses the renderer draws, taken in the middle of a control step. */
   snapshot(): void;
+  /** True once the step just ended stopped the loop: the rest of the budget is not spent. */
+  halted?(): boolean;
 }
 
 export class ControlStep {
@@ -49,6 +51,7 @@ export class ControlStep {
       midStep = !diverged && to < decimation;
       this.substep = midStep ? to : 0;
       if (!midStep) await this.hooks.end(diverged);
+      if (!midStep && this.hooks.halted?.()) break;
       if (now() > deadline) {
         budget = Math.min(budget, stepMs);
         break;
