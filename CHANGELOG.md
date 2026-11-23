@@ -513,6 +513,11 @@ shortcuts.
 
 ### Changed
 
+- **Pull, Push and Grab stand aside while the simulation is paused.** Each acts through
+  the physics step, so a drag on a paused simulation drew an arrow and moved nothing. While
+  paused (by `pause()` or a termination's stop) they report unavailable with a reason, stay
+  selected, and hand their presses to the camera; playing brings them back.
+
 - **`pip install mjswan` builds an app without Node, from a 6.5 MB wheel instead of 12.1
   MB.** The wheel carries the prebuilt SPA alone, marked as the build for the default
   options (`base_path="/"`, no GTM ID, single-threaded, no debug), which reuse it; any

@@ -627,6 +627,7 @@ export class mjswanRuntime {
       controls: this.controls,
       sim: () => this.interactionSim(),
       weld: this.weldHold,
+      paused: () => !this.running,
     });
 
     this.passthrough = new Passthrough(this.scene);

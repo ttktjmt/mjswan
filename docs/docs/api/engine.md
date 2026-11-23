@@ -346,7 +346,10 @@ force.
 `available` is false when the loaded scene cannot run a mode, and `reason` says why. Grab
 needs a weld the viewer injects into the scene MJCF, so a scene loaded as a compiled `.mjb`
 lacks it, and it is withheld from a policy scene whose model does not namespace its
-elements, where one more body would widen a traced graph's input.
+elements, where one more body would widen a traced graph's input. While the simulation is
+paused (by `pause()` or a termination's stop), every mode but View is unavailable too: each
+acts through the physics step, so a press would draw and move nothing. The mode stays
+selected, its presses go to the camera, and it acts again once the simulation plays.
 
 ### WebXR
 
