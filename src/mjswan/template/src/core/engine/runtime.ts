@@ -172,7 +172,7 @@ const MAX_XR_FRAME_SECONDS = 0.1;
 
 /** mjlab's viewer stops a physics burst after one frame, so the renderer gets its turn. */
 const BURST_MS = 1000 / 60;
-/** The most often a host hears that the MDP changed: a held reset's countdown asks every step. */
+/** The most often a host hears that the MDP changed: a held reset notifies every step. */
 const MDP_NOTIFY_MS = 100;
 
 /** The operator's view of the running MDP's terminations and events. */
@@ -1713,7 +1713,7 @@ export class mjswanRuntime {
     kept?: { module: OnnxModule | null },
   ): Promise<void> {
     const outgoing = this.onnxModule;
-    // Queued for the outgoing MDP's events.
+    // Triggers queued for the outgoing MDP's events have nowhere to land.
     this.pendingTriggers = [];
     this.currentPolicy = policy;
     this.sceneHasPolicy = policy !== null;

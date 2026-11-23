@@ -423,7 +423,7 @@ class Engine implements MjswanEngine {
   }
 
   reset(): void {
-    // A reset ends a termination's stop. Play first, so the running loop lands the reset at its step boundary.
+    // A reset ends a stop. Playing first lets the loop land the reset at its step boundary.
     if (this.stoppedBy() !== null) this.play();
     this.runtime.resetSimulation();
   }

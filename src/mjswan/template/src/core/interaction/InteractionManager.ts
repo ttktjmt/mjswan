@@ -38,9 +38,8 @@ export interface InteractionModeReport {
 export const PAUSED_REASON = 'Acts only while the simulation runs.';
 
 /**
- * Why a mode cannot act now, or null. Its own reason (the scene lacks what it needs) comes
- * first; then a pause, since every mode but View acts through the physics step, and a press
- * while paused would draw an arrow and move nothing.
+ * Why a mode cannot act now, or null: the scene's own reason first, then a pause, since every
+ * mode but View acts through the physics step.
  */
 export function unavailableReason(
   mode: Pick<InteractionMode, 'id' | 'unavailable'>,

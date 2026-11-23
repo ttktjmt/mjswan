@@ -205,7 +205,7 @@ export class TerminationManager {
   async evaluate(state: PolicyState): Promise<TerminationResult> {
     await Promise.all(this.graphs.map((graph) => graph.step()));
     const now = this.now();
-    // Without a control period no delay can be measured, and one never measured never ends.
+    // Without a control period a delay cannot be timed, so the reset lands at once.
     const timed = (this.deps.stepDt ?? 0) > 0;
     let terminated = false;
     let truncated = false;
@@ -223,7 +223,7 @@ export class TerminationManager {
       if (active && entry.override.enabled && entry.heldSince === null) entry.heldSince = now;
       if (entry.heldSince === null) continue;
       if (timed && !elapsed(now, entry.heldSince, delayOf(entry.override.onFire))) continue;
-      // Released with the verdict, so a step that follows without a reset judges itself.
+      // Cleared once delivered, so a step that follows without a reset judges the term afresh.
       entry.heldSince = null;
       reasons.push(entry.name);
       this.emit(entry, 'reset', now);
