@@ -226,7 +226,7 @@ function EventRow({ term, gated, handlers }: { term: EventTermDescriptor; gated:
  */
 export function MdpSection({ mdp, gated, handlers }: { mdp: MdpState; gated: ReadonlySet<string>; handlers: MdpHandlers }) {
   return (
-    <CommandSection label="MDP">
+    <CommandSection label="MDP" expandByDefault={false}>
       {mdp.terminations.length > 0 && <Subhead>Terminations</Subhead>}
       {mdp.terminations.map((term) => (
         <TerminationRow key={term.name} term={term} time={mdp.time} handlers={handlers} />
@@ -235,7 +235,7 @@ export function MdpSection({ mdp, gated, handlers }: { mdp: MdpState; gated: Rea
       {mdp.events.map((term) => (
         <EventRow key={term.name} term={term} gated={gated.has(term.name)} handlers={handlers} />
       ))}
-      <Box px="xs" pt="0.2em">
+      <Box px="xs" pt="0.2em" pb="0.5em">
         <Button variant="default" size="xs" fullWidth leftSection={<IconRefresh size={12} />} onClick={handlers.onClear}>
           Reset MDP
         </Button>

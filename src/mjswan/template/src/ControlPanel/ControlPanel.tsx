@@ -797,14 +797,6 @@ function ControlPanel(props: ControlPanelProps) {
             </CommandSection>
           )}
 
-          {mdp && mdpHandlers && mdp.terminations.length + mdp.events.length > 0 && (
-            <MdpSection
-              mdp={mdp}
-              gated={new Set(events.filter((e) => e.kind === 'manual' && !e.armed).map((e) => e.name))}
-              handlers={mdpHandlers}
-            />
-          )}
-
           {/* mjlab's Scene section, as the build recorded its declaration. */}
           {viewerGui && viewerGui.length > 0 && (
             <ViewerGuiSection
@@ -821,6 +813,14 @@ function ControlPanel(props: ControlPanelProps) {
               feeds={cameraFeeds}
               onAttach={onCameraFeedAttach}
               onFrustumChange={onCameraFrustumChange}
+            />
+          )}
+
+          {mdp && mdpHandlers && mdp.terminations.length + mdp.events.length > 0 && (
+            <MdpSection
+              mdp={mdp}
+              gated={new Set(events.filter((e) => e.kind === 'manual' && !e.armed).map((e) => e.name))}
+              handlers={mdpHandlers}
             />
           )}
 
