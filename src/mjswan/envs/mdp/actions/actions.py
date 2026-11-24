@@ -66,6 +66,12 @@ class BaseActionCfg(ActionTermCfg):
     """mjswan-specific: mjlab's ``DcMotorActuatorCfg.velocity_limit``. See
     ``saturation_effort``."""
 
+    torque_speed_envelope: dict[str, Any] | None = None
+    """mjswan-specific: wbc-mjlab's ``UnitreeActuatorCfg`` envelope on this term's
+    joints, ``{"x1", "x2", "y1", "y2"}``, each a value per joint as ``saturation_effort``
+    takes. The browser clips the motor torque it computes as wbc-mjlab's
+    ``clip_unitree_effort`` does. Resolved from the actuator configs when unset."""
+
     def _add_delay(self, entry: dict[str, Any]) -> None:
         if self.delay:
             entry["delay"] = self.delay
@@ -74,6 +80,8 @@ class BaseActionCfg(ActionTermCfg):
         if self.saturation_effort is not None and self.velocity_limit is not None:
             entry["saturation_effort"] = self.saturation_effort
             entry["velocity_limit"] = self.velocity_limit
+        if self.torque_speed_envelope is not None:
+            entry["torque_speed_envelope"] = self.torque_speed_envelope
 
     def to_dict(self) -> dict[str, Any]:
         if self.unsupported_reason is not None:

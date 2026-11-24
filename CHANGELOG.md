@@ -38,6 +38,14 @@ shortcuts.
   the scene's MDPs has warns at build time. The manifest carries them as the scene's
   `term_defaults`.
 
+- **A Unitree motor's torque-speed envelope runs in the browser** (**document format
+  11**). Action terms gain `torque_speed_envelope`, filled from WBC-Mjlab's
+  `UnitreeActuatorCfg` (`x1`, `x2`, `y1`, `y2`) as the gains are, and the browser clips
+  the motor's PD torque as WBC-Mjlab's `clip_unitree_effort` does. Its G1 had no torque
+  limit in the browser (`effort_limit` is infinite there). mjlab 1.5.1 and later never call
+  the class's own clip, so the browser now limits these motors where an mjlab rollout does
+  not. The build no longer warns that the envelope does not run.
+
 - **A DC motor's torque-speed curve runs in the browser** (**document format 10**). Action
   terms gain `saturation_effort` and `velocity_limit`, filled from mjlab's
   `DcMotorActuatorCfg` as the gains are, and the browser clips the motor's PD torque as

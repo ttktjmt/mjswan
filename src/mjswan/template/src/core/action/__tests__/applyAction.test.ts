@@ -17,6 +17,7 @@ import {
   readClipActions,
   resolveActionClip,
   stepPhysics,
+  torqueSpeedEnvelopeClip,
   type ProcessContext,
   type ResolvedActionTerm,
 } from '../applyAction';
@@ -406,6 +407,68 @@ describe('applyAction: DC motor', () => {
       Float32Array.from([1]),
     );
     expect(data.ctrl[0]).toBeCloseTo(7.5, 6);
+  });
+});
+
+describe('applyAction: Unitree torque-speed envelope', () => {
+  // wbc-mjlab 0.0.6's `clip_unitree_effort` for x1 14.5, x2 22.7, y1 111, y2 131 (the G1's
+  // N7520-22.5 motor), efforts across, joint speeds down.
+  const EFFORTS = [-150, -60, -5, 0, 5, 60, 150];
+  const WBC_MJLAB: Record<number, number[]> = {
+    [-30]: [0, 0, 0, 0, 0, 0, 0],
+    [-20]: [-36.5488, -36.5488, -5, 0, 5, 43.1342, 43.1342],
+    [-14.5]: [-111, -60, -5, 0, 5, 60, 131],
+    [-5]: [-111, -60, -5, 0, 5, 60, 131],
+    [0]: [-131, -60, -5, 0, 5, 60, 131],
+    [5]: [-131, -60, -5, 0, 5, 60, 111],
+    [14.5]: [-131, -60, -5, 0, 5, 60, 111],
+    [18]: [-75.0854, -60, -5, 0, 5, 60, 63.622],
+    [20]: [-43.1342, -43.1342, -5, 0, 5, 36.5488, 36.5488],
+    [22.7]: [0, 0, 0, 0, 0, 0, 0],
+    [30]: [0, 0, 0, 0, 0, 0, 0],
+  };
+
+  it("matches wbc-mjlab's envelope", () => {
+    for (const [vel, row] of Object.entries(WBC_MJLAB)) {
+      EFFORTS.forEach((effort, i) => {
+        expect(torqueSpeedEnvelopeClip(effort, Number(vel), 14.5, 22.7, 111, 131)).toBeCloseTo(row[i], 3);
+      });
+    }
+  });
+
+  it('leaves a motor with no envelope unclipped', () => {
+    expect(torqueSpeedEnvelopeClip(500, 40, Infinity, Infinity, Infinity, Infinity)).toBe(500);
+  });
+
+  it("clips the PD torque it computes to the joint's envelope", () => {
+    // At 18 rad/s, driving the motion, the envelope allows 111 - 111 / 8.2 * 3.5 = 63.62.
+    const data = fakeData(1, [0], [18]);
+    applyAction(
+      data,
+      [
+        term({
+          ctrlAdr: [0],
+          qposAdr: [0],
+          qvelAdr: [0],
+          actionIndices: [0],
+          actionScale: Float32Array.from([1]),
+          actionOffset: new Float32Array(1),
+          defaultJointPos: new Float32Array(1),
+          encoderBias: new Float32Array(1),
+          positionActuator: [false],
+          kp: Float32Array.from([1000]),
+          kd: new Float32Array(1),
+          torqueSpeedEnvelope: {
+            x1: Float32Array.from([14.5]),
+            x2: Float32Array.from([22.7]),
+            y1: Float32Array.from([111]),
+            y2: Float32Array.from([131]),
+          },
+        }),
+      ],
+      Float32Array.from([1]),
+    );
+    expect(data.ctrl[0]).toBeCloseTo(63.622, 2);
   });
 });
 

@@ -13,7 +13,7 @@ import dataclasses
 import re
 import reprlib
 import warnings
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from ..envs.mdp import actions as _actions_module
@@ -198,6 +198,11 @@ _PYTHON_PD_ACTUATOR = "IdealPdActuatorCfg"
 _DC_MOTOR_ACTUATOR = "DcMotorActuatorCfg"
 _DC_MOTOR_FIELDS = ("saturation_effort", "velocity_limit")
 
+#: wbc-mjlab's ideal PD with a torque-speed envelope, which the browser runs from these
+#: fields although mjlab 1.5.1 and later never call the class's `_clip_effort`.
+_UNITREE_ACTUATOR = "UnitreeActuatorCfg"
+_UNITREE_ENVELOPE_FIELDS = ("x1", "x2", "y1", "y2")
+
 #: The terms the browser computes a motor's torque for.
 _MOTOR_TORQUE_TERMS = (
     JointPositionActionCfg,
@@ -293,19 +298,10 @@ def resolve_dc_motor_curves(
             continue
         if term.saturation_effort is not None or term.velocity_limit is not None:
             continue
-        motors = [
-            cfg
-            for cfg in _pd_actuators(env_cfg, term)
-            if _is_actuator(cfg, _DC_MOTOR_ACTUATOR)
-        ]
+        motors = _motors(env_cfg, term, _DC_MOTOR_ACTUATOR)
         curve = {
-            field: _expand_patterns(
-                {
-                    pattern: float(getattr(cfg, field))
-                    for cfg in motors
-                    for pattern in cfg.target_names_expr
-                },
-                joint_names,
+            field: _by_joint(
+                motors, lambda cfg: float(getattr(cfg, field)), joint_names
             )
             for field in _DC_MOTOR_FIELDS
         }
@@ -314,9 +310,63 @@ def resolve_dc_motor_curves(
             term.velocity_limit = curve["velocity_limit"]
 
 
+def resolve_torque_speed_envelopes(
+    actions: Mapping[str, MjswanActionTermCfg] | None,
+    joint_names: list[str],
+    env_cfg: Any | None,
+) -> None:
+    """Fill a term's ``torque_speed_envelope`` from the entity's Unitree motors, in
+    place, unless the term sets one."""
+    if not actions or not joint_names:
+        return
+
+    for term in actions.values():
+        if not isinstance(term, _MOTOR_TORQUE_TERMS):
+            continue
+        if term.torque_speed_envelope is not None:
+            continue
+        motors = _motors(env_cfg, term, _UNITREE_ACTUATOR)
+        envelope = {
+            field: _by_joint(
+                motors, lambda cfg: _envelope_value(cfg, field), joint_names
+            )
+            for field in _UNITREE_ENVELOPE_FIELDS
+        }
+        if envelope["y1"]:
+            term.torque_speed_envelope = envelope
+
+
+def _motors(
+    env_cfg: Any | None, term: MjswanActionTermCfg, class_name: str
+) -> list[Any]:
+    return [
+        cfg for cfg in _pd_actuators(env_cfg, term) if _is_actuator(cfg, class_name)
+    ]
+
+
+def _by_joint(
+    actuators: list[Any], value_of: Callable[[Any], float], joint_names: list[str]
+) -> Any:
+    return _expand_patterns(
+        {
+            pattern: value_of(cfg)
+            for cfg in actuators
+            for pattern in cfg.target_names_expr
+        },
+        joint_names,
+    )
+
+
+def _envelope_value(cfg: Any, field: str) -> float:
+    # wbc-mjlab's `__post_init__` sets an unset `y2` (the opposing peak) to `y1`.
+    value = getattr(cfg, field)
+    return float(cfg.y1 if field == "y2" and value is None else value)
+
+
 def _unrun_fields(cfg: Any) -> dict[str, Any]:
-    """What an ideal-PD-family *cfg* sets beyond that PD, a DC motor's torque-speed curve
-    and its command delay, which the browser runs: a subclass's own fields (friction)."""
+    """What an ideal-PD-family *cfg* sets beyond that PD, a DC motor's or Unitree motor's
+    torque-speed limit and its command delay, which the browser runs: a subclass's own
+    fields (friction)."""
     run = {
         f.name
         for base in type(cfg).__mro__
@@ -325,6 +375,8 @@ def _unrun_fields(cfg: Any) -> dict[str, Any]:
     }
     if _is_actuator(cfg, _DC_MOTOR_ACTUATOR):
         run.update(_DC_MOTOR_FIELDS)
+    if _is_actuator(cfg, _UNITREE_ACTUATOR):
+        run.update(_UNITREE_ENVELOPE_FIELDS)
     return {name: value for name, value in _set_fields(cfg).items() if name not in run}
 
 
@@ -344,7 +396,8 @@ def warn_unrun_actuator_fields(
                 f"mjlab actuator '{type(cfg).__name__}' on "
                 f"{reprlib.repr(cfg.target_names_expr)} sets {_listing(unrun)}, which "
                 "the browser does not run: it runs only the PD within the effort limit, "
-                "a DC motor's torque-speed curve and the command delay.",
+                "a DC motor's or Unitree motor's torque-speed limit and the command "
+                "delay.",
                 category=RuntimeWarning,
                 stacklevel=2,
             )
@@ -494,6 +547,7 @@ __all__ = [
     "resolve_dc_motor_curves",
     "resolve_default_joint_vel",
     "resolve_pd_gains",
+    "resolve_torque_speed_envelopes",
     "warn_split_delays",
     "warn_unrun_actuator_fields",
 ]

@@ -8,6 +8,7 @@ Tests the "contract" of the builder's hierarchical configuration API:
 import contextlib
 import sys
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -941,6 +942,54 @@ class TestPolicyTermsDerivedFromEnvCfg:
         term = (cfg.actions or {})["joint_pos"]
         assert term.saturation_effort == {"robot/hip": 30.0}
         assert term.velocity_limit == {"robot/hip": 20.0}
+
+    @pytest.mark.mjlab
+    def test_a_unitree_envelope_reaches_the_action_term(
+        self, minimal_model, minimal_onnx
+    ):
+        actuator = pytest.importorskip("mjlab.actuator")
+
+        @dataclass(kw_only=True)
+        class UnitreeActuatorCfg(actuator.IdealPdActuatorCfg):
+            """wbc-mjlab's, by the name the build recognizes it by."""
+
+            x1: float
+            x2: float
+            y1: float
+            y2: float | None = None
+
+        motor = UnitreeActuatorCfg(
+            target_names_expr=(".*",),
+            stiffness=99.0,
+            damping=6.3,
+            x1=14.5,
+            x2=22.7,
+            y1=111.0,
+            y2=131.0,
+        )
+        env_cfg = _MdpEnvCfg()
+        env_cfg.scene = SimpleNamespace(
+            entities={
+                "robot": SimpleNamespace(
+                    articulation=SimpleNamespace(actuators=(motor,))
+                )
+            }
+        )
+        scene = _mjlab_scene(minimal_model, env_cfg)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            cfg = scene.add_policy(
+                name="Policy", policy=minimal_onnx, policy_joint_names=["robot/hip"]
+            )._config
+
+        term = (cfg.actions or {})["joint_pos"]
+        assert term.torque_speed_envelope == {
+            "x1": {"robot/hip": 14.5},
+            "x2": {"robot/hip": 22.7},
+            "y1": {"robot/hip": 111.0},
+            "y2": {"robot/hip": 131.0},
+        }
 
 
 def _fake_checkpoints(*names: str):

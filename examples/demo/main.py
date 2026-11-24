@@ -624,7 +624,7 @@ def _add_humanoid_skins(project: mjswan.ProjectHandle) -> None:
     # Training-only events the deploy runtime does not apply either.
     for training_only in ("assistive_wrench", "pull_robot"):
         env_cfg.events.pop(training_only, None)
-    # The browser runs the PD alone, so UnitreeActuator's friction terms become the
+    # The browser does not run UnitreeActuator's friction terms, so they become the
     # joints' own frictionloss and damping, which the exported scene carries.
     for actuator in env_cfg.scene.entities["robot"].articulation.actuators:
         actuator.frictionloss, actuator.viscous_damping = actuator.fs, actuator.fd

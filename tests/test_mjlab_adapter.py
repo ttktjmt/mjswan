@@ -37,6 +37,7 @@ from mjswan.mjlab import (
     resolve_dc_motor_curves,
     resolve_pd_gains,
     resolve_runner_defaults,
+    resolve_torque_speed_envelopes,
     warn_unrun_actuator_fields,
 )
 
@@ -979,6 +980,15 @@ class _FakeDcMotorActuatorCfg(_FakeIdealPdActuatorCfg):
 _FakeDcMotorActuatorCfg.__name__ = "DcMotorActuatorCfg"
 
 
+class _FakeUnitreeActuatorCfg(_FakeIdealPdActuatorCfg):
+    def __init__(self, target_names_expr, x1, x2, y1, y2=None):
+        super().__init__(target_names_expr, 99.0, 6.3)
+        self.x1, self.x2, self.y1, self.y2 = x1, x2, y1, y2
+
+
+_FakeUnitreeActuatorCfg.__name__ = "UnitreeActuatorCfg"
+
+
 def _env_cfg_with(*actuators: Any) -> Any:
     entity = SimpleNamespace(articulation=SimpleNamespace(actuators=actuators))
     return SimpleNamespace(scene=SimpleNamespace(entities={"robot": entity}))
@@ -1099,6 +1109,83 @@ class TestResolveDcMotorCurves:
         assert "saturation_effort" not in JointPositionActionCfg().to_dict()
 
 
+class TestResolveTorqueSpeedEnvelopes:
+    """wbc-mjlab's Unitree motor envelope runs in the browser, off its actuator fields."""
+
+    JOINTS = TestResolvePdGains.JOINTS
+
+    def test_the_envelope_expands_to_the_joints_its_motors_match(self):
+        from mjswan.envs.mdp.actions import JointPositionActionCfg
+
+        actions = {"joint_pos": JointPositionActionCfg()}
+        resolve_torque_speed_envelopes(
+            actions,
+            self.JOINTS,
+            _env_cfg_with(
+                _FakeUnitreeActuatorCfg((".*_knee_joint",), 14.5, 22.7, 111.0, 131.0),
+                _FakeIdealPdActuatorCfg(("waist_yaw_joint",), 40.0, 2.5),
+            ),
+        )
+
+        knees = ("robot/left_knee_joint", "robot/right_knee_joint")
+        assert actions["joint_pos"].torque_speed_envelope == {
+            field: dict.fromkeys(knees, value)
+            for field, value in {
+                "x1": 14.5,
+                "x2": 22.7,
+                "y1": 111.0,
+                "y2": 131.0,
+            }.items()
+        }
+
+    def test_an_unset_opposing_peak_is_the_driving_one(self):
+        from mjswan.envs.mdp.actions import JointPositionActionCfg
+
+        actions = {"joint_pos": JointPositionActionCfg()}
+        resolve_torque_speed_envelopes(
+            actions,
+            self.JOINTS,
+            _env_cfg_with(
+                _FakeUnitreeActuatorCfg((".*_knee_joint",), 14.5, 22.7, 111.0)
+            ),
+        )
+
+        envelope = actions["joint_pos"].torque_speed_envelope
+        assert envelope is not None
+        assert envelope["y2"] == envelope["y1"]
+
+    def test_no_unitree_motor_leaves_the_term_unclipped(self):
+        from mjswan.envs.mdp.actions import JointPositionActionCfg
+
+        actions = {"joint_pos": JointPositionActionCfg()}
+        resolve_torque_speed_envelopes(
+            actions,
+            self.JOINTS,
+            _env_cfg_with(_FakeDcMotorActuatorCfg((".*",), 30.0, 20.0)),
+        )
+
+        assert actions["joint_pos"].torque_speed_envelope is None
+
+    def test_the_envelope_reaches_the_manifest_entry(self):
+        from mjswan.envs.mdp.actions import ReferenceJointPositionActionCfg
+
+        envelope = {
+            "x1": {"robot/left_knee_joint": 14.5},
+            "x2": {"robot/left_knee_joint": 22.7},
+            "y1": {"robot/left_knee_joint": 111.0},
+            "y2": {"robot/left_knee_joint": 131.0},
+        }
+        entry = ReferenceJointPositionActionCfg(
+            command_name="motion", torque_speed_envelope=envelope
+        ).to_dict()
+
+        assert entry["torque_speed_envelope"] == envelope
+        assert (
+            "torque_speed_envelope"
+            not in ReferenceJointPositionActionCfg(command_name="motion").to_dict()
+        )
+
+
 @pytest.mark.mjlab
 class TestWarnUnrunActuatorFields:
     """An ideal-PD actuator warns for each field the browser does not run."""
@@ -1164,6 +1251,32 @@ class TestWarnUnrunActuatorFields:
             warn_unrun_actuator_fields(
                 self._two_terms_on_one_entity(), _env_cfg_with(cfg)
             )
+
+    def test_a_unitree_envelope_does_not_warn_but_its_friction_does(self, actuator):
+        # resolve_torque_speed_envelopes hands x1..y2 to the term; the friction stays unrun.
+        @dataclass(kw_only=True)
+        class UnitreeActuatorCfg(actuator.IdealPdActuatorCfg):
+            x1: float
+            x2: float
+            y1: float
+            y2: float | None = None
+            fs: float = 0.0
+
+        cfg = UnitreeActuatorCfg(
+            target_names_expr=(".*",),
+            stiffness=40.0,
+            damping=2.0,
+            x1=14.5,
+            x2=22.7,
+            y1=111.0,
+            y2=131.0,
+            fs=2.4,
+        )
+        with pytest.warns(RuntimeWarning, match=r"sets fs=2\.4, which") as record:
+            warn_unrun_actuator_fields(
+                self._two_terms_on_one_entity(), _env_cfg_with(cfg)
+            )
+        assert len(record) == 1
 
     def test_a_command_delay_does_not_warn(self, actuator):
         # The browser runs it: resolve_actuator_delays hands it to the term.

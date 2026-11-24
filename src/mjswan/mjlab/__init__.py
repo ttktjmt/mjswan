@@ -25,6 +25,7 @@ from .action import (
     resolve_dc_motor_curves,
     resolve_default_joint_vel,
     resolve_pd_gains,
+    resolve_torque_speed_envelopes,
     warn_split_delays,
     warn_unrun_actuator_fields,
 )
@@ -57,6 +58,7 @@ __all__ = [
     "resolve_dc_motor_curves",
     "resolve_default_joint_vel",
     "resolve_pd_gains",
+    "resolve_torque_speed_envelopes",
     "resolve_runner_defaults",
     "warn_split_delays",
     "warn_unrun_actuator_fields",

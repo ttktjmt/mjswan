@@ -16,7 +16,7 @@ The defining architectural fact: mjswan reimplements none of mjlab's MDP term fu
 | [object-model.md](context/object-model.md) | `Builder` and the `*Handle` / `*Config` pairs: what each owns, `MdpConfig` identity and ids, the public API |
 | [build.md](context/build.md) | `build/`: the pipeline's order, manifest entries, where graphs land, `frontend.py` and the SPA cache, `scene.mjz` |
 | [tracing.md](context/tracing.md) | `compile/`: the two passes, slot namespaces, the trace env, stateful terms, randomness, fusion, traced action process and native apply, what cannot be traced, parity, declined and rejected options |
-| [mdp.md](context/mdp.md) | `managers/` and `envs/mdp/`: the mirror cfgs, `*Binding` escape hatches, command terms, the muscle action term |
+| [mdp.md](context/mdp.md) | `managers/` and `envs/mdp/`: the mirror cfgs, `*Binding` escape hatches, actuator models, command terms, the muscle action term |
 | [mjlab.md](context/mjlab.md) | `mjlab/` adapters, the trace envs, the runner, `onnx_meta` pitfalls, and `source/` (W&B, Hub, URL) |
 | [document.md](context/document.md) | the tree and `.swn`, manifest rules, ids, the `in_keys` / `out_keys` slot tables, `format` versus `version`, an MDP owning its events and the MDP switch, `app.py` |
 | [licenses.md](context/licenses.md) | `license/`: file locations, detection, identification and tiers, why files |

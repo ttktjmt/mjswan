@@ -164,7 +164,13 @@ def traced_action_entry(
         "type": kind,
         "actuator_names": [re.escape(t) for t in export.target_names],
     }
-    for field in ("stiffness", "damping", "saturation_effort", "velocity_limit"):
+    for field in (
+        "stiffness",
+        "damping",
+        "saturation_effort",
+        "velocity_limit",
+        "torque_speed_envelope",
+    ):
         if (value := getattr(cfg, field)) is not None:
             entry[field] = value
     if cfg.delay:
