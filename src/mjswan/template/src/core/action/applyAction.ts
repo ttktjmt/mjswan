@@ -72,6 +72,8 @@ export interface ResolvedActionTerm {
   /** A DC motor's `saturation_effort` and `velocity_limit` per joint, `Infinity` for other motors. */
   saturationEffort?: Float32Array;
   velocityLimit?: Float32Array;
+  /** A Unitree motor's torque-speed envelope per joint, `Infinity` for other motors. */
+  torqueSpeedEnvelope?: TorqueSpeedEnvelope;
   /** `muscle_activation` only: how a raw action becomes a control. */
   muscleMode: MuscleMode;
   /** `muscle_activation` with `direct`: each actuator's own `ctrlrange`, per joint. */
@@ -331,7 +333,7 @@ function applyActionTerm(
   }
   for (const delay of term.delays) delay.apply(targets);
 
-  const { saturationEffort, velocityLimit } = term;
+  const { saturationEffort, velocityLimit, torqueSpeedEnvelope: envelope } = term;
   for (let i = 0; i < n; i++) {
     const ctrlIndex = ctrlAdr[i];
     if (ctrlIndex < 0) continue;
@@ -345,8 +347,11 @@ function applyActionTerm(
     else if (position) torque = kp[i] * (targets[i] - qpos[qposAdr[i]]) + kd[i] * (0 - vel);
     // A velocity actuator (`biastype=affine`) runs its own damping on `ctrl`.
     else torque = kd[i] * (targets[i] - vel);
-    ctrl[ctrlIndex] =
-      saturationEffort && velocityLimit ? dcMotorClip(torque, saturationEffort[i], velocityLimit[i], vel) : torque;
+    if (saturationEffort && velocityLimit) torque = dcMotorClip(torque, saturationEffort[i], velocityLimit[i], vel);
+    if (envelope) {
+      torque = torqueSpeedEnvelopeClip(torque, vel, envelope.x1[i], envelope.x2[i], envelope.y1[i], envelope.y2[i]);
+    }
+    ctrl[ctrlIndex] = torque;
   }
 }
 
@@ -358,6 +363,50 @@ export function dcMotorClip(effort: number, saturation: number, velocityLimit: n
   if (!Number.isFinite(saturation)) return effort;
   const slope = vel / velocityLimit;
   return clamp(effort, saturation * (-1 - slope), saturation * (1 - slope));
+}
+
+/** wbc-mjlab's `TorqueSpeedEnvelope`, one value per joint: speeds `x1`, `x2` and peaks `y1`, `y2`. */
+export interface TorqueSpeedEnvelope {
+  x1: Float32Array;
+  x2: Float32Array;
+  y1: Float32Array;
+  y2: Float32Array;
+}
+
+type PerJoint = number | number[] | Record<string, number>;
+
+/**
+ * A term's `torque_speed_envelope` per joint, read by `perJoint`: `Infinity` for a joint
+ * without one, and a joint's `y1` where it has no `y2`, as wbc-mjlab's `UnitreeActuatorCfg` fills it.
+ */
+export function resolveTorqueSpeedEnvelope(
+  envelope: Partial<Record<keyof TorqueSpeedEnvelope, PerJoint>>,
+  perJoint: (values: PerJoint | undefined, fallback: number) => Float32Array,
+): TorqueSpeedEnvelope {
+  const y1 = perJoint(envelope.y1, Infinity);
+  const y2 = perJoint(envelope.y2, NaN);
+  for (let i = 0; i < y2.length; i++) if (Number.isNaN(y2[i])) y2[i] = y1[i];
+  return { x1: perJoint(envelope.x1, Infinity), x2: perJoint(envelope.x2, Infinity), y1, y2 };
+}
+
+/**
+ * wbc-mjlab's `clip_unitree_effort`: the peak is `y1` while the torque drives the joint the
+ * way it moves and `y2` otherwise, and falls linearly from it at `x1` to 0 at `x2` in joint speed.
+ */
+export function torqueSpeedEnvelopeClip(
+  effort: number,
+  vel: number,
+  x1: number,
+  x2: number,
+  y1: number,
+  y2: number,
+): number {
+  if (!Number.isFinite(y1)) return effort;
+  const peak = vel * effort > 0 ? y1 : y2;
+  const speed = Math.abs(vel);
+  const slope = peak / Math.max(x2 - x1, 1e-6);
+  const limit = speed < x1 ? peak : Math.max(peak - slope * (speed - x1), 0);
+  return clamp(effort, -limit, limit);
 }
 
 function clamp01(value: number): number {

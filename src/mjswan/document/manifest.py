@@ -57,8 +57,9 @@ MANIFEST_NAME = "manifest.json"
 #: 10: an action term may carry a DC motor's torque-speed curve (``saturation_effort``,
 #: ``velocity_limit``). An older engine would run those motors without it.
 #:
-#: 11: a scene may carry ``term_defaults``, what its terms do when the viewer opens. An
-#: older engine would start every term as mjlab's.
+#: 11: a scene may carry ``term_defaults``, what its terms do when the viewer opens, and
+#: an action term a Unitree motor's ``torque_speed_envelope``. An older engine would
+#: start every term as mjlab's and run those motors without a torque limit.
 DOCUMENT_FORMAT = 11
 
 #: Input slots the runtime fills itself rather than from an observation group: the

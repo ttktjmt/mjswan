@@ -51,6 +51,8 @@ export type ActionConfigEntry = {
   /** mjlab's DC motor torque-speed curve on the term's joints (format 10). */
   saturation_effort?: number | number[] | Record<string, number>;
   velocity_limit?: number | number[] | Record<string, number>;
+  /** wbc-mjlab's Unitree torque-speed envelope on the term's joints (format 11). */
+  torque_speed_envelope?: Partial<Record<'x1' | 'x2' | 'y1' | 'y2', number | number[] | Record<string, number>>>;
   actuator_names?: string[];
   clip?: Record<string, readonly number[]>;
   /** Ramp each target across the substeps, from the previous processed action. */

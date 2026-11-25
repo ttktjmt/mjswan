@@ -69,6 +69,7 @@ import {
   isTargetActuator,
   readClipActions,
   resolveActionClip,
+  resolveTorqueSpeedEnvelope,
   stepPhysics,
   substepOptions,
   type ControlType,
@@ -2049,6 +2050,14 @@ export class mjswanRuntime {
               velocityLimit: this.normalizeControlArray(actionTerm.velocity_limit, n, Infinity, subsetJointNames),
             }
           : {};
+      const envelope = actionTerm.torque_speed_envelope;
+      const torqueSpeedEnvelope = envelope
+        ? {
+            torqueSpeedEnvelope: resolveTorqueSpeedEnvelope(envelope, (values, fallback) =>
+              this.normalizeControlArray(values, n, fallback, subsetJointNames),
+            ),
+          }
+        : {};
       // Pattern-keyed, unlike the exact-name siblings above.
       const { clipLo, clipHi } = resolveActionClip(actionTerm.clip, subsetJointNames, n);
 
@@ -2085,6 +2094,7 @@ export class mjswanRuntime {
         kp,
         kd,
         ...curve,
+        ...torqueSpeedEnvelope,
         muscleMode: 'sigmoid' as MuscleMode,
         muscleCtrlLo: EMPTY_CTRL_RANGE,
         muscleCtrlHi: EMPTY_CTRL_RANGE,

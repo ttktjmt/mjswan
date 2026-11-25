@@ -12,6 +12,18 @@
 
 A term with no browser implementation **fails the build**, naming both ways out (a trace-friendly `register_*` replacement, or a `ts_src` TS class): [tracing.md](tracing.md).
 
+## Actuator models
+
+The browser computes an ideal-PD actuator's torque itself (`core/action/applyAction.ts`), so what an actuator config adds to that PD reaches it only as fields of the action term, which `mjlab/action.py` fills from the entity's actuator configs, matching classes by name in the MRO:
+
+- `DcMotorActuatorCfg`: `saturation_effort` and `velocity_limit`, clipped as mjlab's `dc_motor_clip`.
+- WBC-Mjlab's `UnitreeActuatorCfg`: `x1`, `x2`, `y1`, `y2` as `torque_speed_envelope`, clipped as its `clip_unitree_effort`. Matched by name, so mjswan does not depend on wbc-mjlab.
+- Every actuator's command delay, as `delay`.
+
+Anything else an `IdealPdActuatorCfg` subclass sets warns at build time (`warn_unrun_actuator_fields`), such as UnitreeActuator's friction, which the demo moves into the joints' `frictionloss` and `damping`.
+
+The Unitree envelope runs although mjlab does not run it: mjlab computes the PD through a fused control law that never calls `_clip_effort`, where wbc-mjlab clips. The envelope is the motor model the config declares and the robot enforces, and the demo's WBC-Mjlab G1 policy was trained under it, on an mjlab that still called `_clip_effort`. A joint without `y2` takes its `y1`, as the class does. Rejected: leaving these motors unlimited to match an mjlab rollout, which drives the G1 with more torque than its motors have.
+
 ## Command terms
 
 `managers/command_manager.py` defines the configs policies consume: `SliderConfig` (with `enabled_when`, and an `adjustable_range` → `SliderRangeConfig` companion slider), `CheckboxConfig`, `ButtonConfig`, `CommandUiConfig`, `CommandTermConfig`, `CommandBinding`, the `CommandInput` union, and `register_command`, which binds an mjlab command-cfg *class name* to a `CommandBinding`. `CommandTermConfig` keeps mjswan's own name: it is not mjlab's `CommandTermCfg`, since it also carries the browser UI and the pending trace.

@@ -292,10 +292,18 @@ A `DcMotorActuatorCfg`'s torque-speed curve runs too: the build reads its
 `saturation_effort` and `velocity_limit` onto the term, and the browser clips the motor's
 torque as mjlab's `dc_motor_clip` does.
 
+So does the envelope of WBC-Mjlab's `UnitreeActuatorCfg`: the build reads its `x1`, `x2`,
+`y1` and `y2` onto the term as `torque_speed_envelope`, and the browser clips the motor's
+torque as WBC-Mjlab's `clip_unitree_effort` does. The peak is `y1` while the torque drives
+the joint the way it moves and `y2` otherwise, and it falls from `x1` to 0 at `x2` in joint
+speed. mjlab 1.5.1 and later never call the class's own clip, so an mjlab rollout runs
+these motors without it.
+
 What the browser does not run warns at build time rather than being dropped silently: an
 mjlab action field mjswan's class does not have, when it holds a non-default value, and
 whatever an `IdealPdActuatorCfg` does beyond its PD within the effort limit, a DC motor's
-curve and its command delay, such as a subclass's own fields (a friction model).
+or Unitree motor's torque-speed limit and its command delay, such as a subclass's own
+fields (a friction model).
 
 ### Task-defined action terms
 
