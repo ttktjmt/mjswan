@@ -194,7 +194,7 @@ exclude = [
 ]
 
 [tool.uv]
-required-version = "==0.13.10"
+required-version = "==0.13.9"
 # `uv lock` takes no release younger than three days: hijacked releases such as litellm
 # 1.107.0 were caught and pulled within that window. The template's .npmrc holds npm to
 # the same three days (`min-release-age`).
