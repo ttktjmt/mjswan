@@ -228,11 +228,11 @@ _EXPORT_FILTERS_INSTALLED = False
 
 
 def _prepare_single_env_export(num_envs: int) -> None:
-    """Refuse a batched trace, and silence the three warnings a single-env one raises.
+    """Refuse a batched trace and silence known warnings for single-env exports.
 
-    All three are safe here: the `index_put_` mutation is read back as a graph output,
-    `len(env_ids)` bakes the row count this guard pins to 1, and the `torch.tensor`
-    constants are config that cannot vary.
+    The `index_put_` mutation is read back as a graph output and `len(env_ids)`
+    bakes the row count this guard pins to 1. The graph checks compare outputs
+    on perturbed inputs to catch divergence from baked values.
     """
     if num_envs != 1:
         raise ValueError(
@@ -252,6 +252,9 @@ def _prepare_single_env_export(num_envs: int) -> None:
     warnings.filterwarnings("ignore", message="Using len to get tensor shape")
     warnings.filterwarnings(
         "ignore", message="torch.tensor results are registered as constants"
+    )
+    warnings.filterwarnings(
+        "ignore", message=r"torch\.as_tensor results are registered as constants"
     )
     _EXPORT_FILTERS_INSTALLED = True
 
@@ -333,6 +336,7 @@ _RANDOM_OPS = frozenset(
 _SOUND_TRACER_WARNINGS = (
     "Using len to get tensor shape",
     "torch.tensor results are registered as constants",
+    "torch.as_tensor results are registered as constants",
 )
 
 

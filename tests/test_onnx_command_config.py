@@ -264,9 +264,8 @@ class _AssetCfg:
 def test_the_export_filters_match_the_exporters_wording(monkeypatch):
     """String matches against torch's wording, so drift is silent.
 
-    What keeps an unvetted warning — a `copy_` removal, another constructor's bake —
-    from being swallowed with the three that are safe. `catch_warnings` stops the
-    process-wide install from leaking into the rest of the session.
+    Keep warnings about other mutations or Python conversions visible.
+    `catch_warnings` stops the process-wide install from leaking into the session.
     """
     from mjswan.compile import export as onnx_export
 
@@ -280,11 +279,11 @@ def test_the_export_filters_match_the_exporters_wording(monkeypatch):
         "safely ignore this warning if you use this function to create tensors out "
         "of constant variables that would be the same every time you call this "
         "function.",
+        "torch.as_tensor results are registered as constants in the trace",
     ]
     others = [
         "ONNX Preprocess - Removing mutation from node aten::copy_ on block input",
         "Converting a tensor to a Python boolean might cause the trace to be incorrect",
-        "torch.as_tensor results are registered as constants in the trace",
     ]
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
