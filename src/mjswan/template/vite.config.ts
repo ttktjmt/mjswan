@@ -3,12 +3,13 @@ import react from '@vitejs/plugin-react';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import path from 'path';
 import fs from 'fs';
+import { createRequire } from 'node:module';
 import postcss from 'postcss';
-import { minify } from './vite.shared';
+import { minify } from './vite.shared.ts';
 
 // Extract version from Python package (source of truth)
 function getVersionFromPython(): string {
-  const initPath = path.resolve(__dirname, '../__init__.py');
+  const initPath = path.resolve(import.meta.dirname, '../__init__.py');
   try {
     const content = fs.readFileSync(initPath, 'utf-8');
     const match = content.match(/__version__\s*=\s*["']([^"']+)["']/);
@@ -18,13 +19,12 @@ function getVersionFromPython(): string {
   } catch {
     // Fallback to package.json if Python file not found
   }
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pkg = require('./package.json');
+  const pkg = createRequire(import.meta.url)('./package.json');
   return pkg.version || '0.0.0';
 }
 
 const isMt = process.env.MJSWAN_MT === '1';
-const coiSwPath = path.resolve(__dirname, '_mt/coi-serviceworker.js');
+const coiSwPath = path.resolve(import.meta.dirname, '_mt/coi-serviceworker.js');
 
 function mtPlugin(enabled: boolean): Plugin | null {
   if (!enabled) return null;
@@ -89,7 +89,7 @@ function gtmPlugin(gtmId: string | undefined) {
   };
 }
 
-const MANTINE_ESM = path.resolve(__dirname, 'node_modules/@mantine/core/esm');
+const MANTINE_ESM = path.resolve(import.meta.dirname, 'node_modules/@mantine/core/esm');
 
 /** The `m_` names in the class maps of the Mantine components src/'s .tsx files reach. */
 function mantineNamesInUse(): Set<string> {
@@ -113,7 +113,7 @@ function mantineNamesInUse(): Set<string> {
       walk(path.resolve(path.dirname(file), from));
     }
   };
-  const src = path.resolve(__dirname, 'src');
+  const src = path.resolve(import.meta.dirname, 'src');
   for (const file of fs.readdirSync(src, { recursive: true, encoding: 'utf-8' })) {
     if (!file.endsWith('.tsx') || file.includes('__tests__') || file.endsWith('.test.tsx')) continue;
     const code = fs.readFileSync(path.join(src, file), 'utf-8');
@@ -196,7 +196,7 @@ function thirdPartyLicensesPlugin(): Plugin {
         const bundled = [...(JSON.parse(source) as BundledLicense[]), ...VENDORED_LICENSES];
         const sections = bundled.map(
           ({ name, version, identifier, text }) => {
-            const own = path.resolve(__dirname, 'licenses', name, 'LICENSE');
+            const own = path.resolve(import.meta.dirname, 'licenses', name, 'LICENSE');
             text ??= fs.existsSync(own) ? fs.readFileSync(own, 'utf-8').trim() : undefined;
             if (!text) missing.push(name);
             return `## ${name} ${version}${identifier ? ` (${identifier})` : ''}\n\n${text}\n`;
@@ -231,9 +231,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
       // Single-threaded apps never load `mujoco/mt`; the stub keeps its 10 MB build out of `dist/`.
-      ...(isMt ? {} : { 'mujoco/mt': path.resolve(__dirname, 'src/engine/mujocoMtStub.ts') }),
+      ...(isMt ? {} : { 'mujoco/mt': path.resolve(import.meta.dirname, 'src/engine/mujocoMtStub.ts') }),
     },
   },
   optimizeDeps: {
@@ -255,7 +255,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 11000,
     license: { fileName: LICENSES_JSON },
     rollupOptions: {
-      input: path.resolve(__dirname, 'index.html'),
+      input: path.resolve(import.meta.dirname, 'index.html'),
       output: { minify },
       onwarn(warning, warn) {
         // mujoco.js is an Emscripten-generated file that imports Node.js built-ins

@@ -4,8 +4,9 @@ import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import { createHash } from 'crypto';
 import path from 'path';
 import fs from 'fs';
-import { minify } from './vite.shared';
-import { ORT_WASM_FILE, ORT_WASM_TOKEN, UPSTREAM_WASM } from './vite.wasm';
+import { createRequire } from 'node:module';
+import { minify } from './vite.shared.ts';
+import { ORT_WASM_FILE, ORT_WASM_TOKEN, UPSTREAM_WASM } from './vite.wasm.ts';
 
 // Library build: emits a single self-contained ESM (`dist/mjswan.js`) exposing
 // `createEngine(element, options?)` (the headless engine; no React/Mantine), with every
@@ -13,7 +14,7 @@ import { ORT_WASM_FILE, ORT_WASM_TOKEN, UPSTREAM_WASM } from './vite.wasm';
 // resolved relative to the bundle wherever it is served from. See src/engine/.
 
 function getVersionFromPython(): string {
-  const initPath = path.resolve(__dirname, '../__init__.py');
+  const initPath = path.resolve(import.meta.dirname, '../__init__.py');
   try {
     const content = fs.readFileSync(initPath, 'utf-8');
     const match = content.match(/__version__\s*=\s*["']([^"']+)["']/);
@@ -23,8 +24,7 @@ function getVersionFromPython(): string {
   } catch {
     // Fall through to package.json.
   }
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pkg = require('./package.json');
+  const pkg = createRequire(import.meta.url)('./package.json');
   return pkg.version || '0.0.0';
 }
 
@@ -48,7 +48,7 @@ const specifierFrom = (fromFile: string, target: string): string =>
 function upstreamWasmNames(): Map<string, string> {
   const names = new Map<string, string>();
   for (const source of UPSTREAM_WASM) {
-    const file = path.resolve(__dirname, 'node_modules', source);
+    const file = path.resolve(import.meta.dirname, 'node_modules', source);
     names.set(sha256(fs.readFileSync(file)), path.basename(file));
   }
   return names;
@@ -230,7 +230,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
   optimizeDeps: {
@@ -265,7 +265,7 @@ export default defineConfig({
     cssCodeSplit: false,
     lib: {
       // The engine entry (createEngine) — no React/Mantine in the CDN bundle.
-      entry: path.resolve(__dirname, 'src/engine/index.ts'),
+      entry: path.resolve(import.meta.dirname, 'src/engine/index.ts'),
       formats: ['es'],
       fileName: () => 'mjswan.js',
     },

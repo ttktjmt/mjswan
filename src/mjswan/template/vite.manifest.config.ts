@@ -13,7 +13,7 @@ export default defineConfig({
     emptyOutDir: false,
     sourcemap: false,
     lib: {
-      entry: path.resolve(__dirname, 'src/manifest/index.ts'),
+      entry: path.resolve(import.meta.dirname, 'src/manifest/index.ts'),
       formats: ['es'],
       fileName: () => 'manifest.js',
     },
