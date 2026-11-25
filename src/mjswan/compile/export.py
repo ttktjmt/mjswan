@@ -228,11 +228,11 @@ _EXPORT_FILTERS_INSTALLED = False
 
 
 def _prepare_single_env_export(num_envs: int) -> None:
-    """Refuse a batched trace and silence known warnings for single-env exports.
+    """Refuse a batched trace, and silence the warnings a single-env one raises.
 
-    The `index_put_` mutation is read back as a graph output and `len(env_ids)`
-    bakes the row count this guard pins to 1. The graph checks compare outputs
-    on perturbed inputs to catch divergence from baked values.
+    All are safe here: the `index_put_` mutation is read back as a graph output,
+    `len(env_ids)` bakes the row count this guard pins to 1, and the `torch.tensor`
+    and `torch.as_tensor` constants are config that cannot vary.
     """
     if num_envs != 1:
         raise ValueError(
