@@ -16,6 +16,7 @@ import {
   processAction,
   readClipActions,
   resolveActionClip,
+  resolveTorqueSpeedEnvelope,
   stepPhysics,
   torqueSpeedEnvelopeClip,
   type ProcessContext,
@@ -469,6 +470,42 @@ describe('applyAction: Unitree torque-speed envelope', () => {
       Float32Array.from([1]),
     );
     expect(data.ctrl[0]).toBeCloseTo(63.622, 2);
+  });
+
+  // A name-keyed reader, as the runtime's `normalizeControlArray` reads a term's joints.
+  const JOINTS = ['robot/knee', 'robot/wrist', 'robot/hip'];
+  const byName = (values: number | number[] | Record<string, number> | undefined, fallback: number) => {
+    const out = new Float32Array(JOINTS.length).fill(fallback);
+    if (values && typeof values === 'object' && !Array.isArray(values)) {
+      for (const [name, v] of Object.entries(values)) out[JOINTS.indexOf(name)] = v;
+    }
+    return out;
+  };
+
+  it("reads each field of a term's envelope into its own per-joint array", () => {
+    const envelope = resolveTorqueSpeedEnvelope(
+      {
+        x1: { 'robot/knee': 14.5, 'robot/wrist': 15.3 },
+        x2: { 'robot/knee': 22.7, 'robot/wrist': 24.76 },
+        y1: { 'robot/knee': 111, 'robot/wrist': 4.8 },
+        y2: { 'robot/knee': 131, 'robot/wrist': 8.6 },
+      },
+      byName,
+    );
+    expect(Array.from(envelope.x1)).toEqual([14.5, Math.fround(15.3), Infinity]);
+    expect(Array.from(envelope.x2)).toEqual([Math.fround(22.7), Math.fround(24.76), Infinity]);
+    expect(Array.from(envelope.y1)).toEqual([111, Math.fround(4.8), Infinity]);
+    expect(Array.from(envelope.y2)).toEqual([131, Math.fround(8.6), Infinity]);
+  });
+
+  it("gives a joint without y2 its y1, as wbc-mjlab's UnitreeActuatorCfg does", () => {
+    const envelope = resolveTorqueSpeedEnvelope(
+      { x1: { 'robot/knee': 14.5 }, x2: { 'robot/knee': 22.7 }, y1: { 'robot/knee': 111 } },
+      byName,
+    );
+    expect(Array.from(envelope.y2)).toEqual([111, Infinity, Infinity]);
+    // Braking against the motion is held to y1.
+    expect(torqueSpeedEnvelopeClip(-500, 1, envelope.x1[0], envelope.x2[0], envelope.y1[0], envelope.y2[0])).toBe(-111);
   });
 });
 

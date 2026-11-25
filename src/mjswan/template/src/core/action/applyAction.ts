@@ -373,6 +373,22 @@ export interface TorqueSpeedEnvelope {
   y2: Float32Array;
 }
 
+type PerJoint = number | number[] | Record<string, number>;
+
+/**
+ * A term's `torque_speed_envelope` per joint, read by `perJoint`: `Infinity` for a joint
+ * without one, and a joint's `y1` where it has no `y2`, as wbc-mjlab's `UnitreeActuatorCfg` fills it.
+ */
+export function resolveTorqueSpeedEnvelope(
+  envelope: Partial<Record<keyof TorqueSpeedEnvelope, PerJoint>>,
+  perJoint: (values: PerJoint | undefined, fallback: number) => Float32Array,
+): TorqueSpeedEnvelope {
+  const y1 = perJoint(envelope.y1, Infinity);
+  const y2 = perJoint(envelope.y2, NaN);
+  for (let i = 0; i < y2.length; i++) if (Number.isNaN(y2[i])) y2[i] = y1[i];
+  return { x1: perJoint(envelope.x1, Infinity), x2: perJoint(envelope.x2, Infinity), y1, y2 };
+}
+
 /**
  * wbc-mjlab's `clip_unitree_effort`: the peak is `y1` while the torque drives the joint the
  * way it moves and `y2` otherwise, and falls linearly from it at `x1` to 0 at `x2` in joint speed.

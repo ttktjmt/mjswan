@@ -951,7 +951,7 @@ class TestPolicyTermsDerivedFromEnvCfg:
 
         @dataclass(kw_only=True)
         class UnitreeActuatorCfg(actuator.IdealPdActuatorCfg):
-            """wbc-mjlab's, by the name the build recognizes it by."""
+            """Stands in for wbc-mjlab's, which the build matches by class name."""
 
             x1: float
             x2: float

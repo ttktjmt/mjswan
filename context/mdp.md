@@ -22,7 +22,7 @@ The browser computes an ideal-PD actuator's torque itself (`core/action/applyAct
 
 Anything else an `IdealPdActuatorCfg` subclass sets warns at build time (`warn_unrun_actuator_fields`), such as UnitreeActuator's friction, which the demo moves into the joints' `frictionloss` and `damping`.
 
-The Unitree envelope runs although mjlab does not run it: mjlab 1.5.1 and later compute the PD through a fused control law that never calls `_clip_effort`, where wbc-mjlab clips, so the clip is dead under the mjlab mjswan pins. The envelope is the motor model the config declares and the real robot enforces, and wbc-mjlab 0.0.1 to 0.0.5 trained under it on mjlab 1.4.0 and 1.5.0. Rejected: leaving these motors unlimited to match an mjlab rollout, which drives the G1 with more torque than its motors have.
+The Unitree envelope runs although mjlab does not run it: mjlab computes the PD through a fused control law that never calls `_clip_effort`, where wbc-mjlab clips. The envelope is the motor model the config declares and the robot enforces, and the demo's WBC-Mjlab G1 policy was trained under it, on an mjlab that still called `_clip_effort`. A joint without `y2` takes its `y1`, as the class does. Rejected: leaving these motors unlimited to match an mjlab rollout, which drives the G1 with more torque than its motors have.
 
 ## Command terms
 

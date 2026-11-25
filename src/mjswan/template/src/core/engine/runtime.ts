@@ -69,6 +69,7 @@ import {
   isTargetActuator,
   readClipActions,
   resolveActionClip,
+  resolveTorqueSpeedEnvelope,
   stepPhysics,
   substepOptions,
   type ControlType,
@@ -2049,16 +2050,12 @@ export class mjswanRuntime {
               velocityLimit: this.normalizeControlArray(actionTerm.velocity_limit, n, Infinity, subsetJointNames),
             }
           : {};
-      // A Unitree motor's torque-speed envelope, likewise Infinity for any other motor.
       const envelope = actionTerm.torque_speed_envelope;
       const torqueSpeedEnvelope = envelope
         ? {
-            torqueSpeedEnvelope: {
-              x1: this.normalizeControlArray(envelope.x1, n, Infinity, subsetJointNames),
-              x2: this.normalizeControlArray(envelope.x2, n, Infinity, subsetJointNames),
-              y1: this.normalizeControlArray(envelope.y1, n, Infinity, subsetJointNames),
-              y2: this.normalizeControlArray(envelope.y2, n, Infinity, subsetJointNames),
-            },
+            torqueSpeedEnvelope: resolveTorqueSpeedEnvelope(envelope, (values, fallback) =>
+              this.normalizeControlArray(values, n, fallback, subsetJointNames),
+            ),
           }
         : {};
       // Pattern-keyed, unlike the exact-name siblings above.

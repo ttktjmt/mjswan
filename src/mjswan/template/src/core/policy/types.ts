@@ -52,7 +52,7 @@ export type ActionConfigEntry = {
   saturation_effort?: number | number[] | Record<string, number>;
   velocity_limit?: number | number[] | Record<string, number>;
   /** wbc-mjlab's Unitree torque-speed envelope on the term's joints (format 11). */
-  torque_speed_envelope?: Record<'x1' | 'x2' | 'y1' | 'y2', number | number[] | Record<string, number>>;
+  torque_speed_envelope?: Partial<Record<'x1' | 'x2' | 'y1' | 'y2', number | number[] | Record<string, number>>>;
   actuator_names?: string[];
   clip?: Record<string, readonly number[]>;
   /** Ramp each target across the substeps, from the previous processed action. */

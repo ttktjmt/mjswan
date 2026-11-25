@@ -199,7 +199,7 @@ _DC_MOTOR_ACTUATOR = "DcMotorActuatorCfg"
 _DC_MOTOR_FIELDS = ("saturation_effort", "velocity_limit")
 
 #: wbc-mjlab's ideal PD with a torque-speed envelope, which the browser runs from these
-#: fields although mjlab 1.5.1 and later never call the class's `_clip_effort`.
+#: fields though mjlab never calls its `_clip_effort` (context/mdp.md).
 _UNITREE_ACTUATOR = "UnitreeActuatorCfg"
 _UNITREE_ENVELOPE_FIELDS = ("x1", "x2", "y1", "y2")
 
