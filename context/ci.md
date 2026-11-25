@@ -12,7 +12,7 @@
 - **`release.yml`** writes one version into `_version.py`, `package.json` and `package-lock.json`, commits it to main for a stable release, tags it, and calls `publish-pypi.yml` and `publish-npm.yml`, which set the version from the input again so a prerelease needs no commit. The Python and npm versions are therefore one string by construction ([document.md](document.md) relies on it).
 - Also: `ruff.yml`, `deploy.yml` (below), `sync-contributors.yml`.
 
-Every workflow installs Python dependencies from `uv.lock` alone (`uv sync --locked`, `uv run --locked`), so a release published since the last lock never reaches CI, torch included (the locked Linux wheel is the CUDA build). The `core` job's pytest is the `test` dependency group, locked like an extra but not published as one. Every action is pinned to a commit SHA with its release tag beside it. How the lock admits new releases is in [dependencies.md](dependencies.md).
+Every workflow installs Python dependencies from `uv.lock` alone (`uv sync --locked`, `uv run --locked`), so a release published since the last lock never reaches CI, torch included (the locked Linux wheel is the CUDA build). The `core` job's pytest is the `test` dependency group, locked like an extra but not published as one. Every action is pinned to a commit SHA with its release tag beside it. The `setup-uv` action reads the exact uv version from `[tool.uv] required-version` in `pyproject.toml`. How the lock admits new releases is in [dependencies.md](dependencies.md).
 
 ## Deployment
 
