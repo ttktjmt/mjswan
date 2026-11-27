@@ -38,17 +38,21 @@ loadable things, and the page owns the fetching.
 
 ```js
 const { createEngine } = await import('https://cdn.jsdelivr.net/npm/mjswan/dist/mjswan.js');
-const { parseManifest } = await import('https://cdn.jsdelivr.net/npm/mjswan/dist/manifest.js');
+const { parseManifest, documentUrl } = await import('https://cdn.jsdelivr.net/npm/mjswan/dist/manifest.js');
 
 // Every other asset (scene.mjz, mdp/…/*.onnx, policy/*.onnx, assets/*.npz) resolves
-// against the manifest's directory.
+// against the manifest's directory; documentUrl keeps each under it.
 const base = 'https://example.com/myapp/';
-const bytes = (path) => async () => (await fetch(new URL(path, base))).arrayBuffer();
+const bytes = (path) => async () => (await fetch(documentUrl(base, path))).arrayBuffer();
 
 const engine = await createEngine(container);
-const catalog = parseManifest(await (await fetch(new URL('manifest.json', base))).text(), bytes);
+const catalog = parseManifest(await (await fetch(documentUrl(base, 'manifest.json'))).text(), bytes);
 await engine.loadScene(await catalog.projects[0].scenes[0].buildScene());
 ```
+
+A splat named by URL (`add_splat(url=...)`) is fetched only through a `remote` you pass,
+where you trust the document's author to pick hosts:
+`parseManifest(text, bytes, { remote: (url) => async () => (await fetch(url)).arrayBuffer() })`.
 
 Or as a normal bundled import:
 
@@ -99,7 +103,7 @@ for when a term needs one, and how a binding's `ts_src` names the file.
 | Import | Provides |
 |---|---|
 | `mjswan` | `createEngine`, `policyGraphRefs` (the runtime library build) |
-| `mjswan/manifest` | `parseManifest`, `sanitizeName`, the `Manifest` types (the catalog parser) |
+| `mjswan/manifest` | `parseManifest`, `documentUrl`, `sanitizeName`, `isReleaseVersion`, `compareVersions`, `engineUrl`, the `Manifest` types (the catalog parser) |
 | `mjswan/observation` | `ObservationBase`, `ObservationConfig` |
 | `mjswan/command` | `CommandManager`, command types and helpers |
 | `mjswan/event` | `EventBase`, event config and context types |

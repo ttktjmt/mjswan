@@ -1,4 +1,4 @@
-"""The release's publish jobs: what they build, and from which commit."""
+"""The release's jobs: what they build, from which commit, and which job can publish."""
 
 from __future__ import annotations
 
@@ -15,11 +15,17 @@ yaml = pytest.importorskip("yaml")
 WORKFLOWS = Path(__file__).resolve().parents[1] / ".github/workflows"
 WORKFLOW = WORKFLOWS / "release.yml"
 PUBLISH_PYPI = WORKFLOWS / "publish-pypi.yml"
+PUBLISH_NPM = WORKFLOWS / "publish-npm.yml"
+RELEASE_WORKFLOWS = [WORKFLOW, PUBLISH_PYPI, PUBLISH_NPM]
 MARK_STEP = "Mark the prebuilt SPA as reusable"
 
 
+def _jobs(path: Path) -> dict:
+    return yaml.safe_load(path.read_text())["jobs"]
+
+
 def _pypi_steps() -> list[dict]:
-    return yaml.safe_load(PUBLISH_PYPI.read_text())["jobs"]["publish"]["steps"]
+    return _jobs(PUBLISH_PYPI)["build"]["steps"]
 
 
 def _pypi_step(name: str) -> dict:
@@ -27,11 +33,101 @@ def _pypi_step(name: str) -> dict:
 
 
 def test_publish_jobs_check_out_the_release_commit_by_sha():
-    jobs = yaml.safe_load(WORKFLOW.read_text())["jobs"]
+    jobs = _jobs(WORKFLOW)
 
     assert jobs["release"]["outputs"]["sha"] == "${{ steps.tag.outputs.sha }}"
+    assert jobs["test"]["steps"][0]["with"]["ref"] == "${{ needs.release.outputs.sha }}"
     for name in ("publish-pypi", "publish-npm"):
         assert jobs[name]["with"]["ref"] == "${{ needs.release.outputs.sha }}"
+    for path in (PUBLISH_PYPI, PUBLISH_NPM):
+        for job in _jobs(path).values():
+            checkouts = [
+                s for s in job["steps"] if "actions/checkout" in s.get("uses", "")
+            ]
+            assert all(s["with"]["ref"] == "${{ inputs.ref }}" for s in checkouts)
+
+
+def test_the_suite_passes_before_anything_publishes():
+    jobs = _jobs(WORKFLOW)
+
+    assert jobs["test"]["needs"] == "release"
+    assert jobs["test"]["permissions"] == {"contents": "read"}
+    assert "pytest" in jobs["test"]["steps"][-1]["run"]
+    for name in ("publish-pypi", "publish-npm"):
+        assert jobs[name]["needs"] == ["release", "test"]
+
+
+@pytest.mark.parametrize("path", [PUBLISH_PYPI, PUBLISH_NPM], ids=["pypi", "npm"])
+def test_the_job_that_can_publish_runs_no_build(path):
+    """The OIDC token PyPI and npm trust never shares a job with the code a build runs."""
+    jobs = _jobs(path)
+
+    assert [n for n, j in jobs.items() if "id-token" in j.get("permissions", {})] == [
+        "publish"
+    ]
+    assert jobs["build"]["permissions"] == {"contents": "read"}
+    assert jobs["publish"]["needs"] == "build"
+    assert "environment" not in jobs["build"]
+    runs = "\n".join(step.get("run", "") for step in jobs["publish"]["steps"])
+    for runs_code in (
+        "pytest",
+        "npm ci",
+        "npm install",
+        "npm run",
+        "uv run",
+        "uv build",
+    ):
+        assert runs_code not in runs
+    checkouts = [
+        step["with"]
+        for job in jobs.values()
+        for step in job["steps"]
+        if "actions/checkout" in step.get("uses", "")
+    ]
+    assert checkouts and all(c["persist-credentials"] is False for c in checkouts)
+
+
+def test_npm_publishes_the_tarball_build_packed():
+    """By path: npm reads `npm/<name>.tgz`, with no `./`, as a GitHub repository."""
+    run = _jobs(PUBLISH_NPM)["publish"]["steps"][-1]["run"]
+
+    assert run.startswith('npm publish "./npm/mjswan-${VERSION}.tgz" ')
+
+
+@pytest.mark.parametrize("path", [PUBLISH_PYPI, PUBLISH_NPM], ids=["pypi", "npm"])
+def test_what_ships_is_built_without_a_stored_cache(path):
+    """A cache another run wrote could change the build; the lock is the one input."""
+    for job in _jobs(path).values():
+        for step in job["steps"]:
+            uses = step.get("uses", "")
+            if "setup-uv" in uses:
+                assert step["with"]["enable-cache"] is False
+            if "setup-node" in uses:
+                assert step["with"]["package-manager-cache"] is False
+            assert "npm install" not in step.get("run", "")
+
+
+@pytest.mark.parametrize(
+    "path", RELEASE_WORKFLOWS, ids=[p.stem for p in RELEASE_WORKFLOWS]
+)
+def test_no_expression_is_pasted_into_a_script(path):
+    """An expression in a `run:` becomes script text; values go through `env`."""
+    for name, job in _jobs(path).items():
+        for step in job.get("steps", []):
+            assert "${{" not in step.get("run", ""), (name, step.get("name"))
+
+
+def test_every_action_is_pinned_to_a_commit():
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        for name, job in _jobs(path).items():
+            refs = [job.get("uses")] + [s.get("uses") for s in job.get("steps", [])]
+            for ref in filter(None, refs):
+                if not ref.startswith("./"):
+                    assert re.fullmatch(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}", ref), (
+                        path.name,
+                        name,
+                        ref,
+                    )
 
 
 def test_pypi_release_builds_the_spa_alone():
@@ -50,7 +146,7 @@ def test_pypi_release_marks_the_tree_it_ships():
         names.index("Set version")
         < names.index("Remove artifacts from pypi package")
         < names.index(MARK_STEP)
-        < names.index("Build and publish")
+        < names.index("Build the wheel and sdist")
     )
 
 

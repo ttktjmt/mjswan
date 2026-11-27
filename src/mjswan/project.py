@@ -16,7 +16,14 @@ from typing import TYPE_CHECKING, Any
 
 import mujoco
 
-from .build.mjz import collect_spec_assets
+from .build.mjz import (
+    AssetRoot,
+    _within,
+    asset_roots,
+    check_asset_roots,
+    collect_spec_assets,
+    files_outside,
+)
 from .document.ids import assign_name, name2id
 from .license import (
     LICENSES_DIR,
@@ -123,6 +130,7 @@ class ProjectHandle:
         metadata: dict[str, Any] | None = None,
         control_dt: float | None = None,
         events: Mapping[str, Any] | None = None,
+        asset_root: AssetRoot | None = None,
     ) -> SceneHandle:
         """Add a MuJoCo scene to this project.
 
@@ -152,9 +160,20 @@ class ProjectHandle:
                 Equivalent to calling :meth:`~mjswan.scene.SceneHandle.set_events`
                 afterwards: the default every policy's MDP on this scene takes for its
                 events.
+            asset_root: Folders to keep the ``spec``'s files to, for a model you do not
+                trust: the build reads only under them (or from ``spec.assets``) and
+                refuses any other file. Unset, it reads every file the model names, as
+                MuJoCo does, and warns about those from outside the model's folder.
 
         Returns:
             SceneHandle for adding policies and further configuration.
+
+        Raises:
+            ValueError: If ``asset_root`` is not a folder, or the ``spec`` names a file
+                outside it.
+
+        A ``spec`` MuJoCo cannot compile, such as one naming a file that is not the mesh
+        or image it claims, stops the build.
 
         For a ``spec`` loaded from disk, ``LICENSE*`` / ``NOTICE*`` files beside the
         model or its meshes and textures are copied verbatim into the project's
@@ -186,6 +205,15 @@ class ProjectHandle:
         if metadata is None:
             metadata = {}
 
+        roots = asset_roots(asset_root)
+        if roots is not None:
+            if spec is None:
+                raise ValueError(
+                    "asset_root= applies to a spec: a compiled model carries no files "
+                    "to read."
+                )
+            check_asset_roots(spec, roots)
+
         name, ident = assign_name(
             name,
             {s.id for s in self._config.scenes} | {LICENSES_DIR},
@@ -197,6 +225,7 @@ class ProjectHandle:
             id=ident,
             model=model,
             spec=spec,
+            asset_roots=roots,
             metadata=metadata,
             control_dt=None if control_dt is None else float(control_dt),
         )
@@ -314,6 +343,7 @@ class ProjectHandle:
         play: bool | None = None,
         env_cfg: Any | None = None,
         events: Mapping[str, Any] | None = None,
+        asset_root: AssetRoot | None = None,
     ) -> SceneHandle:
         """Add a MuJoCo scene from an mjlab task.
 
@@ -341,6 +371,8 @@ class ProjectHandle:
                 term sets off it, so this is also how those defaults pick up your edits.
             events: Scene events, overriding the task's own ``env_cfg.events``. Omit to
                 take the task's (the usual case); pass ``{}`` for a scene with none.
+            asset_root: As for :meth:`add_scene`, over every entity's files. Unset,
+                the build warns about files from outside each entity's folder.
 
         Returns:
             SceneHandle for further configuration (add_policy, add_splat, etc.)
@@ -376,9 +408,16 @@ class ProjectHandle:
         # either way, and traced graphs carry a dynamic batch axis.
         env_cfg.scene.num_envs = 1
         scene = Scene(env_cfg.scene, device="cpu")
-        scene.spec.assets.update(_collect_mjlab_scene_assets(env_cfg.scene))
+        roots = asset_roots(asset_root)
+        assets, outside = _collect_mjlab_scene_assets(env_cfg.scene, roots, scene.spec)
+        scene.spec.assets.update(assets)
         apply_mjlab_sim_options(scene.spec, getattr(env_cfg, "sim", None))
-        handle = self.add_scene(spec=scene.spec, name=task_id if name is None else name)
+        handle = self.add_scene(
+            spec=scene.spec,
+            name=task_id if name is None else name,
+            asset_root=asset_root,
+        )
+        handle._config.outside_files = outside
         # Kept so policies on this scene can default their term sets off the same config
         # the scene (and its tracing env) was built from.
         handle._config.mjlab_env_cfg = env_cfg
@@ -422,28 +461,40 @@ class ProjectHandle:
         return handle
 
 
-def _collect_mjlab_scene_assets(scene_cfg: Any) -> dict[str, bytes]:
-    """Collect assets from mjlab scene component specs before they are flattened.
+def _collect_mjlab_scene_assets(
+    scene_cfg: Any,
+    roots: tuple[str, ...] | None = None,
+    composed: mujoco.MjSpec | None = None,
+) -> tuple[dict[str, bytes], list[str]]:
+    """Collect assets from mjlab scene component specs before they are flattened, and
+    the files read from outside each entity's folder (none with ``roots``).
 
-    A path two entities ship with different bytes is left out, so MuJoCo finds each
-    entity's own file instead of handing both one."""
+    The ``composed`` scene's files count as outside only when outside every entity's
+    folder: mjlab builds it from its own ``scene.xml``. A path two entities ship with
+    different bytes is left out, so MuJoCo finds each entity's own file instead of
+    handing both one."""
     assets: dict[str, bytes] = {}
+    outside: set[str] = set()
+    folders: list[str] = []
     clashing: set[str] = set()
     for spec in entity_specs(scene_cfg):
-        for name, data in collect_spec_assets(spec).items():
+        if spec.modelfiledir:
+            folders.append(os.path.abspath(spec.modelfiledir))
+        if roots is None:
+            outside.update(files_outside(spec))
+        for name, data in collect_spec_assets(spec, roots).items():
             if assets.get(name, data) != data:
                 clashing.add(name)
             assets[name] = data
     for name in clashing:
         del assets[name]
-    return assets
-
-
-def _within(top: str, path: str) -> bool:
-    try:
-        return os.path.commonpath([top, path]) == top
-    except ValueError:  # another drive
-        return False
+    if roots is None and composed is not None:
+        outside.update(
+            file
+            for file in files_outside(composed)
+            if not any(_within(folder, file) for folder in folders)
+        )
+    return assets, sorted(outside)
 
 
 def _refuse_files_outside(root: Path, xml_path: Path, label: str) -> None:

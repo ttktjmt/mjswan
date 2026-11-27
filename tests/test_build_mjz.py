@@ -5,12 +5,15 @@ Layer breakdown:
                                 TestRewriteXmlPaths, TestDefaultsUnreadable,
                                 TestBufferTextureToPng
   L2 (synthetic MuJoCo spec):  TestToZipDeflated, TestAttachedModels,
-                                TestDefaultClasses, TestCollectSpecAssets
+                                TestWhatTheBuildReads, TestAssetRoot,
+                                TestFilesOutside, TestDefaultClasses,
+                                TestCollectSpecAssets
 """
 
 from __future__ import annotations
 
 import io
+import os
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -25,10 +28,14 @@ from mjswan.build.mjz import (
     _buffer_texture_to_png,
     _defaults_unreadable,
     _drop_empty_nameless_defaults,
+    _EncodeError,
     _make_zip_safe_path,
     _rewrite_xml_paths,
     _strip_leading_dotdot,
+    asset_roots,
+    check_asset_roots,
     collect_spec_assets,
+    files_outside,
     to_zip_deflated,
 )
 
@@ -563,8 +570,11 @@ class TestAttachedModels:
     def test_files_the_encoder_cannot_check_are_packed_with_a_warning(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
+        """The spec compiled; only MuJoCo's encoder failed after it."""
+
         def refuse(spec: mujoco.MjSpec, extra: dict[str, bytes]):
-            raise RuntimeError("no encoder")
+            spec.compile()
+            raise _EncodeError("no encoder")
 
         monkeypatch.setattr("mjswan.build.mjz._encode", refuse)
 
@@ -594,6 +604,184 @@ class TestAttachedModels:
 
         with pytest.raises(FileNotFoundError, match="gone.stl"):
             to_zip_deflated(FakeSpec(), io.BytesIO())
+
+
+# ===========================================================================
+# L2: what the build reads, and asset_root (files on disk)
+# ===========================================================================
+def _model_beside_its_meshes(root: Path, size: float = 0.2) -> mujoco.MjSpec:
+    """A model in ``xmls/`` with its mesh in a sibling ``meshes/`` (a ROS-style layout)."""
+    (root / "meshes").mkdir(parents=True)
+    (root / "meshes" / "bone.obj").write_text(TETRA.format(s=size))
+    (root / "xmls").mkdir()
+    (root / "xmls" / "arm.xml").write_text(
+        '<mujoco><compiler meshdir="../meshes"/>'
+        '<asset><mesh name="bone" file="bone.obj"/></asset>'
+        '<worldbody><body name="upper"><geom type="mesh" mesh="bone"/></body></worldbody>'
+        "</mujoco>"
+    )
+    return mujoco.MjSpec.from_file(str(root / "xmls" / "arm.xml"))
+
+
+def _model_naming(folder: Path, file: str) -> mujoco.MjSpec:
+    """A model in ``folder`` with one mesh, read from ``file``."""
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "model.xml").write_text(
+        f'<mujoco><asset><mesh name="m" file="{file}"/></asset>'
+        '<worldbody><geom type="mesh" mesh="m"/></worldbody></mujoco>'
+    )
+    return mujoco.MjSpec.from_file(str(folder / "model.xml"))
+
+
+class TestWhatTheBuildReads:
+    def test_a_file_beside_the_model_folder_is_packed(self, tmp_path: Path):
+        spec = _model_beside_its_meshes(tmp_path / "pkg")
+        reference = spec.compile()
+
+        model = _round_trip(spec)
+
+        assert _mesh_extent(model, "bone") == pytest.approx(
+            _mesh_extent(reference, "bone")
+        )
+
+    def test_a_file_mujoco_cannot_compile_stops_the_build(self, tmp_path: Path):
+        (tmp_path / "secret.obj").write_text("AWS_SECRET_ACCESS_KEY=abc\n")
+        spec = _model_naming(tmp_path, "secret.obj")
+        out = tmp_path / "out" / "scene.mjz"
+
+        with pytest.raises(ValueError, match="cannot compile"):
+            to_zip_deflated(spec, str(out))
+
+        assert not out.exists()
+
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs FIFOs")
+    def test_a_fifo_is_refused_without_being_opened(self, tmp_path: Path):
+        os.mkfifo(tmp_path / "pipe.obj")
+        spec = _model_naming(tmp_path, "pipe.obj")
+
+        with pytest.raises(ValueError, match="not a regular file"):
+            to_zip_deflated(spec, io.BytesIO())
+        with pytest.raises(ValueError, match="not a regular file"):
+            collect_spec_assets(spec)
+
+    @pytest.mark.skipif(
+        not Path("/proc/self/environ").exists(), reason="needs Linux's /proc"
+    )
+    def test_a_link_into_proc_is_refused(self, tmp_path: Path):
+        (tmp_path / "leak.obj").symlink_to("/proc/self/environ")
+        spec = _model_naming(tmp_path, "leak.obj")
+
+        with pytest.raises(ValueError, match="holds no model files"):
+            to_zip_deflated(spec, io.BytesIO())
+
+
+class TestAssetRoot:
+    def test_a_file_outside_asset_root_is_refused(self, tmp_path: Path):
+        spec = _model_beside_its_meshes(tmp_path / "pkg")
+        roots = asset_roots(tmp_path / "pkg" / "xmls")
+        assert roots is not None
+
+        with pytest.raises(ValueError, match="outside asset_root"):
+            check_asset_roots(spec, roots)
+        with pytest.raises(ValueError, match="outside asset_root"):
+            to_zip_deflated(spec, io.BytesIO(), roots=roots)
+        with pytest.raises(ValueError, match="outside asset_root"):
+            collect_spec_assets(spec, roots)
+
+    def test_files_under_asset_root_are_packed(self, tmp_path: Path):
+        spec = _model_beside_its_meshes(tmp_path / "pkg")
+        roots = asset_roots(tmp_path / "pkg")
+        assert roots is not None
+
+        check_asset_roots(spec, roots)
+        buf = io.BytesIO()
+        to_zip_deflated(spec, buf, roots=roots)
+        buf.seek(0)
+
+        assert mujoco.MjSpec.from_zip(buf).compile().nmesh == 1
+
+    def test_spec_assets_stand_in_for_a_file_outside_asset_root(self, tmp_path: Path):
+        held = TETRA.format(s=0.2).encode()
+        spec = _model_beside_its_meshes(tmp_path / "pkg", size=0.9)
+        spec.assets = {"../meshes/bone.obj": held}
+        roots = asset_roots(tmp_path / "pkg" / "xmls")
+        assert roots is not None
+
+        check_asset_roots(spec, roots)
+        assert collect_spec_assets(spec, roots) == {"meshes/bone.obj": held}
+        buf = io.BytesIO()
+        to_zip_deflated(spec, buf, roots=roots)
+        buf.seek(0)
+
+        with zipfile.ZipFile(buf) as zf:
+            assert zf.read("meshes/bone.obj") == held
+
+    def test_a_link_out_of_asset_root_is_refused(self, tmp_path: Path):
+        (tmp_path / "elsewhere.obj").write_text(TETRA.format(s=0.2))
+        (tmp_path / "pkg").mkdir()
+        (tmp_path / "pkg" / "bone.obj").symlink_to(tmp_path / "elsewhere.obj")
+        spec = _model_naming(tmp_path / "pkg", "bone.obj")
+
+        with pytest.raises(ValueError, match="outside asset_root"):
+            to_zip_deflated(spec, io.BytesIO(), roots=asset_roots(tmp_path / "pkg"))
+
+    def test_an_attached_models_file_must_be_under_asset_root(self, tmp_path: Path):
+        scene = _arm_on_disk(tmp_path / "scene", 0.1)
+        arm = _arm_on_disk(tmp_path / "arm", 0.3)
+        scene.attach(arm, prefix="a/", frame=scene.worldbody.add_frame())
+        reference = scene.compile()
+
+        with pytest.raises(ValueError, match="attached from another folder"):
+            to_zip_deflated(scene, io.BytesIO(), roots=asset_roots(tmp_path / "scene"))
+        buf = io.BytesIO()
+        to_zip_deflated(
+            scene, buf, roots=asset_roots([tmp_path / "scene", tmp_path / "arm"])
+        )
+        buf.seek(0)
+
+        model = mujoco.MjSpec.from_zip(buf).compile()
+        assert _mesh_extent(model, "a/bone") == pytest.approx(
+            _mesh_extent(reference, "a/bone")
+        )
+
+    def test_a_hub_snapshot_admits_its_blobs(self, tmp_path: Path):
+        repo = tmp_path / "models--org--robot"
+        (repo / "blobs").mkdir(parents=True)
+        (repo / "blobs" / "0123abcd").write_text(TETRA.format(s=0.2))
+        snapshot = repo / "snapshots" / "deadbeef"
+        snapshot.mkdir(parents=True)
+        (snapshot / "bone.obj").symlink_to(repo / "blobs" / "0123abcd")
+        spec = _model_naming(snapshot, "bone.obj")
+
+        buf = io.BytesIO()
+        to_zip_deflated(spec, buf, roots=asset_roots(snapshot))
+        buf.seek(0)
+
+        assert mujoco.MjSpec.from_zip(buf).compile().nmesh == 1
+
+    def test_asset_root_must_name_folders(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="not a folder"):
+            asset_roots(tmp_path / "missing")
+        with pytest.raises(ValueError, match="names no folder"):
+            asset_roots([])
+        assert asset_roots(None) is None
+
+
+class TestFilesOutside:
+    def test_a_file_beside_the_model_folder_is_listed(self, tmp_path: Path):
+        spec = _model_beside_its_meshes(tmp_path / "pkg")
+
+        assert files_outside(spec) == [str(tmp_path / "pkg" / "meshes" / "bone.obj")]
+
+    def test_a_file_in_the_model_folder_is_not_listed(self, tmp_path: Path):
+        assert files_outside(_arm_on_disk(tmp_path / "arm", 0.2)) == []
+
+    def test_every_file_of_a_spec_with_no_folder_is_listed(self, tmp_path: Path):
+        (tmp_path / "bone.obj").write_text(TETRA.format(s=0.2))
+        spec = mujoco.MjSpec()
+        spec.add_mesh(name="bone", file=str(tmp_path / "bone.obj"))
+
+        assert files_outside(spec) == [str(tmp_path / "bone.obj")]
 
 
 ARM_WITH_CLASS = """

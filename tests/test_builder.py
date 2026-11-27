@@ -139,6 +139,14 @@ class TestProjectIdAssignment:
         assert len(builder.get_projects()) == 1
 
 
+class TestProjectIds:
+    def test_a_project_cannot_take_the_engines_directory(self):
+        """A project `assets/` would mix the document with the engine's scripts."""
+        with pytest.warns(RuntimeWarning, match="renamed 'Assets_1'"):
+            project = Builder().add_project(name="Assets")
+        assert (project._config.name, project._config.id) == ("Assets_1", "assets_1")
+
+
 class TestSceneAndPolicyIds:
     """Scene ids are unique within a project, policy ids within a scene."""
 
@@ -2056,6 +2064,75 @@ class TestSaveWebPolicyJson:
         assert fallen["onnx"] == "mdp/policy/term/fallen.onnx"
         assert (out / "p" / "s" / fallen["onnx"]).exists()
         assert "time_out" not in fallen
+
+
+# ===========================================================================
+# L2: what a build reads for a scene (frontend mocked out)
+# ===========================================================================
+_TETRA = "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n"
+
+
+def _model_beside_its_meshes(root: Path, mesh: str = _TETRA):
+    """A model in ``xmls/`` whose mesh sits in a sibling ``meshes/``."""
+    import mujoco
+
+    (root / "meshes").mkdir(parents=True)
+    (root / "meshes" / "bone.obj").write_text(mesh)
+    (root / "xmls").mkdir()
+    (root / "xmls" / "arm.xml").write_text(
+        '<mujoco><compiler meshdir="../meshes"/>'
+        '<asset><mesh name="bone" file="bone.obj"/></asset>'
+        '<worldbody><body><geom type="mesh" mesh="bone"/></body></worldbody>'
+        "</mujoco>"
+    )
+    return mujoco.MjSpec.from_file(str(root / "xmls" / "arm.xml"))
+
+
+class TestSceneFiles:
+    @pytest.fixture(autouse=True)
+    def _no_frontend(self, monkeypatch):
+        monkeypatch.setattr("mjswan.build.pipeline.ClientBuilder", MagicMock())
+        monkeypatch.setattr(
+            "mjswan.build.pipeline.install_spa", MagicMock(return_value=True)
+        )
+
+    def test_files_from_outside_the_model_folder_are_named_with_a_warning(
+        self, tmp_path
+    ):
+        builder = Builder()
+        spec = _model_beside_its_meshes(tmp_path / "pkg")
+        builder.add_project(name="P").add_scene(name="S", spec=spec)
+
+        with pytest.warns(RuntimeWarning, match="outside its model folder") as caught:
+            builder._save_web(tmp_path / "out")
+
+        [message] = [str(w.message) for w in caught if "model folder" in str(w.message)]
+        assert f"1 in {tmp_path / 'pkg' / 'meshes'}" in message
+
+    def test_asset_root_keeps_the_build_quiet_about_them(self, tmp_path):
+        builder = Builder()
+        spec = _model_beside_its_meshes(tmp_path / "pkg")
+        builder.add_project(name="P").add_scene(
+            name="S", spec=spec, asset_root=tmp_path / "pkg"
+        )
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            builder._save_web(tmp_path / "out")
+
+        assert not [w for w in caught if "model folder" in str(w.message)]
+        assert (tmp_path / "out" / "p" / "s" / "scene.mjz").is_file()
+
+    def test_a_scene_mujoco_cannot_compile_stops_the_build_by_name(self, tmp_path):
+        builder = Builder()
+        spec = _model_beside_its_meshes(tmp_path / "pkg", mesh="TOKEN=secret\n")
+        builder.add_project(name="P").add_scene(name="S", spec=spec)
+
+        with pytest.raises(ValueError, match="cannot compile") as raised:
+            builder._save_web(tmp_path / "out")
+
+        assert "Packing scene 'S' of 'P'." in raised.value.__notes__
+        assert not (tmp_path / "out" / "p" / "s" / "scene.mjz").exists()
 
 
 # ===========================================================================

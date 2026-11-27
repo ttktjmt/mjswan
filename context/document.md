@@ -1,6 +1,6 @@
 # The simulation document
 
-`document/` and the rules of what a build writes: the tree, `manifest.json`, ids, the policy slot tables, `format` versus `version`, the `.swn` container, and what a policy switch does to an MDP's events. `build/` writes all of it ([build.md](build.md)); `app.py`, `cli.py` and `cloud/` read it through `document/`, which is torch- and mjlab-free so they need neither. `document/manifest.py` holds the constants both sides share: `DOCUMENT_FORMAT`, `MANIFEST_NAME` and the slot defaults.
+`document/` and the rules of what a build writes: the tree, `manifest.json`, ids, the policy slot tables, `format` versus `version`, the `.swn` container, and what a policy switch does to an MDP's events. `build/` writes all of it ([build.md](build.md)); `app.py`, `cli.py` and `cloud/` read it through `document/`, which is torch- and mjlab-free so they need neither. `document/manifest.py` holds the constants both sides share: `DOCUMENT_FORMAT`, `MANIFEST_NAME`, `ENGINE_DIR`, the slot defaults, and `author_code`.
 
 ## The tree is the document
 
@@ -28,7 +28,7 @@ There are no per-project `index.html` copies: the SPA selects a project from `?p
 ## Manifest rules
 
 1. **Every key is `snake_case`, at every depth.**
-2. **A path resolves against the directory of the level that declares it.** Everything under a scene entry (`scene`, every graph ref, every asset) resolves against `<project-id>/<scene-id>/`; only the top-level `plugins` resolves against the document root. Graph refs are the paths on disk ([build.md](build.md)).
+2. **A path resolves against the directory of the level that declares it, and stays in the document.** Everything under a scene entry (`scene`, every graph ref, every asset) resolves against `<project-id>/<scene-id>/`; a project's `work` against `<project-id>/`; only the top-level `plugins` against the document root. Graph refs are the paths on disk ([build.md](build.md)). Each segment is `..` or a name a build writes (`[A-Za-z0-9_-][A-Za-z0-9_.-]*`, as ids are), and `..` never climbs above the root, so credits can name `../licenses/…`. `parseManifest` checks them as written, never normalized (`template/src/manifest/path.ts`), so nothing a URL parser reads otherwise (`\`, `%2e%2e`, a tab in `..`) gets through. A splat `url` or a `collider_url` with a scheme is the only reference out of a document: `http(s)`, fetched only through a host's `remote` ([frontend.md](frontend.md)).
 3. **A default is a `"default": true` flag on the entry.** At most one sibling may set it (two is a build error, `_check_defaults`), and when none does the first in document order is the default. Projects and policies both work this way.
 4. **A key is omitted when it carries the default**: `in_keys` is absent when it is `["actor"]`, `out_keys` when it is `["action"]`. The reader supplies the default; the writer never emits noise.
 5. **`mdp` is always written on a policy**, even when a scene has one MDP: a reader that never needs a fallback cannot get the fallback wrong.
@@ -38,11 +38,11 @@ There are no per-project `index.html` copies: the SPA selects a project from `?p
 
 ## Ids
 
-Every id is `name2id(name)` (`document/ids.py`): lowercased, every run of characters outside `[a-z0-9]` collapsed to one `_`, ends stripped. That keeps an id safe as a file name and a storage key, and readable in a URL. A name with no ASCII letter or digit sanitizes to an empty id and is refused.
+Every id is `name2id(name)` (`document/ids.py`): lowercased, every run of characters outside `[a-z0-9]` collapsed to one `_`, ends stripped. That keeps an id safe as a file name and a storage key, and readable in a URL. A name with no ASCII letter or digit sanitizes to an empty id and is refused. A traced term or group name is also its graph's file name (`onnx_ref`), so it must be one the viewer reads.
 
 | id | unique within |
 |---|---|
-| project | the document |
+| project | the document (`assets`, the engine's directory, is reserved) |
 | scene | its project (`licenses` is reserved: it is the project's license directory) |
 | mdp, policy, splat, skin | its scene |
 
@@ -75,7 +75,7 @@ Clearing the policy still restores, so a scene with no policy is as compiled. Th
 
 ## `format` and `version`
 
-- **`version`** is the mjswan release that wrote the document. The release workflow sets `_version.py` and the template's `package.json` from one input, so the Python version and the npm engine version are the same string and `https://cdn.jsdelivr.net/npm/mjswan@<version>/dist/mjswan.js` resolves for every released version. A **host** uses `version` to select the engine.
+- **`version`** is the mjswan release that wrote the document. The release workflow sets `_version.py` and the template's `package.json` from one input, so the Python version and the npm engine version are the same string and `https://cdn.jsdelivr.net/npm/mjswan@<version>/dist/mjswan.js` resolves for every released version. A **host** uses `version` to select the engine, so it must be a release's (`X.Y.Z` or `X.Y.Z-<prerelease>`, `release.yml`'s check): `parseManifest` refuses any other, and `engineUrl(version)` builds the CDN URL only from one. `compareVersions` orders releases as semver does.
 - **`format`** (`DOCUMENT_FORMAT` in `document/manifest.py`) is an integer describing the document's structure, bumped by hand **only** when a released engine that reads the current format would misread the new structure. The **engine** uses it to protect itself: `parseManifest` refuses a document whose `format` exceeds `MAX_DOCUMENT_FORMAT` (`template/src/manifest/index.ts`), naming both and the document's `version`, and refuses a document with no `format` (the pre-manifest layout, a root `assets/config.json`). Every earlier format still parses.
 
 So no document is migrated from one format to the next: each format so far only adds, and a newer engine reads an older document as it is. A breaking change, after which an engine can no longer read an older format, also needs a migration that brings stored documents forward.
@@ -108,9 +108,10 @@ A graph's body is `torch.onnx.export`'s, but its interface is mjswan's: the inpu
 
 A ZIP whose entries are the tree's own paths (`document/container.py`): a directory of files is the authoring model and the container is a reversible packaging step over it, as `.docx` is, so every tool that understands the directory keeps working.
 
-- `document_files()` lists the document off the manifest (the manifest, then everything under each project directory), never off what else is on disk, so the SPA's own `assets/` can never be mistaken for data. A `.swn` never holds the engine (`index.html`, `assets/*.js`, WASM) or the author's custom-term module.
+- **A document carries data, never code**: the manifest, and under each project it names the data (`DATA_SUFFIXES`) and license files a build writes (`is_document_file`). A page or script served beside the engine would run as the app's origin.
+- `document_files()` lists the document off the manifest, never off the disk, so the SPA's `assets/` is never data, and leaves out stray files under a project. `project_ids()` refuses an id `name2id` could not write, and `assets`.
 - The manifest is the first entry, so a reader that stops after one file has the one that describes the rest; the others are sorted, for a reproducible archive. `.mjz`, `.npz` and `.spz` are stored (already compressed), the rest deflated.
-- `unpack_document()` confines entries to the target and refuses one naming `..` or an absolute path; reading bounds total size, entry count and manifest size, and accepts stored and deflated entries only. A symlink in a built tree is refused rather than followed.
+- `unpack_document()` reads the manifest first and refuses the whole document, before writing anything, for an entry that is not one of its files (directory entries under a project excepted) or that names `..` or an absolute path. Reading bounds total size, entry count and manifest size, and accepts stored and deflated entries only. A symlink in a built tree is refused rather than followed.
 - `as_directory()` gives `publish` and `mjswan info` one code path for a directory or a `.swn`.
 
 Two output modes:
@@ -120,7 +121,7 @@ Two output modes:
 
 ## `app.py`: `MjswanApp`
 
-Wraps a built `dist/`: the engine plus the expanded document. `from_document()` takes either form: a directory is served where it sits; a `.swn` is unpacked to a temporary directory with the packaged engine (`build.frontend.install_spa`) laid over it, building the engine first if no matching SPA is cached, and removed at exit. It refuses a custom-TS document, whose `plugins.js` ships with the engine rather than in the document, so the manifest would point at a module that is not there. `launch()` starts a stdlib HTTP server (COOP/COEP headers, for SharedArrayBuffer and MuJoCo WASM threading) and detects Google Colab, displaying an inline iframe instead. `save_document()` writes the document as one `.swn` via `document/`; `publish()` delegates to `cloud.publish` ([cloud.md](cloud.md)).
+Wraps a built `dist/`: the engine plus the expanded document. `from_document()` takes either form: a directory is served where it sits; a `.swn` is unpacked to a temporary directory with the packaged engine (`build.frontend.install_spa`) laid over it, building the engine first if no matching SPA is cached, and removed at exit. It refuses, before unpacking, a document whose manifest asks for author code (`author_code`): a custom-TS build's `plugins.js` ships with the engine, and one the document named would run as the app. `launch()` starts a stdlib HTTP server (COOP/COEP headers, for SharedArrayBuffer and MuJoCo WASM threading) and detects Google Colab, displaying an inline iframe instead. `save_document()` writes the document as one `.swn` via `document/`; `publish()` delegates to `cloud.publish` ([cloud.md](cloud.md)).
 
 ## Rejected
 

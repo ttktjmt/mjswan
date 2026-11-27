@@ -148,8 +148,9 @@ def _matching(directory: Path, names: re.Pattern[str]) -> list[Path]:
 
 def _absolute(path: str) -> Path:
     """``path`` made absolute with its symlinks kept: the Hub cache links each file
-    into ``blobs/``, away from the license beside the link."""
-    return Path(os.path.abspath(os.path.expanduser(path)))
+    into ``blobs/``, away from the license beside the link. A ``~`` is a folder name,
+    as it is to MuJoCo."""
+    return Path(os.path.abspath(path))
 
 
 def spec_asset_directories(spec: Any) -> list[Path]:

@@ -4,7 +4,7 @@
  * entry, the file left as it is.
  */
 import * as THREE from 'three';
-import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
   MToonMaterial,
   VRMLoaderPlugin,
@@ -16,6 +16,7 @@ import {
   VRMUtils,
   type VRM,
 } from '@pixiv/three-vrm';
+import { parseSealedGltf } from '../scene/gltf';
 import { BoundedSpringBones, checkConstraints, checkSpringChains, checkSpringUpdates } from './budget';
 import { modelFrame } from './retarget';
 import { NodeRig, humanoidRig, type SkinRig } from './rig';
@@ -43,11 +44,12 @@ const FACING_TURNS = { '+z': 0, '+x': Math.PI / 2, '-z': Math.PI, '-x': -Math.PI
 const UP = new THREE.Vector3(0, 1, 0);
 
 export async function loadSkinModel(data: ArrayBuffer, config: SkinConfig): Promise<SkinModel> {
-  const loader = new GLTFLoader();
-  if (config.format === 'vrm') {
-    loader.register((parser) => new VRMLoaderPlugin(parser, { springBonePlugin: new BoundedSpringBones(parser) }));
-  }
-  const gltf = await loader.parseAsync(data, '');
+  const gltf = await parseSealedGltf(
+    data,
+    config.format === 'vrm'
+      ? (parser) => new VRMLoaderPlugin(parser, { springBonePlugin: new BoundedSpringBones(parser) })
+      : undefined,
+  );
   return config.format === 'vrm' ? fromVrm(gltf) : fromGltf(gltf, config);
 }
 

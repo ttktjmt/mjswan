@@ -530,27 +530,37 @@ import { parseManifest, type Catalog } from 'mjswan/manifest';
 ```
 
 ```ts
-function parseManifest(manifest: Manifest | string, source: ByteSource): Catalog
+function parseManifest(manifest: Manifest | string, source: ByteSource, options?: ParseOptions): Catalog
 type ByteSource = (relPath: string) => Bytes
+interface ParseOptions { remote?: (url: URL) => Bytes }
+function documentUrl(base: string | URL, path: string): string
 ```
 
 Turns a build's `manifest.json` plus a byte source into a typed catalog. `source` maps a
 build-relative path (`my_robots/g1/scene.mjz`) to bytes — usually a `fetch` wrapper over
 the deployment's base URL, but an in-memory resolver works too, which is how a page can
 render locally-selected files, or an unpacked `.swn`, without an upload round-trip.
+`documentUrl(base, path)` is that URL: `path` under `base`, read as a directory.
 
 The parser refuses a manifest whose `format` is newer than it understands, naming both
 values and the document's `version`, and never gates on `version` itself: that is the
-release that wrote the document, for a host to pick a matching engine by.
+release that wrote the document, for a host to pick a matching engine by. It must have a
+release's form (`X.Y.Z` or `X.Y.Z-<prerelease>`), or the manifest is refused.
+
+It also refuses, before fetching, a document whose ids or paths leave it: each segment
+must be `..` (never above the root) or a name a build writes (letters, digits, `_`, `-`,
+then `.`). A splat `url` or a URL `collider_url` must be `http(s)` and is fetched only
+through `remote`, which you pass only where the document's author may choose the hosts
+your page fetches from; without it, such a splat is left out and such a collider dropped.
 
 The catalog is lazy: nothing is fetched until you call a `build()`.
 
 ```ts
 const base = 'https://example.com/myapp/';
 const bytes = (path: string) => async () =>
-  (await fetch(new URL(path, base))).arrayBuffer();
+  (await fetch(documentUrl(base, path))).arrayBuffer();
 
-const manifest = await (await fetch(new URL('manifest.json', base))).text();
+const manifest = await (await fetch(documentUrl(base, 'manifest.json'))).text();
 const catalog = parseManifest(manifest, bytes);
 
 const project = catalog.projects[0];           // the default project comes first
@@ -582,9 +592,22 @@ the bundled app's `?project=` / `?scene=` / `?policy=` parameters take. `sanitiz
 is the same function in TypeScript, pinned to the Python one by a shared table of cases,
 so a URL written from a display name resolves to the same entry on both sides.
 
-`pluginsPath` is set for a custom-TS build: a trusted app imports that ESM and
-passes its exports as `EnginePlugins`. mjswan Cloud ignores it — see
-[Publishing](../guides/publishing.md).
+`pluginsPath` is set for a custom-TS build (`uses_custom_js: true`) only: a trusted app
+imports that ESM and passes its exports as `EnginePlugins`. mjswan Cloud ignores it (see
+[Publishing](../guides/publishing.md)).
+
+### Choosing an engine by `version`
+
+```ts
+function isReleaseVersion(version: unknown): version is string
+function compareVersions(a: string, b: string): number
+function engineUrl(version: string, file?: 'mjswan.js' | 'manifest.js', cdn?: string): URL
+```
+
+A host rendering documents from many releases picks the engine by the manifest's
+`version`: `engineUrl('0.14.0')` is `https://cdn.jsdelivr.net/npm/mjswan@0.14.0/dist/mjswan.js`,
+and it throws for a value that is not a release's. `compareVersions` orders releases as
+semver does (`0.14.0-beta.2` < `0.14.0-beta.10` < `0.14.0`).
 
 Like the engine, the parser ships as a standalone ESM (`dist/manifest.js`), so it too can be
 imported straight from a CDN.

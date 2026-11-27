@@ -5,6 +5,9 @@ from __future__ import annotations
 
 MANIFEST_NAME = "manifest.json"
 
+#: The engine's directory in an app, so no project may take it as its id.
+ENGINE_DIR = "assets"
+
 #: The structure a build writes: what files exist, where they sit, and what the manifest
 #: says about them. Bumped by hand when a released engine that reads the current format
 #: would ignore an addition and so run wrong; an addition to a format no release has
@@ -69,10 +72,21 @@ RUNTIME_INPUT_SLOTS = frozenset({"is_init", "adapt_hx", "time_step"})
 DEFAULT_IN_KEYS = ("actor",)
 DEFAULT_OUT_KEYS = ("action",)
 
+
+def author_code(manifest: dict) -> bool:
+    """Whether ``manifest`` asks for author code: a ``plugins`` key, whatever its value,
+    or a truthy ``uses_custom_js``. No document carries the module."""
+    if not isinstance(manifest, dict):
+        return False
+    return "plugins" in manifest or bool(manifest.get("uses_custom_js"))
+
+
 __all__ = [
     "DEFAULT_IN_KEYS",
     "DEFAULT_OUT_KEYS",
     "DOCUMENT_FORMAT",
+    "ENGINE_DIR",
     "MANIFEST_NAME",
     "RUNTIME_INPUT_SLOTS",
+    "author_code",
 ]

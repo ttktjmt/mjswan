@@ -223,6 +223,22 @@ class TestProjectHandle:
         scene = project.add_scene(name="S", spec=minimal_spec)
         assert isinstance(scene, mjswan.SceneHandle)
 
+    def test_add_scene_refuses_a_file_outside_asset_root(self, tmp_path: Path):
+        spec = TestProjectHandle._entity_beside_its_meshes(tmp_path / "robot")
+        project = Builder().add_project(name="P")
+
+        with pytest.raises(ValueError, match="outside asset_root"):
+            project.add_scene(
+                name="S", spec=spec, asset_root=tmp_path / "robot" / "xmls"
+            )
+        scene = project.add_scene(name="S", spec=spec, asset_root=tmp_path / "robot")
+        assert scene._config.asset_roots == (str((tmp_path / "robot").resolve()),)
+
+    def test_asset_root_applies_to_a_spec(self, minimal_model, tmp_path: Path):
+        project = Builder().add_project(name="P")
+        with pytest.raises(ValueError, match="applies to a spec"):
+            project.add_scene(name="S", model=minimal_model, asset_root=tmp_path)
+
     def test_add_scene_appended_to_project_scenes(self, minimal_model):
         builder = Builder()
         project = builder.add_project(name="P")
@@ -268,7 +284,7 @@ class TestProjectHandle:
                 "prop": FakeCfg(prop_spec),
             }
 
-        def fake_collect_spec_assets(spec):
+        def fake_collect_spec_assets(spec, roots=None):
             return {f"{spec.modelname}.bin": spec.modelname.encode()}
 
         monkeypatch.setattr(
@@ -276,8 +292,9 @@ class TestProjectHandle:
             fake_collect_spec_assets,
         )
 
-        assets = _collect_mjlab_scene_assets(FakeSceneCfg())
+        assets, outside = _collect_mjlab_scene_assets(FakeSceneCfg())
 
+        assert outside == []
         assert assets == {
             "terrain.bin": b"terrain",
             "robot.bin": b"robot",
@@ -322,7 +339,7 @@ class TestProjectHandle:
             )
         reference = scene.compile()
 
-        assets = _collect_mjlab_scene_assets(FakeSceneCfg())
+        assets, outside = _collect_mjlab_scene_assets(FakeSceneCfg())
         scene.assets.update(assets)
         model = scene.compile()
 
@@ -332,9 +349,99 @@ class TestProjectHandle:
             return float(m.mesh_vert[start : start + m.mesh_vertnum[i]].max())
 
         assert set(assets) == {"meshes/shared.obj"}
+        assert outside == []
         for name in ("left/bone", "right/bone"):
             assert extent(model, name) == pytest.approx(extent(reference, name))
         assert extent(model, "right/bone") > 2 * extent(model, "left/bone")
+
+    @staticmethod
+    def _entity_beside_its_meshes(root: Path) -> mujoco.MjSpec:
+        """An entity in ``xmls/`` whose mesh sits in a sibling ``meshes/``."""
+        tetra = (
+            "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n"
+        )
+        (root / "meshes").mkdir(parents=True)
+        (root / "meshes" / "bone.obj").write_text(tetra)
+        (root / "xmls").mkdir()
+        (root / "xmls" / "arm.xml").write_text(
+            '<mujoco><compiler meshdir="../meshes"/>'
+            '<asset><mesh name="bone" file="bone.obj"/></asset>'
+            '<worldbody><body><geom type="mesh" mesh="bone"/></body></worldbody>'
+            "</mujoco>"
+        )
+        return mujoco.MjSpec.from_file(str(root / "xmls" / "arm.xml"))
+
+    def test_collect_mjlab_scene_assets_lists_entity_files_outside_their_folder(
+        self, tmp_path: Path
+    ):
+        spec = self._entity_beside_its_meshes(tmp_path / "robot")
+
+        class FakeSceneCfg:
+            terrain = None
+            entities = {"robot": SimpleNamespace(spec_fn=lambda: spec)}
+
+        assets, outside = _collect_mjlab_scene_assets(FakeSceneCfg())
+
+        assert set(assets) == {"meshes/bone.obj"}
+        assert outside == [str(tmp_path / "robot" / "meshes" / "bone.obj")]
+
+    def test_collect_mjlab_scene_assets_counts_a_scene_file_against_every_entity(
+        self, tmp_path: Path
+    ):
+        """An entity file named by absolute path is inside the entity's folder; only one
+        the scene attached from elsewhere counts."""
+        tetra = (
+            "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n"
+        )
+        (tmp_path / "robot").mkdir()
+        (tmp_path / "robot" / "bone.obj").write_text(tetra)
+        (tmp_path / "robot" / "robot.xml").write_text(
+            '<mujoco><asset><mesh name="bone" file="bone.obj"/></asset>'
+            '<worldbody><body name="b"><geom type="mesh" mesh="bone"/></body></worldbody>'
+            "</mujoco>"
+        )
+        (tmp_path / "table.obj").write_text(tetra)
+        (tmp_path / "scene").mkdir()
+        (tmp_path / "scene" / "scene.xml").write_text("<mujoco/>")
+
+        def robot() -> mujoco.MjSpec:
+            spec = mujoco.MjSpec.from_file(str(tmp_path / "robot" / "robot.xml"))
+            for mesh in spec.meshes:
+                mesh.file = str(tmp_path / "robot" / mesh.file)
+            return spec
+
+        composed = mujoco.MjSpec.from_file(str(tmp_path / "scene" / "scene.xml"))
+        composed.attach(robot(), prefix="robot/", frame=composed.worldbody.add_frame())
+        composed.add_mesh(name="table", file=str(tmp_path / "table.obj"))
+
+        class FakeSceneCfg:
+            terrain = None
+            entities = {"robot": SimpleNamespace(spec_fn=robot)}
+
+        _, outside = _collect_mjlab_scene_assets(FakeSceneCfg(), None, composed)
+
+        assert outside == [str(tmp_path / "table.obj")]
+
+    def test_collect_mjlab_scene_assets_keeps_entities_to_asset_root(
+        self, tmp_path: Path
+    ):
+        from mjswan.build.mjz import asset_roots
+
+        spec = self._entity_beside_its_meshes(tmp_path / "robot")
+
+        class FakeSceneCfg:
+            terrain = None
+            entities = {"robot": SimpleNamespace(spec_fn=lambda: spec)}
+
+        with pytest.raises(ValueError, match="outside asset_root"):
+            _collect_mjlab_scene_assets(
+                FakeSceneCfg(), asset_roots(tmp_path / "robot" / "xmls")
+            )
+        assets, outside = _collect_mjlab_scene_assets(
+            FakeSceneCfg(), asset_roots(tmp_path / "robot")
+        )
+        assert set(assets) == {"meshes/bone.obj"}
+        assert outside == []
 
     def test_add_scene_mjlab_passes_play_flag_to_load_env_cfg(
         self, monkeypatch, minimal_spec
