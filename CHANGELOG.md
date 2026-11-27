@@ -1597,6 +1597,15 @@ shortcuts.
   keeps any release younger than that out of the lock, as the template's `.npmrc` already
   does for npm. The test jobs now install the locked torch, the CUDA build on Linux,
   where they used to fetch the CPU wheel outside the lock.
+- **Only a job that runs no build can publish a release.** `publish-pypi.yml` and
+  `publish-npm.yml` ran the test suite, `npm install` and the Vite and wheel builds in the
+  job holding `id-token: write`, the OIDC token PyPI and npm trust for mjswan, so a
+  package compromised at release time could have used it to publish a release of its
+  own. Each now builds in a job whose token only reads the repository and hands the
+  wheel and sdist, or the tarball, to a `publish` job that only uploads them, in the
+  `pypi` or `npm` environment as before. `release.yml` runs the suite once, in a job of
+  its own, before either publishes. The builds run `npm ci` and restore no cache, and the
+  workflows pass their inputs to scripts through `env`.
 - **A `?manifest=` link no longer loads a plugins module.** The SPA imported whatever
   `plugins` the manifest named, joined onto the base as a string, so on a site hosted at
   its root a link carrying `?manifest=` with `"plugins": "/other.site/p.js"` imported a

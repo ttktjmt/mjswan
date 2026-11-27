@@ -17,46 +17,86 @@ on:
         type: string
         default: latest
 
+# Two jobs, so the OIDC token npm trusts is never in a job that runs the project's
+# code or its dependencies: `build` runs npm and Vite with a read-only token and packs
+# the tarball; `publish` holds `id-token: write` and only uploads that tarball.
+# npm's Trusted Publisher names this file and the `npm` environment.
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
-    environment: npm
     permissions:
-      id-token: write
       contents: read
 
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ inputs.ref }}
+          persist-credentials: false
 
       # Set from the input so a prerelease publishes its version even though the
-      # tagged commit may not carry the bump (see release.yml).
+      # tagged commit may not carry the bump (see release.yml). Vite reads the
+      # version from _version.py; the lock follows package.json so `npm ci` sees one.
       - name: Set version
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          sed -i "s/^__version__ = \".*\"/__version__ = \"${{ inputs.version }}\"/" src/mjswan/_version.py
+          sed -i "s/^__version__ = \".*\"/__version__ = \"${VERSION}\"/" src/mjswan/_version.py
           cd src/mjswan/template
-          jq --arg v "${{ inputs.version }}" '.version = $v' package.json > package.json.tmp
+          jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp
           mv package.json.tmp package.json
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
-
-      - name: Run pytest
-        run: uv run --locked --extra dev --python 3.12 pytest
+          jq --arg v "$VERSION" '.version = $v | .packages[""].version = $v' package-lock.json > package-lock.json.tmp
+          mv package-lock.json.tmp package-lock.json
 
       - name: Setup Node.js for template build
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version: '24' # Bundles npm >= 11.5.1, required by trusted publishing
-          registry-url: 'https://registry.npmjs.org'
+          node-version: '24'
+          package-manager-cache: false
 
+      # `npm ci` installs package-lock.json as it is, with no install scripts (`.npmrc`).
       - name: Build web template
         working-directory: src/mjswan/template
         run: |
-          npm install
+          npm ci
           npm run build
 
-      - name: Publish to npm
+      - name: Pack
         working-directory: src/mjswan/template
-        run: npm publish --access public --tag "${{ inputs.tag }}" # Auth via OIDC trusted publishing
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm"
+          npm pack --pack-destination "$RUNNER_TEMP/npm"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-tarball
+          path: ${{ runner.temp }}/npm/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '24' # Bundles npm >= 11.5.1, required by trusted publishing
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-tarball
+          path: npm/
+
+      # The tarball named by the version, so one packed at another version fails here;
+      # `./` makes it a file, as `npm/...` alone reads as a GitHub repository. A tarball
+      # runs no package script. Auth via OIDC trusted publishing.
+      - name: Publish to npm
+        env:
+          VERSION: ${{ inputs.version }}
+          TAG: ${{ inputs.tag }}
+        run: npm publish "./npm/mjswan-${VERSION}.tgz" --access public --tag "$TAG"

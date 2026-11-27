@@ -8,6 +8,8 @@ on:
         required: true
         type: string
 
+permissions: {}
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -24,47 +26,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
+      # Inputs reach every script through `env`: an expression in a `run:` is pasted
+      # into the script before it runs. `[[ =~ ]]` matches the whole string, newlines too.
       - name: Determine release type
         id: type
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          v="${{ inputs.version }}"
-          if echo "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
             echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
-          elif echo "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.]+$'; then
+          elif [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.]+$ ]]; then
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
             echo "npm_tag=beta" >> "$GITHUB_OUTPUT"
           else
-            echo "::error::Invalid version '$v'. Expected X.Y.Z or X.Y.Z-beta.N"
+            echo "::error::Invalid version. Expected X.Y.Z or X.Y.Z-beta.N"
             exit 1
           fi
 
       - name: Ensure stable releases run from main
+        env:
+          IS_PRERELEASE: ${{ steps.type.outputs.is_prerelease }}
         run: |
-          if [ "${{ steps.type.outputs.is_prerelease }}" != "true" ] && [ "${{ github.ref }}" != "refs/heads/main" ]; then
-            echo "::error::Stable releases must run from main. Current ref: ${{ github.ref }}"
+          if [ "$IS_PRERELEASE" != "true" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Stable releases must run from main. Current ref: $GITHUB_REF"
             exit 1
           fi
 
       - name: Check release does not already exist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
         run: |
-          if gh release view "v${{ inputs.version }}" >/dev/null 2>&1; then
-            echo "::error::Release v${{ inputs.version }} already exists"
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "::error::Release v${VERSION} already exists"
             exit 1
           fi
 
       - name: Update version in _version.py
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          sed -i "s/^__version__ = \".*\"/__version__ = \"${{ inputs.version }}\"/" src/mjswan/_version.py
+          sed -i "s/^__version__ = \".*\"/__version__ = \"${VERSION}\"/" src/mjswan/_version.py
 
       - name: Update version in package.json and package-lock.json
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           cd src/mjswan/template
-          jq --arg v "${{ inputs.version }}" '.version = $v' package.json > package.json.tmp
+          jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp
           mv package.json.tmp package.json
-          jq --arg v "${{ inputs.version }}" '.version = $v | .packages[""].version = $v' package-lock.json > package-lock.json.tmp
+          jq --arg v "$VERSION" '.version = $v | .packages[""].version = $v' package-lock.json > package-lock.json.tmp
           mv package-lock.json.tmp package-lock.json
 
       # Stable releases bump the version on main. Prereleases do NOT commit — the
@@ -77,20 +89,24 @@ jobs:
 
       - name: Commit version bump (stable only)
         if: steps.type.outputs.is_prerelease != 'true'
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           git add src/mjswan/_version.py src/mjswan/template/package.json src/mjswan/template/package-lock.json
           if git diff --cached --quiet; then
-            echo "Version already at ${{ inputs.version }}, skipping commit"
+            echo "Version already at ${VERSION}, skipping commit"
           else
-            git commit -m "Bump version to ${{ inputs.version }}"
+            git commit -m "Bump version to ${VERSION}"
             git push
           fi
 
       # The publish jobs check out this commit by SHA, so an existing tag must already name it.
       - name: Create and push tag
         id: tag
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          tag="v${{ inputs.version }}"
+          tag="v${VERSION}"
           head=$(git rev-parse HEAD)
           if git ls-remote --tags origin "refs/tags/$tag" | grep -q .; then
             git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag"
@@ -105,8 +121,35 @@ jobs:
           fi
           echo "sha=$head" >> "$GITHUB_OUTPUT"
 
-  publish-pypi:
+  # The full suite once, on the commit the publish jobs ship, before either publishes.
+  # It runs the project's code and its dependencies, so it holds no token that publishes.
+  test:
     needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.release.outputs.sha }}
+          persist-credentials: false
+
+      # As the publish jobs set it, so a prerelease is tested at the version it ships.
+      - name: Set version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          sed -i "s/^__version__ = \".*\"/__version__ = \"${VERSION}\"/" src/mjswan/_version.py
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+
+      - name: Run pytest
+        run: uv run --locked --extra dev --python 3.12 pytest
+
+  publish-pypi:
+    needs: [release, test]
     uses: ./.github/workflows/publish-pypi.yml
     with:
       ref: ${{ needs.release.outputs.sha }}
@@ -116,7 +159,7 @@ jobs:
       contents: read
 
   publish-npm:
-    needs: release
+    needs: [release, test]
     uses: ./.github/workflows/publish-npm.yml
     with:
       ref: ${{ needs.release.outputs.sha }}
@@ -140,11 +183,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          PUBLISHED: ${{ needs.release.outputs.sha }}
         run: |
-          read -r type sha < <(gh api "repos/${GH_REPO}/git/ref/tags/v${{ inputs.version }}" --jq '.object.type + " " + .object.sha')
+          read -r type sha < <(gh api "repos/${GH_REPO}/git/ref/tags/v${VERSION}" --jq '.object.type + " " + .object.sha')
           if [ "$type" = tag ]; then sha=$(gh api "repos/${GH_REPO}/git/tags/${sha}" --jq .object.sha); fi
-          if [ "$sha" != "${{ needs.release.outputs.sha }}" ]; then
-            echo "::error::Tag v${{ inputs.version }} was moved to $sha after publishing ${{ needs.release.outputs.sha }}"
+          if [ "$sha" != "$PUBLISHED" ]; then
+            echo "::error::Tag v${VERSION} was moved to $sha after publishing $PUBLISHED"
             exit 1
           fi
 
@@ -153,11 +198,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PRERELEASE_FLAG: ${{ needs.release.outputs.is_prerelease == 'true' && '--prerelease' || '' }}
+          VERSION: ${{ inputs.version }}
         run: |
           for i in 1 2 3; do
-            gh release create "v${{ inputs.version }}" \
+            gh release create "v${VERSION}" \
               --repo "${GH_REPO}" \
-              --title "v${{ inputs.version }}" \
+              --title "v${VERSION}" \
               --generate-notes \
               ${PRERELEASE_FLAG} && exit 0
             echo "Attempt $i failed, retrying in 15s..."
