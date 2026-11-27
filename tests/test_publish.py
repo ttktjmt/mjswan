@@ -204,6 +204,12 @@ def _make_dist(
     return dist
 
 
+def _edit_manifest(dist: Path, edit) -> None:
+    manifest = json.loads((dist / "manifest.json").read_text())
+    edit(manifest)
+    (dist / "manifest.json").write_text(json.dumps(manifest))
+
+
 # ── HttpTransport User-Agent (Cloudflare 1010 guard) ─────────────────────────
 
 
@@ -317,6 +323,87 @@ class TestPlanPublish:
             plan_publish(_make_dist(tmp_path, uses_custom_js=True))
         assert exc.value.file == "manifest.json"
         assert "custom-ts" in str(exc.value).lower()
+
+    @pytest.mark.parametrize(
+        "asks",
+        [{"plugins": "demo/x.js"}, {"uses_custom_js": "yes"}],
+        ids=["plugins", "truthy"],
+    )
+    def test_rejects_a_manifest_asking_for_code(self, tmp_path: Path, asks):
+        dist = _make_dist(tmp_path)
+        _edit_manifest(dist, lambda m: m.update(asks))
+
+        with pytest.raises(PublishError, match="custom-TS") as exc:
+            plan_publish(dist)
+        assert exc.value.file == "manifest.json"
+
+    @pytest.mark.parametrize(
+        "splat",
+        [
+            {"url": "https://cdn.example.com/bg.spz"},
+            {"path": "assets/bg.spz", "collider_url": "https://example.com/c.glb"},
+            {"path": "assets/bg.spz", "collider_url": "//example.com/c.glb"},
+        ],
+        ids=["url", "collider-url", "collider-protocol-relative"],
+    )
+    def test_rejects_a_splat_fetched_from_elsewhere(self, tmp_path: Path, splat):
+        """Every viewer of the page would fetch it from a host the author picks."""
+        dist = _make_dist(tmp_path)
+        _edit_manifest(
+            dist,
+            lambda m: m["projects"][0]["scenes"][0].update(
+                splats=[{"id": "bg", "name": "Bg", **splat}]
+            ),
+        )
+
+        with pytest.raises(PublishError, match="mjswan Cloud serves only the files"):
+            plan_publish(dist)
+
+    def test_a_bundled_splat_with_a_collider_in_the_build_is_published(
+        self, tmp_path: Path
+    ):
+        dist = _make_dist(tmp_path)
+        _edit_manifest(
+            dist,
+            lambda m: m["projects"][0]["scenes"][0].update(
+                splats=[
+                    {
+                        "id": "bg",
+                        "name": "Bg",
+                        "path": "assets/bg.spz",
+                        "collider_url": "assets/c.glb",
+                    }
+                ]
+            ),
+        )
+        (dist / "demo" / "humanoid" / "assets" / "bg.spz").write_bytes(b"SPZ")
+
+        paths = {f.upload_path for f in plan_publish(dist).files}
+        assert "demo/humanoid/assets/bg.spz" in paths
+
+    def test_rejects_the_engines_directory_as_a_project(self, tmp_path: Path):
+        dist = _make_dist(tmp_path)
+        _edit_manifest(dist, lambda m: m["projects"][0].update(id="assets"))
+
+        with pytest.raises(PublishError, match="the engine's directory"):
+            plan_publish(dist)
+
+    def test_uploads_nothing_outside_the_documents_projects(self, tmp_path: Path):
+        dist = _make_dist(tmp_path)
+        (dist / "demo" / "x.js").write_text("alert(1)")
+        (dist / "elsewhere").mkdir()
+        (dist / "elsewhere" / "data.json").write_text("{}")
+        (dist / "assets" / "nested").mkdir()
+        (dist / "assets" / "nested" / "stats.json").write_text("{}")
+
+        paths = {f.upload_path for f in plan_publish(dist).files}
+        assert paths == {
+            "manifest.json",
+            "demo/humanoid/scene.mjz",
+            "demo/humanoid/policy/walk.onnx",
+            "demo/humanoid/mdp/mdp_0/obs/actor.onnx",
+            "demo/humanoid/assets/walk_run.npz",
+        }
 
     def test_refuses_an_mjb_scene_rather_than_publishing_it_without_one(
         self, tmp_path: Path

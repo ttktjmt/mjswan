@@ -13,9 +13,10 @@ SHA-256 of its bytes, cut into pieces where :mod:`.blob` says:
    every piece's SHA-256 as it moves it into place.
 4. ``POST {base}/api/simulations/commit`` with the ``upload_id`` → the sim id.
 
-The platform renders only **declarative** builds (no author-supplied code), so
-``publish`` refuses any build whose ``manifest.json`` reports ``uses_custom_js: true``
-locally, before the server would reject it.
+The platform renders only **declarative** builds (no author-supplied code) from the
+files a document carries, so ``publish`` refuses, locally and before the server would, any
+build whose ``manifest.json`` asks for a plugins module (``plugins`` or
+``uses_custom_js``) or a splat or collider fetched from another site.
 """
 
 from __future__ import annotations
@@ -34,6 +35,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from ..document.container import (
+    DATA_SUFFIXES,
+    DocumentError,
+    is_document_file,
+    project_ids,
+)
+from ..document.manifest import MANIFEST_NAME, author_code
 from ..document.skin import read_skin_file
 from ..license import (
     LICENSE_FILE_MAX_BYTES,
@@ -49,14 +57,13 @@ from .transport import USER_AGENT
 
 # ── Client-side constraints (mirror the server's; fail fast and locally) ──────
 
-#: File extensions uploaded as simulation *data*. Everything else in ``dist/``
-#: (``.html`` / ``.js`` / ``.css`` / ``.wasm`` / fonts / images) is the engine shell and
-#: is never sent: the platform loads a pinned engine from its CDN. ``LICENSE`` /
-#: ``NOTICE`` files are admitted by name instead, in the project directory and the
-#: directory below it only.
-DATA_EXTENSIONS: frozenset[str] = frozenset(
-    {".json", ".mjz", ".onnx", ".npz", ".ply", ".spz", ".vrm", ".glb"}
-)
+#: File extensions uploaded as simulation *data*: a document's, less ``.mjb``, which
+#: loads only in the MuJoCo that wrote it. Everything else in ``dist/`` (``.html`` /
+#: ``.js`` / ``.css`` / ``.wasm`` / fonts / images) is the engine shell and is never
+#: sent: the platform loads a pinned engine from its CDN. ``LICENSE`` / ``NOTICE``
+#: files are admitted by name instead, in the project directory and the directory below
+#: it only.
+DATA_EXTENSIONS: frozenset[str] = DATA_SUFFIXES - {".mjb"}
 SKIN_EXTENSIONS: frozenset[str] = frozenset({".vrm", ".glb"})
 
 #: The most of a skin's glTF JSON mjswan Cloud reads, and of a VRM's meta it stores.
@@ -260,37 +267,39 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
     without any network I/O.
 
     Raises :class:`PublishError` on any client-side constraint violation:
-    missing/invalid config, custom-TS build, a ``.mjb`` scene, too many/too-large
-    files, a path that escapes the upload root, a license file whose terms forbid
-    redistribution, or a skin the engine cannot draw or whose VRM license forbids
-    redistribution.
+    missing/invalid config, a build asking for a plugins module (custom-TS), a project
+    id no build writes, a ``.mjb`` scene, a splat or collider fetched by URL, too
+    many/too-large files, a path that escapes the upload root, a license file whose
+    terms forbid redistribution, or a skin the engine cannot draw or whose VRM license
+    forbids redistribution.
     """
     dist_dir = Path(dist_dir).expanduser().resolve()
     if not dist_dir.is_dir():
         raise PublishError(f"Not a directory: {dist_dir}")
 
-    from ..document import DocumentError, read_manifest
+    from ..document import read_manifest
 
     _find_config(dist_dir)
     try:
         config = read_manifest(dist_dir)
+        projects = project_ids(config)
     except json.JSONDecodeError as exc:
         raise PublishError(f"Invalid manifest.json: {exc}")
     except DocumentError as exc:
         raise PublishError(str(exc), file="manifest.json") from None
 
-    if config.get("uses_custom_js") is True:
+    if author_code(config):
         raise PublishError(
-            "This build uses custom-TS MDP terms (uses_custom_js: true) and "
-            "cannot be published to mjswan Cloud, which renders only declarative "
-            "builds. Re-author the custom terms declaratively, or request the "
-            "missing capability as an engine built-in.",
+            "This build asks for a plugins module, as custom-TS MDP terms do "
+            "(uses_custom_js), and cannot be published to mjswan Cloud, which renders "
+            "only declarative builds. Re-author the custom terms declaratively, or "
+            "request the missing capability as an engine built-in.",
             file="manifest.json",
         )
 
-    # An .mjb is not uploaded (DATA_EXTENSIONS), so the scene would publish without it.
     for project in config.get("projects", []):
         for scene in project.get("scenes", []):
+            # An .mjb is not uploaded (DATA_EXTENSIONS): the scene would publish without it.
             if scene.get("scene", "").endswith(".mjb"):
                 raise PublishError(
                     f"Scene {scene.get('name')!r} was built with add_scene(model=...), "
@@ -298,15 +307,27 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
                     "Build it with add_scene(spec=...) to publish it.",
                     file=f"{project['id']}/{scene['id']}/{scene['scene']}",
                 )
+            for splat in scene.get("splats", []):
+                url = _fetched_elsewhere(splat)
+                if url is not None:
+                    raise PublishError(
+                        f"Splat {splat.get('name')!r} of scene {scene.get('name')!r} "
+                        f"is fetched from {url}, and mjswan Cloud serves only the files "
+                        "a document carries. Bundle the splat with add_splat(source=...) "
+                        "and give its collider as a path in the build to publish it.",
+                        file=MANIFEST_NAME,
+                    )
 
     plan = PublishPlan(dist_dir=dist_dir, config=config)
 
     for path in sorted(dist_dir.rglob("*")):
         if not path.is_file():
             continue
-        if path.parent == dist_dir / "assets":
-            continue  # the SPA's own directory: bundle metadata, not the document
         rel = path.relative_to(dist_dir).as_posix()
+        # The engine's own files (index.html, assets/) are not the document's, nor is
+        # anything no build writes under a project.
+        if rel != MANIFEST_NAME and not is_document_file(rel, projects):
+            continue
         # A build writes regular files only; a link would upload whatever it names.
         if path.is_symlink():
             raise PublishError(f"Symbolic links are not published: {rel}", file=rel)
@@ -343,6 +364,20 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
     _validate_plan(plan)
     _map_files(plan)
     return plan
+
+
+#: A scheme (``https:``, ``data:``) or a leading slash: a reference out of the document.
+_ELSEWHERE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:|[/\\]")
+
+
+def _fetched_elsewhere(splat: dict) -> str | None:
+    """The URL a splat entry has the viewer fetch from outside the document, if any."""
+    if splat.get("url") is not None:
+        return str(splat["url"])
+    collider = splat.get("collider_url")
+    if isinstance(collider, str) and _ELSEWHERE.match(collider):
+        return collider
+    return None
 
 
 def _check_skin(plan: PublishPlan, rel: str, path: Path) -> None:

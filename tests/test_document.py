@@ -1,8 +1,9 @@
 """The `.swn` simulation document.
 
 Layer: L1, a built tree on disk with the Node build and template copy mocked. Pins that a
-document is the manifest plus the project trees and nothing of the engine, that it unpacks
-to the tree it was made from, and that publishing it matches publishing the directory.
+document is the manifest plus the project trees' data and nothing of the engine, that it
+unpacks to the tree it was made from and to nothing else, and that publishing it matches
+publishing the directory.
 """
 
 from __future__ import annotations
@@ -84,6 +85,26 @@ class TestDocumentFiles:
         with pytest.raises(DocumentError, match="not one a build writes"):
             write_document(built, target)
         assert not target.exists()
+
+    def test_the_engines_directory_is_no_project(self, built, tmp_path):
+        manifest = read_manifest(built)
+        manifest["projects"][0]["id"] = "assets"
+        (built / "manifest.json").write_text(json.dumps(manifest))
+
+        with pytest.raises(DocumentError, match="the engine's directory"):
+            write_document(built, tmp_path / "out.swn")
+
+    @pytest.mark.parametrize(
+        "rel",
+        ["demo/x.js", "demo/.DS_Store", "demo/humanoid/page.html", "elsewhere/x.json"],
+    )
+    def test_a_file_no_build_writes_is_left_out(self, built, rel):
+        (built / rel).parent.mkdir(parents=True, exist_ok=True)
+        (built / rel).write_text("x")
+
+        assert rel not in [p.as_posix() for p in document_files(built)]
+        with zipfile.ZipFile(write_document(built)) as zf:
+            assert rel not in zf.namelist()
 
     @pytest.mark.parametrize(
         "rel", ["manifest.json", "demo", "demo/humanoid/policy/walk.onnx"]
@@ -179,6 +200,49 @@ class TestWriteAndUnpack:
         with pytest.raises(PublishError, match="over 100 bytes"):
             plan_publish(built)
 
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "index.html",
+            "assets/x.js",
+            "assets/plugins.js",
+            "demo/x.js",
+            "demo/humanoid/x.html",
+            "demo/humanoid/assets/x.svg",
+            "notes/LICENSE",
+        ],
+    )
+    def test_an_entry_no_build_writes_is_refused(self, built, tmp_path, name):
+        """A page or script beside the data would be served from the app's origin."""
+        doc = write_document(built)
+        with zipfile.ZipFile(doc, "a") as zf:
+            zf.writestr(name, "alert(1)")
+        target = tmp_path / "target"
+
+        with pytest.raises(DocumentError, match=f"holds '{name}'"):
+            unpack_document(doc, target)
+        assert not any(target.iterdir())
+
+    def test_a_manifest_with_an_id_no_build_writes_unpacks_nothing(self, tmp_path):
+        doc = tmp_path / "evil.swn"
+        with zipfile.ZipFile(doc, "w") as zf:
+            zf.writestr("manifest.json", json.dumps({"projects": [{"id": "assets"}]}))
+            zf.writestr("assets/plugins.js", "alert(1)")
+        target = tmp_path / "target"
+
+        with pytest.raises(DocumentError, match="the engine's directory"):
+            unpack_document(doc, target)
+        assert not any(target.iterdir())
+
+    def test_directory_entries_other_tools_add_are_unpacked(self, built, tmp_path):
+        doc = write_document(built)
+        with zipfile.ZipFile(doc, "a") as zf:
+            zf.writestr("demo/", "")
+            zf.writestr("demo/humanoid/", "")
+
+        tree = unpack_document(doc, tmp_path / "unpacked")
+        assert (tree / "demo" / "humanoid" / "policy" / "walk.onnx").is_file()
+
     def test_a_zip_without_a_manifest_is_not_a_document(self, tmp_path):
         other = tmp_path / "other.swn"
         with zipfile.ZipFile(other, "w") as zf:
@@ -269,18 +333,44 @@ class TestServingADocument:
         assert not (app_dir / "fixtures").exists()
         assert not (app_dir / ".mjswan-build-meta.json").exists()
 
-    def test_a_custom_js_document_is_refused_with_the_reason(
-        self, built, monkeypatch, tmp_path
+    @pytest.mark.parametrize(
+        "asks",
+        [
+            {"uses_custom_js": True},
+            {"uses_custom_js": "yes"},
+            {"uses_custom_js": False, "plugins": "demo/x.js"},
+            {"plugins": None},
+        ],
+        ids=["custom-js", "truthy", "plugins", "plugins-null"],
+    )
+    def test_a_document_asking_for_code_is_refused_with_the_reason(
+        self, built, monkeypatch, tmp_path, asks
     ):
-        from mjswan.document import DocumentError
-
+        """The SPA imports a manifest's `plugins` from the page's own origin."""
         self._engine(monkeypatch, tmp_path)
         manifest = built / "manifest.json"
-        manifest.write_text(
-            json.dumps({**json.loads(manifest.read_text()), "uses_custom_js": True})
-        )
+        manifest.write_text(json.dumps({**json.loads(manifest.read_text()), **asks}))
+        doc = write_document(built)
+        made = []
+        monkeypatch.setattr("tempfile.mkdtemp", lambda **kw: made.append(kw))
+
         with pytest.raises(DocumentError, match="custom-TS"):
-            MjswanApp.from_document(write_document(built))
+            MjswanApp.from_document(doc)
+        assert made == []
+
+    def test_the_served_app_holds_only_the_engines_scripts(
+        self, built, monkeypatch, tmp_path
+    ):
+        self._engine(monkeypatch, tmp_path)
+        (built / "demo" / "x.js").write_text("alert(1)")
+        app_dir = MjswanApp.from_document(write_document(built)).app_dir
+
+        scripts = {
+            p.relative_to(app_dir).as_posix()
+            for p in app_dir.rglob("*")
+            if p.suffix in {".js", ".html"}
+        }
+        assert scripts == {"index.html", "assets/index-abc.js"}
 
     def test_a_missing_path_says_so(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="No such app or document"):

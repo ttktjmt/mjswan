@@ -93,14 +93,22 @@ class MjswanApp:
 
         A directory is already an app and is served where it sits. A document carries no
         engine, so it is unpacked into a temporary directory (removed at exit) with the
-        packaged engine laid over it, built first if no matching SPA is cached.
+        packaged engine laid over it, built first if no matching SPA is cached. A
+        document carries no code either: one that asks for a plugins module, or holds a
+        file no build writes, is refused before anything is unpacked.
         """
         import atexit
         import shutil
         import tempfile
 
         from .build.frontend import TEMPLATE_DIR, ClientBuilder, install_spa
-        from .document import DocumentError, is_document, read_manifest, unpack_document
+        from .document import (
+            DocumentError,
+            author_code,
+            is_document,
+            read_manifest,
+            unpack_document,
+        )
 
         source = Path(source).expanduser()
         if not source.exists():
@@ -109,12 +117,13 @@ class MjswanApp:
             return cls(source.resolve())
 
         # Custom-TS terms compile to a `plugins.js` that ships with the engine, not in
-        # the document, so the manifest would point at a module that is not there.
-        if read_manifest(source).get("uses_custom_js") is True:
+        # the document, and a module a document named would run as this page.
+        if author_code(read_manifest(source)):
             raise DocumentError(
-                f"{source.name} was built with custom-TS MDP terms, whose runtime module "
-                "ships with the engine rather than in the document. Serve "
-                "the built directory instead."
+                f"{source.name} asks for a plugins module, as a build with custom-TS MDP "
+                "terms does. Their module ships with the engine rather than in the "
+                "document, and a document runs no code of its own. Serve the built "
+                "directory instead."
             )
 
         app_dir = Path(tempfile.mkdtemp(prefix="mjswan-swn-"))

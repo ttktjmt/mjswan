@@ -55,6 +55,11 @@ temporary directory, lays the packaged engine over it and serves that; the direc
 the command exits. A document built with custom-TS MDP terms is refused, since their runtime module
 ships with the engine rather than in the document — serve its built directory instead.
 
+A document carries data, never code, so one from someone else is safe to serve: mjswan unpacks
+only the manifest and the data and license files under its projects. A document holding anything
+else (a script, a page), or whose manifest names a plugins module, is refused before anything is
+unpacked, as no build writes one.
+
 | Option | Default | Description |
 |---|---|---|
 | `<dist-dir \| document.swn>` | — | A built mjswan `dist/` directory, or a `.swn` document. |

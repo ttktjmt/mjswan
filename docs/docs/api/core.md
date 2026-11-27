@@ -461,7 +461,7 @@ Add a Gaussian Splat background to the scene. Exactly one of `source` or `url` m
 |---|---|---|---|
 | `name` | `str` | required | Display name shown in the viewer selector. A name whose id another splat on the scene has is renamed `<name>_1` with a warning. |
 | `source` | `str \| None` | `None` | Local path to a `.spz` file. The file is copied into `dist/` during `Builder.build()`. Mutually exclusive with `url`. |
-| `url` | `str \| None` | `None` | URL to an external `.spz` file. Fetched by the browser at runtime; not bundled. Mutually exclusive with `source`. |
+| `url` | `str \| None` | `None` | URL to an external `.spz` file. Fetched by the browser at runtime; not bundled. Mutually exclusive with `source`. A build with one cannot be published to mjswan Cloud, which serves only the files a document carries. |
 | `scale` | `float` | `1.0` | Metric scale factor (converts splat units to metres). |
 | `x_offset` | `float` | `0.0` | X-axis position offset in scaled splat units. |
 | `y_offset` | `float` | `0.0` | Y-axis position offset in scaled splat units. |
@@ -469,7 +469,7 @@ Add a Gaussian Splat background to the scene. Exactly one of `source` or `url` m
 | `roll` | `float` | `0.0` | Roll rotation in degrees applied on top of the COLMAP → Three.js base rotation. |
 | `pitch` | `float` | `0.0` | Pitch rotation in degrees applied on top of the COLMAP → Three.js base rotation. |
 | `yaw` | `float` | `0.0` | Yaw rotation in degrees applied on top of the COLMAP → Three.js base rotation. |
-| `collider_url` | `str \| None` | `None` | Optional URL or local path to a `.glb` collision mesh. |
+| `collider_url` | `str \| None` | `None` | Optional URL or local path to a `.glb` collision mesh. As a URL, it keeps the build from being published to mjswan Cloud, as `url` does. |
 | `control` | `bool` | `False` | Show live scale/offset/rotation controls in the viewer control panel. Useful during calibration. |
 
 **Returns:** `SplatHandle`

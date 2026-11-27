@@ -1,6 +1,6 @@
 # The simulation document
 
-`document/` and the rules of what a build writes: the tree, `manifest.json`, ids, the policy slot tables, `format` versus `version`, the `.swn` container, and what a policy switch does to an MDP's events. `build/` writes all of it ([build.md](build.md)); `app.py`, `cli.py` and `cloud/` read it through `document/`, which is torch- and mjlab-free so they need neither. `document/manifest.py` holds the constants both sides share: `DOCUMENT_FORMAT`, `MANIFEST_NAME` and the slot defaults.
+`document/` and the rules of what a build writes: the tree, `manifest.json`, ids, the policy slot tables, `format` versus `version`, the `.swn` container, and what a policy switch does to an MDP's events. `build/` writes all of it ([build.md](build.md)); `app.py`, `cli.py` and `cloud/` read it through `document/`, which is torch- and mjlab-free so they need neither. `document/manifest.py` holds the constants both sides share: `DOCUMENT_FORMAT`, `MANIFEST_NAME`, `ENGINE_DIR`, the slot defaults, and `author_code`.
 
 ## The tree is the document
 
@@ -42,7 +42,7 @@ Every id is `name2id(name)` (`document/ids.py`): lowercased, every run of charac
 
 | id | unique within |
 |---|---|
-| project | the document |
+| project | the document (`assets` is reserved: it is the engine's directory in an app) |
 | scene | its project (`licenses` is reserved: it is the project's license directory) |
 | mdp, policy, splat, skin | its scene |
 
@@ -108,9 +108,10 @@ A graph's body is `torch.onnx.export`'s, but its interface is mjswan's: the inpu
 
 A ZIP whose entries are the tree's own paths (`document/container.py`): a directory of files is the authoring model and the container is a reversible packaging step over it, as `.docx` is, so every tool that understands the directory keeps working.
 
-- `document_files()` lists the document off the manifest (the manifest, then everything under each project directory), never off what else is on disk, so the SPA's own `assets/` can never be mistaken for data. A `.swn` never holds the engine (`index.html`, `assets/*.js`, WASM) or the author's custom-term module.
+- **A document carries data, never code.** Its files are the manifest and, under each project directory the manifest names, the data a build writes (`DATA_SUFFIXES`: `.json`, `.mjz`, `.mjb`, `.onnx`, `.npz`, `.ply`, `.spz`, `.vrm`, `.glb`) and the license files where a build puts them (`is_document_file`). Never the engine (`index.html`, `assets/*.js`, WASM), the author's custom-term module, or any page, script or image: served beside the engine, one would run as the app's own origin.
+- `document_files()` lists the document off the manifest, never off what else is on disk, so the SPA's own `assets/` can never be mistaken for data, and leaves out any other file under a project (an OS's folder metadata, a stray script). `project_ids()` refuses an id `name2id` could not have written and the engine's `assets`.
 - The manifest is the first entry, so a reader that stops after one file has the one that describes the rest; the others are sorted, for a reproducible archive. `.mjz`, `.npz` and `.spz` are stored (already compressed), the rest deflated.
-- `unpack_document()` confines entries to the target and refuses one naming `..` or an absolute path; reading bounds total size, entry count and manifest size, and accepts stored and deflated entries only. A symlink in a built tree is refused rather than followed.
+- `unpack_document()` reads the manifest first and refuses the whole document, before writing anything, for an entry that is not one of its files (another zip tool's directory entries under a project excepted) or that names `..` or an absolute path; something other than a build made or changed such a document. Reading bounds total size, entry count and manifest size, and accepts stored and deflated entries only. A symlink in a built tree is refused rather than followed.
 - `as_directory()` gives `publish` and `mjswan info` one code path for a directory or a `.swn`.
 
 Two output modes:
@@ -120,7 +121,7 @@ Two output modes:
 
 ## `app.py`: `MjswanApp`
 
-Wraps a built `dist/`: the engine plus the expanded document. `from_document()` takes either form: a directory is served where it sits; a `.swn` is unpacked to a temporary directory with the packaged engine (`build.frontend.install_spa`) laid over it, building the engine first if no matching SPA is cached, and removed at exit. It refuses a custom-TS document, whose `plugins.js` ships with the engine rather than in the document, so the manifest would point at a module that is not there. `launch()` starts a stdlib HTTP server (COOP/COEP headers, for SharedArrayBuffer and MuJoCo WASM threading) and detects Google Colab, displaying an inline iframe instead. `save_document()` writes the document as one `.swn` via `document/`; `publish()` delegates to `cloud.publish` ([cloud.md](cloud.md)).
+Wraps a built `dist/`: the engine plus the expanded document. `from_document()` takes either form: a directory is served where it sits; a `.swn` is unpacked to a temporary directory with the packaged engine (`build.frontend.install_spa`) laid over it, building the engine first if no matching SPA is cached, and removed at exit. It refuses, before unpacking, a document whose manifest asks for author code (`author_code`: a `plugins` key, whatever its value, or a true `uses_custom_js`): a custom-TS build's `plugins.js` ships with the engine rather than in the document, and a module the document named itself would run as the app. `launch()` starts a stdlib HTTP server (COOP/COEP headers, for SharedArrayBuffer and MuJoCo WASM threading) and detects Google Colab, displaying an inline iframe instead. `save_document()` writes the document as one `.swn` via `document/`; `publish()` delegates to `cloud.publish` ([cloud.md](cloud.md)).
 
 ## Rejected
 

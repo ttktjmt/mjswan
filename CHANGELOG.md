@@ -529,6 +529,15 @@ shortcuts.
 
 ### Changed
 
+- **A project cannot take the id `assets`, the engine's directory in an app.** A project
+  named "Assets" is renamed "Assets_1", id `assets_1`, with a warning, as a second project
+  of one name is: its files sat among the engine's, so `save_document` packed the engine
+  into the document and `publish` skipped the project's files there. A `?project=assets`
+  link needs the new id.
+- **`mjswan publish` refuses a splat fetched from elsewhere**: one added with
+  `add_splat(url=...)`, or a `collider_url` that is a URL. mjswan Cloud serves only the
+  files a document carries, and every viewer of the page would have fetched it from that
+  host. Bundle the splat with `add_splat(source=...)`.
 - **The build names the folders a scene packs files from outside its model's own**, in
   one `RuntimeWarning` per scene, so files a model reaches for elsewhere on disk are
   seen before the build is published. `add_scene_mjlab` counts each entity's files
@@ -1583,6 +1592,18 @@ shortcuts.
 
 ### Security
 
+- **A `.swn` document carries data, never code.** `mjswan serve` and
+  `MjswanApp.from_document` refused a document with `uses_custom_js: true` but unpacked
+  every other entry and served it beside the engine, and the viewer imports the
+  manifest's `plugins` from the page's own origin whatever `uses_custom_js` says. So a
+  document from someone else, naming `"plugins": "p/x.js"` and carrying `p/x.js`, ran
+  that script as `http://localhost:<port>`, the same site as every other local service.
+  A document is now its manifest and the data and license files under the project
+  directories it names: `unpack_document` refuses any other entry (a script, a page, a
+  file in the engine's `assets/`) before writing anything, `save_document` leaves such
+  files out, and `from_document` and `publish` refuse a manifest with a `plugins` key or
+  a true `uses_custom_js` (`mjswan.document.author_code`). `publish` also sends only the
+  document's files.
 - **The build never reads a FIFO, a device, or a file under `/proc`, `/sys` or `/dev`.**
   A model could name one as a mesh or texture: a FIFO hung the build as MuJoCo waited on
   it, and `/proc/self/environ` was read into memory before MuJoCo refused it. Such a path

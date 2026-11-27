@@ -81,11 +81,17 @@ checked like the files above. From Python, `publish_dist(..., attest=...)` is as
 once per such VRM, with the file and its terms.
 
 !!! warning "Custom-TS builds are rejected"
-    A build whose `manifest.json` carries `uses_custom_js: true` — one using a
-    `*Binding` with `ts_src`, i.e. an author-written TypeScript term class — cannot be
-    published. Cloud will not execute author-supplied code in its own origin. Traced ONNX
-    terms are fine; they are inert data run by a fixed runtime. This is checked locally
-    before any upload starts.
+    A build whose `manifest.json` carries `uses_custom_js: true` or names a `plugins`
+    module — one using a `*Binding` with `ts_src`, i.e. an author-written TypeScript term
+    class — cannot be published. Cloud will not execute author-supplied code in its own
+    origin. Traced ONNX terms are fine; they are inert data run by a fixed runtime. This is
+    checked locally before any upload starts.
+
+!!! warning "Splats are published from the build"
+    Cloud serves only the files a document carries. A splat added with
+    `add_splat(url=...)`, or a `collider_url` that is a URL, would have every viewer's
+    browser fetch from that host, so the build is refused: bundle the splat with
+    `add_splat(source=...)` and give its collider as a path in the build.
 
 ## From the CLI
 

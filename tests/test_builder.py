@@ -139,6 +139,14 @@ class TestProjectIdAssignment:
         assert len(builder.get_projects()) == 1
 
 
+class TestProjectIds:
+    def test_a_project_cannot_take_the_engines_directory(self):
+        """A project `assets/` would mix the document with the engine's scripts."""
+        with pytest.warns(RuntimeWarning, match="renamed 'Assets_1'"):
+            project = Builder().add_project(name="Assets")
+        assert (project._config.name, project._config.id) == ("Assets_1", "assets_1")
+
+
 class TestSceneAndPolicyIds:
     """Scene ids are unique within a project, policy ids within a scene."""
 

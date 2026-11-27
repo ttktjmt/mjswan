@@ -8,11 +8,14 @@ See ``context/document.md``.
 """
 
 from .container import (
+    DATA_SUFFIXES,
     DOCUMENT_SUFFIX,
     DocumentError,
     as_directory,
     document_files,
     is_document,
+    is_document_file,
+    project_ids,
     read_manifest,
     unpack_document,
     write_document,
@@ -22,26 +25,33 @@ from .manifest import (
     DEFAULT_IN_KEYS,
     DEFAULT_OUT_KEYS,
     DOCUMENT_FORMAT,
+    ENGINE_DIR,
     MANIFEST_NAME,
     RUNTIME_INPUT_SLOTS,
+    author_code,
 )
 from .skin import COMPRESSION_EXTENSIONS, SkinFile, read_skin_file
 
 __all__ = [
     "COMPRESSION_EXTENSIONS",
+    "DATA_SUFFIXES",
     "DEFAULT_IN_KEYS",
     "DEFAULT_OUT_KEYS",
     "DOCUMENT_FORMAT",
     "DOCUMENT_SUFFIX",
+    "ENGINE_DIR",
     "MANIFEST_NAME",
     "RUNTIME_INPUT_SLOTS",
     "DocumentError",
     "SkinFile",
     "as_directory",
     "assign_id",
+    "author_code",
     "document_files",
     "is_document",
+    "is_document_file",
     "name2id",
+    "project_ids",
     "read_manifest",
     "read_skin_file",
     "unique_id",

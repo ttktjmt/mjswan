@@ -15,6 +15,7 @@ from typing import Any
 
 from .app import MjswanApp
 from .document.ids import assign_name
+from .document.manifest import ENGINE_DIR
 from .license import resolve_license
 from .project import ProjectConfig, ProjectHandle
 
@@ -201,6 +202,7 @@ class Builder:
         The project's id (its directory in the build and its ``?project=`` value) is
         ``name2id(name)``, made unique within the document: a second project that
         sanitizes to the same id is renamed ``<name>_1``, id ``<id>_1``, with a warning.
+        So is one that sanitizes to ``assets``, the engine's directory.
 
         Args:
             name: Name for the project (displayed in the UI).
@@ -221,7 +223,10 @@ class Builder:
                     f"Project {name!r} cannot be the default: {taken.name!r} already "
                     "is. Exactly one project may set default=True."
                 )
-        name, ident = assign_name(name, {p.id for p in self._projects}, kind="project")
+        # A project directory sits beside the engine's own `assets/` in the build.
+        name, ident = assign_name(
+            name, {p.id for p in self._projects} | {ENGINE_DIR}, kind="project"
+        )
         project = ProjectConfig(
             name=name,
             id=ident,
