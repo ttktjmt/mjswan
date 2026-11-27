@@ -388,9 +388,8 @@ class TestProjectHandle:
     def test_collect_mjlab_scene_assets_counts_a_scene_file_against_every_entity(
         self, tmp_path: Path
     ):
-        """mjlab's scene spec has its own folder: an entity file named by absolute path
-        is outside it but inside the entity's, and only a file the scene itself
-        attached from elsewhere counts."""
+        """An entity file named by absolute path is inside the entity's folder; only one
+        the scene attached from elsewhere counts."""
         tetra = (
             "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n"
         )

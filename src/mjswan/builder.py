@@ -223,7 +223,6 @@ class Builder:
                     f"Project {name!r} cannot be the default: {taken.name!r} already "
                     "is. Exactly one project may set default=True."
                 )
-        # A project directory sits beside the engine's own `assets/` in the build.
         name, ident = assign_name(
             name, {p.id for p in self._projects} | {ENGINE_DIR}, kind="project"
         )

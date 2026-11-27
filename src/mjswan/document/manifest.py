@@ -5,8 +5,7 @@ from __future__ import annotations
 
 MANIFEST_NAME = "manifest.json"
 
-#: The engine's directory in an app: its scripts, styles, WASM and the author's
-#: custom-term module. Never part of a document, so no project may take it as its id.
+#: The engine's directory in an app, so no project may take it as its id.
 ENGINE_DIR = "assets"
 
 #: The structure a build writes: what files exist, where they sit, and what the manifest
@@ -75,12 +74,8 @@ DEFAULT_OUT_KEYS = ("action",)
 
 
 def author_code(manifest: dict) -> bool:
-    """Whether ``manifest`` asks for author code: a ``plugins`` module, whatever its
-    value, or a true ``uses_custom_js``.
-
-    A build writes both for custom-TS terms, whose module ships with the engine and never
-    in a document, so a document that asks for one cannot be served or published.
-    """
+    """Whether ``manifest`` asks for author code: a ``plugins`` key, whatever its value,
+    or a truthy ``uses_custom_js``. No document carries the module."""
     if not isinstance(manifest, dict):
         return False
     return "plugins" in manifest or bool(manifest.get("uses_custom_js"))

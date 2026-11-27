@@ -4,7 +4,7 @@ A ZIP whose entries are the build tree's own paths, so unpacking one gives back 
 what the build wrote. It holds the manifest and the data and license files under the
 project directories the manifest names, never the engine (``index.html``, ``assets/*.js``,
 WASM) or the author's custom-term module: an app is the engine plus the expanded tree,
-and mjswan Cloud brings its own. A document carries no code.
+and mjswan Cloud brings its own.
 """
 
 from __future__ import annotations
@@ -22,8 +22,7 @@ from .manifest import ENGINE_DIR, MANIFEST_NAME
 
 DOCUMENT_SUFFIX = ".swn"
 
-#: What a build writes under a project directory, besides its license files: the scene,
-#: the networks, clips, splats, skins and JSON. Never a script, a page or an image.
+#: What a build writes under a project besides license files; never a script or a page.
 DATA_SUFFIXES = frozenset(
     {".json", ".mjz", ".mjb", ".onnx", ".npz", ".ply", ".spz", ".vrm", ".glb"}
 )
@@ -106,8 +105,8 @@ def read_manifest(source: str | Path) -> dict:
 
 
 def project_ids(manifest: dict) -> list[str]:
-    """The project directories ``manifest`` names, each refused unless a build could
-    have written it: an id from ``name2id``, and not the engine's ``assets``."""
+    """The project directories ``manifest`` names; ``DocumentError`` for one no build
+    writes (not a ``name2id`` id, or the engine's ``assets``)."""
     projects = manifest.get("projects", []) if isinstance(manifest, dict) else None
     if not isinstance(projects, list):
         raise DocumentError(f"The {MANIFEST_NAME} lists no projects.")
@@ -126,8 +125,8 @@ def project_ids(manifest: dict) -> list[str]:
 
 
 def is_document_file(rel: str, projects: Collection[str]) -> bool:
-    """Whether a build writes the file at ``rel`` (POSIX, relative to the build root)
-    into a document: a data or license file under one of ``projects``."""
+    """Whether ``rel`` (POSIX, from the build root) is a document's file: data or a
+    license under one of ``projects``."""
     path = PurePosixPath(rel)
     if len(path.parts) < 2 or path.parts[0] not in projects:
         return False
@@ -137,11 +136,9 @@ def is_document_file(rel: str, projects: Collection[str]) -> bool:
 def document_files(dist_dir: str | Path) -> list[Path]:
     """The files a document consists of, relative to ``dist_dir``, manifest first.
 
-    The data and license files under a project directory belong to the document, nothing
-    else does: a stray file there (a script, a page, an OS's folder metadata) is left
-    out, as :func:`unpack_document` would refuse it. The project directories come from
-    the manifest rather than from what is on disk, so the SPA's own ``assets/`` can never
-    be mistaken for one.
+    Only :func:`is_document_file`'s: any other file is left out, as
+    :func:`unpack_document` would refuse it. Projects come from the manifest, not the
+    disk, so the SPA's ``assets/`` is never one.
     """
     dist_dir = Path(dist_dir)
     manifest_path = dist_dir / MANIFEST_NAME
@@ -199,10 +196,8 @@ def write_document(dist_dir: str | Path, target: str | Path | None = None) -> Pa
 def unpack_document(document: str | Path, target_dir: str | Path) -> Path:
     """Expand a ``.swn`` into ``target_dir``, the tree the build wrote, and return it.
 
-    Only what a build writes is unpacked: the manifest, and data and license files under
-    the project directories it names. Any other entry (a script, a page, a file in the
-    engine's ``assets/``, a path out of the target) means something else made or changed
-    the document, which is refused before anything is written.
+    An entry other than the manifest and :func:`is_document_file`'s, or one landing
+    outside the target, refuses the whole document before anything is written.
     """
     document = Path(document)
     target_dir = Path(target_dir)

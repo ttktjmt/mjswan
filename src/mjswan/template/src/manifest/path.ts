@@ -2,15 +2,10 @@
  * Paths inside a document, the URL a host fetches one from, and the URLs a document may
  * name outside itself.
  *
- * A document names its files by path: a scene's against `<project-id>/<scene-id>/`, a
- * project's work against `<project-id>/`, `plugins` against the root. A path is checked
- * as written, never normalized first: each segment is `..` or a name a build writes
- * (letters, digits, `_` and `-`, then `.` too), and `..` never climbs above the document's
- * root. What a URL parser would read as something else (a backslash, `%2e%2e`, a tab
- * inside `..`, a scheme, an empty segment) is no such name, so a checked path joined onto
- * a directory's URL stays under it.
- *
- * See context/document.md.
+ * A path is checked as written, never normalized: each segment is `..` or a name a build
+ * writes, and `..` never climbs above the root. What a URL parser reads otherwise (a
+ * backslash, `%2e%2e`, a tab in `..`, a scheme, an empty segment) is no such name, so a
+ * checked path stays under the directory URL it is joined to.
  */
 
 /** A name a build writes: an id, a term name, `scene.mjz`, `LICENSE.<component>`. */
@@ -29,9 +24,8 @@ export function documentName(value: unknown, what: string): string {
 }
 
 /**
- * `rel` against `dir`, a document-relative directory (`''` for the root, else ending in
- * `/`), as the document-relative path a {@link ByteSource} is asked for. Refuses a `rel`
- * that is not a path a build writes, or that would climb above the document's root.
+ * `rel` resolved against `dir` (`''` for the root, else ending in `/`); throws for a path
+ * a build would not write or one climbing above the root.
  */
 export function documentPath(dir: string, rel: unknown, what: string): string {
   if (typeof rel !== 'string') throw refuse(what, rel, 'is not a path');
@@ -50,10 +44,8 @@ export function documentPath(dir: string, rel: unknown, what: string): string {
 }
 
 /**
- * The URL a host fetches a document's file from: `path`, as a {@link ByteSource} is given
- * it, under `base`, the document's root read as a directory (`https://host/app` is
- * `https://host/app/`). Throws unless every segment of `path` is a name a build writes, so
- * the URL stays under `base` whatever a document says.
+ * Where a host fetches the document file at `path` (as a {@link ByteSource} gets it): under
+ * `base`, read as a directory. Throws unless every segment is a name a build writes.
  */
 export function documentUrl(base: string | URL, path: string): string {
   for (const segment of path.split('/')) {

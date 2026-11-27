@@ -59,11 +59,7 @@ def test_the_suite_passes_before_anything_publishes():
 
 @pytest.mark.parametrize("path", [PUBLISH_PYPI, PUBLISH_NPM], ids=["pypi", "npm"])
 def test_the_job_that_can_publish_runs_no_build(path):
-    """The OIDC token PyPI and npm trust never shares a job with the code a build runs.
-
-    The suite, npm's packages, Vite and the build backend all run in a job whose
-    token reads the repository and nothing more.
-    """
+    """The OIDC token PyPI and npm trust never shares a job with the code a build runs."""
     jobs = _jobs(path)
 
     assert [n for n, j in jobs.items() if "id-token" in j.get("permissions", {})] == [

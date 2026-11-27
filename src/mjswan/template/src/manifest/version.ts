@@ -1,9 +1,6 @@
 /**
- * mjswan release versions. A document's `version` names the release that wrote it, and a
- * host picks an engine by it, so it must be one a release could have, never a path or a
- * URL: an engine URL built from it stays at that release.
- *
- * See context/document.md.
+ * mjswan release versions. A host picks an engine by a document's `version`, so it must be
+ * a release's, never a path or a URL.
  */
 
 /** `X.Y.Z`, or `X.Y.Z-<prerelease>`: the forms `release.yml` publishes. */
@@ -32,9 +29,8 @@ function compareIdentifiers(a: string, b: string): number {
 }
 
 /**
- * Negative when release `a` comes before `b`, positive after, zero when they are one:
- * semver's precedence, so `0.14.0-beta.2` < `0.14.0-beta.10` < `0.14.0`. Throws for a
- * version no release has.
+ * Semver precedence of release `a` against `b` (`0.14.0-beta.2` < `0.14.0-beta.10` <
+ * `0.14.0`); throws for a version no release has.
  */
 export function compareVersions(a: string, b: string): number {
   const [coreA, preA] = parts(a);
@@ -50,11 +46,7 @@ export function compareVersions(a: string, b: string): number {
   return Math.sign(preA.length - preB.length);
 }
 
-/**
- * Where release `version`'s engine (`mjswan.js`) or catalog parser (`manifest.js`) is
- * served from `cdn`. Throws for a version no release has, so a document cannot choose
- * what the URL names beyond the release.
- */
+/** The `cdn` URL of release `version`'s engine or parser; throws for a non-release. */
 export function engineUrl(
   version: string,
   file: 'mjswan.js' | 'manifest.js' = 'mjswan.js',

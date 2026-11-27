@@ -26,8 +26,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      # Inputs reach every script through `env`: an expression in a `run:` is pasted
-      # into the script before it runs. `[[ =~ ]]` matches the whole string, newlines too.
+      # Inputs reach scripts through `env`, never `${{ }}` in a `run:`. `[[ =~ ]]` matches
+      # the whole string.
       - name: Determine release type
         id: type
         env:
@@ -121,8 +121,7 @@ jobs:
           fi
           echo "sha=$head" >> "$GITHUB_OUTPUT"
 
-  # The full suite once, on the commit the publish jobs ship, before either publishes.
-  # It runs the project's code and its dependencies, so it holds no token that publishes.
+  # The full suite once, on the commit both publish jobs ship, with no publishing token.
   test:
     needs: release
     runs-on: ubuntu-latest
@@ -135,7 +134,7 @@ jobs:
           ref: ${{ needs.release.outputs.sha }}
           persist-credentials: false
 
-      # As the publish jobs set it, so a prerelease is tested at the version it ships.
+      # As the publish jobs set it.
       - name: Set version
         env:
           VERSION: ${{ inputs.version }}

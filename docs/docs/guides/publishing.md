@@ -88,10 +88,8 @@ once per such VRM, with the file and its terms.
     checked locally before any upload starts.
 
 !!! warning "Splats are published from the build"
-    Cloud serves only the files a document carries. A splat added with
-    `add_splat(url=...)`, or a `collider_url` that is a URL, would have every viewer's
-    browser fetch from that host, so the build is refused: bundle the splat with
-    `add_splat(source=...)` and give its collider as a path in the build.
+    Cloud serves only the files a document carries, so a build with `add_splat(url=...)`
+    or a URL `collider_url` is refused: bundle the splat with `add_splat(source=...)`.
 
 ## From the CLI
 

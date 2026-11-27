@@ -160,12 +160,10 @@ class ProjectHandle:
                 Equivalent to calling :meth:`~mjswan.scene.SceneHandle.set_events`
                 afterwards: the default every policy's MDP on this scene takes for its
                 events.
-            asset_root: A folder, or several, to keep the ``spec``'s files to. The
-                build then reads a file from disk only under one of them (or takes it
-                from ``spec.assets``) and refuses any other. Unset, it reads every file
-                the model names, wherever it is, as MuJoCo does, and lists those from
-                outside the model's folder in the build output. Set it to build a
-                model you do not trust.
+            asset_root: Folders to keep the ``spec``'s files to, for a model you do not
+                trust: the build reads only under them (or from ``spec.assets``) and
+                refuses any other file. Unset, it reads every file the model names, as
+                MuJoCo does, and warns about those from outside the model's folder.
 
         Returns:
             SceneHandle for adding policies and further configuration.
@@ -174,9 +172,8 @@ class ProjectHandle:
             ValueError: If ``asset_root`` is not a folder, or the ``spec`` names a file
                 outside it.
 
-        The build packs a ``spec``'s files only once MuJoCo has compiled it: a file
-        that is not the mesh or image it claims to be stops the build rather than
-        being published.
+        A ``spec`` MuJoCo cannot compile, such as one naming a file that is not the mesh
+        or image it claims, stops the build.
 
         For a ``spec`` loaded from disk, ``LICENSE*`` / ``NOTICE*`` files beside the
         model or its meshes and textures are copied verbatim into the project's
@@ -374,9 +371,8 @@ class ProjectHandle:
                 term sets off it, so this is also how those defaults pick up your edits.
             events: Scene events, overriding the task's own ``env_cfg.events``. Omit to
                 take the task's (the usual case); pass ``{}`` for a scene with none.
-            asset_root: A folder, or several, to keep every entity's files to, as for
-                :meth:`add_scene`. Unset, the build lists the files it reads from
-                outside each entity's own folder.
+            asset_root: As for :meth:`add_scene`, over every entity's files. Unset,
+                the build warns about files from outside each entity's folder.
 
         Returns:
             SceneHandle for further configuration (add_policy, add_splat, etc.)
@@ -471,13 +467,12 @@ def _collect_mjlab_scene_assets(
     composed: mujoco.MjSpec | None = None,
 ) -> tuple[dict[str, bytes], list[str]]:
     """Collect assets from mjlab scene component specs before they are flattened, and
-    the files read from outside each component's own folder (none with ``roots``).
+    the files read from outside each entity's folder (none with ``roots``).
 
-    An entity's files count against its own folder, and those of the ``composed`` scene
-    (one its ``spec_fn`` attached) against every entity's: mjlab builds the scene from
-    its own ``scene.xml``, so an entity file named by absolute path sits outside that
-    folder but inside the entity's. A path two entities ship with different bytes is
-    left out, so MuJoCo finds each entity's own file instead of handing both one."""
+    The ``composed`` scene's files count as outside only when outside every entity's
+    folder: mjlab builds it from its own ``scene.xml``. A path two entities ship with
+    different bytes is left out, so MuJoCo finds each entity's own file instead of
+    handing both one."""
     assets: dict[str, bytes] = {}
     outside: set[str] = set()
     folders: list[str] = []

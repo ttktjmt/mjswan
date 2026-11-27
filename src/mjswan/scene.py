@@ -375,13 +375,12 @@ class SceneConfig:
     """MuJoCo spec for the scene (saved as .mjz)."""
 
     asset_roots: tuple[str, ...] | None = field(default=None, repr=False)
-    """The folders the build may read this scene's files from (``asset_root=``), as real
-    paths. ``None`` reads every file the model names, as MuJoCo does."""
+    """Real paths the build may read this scene's files from (``asset_root=``); ``None``
+    reads them wherever the model names them."""
 
     outside_files: list[str] | None = field(default=None, repr=False, compare=False)
-    """The files the build reads for this scene from outside the model's folder, which
-    it reports. Set by :meth:`ProjectHandle.add_scene_mjlab`, against each entity's own
-    folder; ``None`` has the build find them from :attr:`spec`."""
+    """Files from outside the model's folder, for the build's warning. Set by
+    ``add_scene_mjlab``, each entity's against its own folder; ``None`` derives them."""
 
     policies: list[PolicyConfig] = field(default_factory=list)
     """List of policies available for this scene."""

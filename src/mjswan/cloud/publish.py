@@ -13,10 +13,9 @@ SHA-256 of its bytes, cut into pieces where :mod:`.blob` says:
    every piece's SHA-256 as it moves it into place.
 4. ``POST {base}/api/simulations/commit`` with the ``upload_id`` → the sim id.
 
-The platform renders only **declarative** builds (no author-supplied code) from the
-files a document carries, so ``publish`` refuses, locally and before the server would, any
-build whose ``manifest.json`` asks for a plugins module (``plugins`` or
-``uses_custom_js``) or a splat or collider fetched from another site.
+The platform renders only **declarative** builds from the files a document carries, so
+``publish`` refuses, locally and before the server would, a build that asks for a plugins
+module or names a splat or collider by URL.
 """
 
 from __future__ import annotations
@@ -324,8 +323,7 @@ def plan_publish(dist_dir: Path) -> PublishPlan:
         if not path.is_file():
             continue
         rel = path.relative_to(dist_dir).as_posix()
-        # The engine's own files (index.html, assets/) are not the document's, nor is
-        # anything no build writes under a project.
+        # Not the engine's files (index.html, assets/), nor strays under a project.
         if rel != MANIFEST_NAME and not is_document_file(rel, projects):
             continue
         # A build writes regular files only; a link would upload whatever it names.

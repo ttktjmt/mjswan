@@ -53,21 +53,21 @@ One module per term kind (`observation`, `termination`, `event`, `command`, `act
 
 ### What it reads
 
-Files are read where the model names them, as MuJoCo and mjlab read them, absolute paths and `..` included: many models keep their meshes beside the XML's folder (`xmls/` next to `meshes/`, as ROS-style packages lay them out). The guards are on what is packed:
+Files are read where the model names them, absolute paths and `..` included, as MuJoCo and mjlab read them (many models keep meshes in a folder beside the XML's). The guards are on what is packed:
 
-- **Only what MuJoCo compiled.** `spec.to_xml()` compiles the spec, decoding every file it names, so a file that is not the mesh or image it claims to be stops the build with `ValueError` before anything is written (`_cannot_compile`). MuJoCo's encoder failing after a compile only warns.
-- **No special files.** `_is_file` refuses a FIFO, a device or a socket (found with `stat`, never opened, as a read could block) and anything under `/proc`, `/sys` or `/dev` (a `/proc` file stats as regular).
-- **Files from outside the model's folder are named.** `files_outside` lists them, lexically, so a Hub snapshot's links into `blobs/` stay the snapshot's; the pipeline warns once per scene, by folder. `add_scene_mjlab` makes its list when it collects the entities, whose specs are gone by the build: an entity's files count against its own folder, and the scene's own (a table its `spec_fn` attached) against every entity's, since mjlab builds the scene from its own `scene.xml` and an entity file named by absolute path is outside that folder but inside the entity's.
-- **`asset_root=` keeps a scene to folders** (`asset_roots`: real paths, plus a Hub snapshot's `blobs/`). A file outside them comes from `spec.assets` or raises, at `add_scene` for the paths Python sees (`check_asset_roots`) and in the build for the rest. A file the encoder resolved for an attached model is packed only when a file under the roots holds the same bytes, compared by content since the encoder renames a file whose path another took.
-- `add_scene_hf` keeps its own check: the MJCF and every file it includes stay inside the repository (`_refuse_files_outside`), since a Hub repository is someone else's by design.
+- **Only what MuJoCo compiled.** `spec.to_xml()` decodes every file, so one that is not the mesh or image it claims stops the build before anything is written (`_cannot_compile`). An encoder failure after a compile only warns.
+- **No special files.** `_is_file` refuses, without opening it, a FIFO, device or socket, and anything under `/proc`, `/sys` or `/dev`.
+- **Files from outside the model's folder are named**, in one warning per scene (`files_outside`, lexical, so a Hub snapshot's links into `blobs/` stay inside). `add_scene_mjlab` lists them while collecting the entities: each entity's against its own folder, the composed scene's own against every entity's.
+- **`asset_root=` keeps a scene to folders** (real paths, plus a Hub snapshot's `blobs/`): any other file comes from `spec.assets` or raises. A file the encoder resolved for an attached model is packed only if a file under the roots has the same bytes (by content, since the encoder renames colliding files).
+- `add_scene_hf` keeps its own check: the MJCF and its includes stay inside the repository.
 
-What remains: a model can have the build pack a valid mesh or image from anywhere on disk. The warning names the folder, and a third-party model is to be trusted like code.
+What remains: a model can still have the build pack a valid mesh or image from anywhere on disk. The warning names it, and a third-party model is trusted like code.
 
 | Option | Why not |
 |---|---|
-| Keep files to the model's folder by default | Breaks the common `xmls/` beside `meshes/` layout (14 of mjswan_playground's 70 scenes), which MuJoCo and mjlab read freely. |
-| Take the folders a model's `<compiler>` names as roots | The model's author would set the boundary it is meant to hold. |
-| The repository's root as the default boundary | Where a repository starts is a guess, and a home folder kept in git puts everything in it. |
+| Keep files to the model's folder by default | Breaks the common `xmls/` beside `meshes/` layout, which MuJoCo and mjlab read freely. |
+| Take the folders a model's `<compiler>` names as roots | The model's author would set the boundary meant to hold it. |
+| The repository's root as the default boundary | Where a repository starts is a guess. |
 
 ## Other modules
 

@@ -331,7 +331,7 @@ class _SceneSteps:
 
 
 def _outside_message(scene: str, files: list[str]) -> str:
-    """Where a scene's model reached for files outside its own folder, by folder."""
+    """The warning for files packed from outside a scene's model folder."""
     folders: dict[str, int] = {}
     for file in sorted(set(files)):
         folder = str(Path(file).parent)

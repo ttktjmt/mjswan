@@ -26,8 +26,7 @@ import mujoco
 #: One folder, or several, that a scene's files may be read from (``asset_root=``).
 AssetRoot = str | os.PathLike[str] | Sequence[str | os.PathLike[str]]
 
-#: Pseudo-filesystems that hold no model files; ``/proc/self/environ`` reads as a
-#: regular file.
+#: Pseudo-filesystems, whose files can stat as regular (``/proc/self/environ``).
 _SYSTEM_DIRS = ("/proc", "/sys", "/dev")
 
 
@@ -105,10 +104,9 @@ def _within(top: str, path: str) -> bool:
 
 
 def _is_file(path: str) -> bool:
-    """Whether ``path`` names a file the build may read, found without opening it.
+    """Whether ``path`` exists, checked without opening it (a FIFO would block).
 
-    Raises ``ValueError`` for one that is not a regular file (a FIFO or a device, whose
-    read could block) or that sits under ``/proc``, ``/sys`` or ``/dev``.
+    Raises ``ValueError`` if it is not a regular file or is under ``_SYSTEM_DIRS``.
     """
     try:
         mode = os.stat(path).st_mode
@@ -124,11 +122,8 @@ def _is_file(path: str) -> bool:
 
 
 def asset_roots(asset_root: AssetRoot | None) -> tuple[str, ...] | None:
-    """``asset_root`` as the real paths a scene's files may be read from, or ``None``.
-
-    A Hugging Face snapshot also admits its repository's ``blobs/``: every file in the
-    snapshot is a link into it.
-    """
+    """``asset_root`` as real paths, plus a Hugging Face snapshot's ``blobs/``, which
+    every file in the snapshot links into."""
     if asset_root is None:
         return None
     given = (
@@ -164,9 +159,8 @@ def _outside_roots(path: str, roots: tuple[str, ...]) -> ValueError:
 
 
 def _from_spec_assets(assets: Mapping[str, bytes] | None, path: str) -> bytes | None:
-    """``path``'s bytes in ``spec.assets``: under its own key or one of its
-    :func:`_iter_asset_lookup_candidates`, else under a key ending in one of them (mjlab
-    prefixes its keys, as in ``assets/robot/model.stl``)."""
+    """``path``'s bytes in ``spec.assets``, by a lookup candidate or a key ending in one
+    (mjlab prefixes its keys)."""
     if not assets:
         return None
     candidates = _iter_asset_lookup_candidates(path)
@@ -181,8 +175,8 @@ def _from_spec_assets(assets: Mapping[str, bytes] | None, path: str) -> bytes | 
 
 
 def check_asset_roots(spec: mujoco.MjSpec, roots: tuple[str, ...]) -> None:
-    """Raise ``ValueError`` for a file ``spec`` names outside ``roots`` that
-    ``spec.assets`` does not hold, before anything is read."""
+    """Raise ``ValueError`` for a file ``spec`` names outside ``roots`` and not in
+    ``spec.assets``."""
     base_dir = spec.modelfiledir or ""
     for rel in _referenced_paths(spec, spec.meshdir or "", spec.texturedir or ""):
         full = os.path.join(base_dir, rel)
@@ -195,12 +189,9 @@ def check_asset_roots(spec: mujoco.MjSpec, roots: tuple[str, ...]) -> None:
 
 
 def files_outside(spec: mujoco.MjSpec) -> list[str]:
-    """The files on disk the build packs for ``spec`` from outside its model folder (all
-    of them for a spec with no folder), as absolute paths.
-
-    Lexical, as :func:`collect_spec_assets` resolves them: a Hub snapshot's files link
-    into ``blobs/`` and still count as the snapshot's.
-    """
+    """Absolute paths of the files on disk ``spec`` names outside its model folder (all
+    of them when it has none). Lexical, so a Hub snapshot's links into ``blobs/`` count
+    as inside."""
     base_dir = spec.modelfiledir or ""
     top = os.path.abspath(base_dir) if base_dir else None
     found: set[str] = set()
@@ -259,9 +250,8 @@ def collect_spec_assets(
 
     Uses ``spec.modelfiledir``, ``spec.meshdir``, and ``spec.texturedir``
     to resolve file paths.  Returns a dictionary mapping POSIX-style relative
-    paths (suitable for ZIP entries) to file contents. With ``roots`` (from
-    :func:`asset_roots`), a file outside them is taken from ``spec.assets`` instead,
-    and one ``spec.assets`` does not hold raises ``ValueError``.
+    paths (suitable for ZIP entries) to file contents. With ``roots``, a file outside
+    them comes from ``spec.assets`` or raises ``ValueError``.
     """
     base_dir = spec.modelfiledir or ""
     mesh_dir = spec.meshdir or ""
@@ -565,9 +555,8 @@ class _EncodeError(Exception):
 
 
 def _cannot_compile(error: Exception) -> ValueError:
-    """The build's refusal of a spec MuJoCo cannot compile: the files read for it may be
-    anything the model names, and only a compile shows they are the meshes and images
-    they claim to be."""
+    """Refuse a spec MuJoCo cannot compile: only a compile shows its files are the
+    meshes and images they claim to be."""
     return ValueError(
         f"MuJoCo cannot compile the scene, so none of its files is packed: {error}"
     )
@@ -579,8 +568,8 @@ def _encode(
     """The model XML and the files MuJoCo's own ``.mjz`` encoder packs for the spec.
 
     ``extra_assets`` (the buffer textures' PNGs) are lent to ``spec.assets`` for the call.
-    A spec MuJoCo cannot compile raises MuJoCo's own error; the encoder failing after
-    that raises :class:`_EncodeError`.
+    A compile failure raises MuJoCo's error; an encoder failure after it,
+    :class:`_EncodeError`.
     """
     lent = [name for name in extra_assets if name not in spec.assets]
     for name in lent:
@@ -611,11 +600,8 @@ def _encode(
 
 
 def _holder(roots: tuple[str, ...]) -> Callable[[bytes], bool]:
-    """Whether a file under ``roots`` holds exactly ``data``.
-
-    By content, not name: the encoder renames a file whose path another took. The roots
-    are walked once, on the first call.
-    """
+    """A test of whether a file under ``roots`` holds given bytes, by content since the
+    encoder renames a file whose path another took. The roots are walked on first use."""
     by_size: dict[int, list[str]] | None = None
 
     def held(data: bytes) -> bool:
@@ -667,9 +653,8 @@ def _check_with_encoder(
     XMLs come from the same writer, so their file elements pair up in order. Returns the
     entries by element index and attribute, for :func:`_rewrite_xml_paths`.
 
-    A spec MuJoCo cannot compile raises ``ValueError`` (:func:`_cannot_compile`). With
-    ``roots``, a file the encoder resolved is packed only when a file under them holds
-    the same bytes.
+    A spec MuJoCo cannot compile raises ``ValueError``. With ``roots``, a file the
+    encoder resolved is packed only when a file under them holds the same bytes.
     """
     try:
         encoded_root, encoded = _encode(spec, extra_assets)
@@ -807,10 +792,9 @@ def to_zip_deflated(
 
     Asset paths lose their leading ``..``, and every file is checked against MuJoCo's own
     encoder. A file neither this module nor the encoder finds raises
-    ``FileNotFoundError``, and a spec MuJoCo cannot compile raises ``ValueError`` before
-    anything is written. Files are read wherever the model names them, as MuJoCo reads
-    them, except special files (:func:`_is_file`); with ``roots`` (from
-    :func:`asset_roots`), only from under those folders, or from ``spec.assets``.
+    ``FileNotFoundError``; a spec MuJoCo cannot compile raises ``ValueError`` before
+    anything is written. Files are read where the model names them, special files
+    excepted, and with ``roots`` only from under them or ``spec.assets``.
     """
     base_dir = spec.modelfiledir or ""
     mesh_dir = spec.meshdir or ""

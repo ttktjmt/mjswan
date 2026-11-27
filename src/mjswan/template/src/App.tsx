@@ -62,8 +62,7 @@ async function loadCatalog(base: string): Promise<Catalog> {
   if (!res.ok) {
     throw new Error(`Failed to fetch ${manifestUrl}: ${res.status}`);
   }
-  // A splat the build names by URL loads for the site's own manifest only: one from
-  // `?manifest=` belongs to whoever wrote the link, who would pick the host it loads from.
+  // URL splats load for the site's own manifest only, never a `?manifest=` link's.
   return parseManifest(await res.text(), makeByteSource(base), override ? {} : { remote: fetchBytes });
 }
 

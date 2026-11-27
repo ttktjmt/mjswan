@@ -547,13 +547,11 @@ values and the document's `version`, and never gates on `version` itself: that i
 release that wrote the document, for a host to pick a matching engine by. It must have a
 release's form (`X.Y.Z` or `X.Y.Z-<prerelease>`), or the manifest is refused.
 
-The parser also refuses a document naming anything outside itself, before anything is
-fetched: a project or scene id, or a path, whose segments are not `..` or names a build
-writes (letters, digits, `_`, `-`, then `.`), or whose `..` would climb above the
-document's root. `source` is asked only for the document's own files. A splat's `url`, or
-a `collider_url` that is a URL, must be `http(s)` and is fetched only through `remote`:
-pass one only where the document's author may choose the hosts your page fetches from.
-Without it, such a splat is left out of the catalog and such a collider dropped.
+It also refuses, before fetching, a document whose ids or paths leave it: each segment
+must be `..` (never above the root) or a name a build writes (letters, digits, `_`, `-`,
+then `.`). A splat `url` or a URL `collider_url` must be `http(s)` and is fetched only
+through `remote`, which you pass only where the document's author may choose the hosts
+your page fetches from; without it, such a splat is left out and such a collider dropped.
 
 The catalog is lazy: nothing is fetched until you call a `build()`.
 
@@ -576,7 +574,7 @@ only when named.
 
 | Type | Shape |
 |---|---|
-| `Catalog` | `{ projects: ProjectCatalog[], pluginsPath?: string }` (`pluginsPath` for a `uses_custom_js: true` build only) |
+| `Catalog` | `{ projects: ProjectCatalog[], pluginsPath?: string }` |
 | `ProjectCatalog` | `{ id, name, default, work?, scenes }` |
 | `SceneEntry` | `{ id, name, camera?, graphics, splatSection, policies, splats, skins, credits, buildScene(opts?) }` |
 | `PolicyEntry` | `{ id, name, default, motions, build() }` |
@@ -606,13 +604,10 @@ function compareVersions(a: string, b: string): number
 function engineUrl(version: string, file?: 'mjswan.js' | 'manifest.js', cdn?: string): URL
 ```
 
-A host that renders documents from many releases picks the engine by the manifest's
-`version`. `engineUrl('0.14.0')` is
-`https://cdn.jsdelivr.net/npm/mjswan@0.14.0/dist/mjswan.js`, and throws for a value that is
-not a release's form, so a document cannot point the URL at another path.
-`compareVersions` orders releases as semver does (`0.14.0-beta.2` < `0.14.0-beta.10` <
-`0.14.0`), for a host that keeps a floor and renders an older document with a newer engine,
-which reads every earlier format.
+A host rendering documents from many releases picks the engine by the manifest's
+`version`: `engineUrl('0.14.0')` is `https://cdn.jsdelivr.net/npm/mjswan@0.14.0/dist/mjswan.js`,
+and it throws for a value that is not a release's. `compareVersions` orders releases as
+semver does (`0.14.0-beta.2` < `0.14.0-beta.10` < `0.14.0`).
 
 Like the engine, the parser ships as a standalone ESM (`dist/manifest.js`), so it too can be
 imported straight from a CDN.

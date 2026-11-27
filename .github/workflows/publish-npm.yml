@@ -17,10 +17,8 @@ on:
         type: string
         default: latest
 
-# Two jobs, so the OIDC token npm trusts is never in a job that runs the project's
-# code or its dependencies: `build` runs npm and Vite with a read-only token and packs
-# the tarball; `publish` holds `id-token: write` and only uploads that tarball.
-# npm's Trusted Publisher names this file and the `npm` environment.
+# Only `publish`, which runs no project code or dependency, holds the OIDC token npm
+# trusts. npm's Trusted Publisher names this file and the `npm` environment.
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -34,8 +32,7 @@ jobs:
           persist-credentials: false
 
       # Set from the input so a prerelease publishes its version even though the
-      # tagged commit may not carry the bump (see release.yml). Vite reads the
-      # version from _version.py; the lock follows package.json so `npm ci` sees one.
+      # tagged commit may not carry the bump (see release.yml). Vite reads _version.py.
       - name: Set version
         env:
           VERSION: ${{ inputs.version }}
@@ -53,7 +50,7 @@ jobs:
           node-version: '24'
           package-manager-cache: false
 
-      # `npm ci` installs package-lock.json as it is, with no install scripts (`.npmrc`).
+      # No install scripts run (`.npmrc`).
       - name: Build web template
         working-directory: src/mjswan/template
         run: |
@@ -92,9 +89,7 @@ jobs:
           name: npm-tarball
           path: npm/
 
-      # The tarball named by the version, so one packed at another version fails here;
-      # `./` makes it a file, as `npm/...` alone reads as a GitHub repository. A tarball
-      # runs no package script. Auth via OIDC trusted publishing.
+      # `./`: npm reads `npm/<file>` as a GitHub repository. Auth via OIDC trusted publishing.
       - name: Publish to npm
         env:
           VERSION: ${{ inputs.version }}

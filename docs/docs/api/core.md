@@ -165,7 +165,7 @@ def add_scene(
 
 Add a MuJoCo scene. Provide exactly one of `model` or `spec`.
 
-A `spec`'s files are read wherever the model names them, as MuJoCo reads them, so a model whose meshes sit beside its folder (`meshdir="../meshes"`) builds as it is. The build packs them only once MuJoCo has compiled the scene: a file that is not the mesh or image it claims to be stops the build. It never reads a FIFO, a device or anything under `/proc`, `/sys` or `/dev`, and it warns with the folders it packed files from outside the model's own.
+A `spec`'s files are read wherever the model names them, as MuJoCo reads them (`meshdir="../meshes"` builds as it is). A scene MuJoCo cannot compile stops the build, special files (FIFOs, devices, `/proc`) are never read, and files packed from outside the model's folder are named in a warning.
 
 **Parameters**
 
@@ -177,7 +177,7 @@ A `spec`'s files are read wherever the model names them, as MuJoCo reads them, s
 | `metadata` | `dict \| None` | `None` | Arbitrary key-value metadata kept on the scene. |
 | `control_dt` | `float \| None` | `None` | Seconds per control step — mjlab's `timestep * decimation`. Required once the scene carries a policy: the model holds only the physics timestep, and a wrong control rate raises nothing at playback. `add_scene_mjlab` fills it in from the task. |
 | `events` | `Mapping[str, Any] \| None` | `None` | The scene's default events (`EventTermCfg` instances, mjswan or mjlab). Same as calling `SceneHandle.set_events` afterwards. Events belong to a policy's MDP; these are what a policy gets when it declares none of its own (see [`MdpConfig`](#mdpconfig)). |
-| `asset_root` | `str \| PathLike \| Sequence \| None` | `None` | A folder, or several, to keep the `spec`'s files to: the build reads a file from disk only under one of them (links resolved) or takes it from `spec.assets`, and refuses any other. For a model you do not trust. A Hugging Face snapshot also admits its repository's `blobs/`. |
+| `asset_root` | `str \| PathLike \| Sequence \| None` | `None` | Folders to keep the `spec`'s files to, for a model you do not trust: any other file must be in `spec.assets`. A Hugging Face snapshot also admits its `blobs/`. |
 
 **Returns:** `SceneHandle`
 
@@ -208,7 +208,7 @@ Load an mjlab task's MuJoCo spec from the task registry and add it as a scene. N
 | `play` | `bool \| None` | `None` | Which of the task's two registered configs to load. mjlab keeps them as `env_cfg` (training) and `play_env_cfg`; this selects between them exactly as its `load_env_cfg(task_id, play=...)` does. **Unset means play — the opposite of mjlab's own default, deliberately**: that one serves training scripts, and this is a playback tool. mjlab's training config sets `episode_length_s` to 10–20 s, which mjswan serializes into the browser's `time_out` termination, so a viewer built from it resets the robot every few seconds; it also keeps `push_robot` and the terrain-bounds termination, and lacks `randomize_terrain`. Pass `False` to reproduce training-time conditions. **Mutually exclusive with `env_cfg`** — passing both raises. |
 | `env_cfg` | `Any \| None` | `None` | Pre-loaded (and possibly edited) env config to use instead of loading `task_id` fresh. Load it with the `play` you want — `load_env_cfg(task_id, play=True)` — since `play` here then has nothing left to select. The scene keeps whichever config it used, and policies added to it default their term sets to it. A tracking task does not need this: mjlab registers it with `commands["motion"].motion_file = ""`, and the builder points that at the clip it bundles. |
 | `events` | `Mapping[str, Any] \| None` | `None` | Scene events, overriding the task's own `env_cfg.events`. Omit to take the task's; pass `{}` for a scene with none. |
-| `asset_root` | `str \| PathLike \| Sequence \| None` | `None` | Keeps every entity's files to these folders, as on [`add_scene`](#projecthandleadd_scene). Unset, the build warns with the folders it read entity files from outside each entity's own. |
+| `asset_root` | `str \| PathLike \| Sequence \| None` | `None` | As on [`add_scene`](#projecthandleadd_scene), for every entity's files. |
 
 **Returns:** `SceneHandle`
 
@@ -461,7 +461,7 @@ Add a Gaussian Splat background to the scene. Exactly one of `source` or `url` m
 |---|---|---|---|
 | `name` | `str` | required | Display name shown in the viewer selector. A name whose id another splat on the scene has is renamed `<name>_1` with a warning. |
 | `source` | `str \| None` | `None` | Local path to a `.spz` file. The file is copied into `dist/` during `Builder.build()`. Mutually exclusive with `url`. |
-| `url` | `str \| None` | `None` | URL to an external `.spz` file. Fetched by the browser at runtime; not bundled. Mutually exclusive with `source`. A build with one cannot be published to mjswan Cloud, which serves only the files a document carries. |
+| `url` | `str \| None` | `None` | URL to an external `.spz` file. Fetched by the browser at runtime; not bundled. Mutually exclusive with `source`. Not publishable to mjswan Cloud. |
 | `scale` | `float` | `1.0` | Metric scale factor (converts splat units to metres). |
 | `x_offset` | `float` | `0.0` | X-axis position offset in scaled splat units. |
 | `y_offset` | `float` | `0.0` | Y-axis position offset in scaled splat units. |
@@ -469,7 +469,7 @@ Add a Gaussian Splat background to the scene. Exactly one of `source` or `url` m
 | `roll` | `float` | `0.0` | Roll rotation in degrees applied on top of the COLMAP → Three.js base rotation. |
 | `pitch` | `float` | `0.0` | Pitch rotation in degrees applied on top of the COLMAP → Three.js base rotation. |
 | `yaw` | `float` | `0.0` | Yaw rotation in degrees applied on top of the COLMAP → Three.js base rotation. |
-| `collider_url` | `str \| None` | `None` | Optional URL or local path to a `.glb` collision mesh. As a URL, it keeps the build from being published to mjswan Cloud, as `url` does. |
+| `collider_url` | `str \| None` | `None` | Optional URL or local path to a `.glb` collision mesh. A URL is not publishable to mjswan Cloud. |
 | `control` | `bool` | `False` | Show live scale/offset/rotation controls in the viewer control panel. Useful during calibration. |
 
 **Returns:** `SplatHandle`

@@ -1,7 +1,4 @@
-/**
- * A skin's or collider's glTF is parsed from its own bytes: one that names a buffer or an
- * image elsewhere is refused, and nothing it names is fetched.
- */
+/** A glTF naming a buffer or image elsewhere is refused, and nothing it names is fetched. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseSealedGltf } from '../gltf';
 
@@ -52,7 +49,7 @@ describe('parseSealedGltf', () => {
     ['embedded in the GLB', undefined],
     ['a data: URI', DATA_URI],
   ])('reads a buffer %s', async (_, uri) => {
-    // three's FileLoader reports progress as a browser does.
+    // Node has no ProgressEvent, which three's FileLoader uses.
     vi.stubGlobal(
       'ProgressEvent',
       class {
@@ -83,7 +80,7 @@ describe('parseSealedGltf', () => {
   );
 
   it.each(['t.png', 'https://evil.test/t.png'])('refuses an image at %s and fetches nothing', async (uri) => {
-    // three reads `self.URL` for an image, as a browser has it.
+    // Node has no `self`, which three reads for an image.
     vi.stubGlobal('self', globalThis);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const fetching = vi.spyOn(globalThis, 'fetch');

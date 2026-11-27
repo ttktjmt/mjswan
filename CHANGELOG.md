@@ -15,12 +15,8 @@ shortcuts.
 ### Added
 
 - **`asset_root=` on `add_scene` and `add_scene_mjlab` keeps a scene's files to the
-  folders you choose.** The build then reads a file from disk only under one of them
-  (links resolved) or takes it from `spec.assets`, and raises `ValueError` for any other,
-  at `add_scene` for the files the spec names and in the build for the rest; a file
-  MuJoCo resolved for an attached model is packed only when one under the folders holds
-  the same bytes. For building a model you do not trust. A Hugging Face snapshot also
-  admits its repository's `blobs/`.
+  folders you choose**, for a model you do not trust: any other file must be in
+  `spec.assets` or raises `ValueError`. A Hugging Face snapshot also admits its `blobs/`.
 
 - **`engine.mdp`: operate a running MDP's terminations and events.** A termination can be
   switched off (still evaluated and reported, but it never ends the episode) and given
@@ -529,31 +525,20 @@ shortcuts.
 
 ### Changed
 
-- **`parseManifest(manifest, source, { remote })` fetches a splat or collider named by URL
-  only through `remote`** (engine API). Without it, such a splat is left out of the
-  catalog and such a collider dropped. A host showing its own build's URL splats passes
-  `remote: (url) => async () => (await fetch(url)).arrayBuffer()`. The parser also
-  refuses a document whose ids or paths leave it, whose `version` is not a release's, or
-  whose skin or collider names a file outside itself, and `Catalog.pluginsPath` is set
-  only for `uses_custom_js: true`. A host builds its byte source's URLs with the new
-  `documentUrl(base, path)`. Every document a build writes passes.
-- **A traced term or group whose name is not a file name fails the build.** Its name
-  names its graph's file, and the viewer now reads only letters, digits, `_`, `-` and
-  `.` (not first) in one: rename a term called `a/b` or `foo bar`.
-- **A project cannot take the id `assets`, the engine's directory in an app.** A project
-  named "Assets" is renamed "Assets_1", id `assets_1`, with a warning, as a second project
-  of one name is: its files sat among the engine's, so `save_document` packed the engine
-  into the document and `publish` skipped the project's files there. A `?project=assets`
-  link needs the new id.
-- **`mjswan publish` refuses a splat fetched from elsewhere**: one added with
-  `add_splat(url=...)`, or a `collider_url` that is a URL. mjswan Cloud serves only the
-  files a document carries, and every viewer of the page would have fetched it from that
-  host. Bundle the splat with `add_splat(source=...)`.
-- **The build names the folders a scene packs files from outside its model's own**, in
-  one `RuntimeWarning` per scene, so files a model reaches for elsewhere on disk are
-  seen before the build is published. `add_scene_mjlab` counts each entity's files
-  against that entity's folder. `asset_root=` silences it. A scene MuJoCo cannot compile
-  now stops the build with a `ValueError` that says so and names the scene.
+- **`parseManifest(manifest, source, { remote })`** (engine API): a splat or collider
+  named by URL is fetched only through `remote`, and left out without it. The parser
+  refuses ids, paths and `version` values no build writes, and skins or colliders naming
+  outside files; `Catalog.pluginsPath` is set only for `uses_custom_js: true`. Build the
+  byte source's URLs with the new `documentUrl(base, path)`.
+- **A traced term or group name must be a file name** (letters, digits, `_`, `-`, and `.`
+  not first), as it names its graph's file.
+- **A project cannot take the id `assets`**, the engine's directory: "Assets" becomes
+  "Assets_1" (`assets_1`) with a warning, so a `?project=assets` link needs the new id.
+- **`mjswan publish` refuses a splat or collider named by URL**: mjswan Cloud serves only
+  the files a document carries. Bundle it with `add_splat(source=...)`.
+- **The build warns about files packed from outside a scene's model folder**, once per
+  scene (`add_scene_mjlab` checks each entity against its own folder); `asset_root=`
+  silences it. A scene MuJoCo cannot compile stops the build with a `ValueError` naming it.
 
 - **Pull, Push and Grab stand aside while the simulation is paused.** Each acts through
   the physics step, so a drag on a paused simulation drew an arrow and moved nothing. While
@@ -1603,41 +1588,23 @@ shortcuts.
 
 ### Security
 
-- **The viewer fetches nothing from outside the document it shows.** `parseManifest`
-  joined a document's ids and paths onto the base URL as written, so a project id
-  `\evil.test` made the bundled app on a site hosted at its root fetch the scene from
-  `https://evil.test/...`, a `%2e%2e` or a tab inside `..` left the base path, and a
-  splat `url` or absolute `collider_url` was fetched as given: a published document or a
-  `?manifest=` link could have every viewer request files from a host its author picked,
-  and swap them after publishing. Every id and path is now checked when the manifest is
-  parsed, each segment a name a build writes or `..` never above the root, and the
-  document refused before anything is fetched. A splat or collider named by URL is fetched only through the
-  `remote` a host passes: the bundled app passes one for its own build's manifest, none
-  for a `?manifest=` link. Skins and colliders are parsed with every external buffer and
-  image refused, before any request. The app imports a plugins module only for
-  `uses_custom_js: true` and only from `assets/plugins.js`.
-- **A document's `version` must be a release's.** A host picks an engine by it, and the
-  "newer format" error quoted it. `parseManifest` refuses a `version` other than `X.Y.Z`
-  or `X.Y.Z-<prerelease>`, and `mjswan/manifest` adds `engineUrl(version)`,
-  `compareVersions` and `isReleaseVersion`, so a host builds an engine URL from a
-  release and nothing else.
-- **A `.swn` document carries data, never code.** `mjswan serve` and
-  `MjswanApp.from_document` refused a document with `uses_custom_js: true` but unpacked
-  every other entry and served it beside the engine, and the viewer imports the
-  manifest's `plugins` from the page's own origin whatever `uses_custom_js` says. So a
-  document from someone else, naming `"plugins": "p/x.js"` and carrying `p/x.js`, ran
-  that script as `http://localhost:<port>`, the same site as every other local service.
-  A document is now its manifest and the data and license files under the project
-  directories it names: `unpack_document` refuses any other entry (a script, a page, a
-  file in the engine's `assets/`) before writing anything, `save_document` leaves such
-  files out, and `from_document` and `publish` refuse a manifest with a `plugins` key or
-  a true `uses_custom_js` (`mjswan.document.author_code`). `publish` also sends only the
-  document's files.
-- **The build never reads a FIFO, a device, or a file under `/proc`, `/sys` or `/dev`.**
-  A model could name one as a mesh or texture: a FIFO hung the build as MuJoCo waited on
-  it, and `/proc/self/environ` was read into memory before MuJoCo refused it. Such a path
-  now raises `ValueError`, found without opening it. License detection no longer expands
-  a `~` in an asset path, which MuJoCo reads as a folder name.
+- **The viewer fetches nothing from outside the document it shows.** A document's ids and
+  paths could make the bundled app fetch from another host or leave the base path, and a
+  splat `url` or absolute `collider_url` was fetched as given. `parseManifest` now checks
+  every id and path before fetching, URLs go only through a host's `remote` (the app
+  passes one for its own manifest, never a `?manifest=` link's), skins and colliders
+  refuse external buffers and images, and the app loads plugins only for
+  `uses_custom_js: true` from `assets/plugins.js`.
+- **A document's `version` must be a release's** (`X.Y.Z` or `X.Y.Z-<prerelease>`), as a
+  host picks an engine by it. `mjswan/manifest` adds `engineUrl`, `compareVersions` and
+  `isReleaseVersion`.
+- **A `.swn` carries data, never code.** `mjswan serve` unpacked every entry and the
+  viewer imported the manifest's `plugins`, so a received document could run a script on
+  `localhost`. Unpacking now refuses anything but the manifest and the data and license
+  files under its projects, saving leaves other files out, and `from_document` and
+  `publish` refuse a manifest that asks for a plugins module.
+- **The build never reads a FIFO, a device, or a file under `/proc`, `/sys` or `/dev`**,
+  which a model could name as a mesh or texture. License detection no longer expands `~`.
 - **CI installs Python dependencies from `uv.lock` alone, and the lock waits three days
   for a release.** `pytest.yml`, `ruff.yml` and `parity.yml` ran `uv pip install -e .[...]`,
   which resolves every `>=` floor afresh, so a hijacked release (litellm 1.107.0 was live
@@ -1647,15 +1614,10 @@ shortcuts.
   keeps any release younger than that out of the lock, as the template's `.npmrc` already
   does for npm. The test jobs now install the locked torch, the CUDA build on Linux,
   where they used to fetch the CPU wheel outside the lock.
-- **Only a job that runs no build can publish a release.** `publish-pypi.yml` and
-  `publish-npm.yml` ran the test suite, `npm install` and the Vite and wheel builds in the
-  job holding `id-token: write`, the OIDC token PyPI and npm trust for mjswan, so a
-  package compromised at release time could have used it to publish a release of its
-  own. Each now builds in a job whose token only reads the repository and hands the
-  wheel and sdist, or the tarball, to a `publish` job that only uploads them, in the
-  `pypi` or `npm` environment as before. `release.yml` runs the suite once, in a job of
-  its own, before either publishes. The builds run `npm ci` and restore no cache, and the
-  workflows pass their inputs to scripts through `env`.
+- **Only a job that runs no build can publish a release.** The publish jobs held the OIDC
+  token PyPI and npm trust while running the tests and builds; each now builds in a
+  read-only job and uploads from a separate one. `release.yml` runs the suite once first,
+  and the builds use `npm ci`, no cache, and inputs through `env`.
 - **A `?manifest=` link no longer loads a plugins module.** The SPA imported whatever
   `plugins` the manifest named, joined onto the base as a string, so on a site hosted at
   its root a link carrying `?manifest=` with `"plugins": "/other.site/p.js"` imported a

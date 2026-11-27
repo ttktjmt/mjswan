@@ -7,9 +7,8 @@
  * The manifest is the one descriptor of a document: every key `snake_case`, every path
  * under a scene entry relative to `<project-id>/<scene-id>/`, under a project's `work`
  * relative to `<project-id>/`, the top-level `plugins` relative to the document root.
- * Every id and path is checked when the manifest is parsed (`path.ts`), so a source is
- * only ever asked for a file inside the document, and a URL the document names outside
- * itself is fetched only through the host's own `remote`.
+ * Ids and paths are checked at parse (`path.ts`); a URL the document names is fetched only
+ * through the host's `remote`.
  *
  * See context/document.md.
  */
@@ -35,20 +34,14 @@ import { isReleaseVersion } from './version';
 export { documentUrl } from './path';
 export { compareVersions, ENGINE_CDN, engineUrl, isReleaseVersion } from './version';
 
-/**
- * Maps a document-relative path (e.g. `demo/humanoid/scene.mjz`) to bytes. Asked only for
- * a path whose every segment is a name a build writes, with no `..` left: `documentUrl`
- * joins one onto the document's base URL.
- */
+/** Maps a checked document-relative path (e.g. `demo/humanoid/scene.mjz`) to bytes. */
 export type ByteSource = (relPath: string) => Bytes;
 
 export interface ParseOptions {
   /**
-   * Bytes for a URL the document names outside itself, an `http(s)` splat `url` or
-   * `collider_url`. Pass it only where the document's author may pick the hosts its
-   * viewers fetch from, as for a site's own build. Without it, such a splat is left out
-   * of the catalog and such a collider dropped, and nothing outside the document is
-   * fetched.
+   * Bytes for a splat `url` or `collider_url`. Pass it only where the document's author may
+   * choose the hosts viewers fetch from; without it such a splat is left out and such a
+   * collider dropped.
    */
   remote?: (url: URL) => Bytes;
 }
@@ -83,10 +76,7 @@ export interface ManifestSplat {
   name: string;
   /** Scene-relative path of a bundled `.spz` (`assets/<id>.spz`). */
   path?: string;
-  /**
-   * `http(s)` URL of an unbundled `.spz`, fetched only through `ParseOptions.remote`.
-   * Exactly one of `path`/`url` is set.
-   */
+  /** `http(s)` URL of an unbundled `.spz`, fetched through `ParseOptions.remote`; set instead of `path`. */
   url?: string;
   scale?: number;
   x_offset?: number;
@@ -346,9 +336,8 @@ export function sanitizeName(name: string): string {
 export const MAX_DOCUMENT_FORMAT = 11;
 
 /**
- * Refuse a document this reader cannot read: one without a `format`, or one newer than it
- * knows, or one whose `version` no release has. `version` is provenance a host may pick
- * an engine by, never a gate on what parses, but it must name a release.
+ * Refuse a document this reader cannot read: one without a `format`, one newer than it
+ * knows, or one whose `version` (what a host picks an engine by) no release has.
  */
 function checkFormat(parsed: Manifest): void {
   const format = parsed.format;
@@ -382,11 +371,7 @@ function checkLicense(dir: string, entry: ManifestLicense | undefined): void {
   if (entry?.notice !== undefined) documentPath(dir, entry.notice, 'notice');
 }
 
-/**
- * Refuse a document naming anything outside itself, before any of it is fetched: every id
- * that becomes a directory, every path the catalog would ask its source for, and every
- * URL it would ask `remote` for.
- */
+/** Refuse a document naming anything outside itself (an id, a path, a URL), before any fetch. */
 function checkDocument(parsed: Manifest): void {
   if (parsed.plugins !== undefined) documentPath('', parsed.plugins, 'plugins');
   for (const project of parsed.projects) {
@@ -643,9 +628,8 @@ function toTermDefaults(defaults: ManifestTermDefaults | undefined): TermDefault
 }
 
 /**
- * Parse a build's `manifest.json` (object or JSON string) into a {@link Catalog}. Throws
- * for a document this reader cannot read or one naming anything outside itself; `source`
- * is asked only for the document's own files, and `options.remote` for the URLs it names.
+ * Parse a build's `manifest.json` (object or JSON string) into a {@link Catalog}; throws
+ * for a document this reader cannot read or one naming anything outside itself.
  */
 export function parseManifest(
   manifest: Manifest | string,

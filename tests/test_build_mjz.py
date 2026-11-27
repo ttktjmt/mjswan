@@ -610,8 +610,7 @@ class TestAttachedModels:
 # L2: what the build reads, and asset_root (files on disk)
 # ===========================================================================
 def _model_beside_its_meshes(root: Path, size: float = 0.2) -> mujoco.MjSpec:
-    """A model in ``xmls/`` whose mesh sits in a sibling ``meshes/``, as a ROS-style
-    package lays them out."""
+    """A model in ``xmls/`` with its mesh in a sibling ``meshes/`` (a ROS-style layout)."""
     (root / "meshes").mkdir(parents=True)
     (root / "meshes" / "bone.obj").write_text(TETRA.format(s=size))
     (root / "xmls").mkdir()

@@ -93,9 +93,8 @@ class MjswanApp:
 
         A directory is already an app and is served where it sits. A document carries no
         engine, so it is unpacked into a temporary directory (removed at exit) with the
-        packaged engine laid over it, built first if no matching SPA is cached. A
-        document carries no code either: one that asks for a plugins module, or holds a
-        file no build writes, is refused before anything is unpacked.
+        packaged engine laid over it, built first if no matching SPA is cached. One that
+        asks for a plugins module, or holds a file no build writes, is refused first.
         """
         import atexit
         import shutil
@@ -116,8 +115,7 @@ class MjswanApp:
         if not is_document(source):
             return cls(source.resolve())
 
-        # Custom-TS terms compile to a `plugins.js` that ships with the engine, not in
-        # the document, and a module a document named would run as this page.
+        # A custom-TS module ships with the engine; one a document named would run here.
         if author_code(read_manifest(source)):
             raise DocumentError(
                 f"{source.name} asks for a plugins module, as a build with custom-TS MDP "

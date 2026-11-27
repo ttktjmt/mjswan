@@ -41,8 +41,7 @@ const { createEngine } = await import('https://cdn.jsdelivr.net/npm/mjswan/dist/
 const { parseManifest, documentUrl } = await import('https://cdn.jsdelivr.net/npm/mjswan/dist/manifest.js');
 
 // Every other asset (scene.mjz, mdp/…/*.onnx, policy/*.onnx, assets/*.npz) resolves
-// against the manifest's directory. The parser asks only for paths inside the document,
-// and documentUrl keeps each under the base.
+// against the manifest's directory; documentUrl keeps each under it.
 const base = 'https://example.com/myapp/';
 const bytes = (path) => async () => (await fetch(documentUrl(base, path))).arrayBuffer();
 
@@ -51,8 +50,8 @@ const catalog = parseManifest(await (await fetch(documentUrl(base, 'manifest.jso
 await engine.loadScene(await catalog.projects[0].scenes[0].buildScene());
 ```
 
-A splat the build names by URL (`add_splat(url=...)`) is fetched only through a
-`remote` you pass, for a document whose author may pick the hosts your page fetches from:
+A splat named by URL (`add_splat(url=...)`) is fetched only through a `remote` you pass,
+where you trust the document's author to pick hosts:
 `parseManifest(text, bytes, { remote: (url) => async () => (await fetch(url)).arrayBuffer() })`.
 
 Or as a normal bundled import:

@@ -233,7 +233,7 @@ anything itself, so you decide where the bytes come from:
 import { createEngine } from 'mjswan';
 import { documentUrl, parseManifest } from 'mjswan/manifest';
 
-// The parser asks only for paths inside the document; documentUrl keeps each under base.
+// documentUrl keeps every path under base.
 const base = 'https://example.com/myapp/';
 const bytes = (path: string) => async () =>
   (await fetch(documentUrl(base, path))).arrayBuffer();

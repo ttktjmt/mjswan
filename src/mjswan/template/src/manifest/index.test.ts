@@ -381,10 +381,7 @@ const OUTSIDE = [
   '',
 ];
 
-/**
- * Every field that names a file of the document, how deep below the root its paths start
- * (a scene's two levels, a project's one), and how to set it.
- */
+/** Each field naming a document file: how deep below the root it resolves, and how to set it. */
 const PATH_FIELDS: Array<[string, number, (m: Manifest, path: string) => void]> = [
   ['scene', 2, (m, path) => (scene0(m).scene = path)],
   ['policy onnx', 2, (m, path) => (scene0(m).policies[0].onnx = path)],

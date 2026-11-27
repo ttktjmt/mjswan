@@ -1,26 +1,21 @@
 /**
- * A glTF parsed from its own bytes alone. A document's skins and colliders are `.glb` and
- * `.vrm` files that embed every buffer and image; one naming another file, by URL or by
- * path, would have the viewer fetch from wherever the file says. Such a file is refused
- * and nothing it names is fetched.
+ * A glTF parsed from its own bytes alone: one naming a buffer or image elsewhere would have
+ * the viewer fetch wherever the file says, so it is refused and nothing it names is fetched.
  */
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF, type GLTFLoaderPlugin, type GLTFParser } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-/** What a glTF's own bytes become while it is parsed: a `data:` URI, or a `blob:` URL for an embedded image. */
+/** A glTF's own bytes while it is parsed: `data:` URIs, and `blob:` URLs for embedded images. */
 const SEALED = /^(?:data|blob):/i;
 
-/**
- * Parse `data`, a binary glTF, refusing it when it names a buffer or an image outside
- * itself. `plugin` is registered on the loader (the VRM extensions, for a VRM).
- */
+/** Parse the binary glTF `data`, refusing one that names a file outside itself; `plugin` extends the loader (VRM). */
 export async function parseSealedGltf(
   data: ArrayBuffer,
   plugin?: (parser: GLTFParser) => GLTFLoaderPlugin,
 ): Promise<GLTF> {
   const named: string[] = [];
-  // Every request the loader makes for a buffer or an image passes here first. Throwing
-  // fails it before any is sent; a texture's failure only logs, so it is counted too.
+  // Every buffer and image request passes here first. Throwing stops it before it is sent;
+  // three only logs a failed texture, so refusals are also counted and thrown after.
   const manager = new THREE.LoadingManager();
   manager.setURLModifier((url) => {
     if (SEALED.test(url)) return url;
