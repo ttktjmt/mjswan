@@ -81,6 +81,8 @@ def author_code(manifest: dict) -> bool:
     A build writes both for custom-TS terms, whose module ships with the engine and never
     in a document, so a document that asks for one cannot be served or published.
     """
+    if not isinstance(manifest, dict):
+        return False
     return "plugins" in manifest or bool(manifest.get("uses_custom_js"))
 
 

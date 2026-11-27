@@ -225,7 +225,9 @@ def unpack_document(document: str | Path, target_dir: str | Path) -> Path:
                     "directory it is unpacked into."
                 )
             # Other zip tools add an entry for each directory.
-            directory = name.endswith("/") and rel.parts[0] in projects
+            directory = (
+                name.endswith("/") and bool(rel.parts) and rel.parts[0] in projects
+            )
             if name != MANIFEST_NAME and not (
                 directory or is_document_file(name, projects)
             ):

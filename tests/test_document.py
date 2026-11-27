@@ -234,6 +234,23 @@ class TestWriteAndUnpack:
             unpack_document(doc, target)
         assert not any(target.iterdir())
 
+    @pytest.mark.parametrize(
+        "manifest, entry",
+        [("[]", "demo/x.json"), ('{"projects": []}', "./"), ('"x"', "manifest.json")],
+        ids=["a-list", "dot-entry", "a-string"],
+    )
+    def test_a_malformed_document_is_refused_as_one(self, tmp_path, manifest, entry):
+        doc = tmp_path / "odd.swn"
+        with zipfile.ZipFile(doc, "w") as zf:
+            zf.writestr("manifest.json", manifest)
+            if entry != "manifest.json":
+                zf.writestr(entry, "")
+
+        with pytest.raises(DocumentError):
+            unpack_document(doc, tmp_path / "target")
+        with pytest.raises(DocumentError):
+            MjswanApp.from_document(doc)
+
     def test_directory_entries_other_tools_add_are_unpacked(self, built, tmp_path):
         doc = write_document(built)
         with zipfile.ZipFile(doc, "a") as zf:
