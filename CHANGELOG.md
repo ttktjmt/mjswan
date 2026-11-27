@@ -14,6 +14,14 @@ shortcuts.
 
 ### Added
 
+- **`asset_root=` on `add_scene` and `add_scene_mjlab` keeps a scene's files to the
+  folders you choose.** The build then reads a file from disk only under one of them
+  (links resolved) or takes it from `spec.assets`, and raises `ValueError` for any other,
+  at `add_scene` for the files the spec names and in the build for the rest; a file
+  MuJoCo resolved for an attached model is packed only when one under the folders holds
+  the same bytes. For building a model you do not trust. A Hugging Face snapshot also
+  admits its repository's `blobs/`.
+
 - **`engine.mdp`: operate a running MDP's terminations and events.** A termination can be
   switched off (still evaluated and reported, but it never ends the episode) and given
   what follows its firing (`onFire`): the reset at once, as mjlab does; the reset a delay
@@ -520,6 +528,12 @@ shortcuts.
   dialog it opens.
 
 ### Changed
+
+- **The build names the folders a scene packs files from outside its model's own**, in
+  one `RuntimeWarning` per scene, so files a model reaches for elsewhere on disk are
+  seen before the build is published. `add_scene_mjlab` counts each entity's files
+  against that entity's folder. `asset_root=` silences it. A scene MuJoCo cannot compile
+  now stops the build with a `ValueError` that says so and names the scene.
 
 - **Pull, Push and Grab stand aside while the simulation is paused.** Each acts through
   the physics step, so a drag on a paused simulation drew an arrow and moved nothing. While
@@ -1569,6 +1583,11 @@ shortcuts.
 
 ### Security
 
+- **The build never reads a FIFO, a device, or a file under `/proc`, `/sys` or `/dev`.**
+  A model could name one as a mesh or texture: a FIFO hung the build as MuJoCo waited on
+  it, and `/proc/self/environ` was read into memory before MuJoCo refused it. Such a path
+  now raises `ValueError`, found without opening it. License detection no longer expands
+  a `~` in an asset path, which MuJoCo reads as a folder name.
 - **CI installs Python dependencies from `uv.lock` alone, and the lock waits three days
   for a release.** `pytest.yml`, `ruff.yml` and `parity.yml` ran `uv pip install -e .[...]`,
   which resolves every `>=` floor afresh, so a hijacked release (litellm 1.107.0 was live

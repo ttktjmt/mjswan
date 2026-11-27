@@ -393,6 +393,15 @@ class TestDetection:
             a.license for a in detect_attributions(spec_asset_directories(spec))
         ] == [_APACHE]
 
+    def test_a_tilde_is_a_folder_name_as_it_is_to_mujoco(self, tmp_path):
+        xml = _write_model(tmp_path / "robot", meshdir="~/meshes")
+        spec = mujoco.MjSpec.from_file(str(xml))
+
+        directories = spec_asset_directories(spec)
+
+        assert tmp_path / "robot" / "~" / "meshes" in directories
+        assert Path.home() / "meshes" not in directories
+
     def test_the_nearest_level_wins_and_content_is_de_duplicated(self, tmp_path):
         model_dir = tmp_path / "robot"
         xml = _write_model(model_dir, meshdir="assets")

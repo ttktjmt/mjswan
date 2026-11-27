@@ -159,10 +159,13 @@ def add_scene(
     metadata: dict[str, Any] | None = None,
     control_dt: float | None = None,
     events: Mapping[str, Any] | None = None,
+    asset_root: str | os.PathLike | Sequence[str | os.PathLike] | None = None,
 ) -> SceneHandle
 ```
 
 Add a MuJoCo scene. Provide exactly one of `model` or `spec`.
+
+A `spec`'s files are read wherever the model names them, as MuJoCo reads them, so a model whose meshes sit beside its folder (`meshdir="../meshes"`) builds as it is. The build packs them only once MuJoCo has compiled the scene: a file that is not the mesh or image it claims to be stops the build. It never reads a FIFO, a device or anything under `/proc`, `/sys` or `/dev`, and it warns with the folders it packed files from outside the model's own.
 
 **Parameters**
 
@@ -174,10 +177,11 @@ Add a MuJoCo scene. Provide exactly one of `model` or `spec`.
 | `metadata` | `dict \| None` | `None` | Arbitrary key-value metadata kept on the scene. |
 | `control_dt` | `float \| None` | `None` | Seconds per control step — mjlab's `timestep * decimation`. Required once the scene carries a policy: the model holds only the physics timestep, and a wrong control rate raises nothing at playback. `add_scene_mjlab` fills it in from the task. |
 | `events` | `Mapping[str, Any] \| None` | `None` | The scene's default events (`EventTermCfg` instances, mjswan or mjlab). Same as calling `SceneHandle.set_events` afterwards. Events belong to a policy's MDP; these are what a policy gets when it declares none of its own (see [`MdpConfig`](#mdpconfig)). |
+| `asset_root` | `str \| PathLike \| Sequence \| None` | `None` | A folder, or several, to keep the `spec`'s files to: the build reads a file from disk only under one of them (links resolved) or takes it from `spec.assets`, and refuses any other. For a model you do not trust. A Hugging Face snapshot also admits its repository's `blobs/`. |
 
 **Returns:** `SceneHandle`
 
-**Raises:** `ValueError` if both or neither of `model`/`spec` are provided.
+**Raises:** `ValueError` if both or neither of `model`/`spec` are provided, if `asset_root` is given with `model` or names a path that is not a folder, or if the `spec` names a file outside it.
 
 ### ProjectHandle.add_scene_mjlab
 
@@ -189,6 +193,7 @@ def add_scene_mjlab(
     play: bool | None = None,
     env_cfg: Any | None = None,
     events: Mapping[str, Any] | None = None,
+    asset_root: str | os.PathLike | Sequence[str | os.PathLike] | None = None,
 ) -> SceneHandle
 ```
 
@@ -203,10 +208,11 @@ Load an mjlab task's MuJoCo spec from the task registry and add it as a scene. N
 | `play` | `bool \| None` | `None` | Which of the task's two registered configs to load. mjlab keeps them as `env_cfg` (training) and `play_env_cfg`; this selects between them exactly as its `load_env_cfg(task_id, play=...)` does. **Unset means play — the opposite of mjlab's own default, deliberately**: that one serves training scripts, and this is a playback tool. mjlab's training config sets `episode_length_s` to 10–20 s, which mjswan serializes into the browser's `time_out` termination, so a viewer built from it resets the robot every few seconds; it also keeps `push_robot` and the terrain-bounds termination, and lacks `randomize_terrain`. Pass `False` to reproduce training-time conditions. **Mutually exclusive with `env_cfg`** — passing both raises. |
 | `env_cfg` | `Any \| None` | `None` | Pre-loaded (and possibly edited) env config to use instead of loading `task_id` fresh. Load it with the `play` you want — `load_env_cfg(task_id, play=True)` — since `play` here then has nothing left to select. The scene keeps whichever config it used, and policies added to it default their term sets to it. A tracking task does not need this: mjlab registers it with `commands["motion"].motion_file = ""`, and the builder points that at the clip it bundles. |
 | `events` | `Mapping[str, Any] \| None` | `None` | Scene events, overriding the task's own `env_cfg.events`. Omit to take the task's; pass `{}` for a scene with none. |
+| `asset_root` | `str \| PathLike \| Sequence \| None` | `None` | Keeps every entity's files to these folders, as on [`add_scene`](#projecthandleadd_scene). Unset, the build warns with the folders it read entity files from outside each entity's own. |
 
 **Returns:** `SceneHandle`
 
-**Raises:** `ImportError`, naming `mjswan[mjlab]`, if mjlab is not installed.
+**Raises:** `ImportError`, naming `mjswan[mjlab]`, if mjlab is not installed. `ValueError` if an entity names a file outside `asset_root`.
 
 ### ProjectHandle.add_scene_hf
 

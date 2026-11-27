@@ -58,7 +58,7 @@ from .manifest import (
     scene_entry,
     write_manifest,
 )
-from .mjz import to_zip_deflated
+from .mjz import files_outside, to_zip_deflated
 
 if TYPE_CHECKING:
     from ..project import ProjectConfig
@@ -184,7 +184,25 @@ def write_app(
                 steps.on("packaging scene")
                 if scene.spec is not None:
                     graphics = graphics_entry(scene.viewer, scene.spec)
-                    to_zip_deflated(scene.spec, str(scene_path))
+                    if scene.asset_roots is not None:
+                        outside = []
+                    elif scene.outside_files is not None:
+                        outside = scene.outside_files
+                    else:
+                        outside = files_outside(scene.spec)
+                    try:
+                        to_zip_deflated(
+                            scene.spec, str(scene_path), roots=scene.asset_roots
+                        )
+                    except (ValueError, FileNotFoundError) as e:
+                        e.add_note(f"Packing scene {scene.name!r} of {project.name!r}.")
+                        raise
+                    if outside:
+                        warnings.warn(
+                            _outside_message(scene.name, outside),
+                            category=RuntimeWarning,
+                            stacklevel=2,
+                        )
                     scene.spec = None
                 else:
                     if scene.model is None:
@@ -310,6 +328,22 @@ class _SceneSteps:
 
     def close(self) -> None:
         self._progress.remove_task(self._task)
+
+
+def _outside_message(scene: str, files: list[str]) -> str:
+    """Where a scene's model reached for files outside its own folder, by folder."""
+    folders: dict[str, int] = {}
+    for file in sorted(set(files)):
+        folder = str(Path(file).parent)
+        folders[folder] = folders.get(folder, 0) + 1
+    listed = "; ".join(f"{n} in {folder}" for folder, n in list(folders.items())[:3])
+    if len(folders) > 3:
+        listed += f"; and files in {len(folders) - 3} more folders"
+    return (
+        f"Scene {scene!r} packs files from outside its model folder: {listed}. A model "
+        "can name any file on disk, so check that these belong in the build, or pass "
+        "asset_root= to keep it to the folders you choose."
+    )
 
 
 def _check_defaults(projects: list[ProjectConfig]) -> None:
