@@ -7,6 +7,9 @@
  * The manifest is the one descriptor of a document: every key `snake_case`, every path
  * under a scene entry relative to `<project-id>/<scene-id>/`, under a project's `work`
  * relative to `<project-id>/`, the top-level `plugins` relative to the document root.
+ * Every id and path is checked when the manifest is parsed (`path.ts`), so a source is
+ * only ever asked for a file inside the document, and a URL the document names outside
+ * itself is fetched only through the host's own `remote`.
  *
  * See context/document.md.
  */
@@ -26,9 +29,29 @@ import {
 } from '../core/scene/graphicsSettings';
 import type { PolicyInput, SceneInput, SkinInput, SplatInput } from '../engine/types';
 import type { OnFire, TermDefaults } from '../core/mdp/operator';
+import { documentName, documentPath, isUrl, remoteUrl } from './path';
+import { isReleaseVersion } from './version';
 
-/** Maps a document-relative path (e.g. `demo/humanoid/scene.mjz`) to bytes. */
+export { documentUrl } from './path';
+export { compareVersions, ENGINE_CDN, engineUrl, isReleaseVersion } from './version';
+
+/**
+ * Maps a document-relative path (e.g. `demo/humanoid/scene.mjz`) to bytes. Asked only for
+ * a path whose every segment is a name a build writes, with no `..` left: `documentUrl`
+ * joins one onto the document's base URL.
+ */
 export type ByteSource = (relPath: string) => Bytes;
+
+export interface ParseOptions {
+  /**
+   * Bytes for a URL the document names outside itself, an `http(s)` splat `url` or
+   * `collider_url`. Pass it only where the document's author may pick the hosts its
+   * viewers fetch from, as for a site's own build. Without it, such a splat is left out
+   * of the catalog and such a collider dropped, and nothing outside the document is
+   * fetched.
+   */
+  remote?: (url: URL) => Bytes;
+}
 
 // ── manifest.json shape (Python Builder ↔ consumer contract) ─────────────────
 export interface ManifestCamera {
@@ -60,7 +83,10 @@ export interface ManifestSplat {
   name: string;
   /** Scene-relative path of a bundled `.spz` (`assets/<id>.spz`). */
   path?: string;
-  /** External URL of an unbundled `.spz`. Exactly one of `path`/`url` is set. */
+  /**
+   * `http(s)` URL of an unbundled `.spz`, fetched only through `ParseOptions.remote`.
+   * Exactly one of `path`/`url` is set.
+   */
   url?: string;
   scale?: number;
   x_offset?: number;
@@ -69,6 +95,7 @@ export interface ManifestSplat {
   roll?: number;
   pitch?: number;
   yaw?: number;
+  /** A scene-relative `.glb` path, or an `http(s)` URL fetched as `url` is. */
   collider_url?: string;
   control?: boolean;
 }
@@ -198,6 +225,7 @@ export interface Manifest {
    * here.
    */
   format: number;
+  /** The release that wrote the document: `X.Y.Z` or `X.Y.Z-<prerelease>`. */
   version: string;
   uses_custom_js?: boolean;
   /** Document-root-relative path to the runtime custom-MDP plugin ESM (custom-TS builds). */
@@ -278,8 +306,9 @@ export interface Catalog {
   /** All projects in the build; the default first, so `projects[0]` is the one to open. */
   projects: ProjectCatalog[];
   /**
-   * Document-root-relative path to the author custom-MDP plugin ESM, if any. A trusted
-   * app imports it and passes the exports as {@link EnginePlugins}; mjswan Cloud ignores it.
+   * Document-root-relative path to the author custom-MDP plugin ESM, for a document with
+   * `uses_custom_js: true` only. A trusted app imports it and passes the exports as
+   * {@link EnginePlugins}; mjswan Cloud ignores it.
    */
   pluginsPath?: string;
   /** {@link Manifest.viewer_gui}. */
@@ -318,7 +347,8 @@ export const MAX_DOCUMENT_FORMAT = 11;
 
 /**
  * Refuse a document this reader cannot read: one without a `format`, or one newer than it
- * knows. `version` is provenance a host may pick an engine by, never a gate here.
+ * knows, or one whose `version` no release has. `version` is provenance a host may pick
+ * an engine by, never a gate on what parses, but it must name a release.
  */
 function checkFormat(parsed: Manifest): void {
   const format = parsed.format;
@@ -326,6 +356,12 @@ function checkFormat(parsed: Manifest): void {
     throw new Error(
       'mjswan/manifest: this build predates document format 1 (a root assets/config.json ' +
         'rather than manifest.json). Rebuild it with a current mjswan.',
+    );
+  }
+  if (!isReleaseVersion(parsed.version)) {
+    throw new Error(
+      `mjswan/manifest: version ${JSON.stringify(parsed.version)} is not one a release ` +
+        'has (X.Y.Z or X.Y.Z-<prerelease>), so no mjswan build wrote this document.',
     );
   }
   if (!Number.isInteger(format) || format < 1) {
@@ -339,19 +375,53 @@ function checkFormat(parsed: Manifest): void {
   }
 }
 
-/** `rel` against `dir`, its `..` resolved: a scene's credits name the project's `../licenses/…`. */
-function inScene(dir: string, rel: string): string {
-  const parts: string[] = [];
-  for (const part of `${dir}${rel}`.split('/')) {
-    if (part === '..') parts.pop();
-    else if (part && part !== '.') parts.push(part);
+type Remote = NonNullable<ParseOptions['remote']>;
+
+function checkLicense(dir: string, entry: ManifestLicense | undefined): void {
+  if (entry?.license !== undefined) documentPath(dir, entry.license, 'license');
+  if (entry?.notice !== undefined) documentPath(dir, entry.notice, 'notice');
+}
+
+/**
+ * Refuse a document naming anything outside itself, before any of it is fetched: every id
+ * that becomes a directory, every path the catalog would ask its source for, and every
+ * URL it would ask `remote` for.
+ */
+function checkDocument(parsed: Manifest): void {
+  if (parsed.plugins !== undefined) documentPath('', parsed.plugins, 'plugins');
+  for (const project of parsed.projects) {
+    const projectDir = `${documentName(project.id, 'project id')}/`;
+    checkLicense(projectDir, project.work);
+    for (const scene of project.scenes ?? []) {
+      const dir = `${projectDir}${documentName(scene.id, 'scene id')}/`;
+      documentPath(dir, scene.scene, 'scene');
+      for (const owner of [...(scene.mdps ?? []), ...(scene.policies ?? [])]) {
+        for (const ref of policyGraphRefs(owner as unknown as Record<string, unknown>)) {
+          documentPath(dir, ref, 'graph');
+        }
+      }
+      for (const policy of scene.policies ?? []) {
+        documentPath(dir, policy.onnx, 'policy');
+        for (const motion of policy.motions ?? []) documentPath(dir, motion.path, 'motion');
+      }
+      for (const splat of scene.splats ?? []) {
+        if (splat.path !== undefined) documentPath(dir, splat.path, 'splat');
+        else remoteUrl(splat.url, 'splat url');
+        const collider = splat.collider_url;
+        if (collider !== undefined) {
+          if (isUrl(collider)) remoteUrl(collider, 'collider_url');
+          else documentPath(dir, collider, 'collider_url');
+        }
+      }
+      for (const skin of scene.skins ?? []) documentPath(dir, skin.path, 'skin');
+      for (const credit of scene.credits ?? []) checkLicense(dir, credit);
+    }
   }
-  return parts.join('/');
 }
 
 function toLicenseEntry(dir: string, entry: ManifestLicense, source: ByteSource): LicenseEntry {
   const text = (rel: string) => async () =>
-    new TextDecoder().decode(await resolveBytes(source(inScene(dir, rel))));
+    new TextDecoder().decode(await resolveBytes(source(documentPath(dir, rel, 'license'))));
   return {
     spdx: entry.spdx,
     restriction: entry.restriction,
@@ -369,17 +439,6 @@ function toCreditEntry(dir: string, credit: ManifestCredit, source: ByteSource):
     otherLicenseUrl: credit.vrm.other_license_url,
   };
   return { ...toLicenseEntry(dir, credit, source), component: credit.component, skin: credit.skin, vrm };
-}
-
-/** Lazy-fetch an absolute/external URL as bytes (for splats hosted off-build). */
-function urlBytes(url: string): Bytes {
-  return async () => {
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`mjswan/manifest: failed to fetch ${url}: ${res.status}`);
-    }
-    return res.arrayBuffer();
-  };
 }
 
 /** The manifest's snake_case camera entry as the engine's `ViewerConfig`. */
@@ -426,13 +485,18 @@ function splatTransform(splat: ManifestSplat): SplatTransform {
   };
 }
 
-function buildSplat(dir: string, splat: ManifestSplat, source: ByteSource): SplatInput {
-  const data = splat.path ? source(inScene(dir, splat.path)) : urlBytes(splat.url!);
-  const collider = splat.collider_url
-    ? (/^[a-z]+:\/\//i.test(splat.collider_url)
-        ? urlBytes(splat.collider_url)
-        : source(inScene(dir, splat.collider_url)))
-    : undefined;
+function buildSplat(dir: string, splat: ManifestSplat, source: ByteSource, remote?: Remote): SplatInput {
+  const data =
+    splat.path !== undefined
+      ? source(documentPath(dir, splat.path, 'splat'))
+      : remote!(remoteUrl(splat.url, 'splat url'));
+  const named = splat.collider_url;
+  const collider =
+    named === undefined
+      ? undefined
+      : !isUrl(named)
+        ? source(documentPath(dir, named, 'collider_url'))
+        : remote?.(remoteUrl(named, 'collider_url'));
   return { data, collider, transform: splatTransform(splat) };
 }
 
@@ -442,7 +506,7 @@ function buildSplat(dir: string, splat: ManifestSplat, source: ByteSource): Spla
  */
 function graphBytes(refs: string[], dir: string, source: ByteSource): Record<string, Bytes> {
   const graphs: Record<string, Bytes> = {};
-  for (const ref of refs) graphs[ref] = source(inScene(dir, ref));
+  for (const ref of refs) graphs[ref] = source(documentPath(dir, ref, 'graph'));
   return graphs;
 }
 
@@ -472,12 +536,12 @@ function buildPolicy(
   const config = policyConfig(scene, policy);
   const motions = (policy.motions ?? []).map((m) => ({
     name: m.name,
-    data: source(inScene(dir, m.path)),
+    data: source(documentPath(dir, m.path, 'motion')),
     default: m.default,
   }));
   return {
     config,
-    onnx: source(inScene(dir, policy.onnx)),
+    onnx: source(documentPath(dir, policy.onnx, 'policy')),
     graphs: graphBytes(policyGraphRefs(config), dir, source),
     motions,
   };
@@ -488,6 +552,7 @@ function toSceneEntry(
   scene: ManifestScene,
   source: ByteSource,
   format: number,
+  remote: Remote | undefined,
 ): SceneEntry {
   // `<project-id>/<scene-id>/`: the base every path under a scene entry resolves against.
   const dir = `${project.id}/${scene.id}/`;
@@ -500,16 +565,25 @@ function toSceneEntry(
     build: async () => buildPolicy(dir, scene, p, source),
   }));
 
-  const splats: SplatEntry[] = (scene.splats ?? []).map((s) => ({
+  // A splat named by URL loads only through the host's `remote`.
+  const reachable = (scene.splats ?? []).filter((s) => {
+    const fetchable = s.path !== undefined || remote !== undefined;
+    if (!fetchable) console.warn(`mjswan/manifest: splat "${s.name}" is left out: it loads from ${s.url}.`);
+    else if (!remote && s.collider_url !== undefined && isUrl(s.collider_url)) {
+      console.warn(`mjswan/manifest: splat "${s.name}" has no collider: it loads from ${s.collider_url}.`);
+    }
+    return fetchable;
+  });
+  const splats: SplatEntry[] = reachable.map((s) => ({
     id: s.id,
     name: s.name,
     control: s.control ?? false,
     transform: splatTransform(s),
-    build: async () => buildSplat(dir, s, source),
+    build: async () => buildSplat(dir, s, source, remote),
   }));
 
   const buildSkin = (skin: ManifestSkin): SkinInput => ({
-    data: source(inScene(dir, skin.path)),
+    data: source(documentPath(dir, skin.path, 'skin')),
     config: skin,
   });
   const skins: SkinEntry[] = (scene.skins ?? []).map((s) => ({
@@ -536,16 +610,16 @@ function toSceneEntry(
           ? (scene.policies.find((p) => p.default) ?? scene.policies[0])
           : scene.policies.find((p) => p.id === policyId);
       const splatId = opts?.splat;
-      const splat = splatId == null ? undefined : scene.splats?.find((s) => s.id === splatId);
+      const splat = splatId == null ? undefined : reachable.find((s) => s.id === splatId);
       const skinId = opts?.skin;
       const skin = skinId == null ? undefined : scene.skins?.find((s) => s.id === skinId);
       // Events travel with the policy, inside its MDP, so the scene carries only
       // `terrainData`, which every MDP on it may draw from.
       return {
-        model: source(inScene(dir, scene.scene)),
+        model: source(documentPath(dir, scene.scene, 'scene')),
         modelFormat: scene.scene.endsWith('.mjb') ? 'mjb' : 'mjz',
         policy: policy ? buildPolicy(dir, scene, policy, source) : null,
-        splat: splat ? buildSplat(dir, splat, source) : null,
+        splat: splat ? buildSplat(dir, splat, source, remote) : null,
         skin: skin ? buildSkin(skin) : null,
         viewer: toViewerConfig(scene.camera, format),
         graphics,
@@ -568,13 +642,22 @@ function toTermDefaults(defaults: ManifestTermDefaults | undefined): TermDefault
   };
 }
 
-/** Parse a build's `manifest.json` (object or JSON string) into a {@link Catalog}. */
-export function parseManifest(manifest: Manifest | string, source: ByteSource): Catalog {
+/**
+ * Parse a build's `manifest.json` (object or JSON string) into a {@link Catalog}. Throws
+ * for a document this reader cannot read or one naming anything outside itself; `source`
+ * is asked only for the document's own files, and `options.remote` for the URLs it names.
+ */
+export function parseManifest(
+  manifest: Manifest | string,
+  source: ByteSource,
+  options: ParseOptions = {},
+): Catalog {
   const parsed: Manifest = typeof manifest === 'string' ? JSON.parse(manifest) : manifest;
   checkFormat(parsed);
   if (!parsed.projects?.length) {
     throw new Error('mjswan/manifest: manifest.json has no projects.');
   }
+  checkDocument(parsed);
   // The default project first, so `projects[0]` is always the one to open on. The build
   // refuses two defaults; with none, document order already puts the right one first.
   const flagged = parsed.projects.find((p) => p.default) ?? parsed.projects[0];
@@ -585,9 +668,10 @@ export function parseManifest(manifest: Manifest | string, source: ByteSource): 
       name: project.name,
       default: project === flagged,
       work: project.work && toLicenseEntry(`${project.id}/`, project.work, source),
-      scenes: project.scenes.map((scene) => toSceneEntry(project, scene, source, parsed.format)),
+      scenes: project.scenes.map((scene) => toSceneEntry(project, scene, source, parsed.format, options.remote)),
     })),
-    pluginsPath: parsed.plugins,
+    // A custom-TS build's module only; the host decides whether to load it (urlState.ts).
+    pluginsPath: parsed.uses_custom_js === true ? parsed.plugins : undefined,
     viewerGui: parsed.viewer_gui,
   };
 }

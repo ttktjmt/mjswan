@@ -313,7 +313,7 @@ describe('parseManifest', () => {
   it('exposes all projects, the default first, and throws on an empty catalog', () => {
     const multi: Manifest = {
       format: 1,
-      version: '0',
+      version: '0.0.0',
       projects: [
         { id: 'extra', name: 'Extra', scenes: [] },
         { id: 'main', name: 'Main', default: true, scenes: [] },
@@ -322,13 +322,15 @@ describe('parseManifest', () => {
     const catalog = parseManifest(multi, fakeSource().source);
     expect(catalog.projects.map((p) => p.name)).toEqual(['Main', 'Extra']);
     expect(catalog.projects.map((p) => p.default)).toEqual([true, false]);
-    expect(() => parseManifest({ format: 1, version: '0', projects: [] }, fakeSource().source)).toThrow();
+    expect(() => parseManifest({ format: 1, version: '0.0.0', projects: [] }, fakeSource().source)).toThrow(
+      /no projects/,
+    );
   });
 
   it('with no default flagged, the first project in document order is the default', () => {
     const multi: Manifest = {
       format: 1,
-      version: '0',
+      version: '0.0.0',
       projects: [
         { id: 'first', name: 'First', scenes: [] },
         { id: 'second', name: 'Second', scenes: [] },
@@ -341,11 +343,165 @@ describe('parseManifest', () => {
     ]);
   });
 
-  it('surfaces the runtime plugin module path when present', () => {
-    const withPlugins = { ...MANIFEST, plugins: 'assets/plugins.js' };
+  it("surfaces a custom-TS build's plugin module path, and no other", () => {
+    const withPlugins = { ...MANIFEST, uses_custom_js: true, plugins: 'assets/plugins.js' };
     expect(parseManifest(withPlugins, fakeSource().source).pluginsPath).toBe('assets/plugins.js');
     expect(parseManifest(MANIFEST, fakeSource().source).pluginsPath).toBeUndefined();
+    // A build writes `plugins` only beside `uses_custom_js: true`.
+    for (const flag of [false, undefined]) {
+      const named = { ...MANIFEST, uses_custom_js: flag, plugins: 'assets/plugins.js' };
+      expect(parseManifest(named, fakeSource().source).pluginsPath).toBeUndefined();
+    }
   });
+});
+
+/** MANIFEST with one change made to a copy of it. */
+function edited(edit: (m: Manifest) => void): Manifest {
+  const copy: Manifest = JSON.parse(JSON.stringify(MANIFEST));
+  edit(copy);
+  return copy;
+}
+
+const scene0 = (m: Manifest) => m.projects[0].scenes[0];
+
+/** Paths that a URL parser would take out of the document, or that are not paths at all. */
+const OUTSIDE = [
+  '/x',
+  '//evil.test/x',
+  '\\evil.test/x',
+  '%2e%2e/x',
+  'a\\..\\..\\x',
+  '.\t./x',
+  'x?y',
+  'x#y',
+  'https://evil.test/x',
+  '../../../x',
+  'a//b',
+  './x',
+  '',
+];
+
+/**
+ * Every field that names a file of the document, how deep below the root its paths start
+ * (a scene's two levels, a project's one), and how to set it.
+ */
+const PATH_FIELDS: Array<[string, number, (m: Manifest, path: string) => void]> = [
+  ['scene', 2, (m, path) => (scene0(m).scene = path)],
+  ['policy onnx', 2, (m, path) => (scene0(m).policies[0].onnx = path)],
+  ['motion', 2, (m, path) => (scene0(m).policies[0].motions![0].path = path)],
+  ['splat', 2, (m, path) => (scene0(m).splats![0].path = path)],
+  ['collider', 2, (m, path) => (scene0(m).splats![0].collider_url = path)],
+  ['skin', 2, (m, path) => (scene0(m).skins![0].path = path)],
+  ['credit license', 2, (m, path) => (scene0(m).credits = [{ component: 'c', license: path }])],
+  ['credit notice', 2, (m, path) => (scene0(m).credits = [{ component: 'c', notice: path }])],
+  ['work', 1, (m, path) => (m.projects[0].work = { license: path })],
+  ['plugins', 0, (m, path) => Object.assign(m, { uses_custom_js: true, plugins: path })],
+  [
+    'term graph',
+    2,
+    (m, path) =>
+      ((scene0(m).mdps[0].observations as { actor: Array<{ onnx?: string }> }).actor[0].onnx = path),
+  ],
+  ['fused graph', 2, (m, path) => (scene0(m).mdps[0].observations = { actor: { fused: path } as never })],
+  ['action graph', 2, (m, path) => (scene0(m).mdps[0].actions = { joint_pos: { process: { onnx: path } } })],
+];
+
+describe('what a document may name', () => {
+  it.each(['\\evil.test', 'http:evil.test', '%2e%2e', '..', '.', 'a/b', '', 'a b'])(
+    'refuses a project or scene id that is not a name a build writes (%j)',
+    (id) => {
+      for (const set of [(m: Manifest) => (m.projects[0].id = id), (m: Manifest) => (scene0(m).id = id)]) {
+        const { source, requested } = fakeSource();
+        expect(() => parseManifest(edited(set), source)).toThrow(/is not a name a build writes/);
+        expect(requested).toEqual([]);
+      }
+    },
+  );
+
+  describe.each(PATH_FIELDS)('the %s path', (field, depth, set) => {
+    // A collider may also be a URL, fetched through `remote` alone (below).
+    it.each(OUTSIDE.filter((path) => !(field === 'collider' && path.startsWith('https:'))))(
+      'refuses %j before anything is fetched',
+      (path) => {
+        const { source, requested } = fakeSource();
+        expect(() => parseManifest(edited((m) => set(m, path)), source)).toThrow(/mjswan\/manifest/);
+        expect(requested).toEqual([]);
+      },
+    );
+
+    it('takes a path inside the document, up to its root and no further', () => {
+      const parse = (path: string) => () => parseManifest(edited((m) => set(m, path)), fakeSource().source);
+      expect(parse('assets/x-1.y_z')).not.toThrow();
+      expect(parse(`${'../'.repeat(depth)}x`)).not.toThrow();
+      expect(parse(`${'../'.repeat(depth + 1)}x`)).toThrow(/climbs out of the document/);
+    });
+  });
+
+  it('asks the source for every file by its path in the document', async () => {
+    const { source, requested } = fakeSource();
+    const manifest = edited((m) => (scene0(m).splats![0].collider_url = '../shared/room.glb'));
+    const scene = parseManifest(manifest, source).projects[0].scenes[0];
+    await scene.buildScene({ policy: 'walk', splat: 'room', skin: 'fox' });
+    expect(requested).toEqual([
+      'demo/humanoid/scene.mjz',
+      'demo/humanoid/assets/walk_clip.npz',
+      'demo/humanoid/policy/walk.onnx',
+      'demo/humanoid/mdp/mdp_0/command/twist.onnx',
+      'demo/humanoid/mdp/mdp_0/event/push_robot.onnx',
+      'demo/humanoid/mdp/mdp_0/obs/joint_pos.onnx',
+      'demo/humanoid/mdp/mdp_0/term/fell_over.onnx',
+      'demo/humanoid/assets/room.spz',
+      'demo/shared/room.glb',
+      'demo/humanoid/assets/fox.glb',
+    ]);
+  });
+});
+
+describe('a URL the document names outside itself', () => {
+  const urlSplat = (m: Manifest) =>
+    (scene0(m).splats = [
+      { id: 'room', name: 'Room', path: 'assets/room.spz', collider_url: 'https://cdn.test/room.glb' },
+      { id: 'park', name: 'Park', url: 'https://cdn.test/park.spz' },
+    ]);
+
+  it('is fetched by no one without remote: its splat is left out, its collider dropped', async () => {
+    const { source, requested } = fakeSource();
+    const scene = parseManifest(edited(urlSplat), source).projects[0].scenes[0];
+    expect(scene.splats.map((s) => s.id)).toEqual(['room']);
+    const splat = await scene.splats[0].build();
+    expect(splat.collider).toBeUndefined();
+    expect((await scene.buildScene({ splat: 'park' })).splat).toBeNull();
+    expect(requested.every((path) => !path.includes('cdn.test'))).toBe(true);
+  });
+
+  it('is handed to remote as a URL, when the host passes one', async () => {
+    const asked: string[] = [];
+    const remote = (url: URL) => {
+      asked.push(url.href);
+      return async () => new ArrayBuffer(0);
+    };
+    const scene = parseManifest(edited(urlSplat), fakeSource().source, { remote }).projects[0].scenes[0];
+    expect(scene.splats.map((s) => s.id)).toEqual(['room', 'park']);
+    await scene.splats[0].build();
+    await scene.splats[1].build();
+    expect(asked).toEqual(['https://cdn.test/room.glb', 'https://cdn.test/park.spz']);
+  });
+
+  it.each(['javascript:alert(1)', 'data:text/plain,x', 'file:///etc/passwd', 'blob:https://a.test/x', 'cdn.test/x'])(
+    'must be http(s), with or without remote (%s)',
+    (url) => {
+      const remote = () => async () => new ArrayBuffer(0);
+      for (const options of [{}, { remote }]) {
+        const splat = edited((m) => (scene0(m).splats = [{ id: 'park', name: 'Park', url }]));
+        expect(() => parseManifest(splat, fakeSource().source, options)).toThrow(/not an http\(s\) URL/);
+        // A collider without a scheme is a path in the document instead.
+        const collider = edited((m) => (scene0(m).splats![0].collider_url = url));
+        const parse = () => parseManifest(collider, fakeSource().source, options);
+        if (url.includes(':')) expect(parse).toThrow(/not an http\(s\) URL/);
+        else expect(parse).not.toThrow();
+      }
+    },
+  );
 });
 
 describe('document format', () => {
@@ -372,6 +528,15 @@ describe('document format', () => {
   it('does not gate on version: an unknown version with a known format parses', () => {
     expect(() => parseManifest({ ...MANIFEST, format: 1, version: '99.0.0' }, fakeSource().source)).not.toThrow();
   });
+
+  // A host picks an engine by `version`, and the newer-format error quotes it.
+  it.each(['0', '../../evil/x', 'latest', '1.2.3/../../x', 'v1.2.3', undefined, 13])(
+    'refuses a version no release has (%j)',
+    (version) => {
+      const manifest = { ...MANIFEST, format: 99, version } as unknown as Manifest;
+      expect(() => parseManifest(manifest, fakeSource().source)).toThrow(/not one a release has/);
+    },
+  );
 });
 
 describe('sanitizeName', () => {

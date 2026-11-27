@@ -39,10 +39,13 @@ export function applyUrlState(search: string, state: UrlState): string {
   return params.toString();
 }
 
+/** Where a build writes the custom-TS plugins module, beside the engine. */
+export const PLUGINS_PATH = 'assets/plugins.js';
+
 /**
  * Where the build's plugins module loads from, or null when it must not load. A manifest
  * named by `?manifest=` belongs to whoever wrote the link, so its plugins never run, and
- * the module must stay on the page's origin: a build only writes `assets/plugins.js`.
+ * the module must be the one a build writes, on the page's origin: `assets/plugins.js`.
  */
 export function pluginModuleUrl(
   base: string,
@@ -50,7 +53,7 @@ export function pluginModuleUrl(
   search: string,
   page: string,
 ): string | null {
-  if (!pluginsPath || new URLSearchParams(search).has(MANIFEST_PARAM)) return null;
+  if (pluginsPath !== PLUGINS_PATH || new URLSearchParams(search).has(MANIFEST_PARAM)) return null;
   const url = new URL(pluginsPath, new URL(base, page));
   return url.origin === new URL(page).origin ? url.href : null;
 }

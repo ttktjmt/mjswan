@@ -82,8 +82,8 @@ once per such VRM, with the file and its terms.
 
 !!! warning "Custom-TS builds are rejected"
     A build whose `manifest.json` carries `uses_custom_js: true` or names a `plugins`
-    module — one using a `*Binding` with `ts_src`, i.e. an author-written TypeScript term
-    class — cannot be published. Cloud will not execute author-supplied code in its own
+    module (one using a `*Binding` with `ts_src`, i.e. an author-written TypeScript term
+    class) cannot be published. Cloud will not execute author-supplied code in its own
     origin. Traced ONNX terms are fine; they are inert data run by a fixed runtime. This is
     checked locally before any upload starts.
 

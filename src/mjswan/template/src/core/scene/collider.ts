@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { parseSealedGltf } from './gltf';
 
 type ColliderMesh = THREE.Group;
 
@@ -7,8 +7,7 @@ export async function loadCollider(
   data: ArrayBuffer,
   scene: THREE.Scene
 ): Promise<ColliderMesh> {
-  const loader = new GLTFLoader();
-  const gltf = await loader.parseAsync(data, '');
+  const gltf = await parseSealedGltf(data);
   const root = gltf.scene;
 
   root.traverse((obj: THREE.Object3D) => {

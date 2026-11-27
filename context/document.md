@@ -28,7 +28,7 @@ There are no per-project `index.html` copies: the SPA selects a project from `?p
 ## Manifest rules
 
 1. **Every key is `snake_case`, at every depth.**
-2. **A path resolves against the directory of the level that declares it.** Everything under a scene entry (`scene`, every graph ref, every asset) resolves against `<project-id>/<scene-id>/`; only the top-level `plugins` resolves against the document root. Graph refs are the paths on disk ([build.md](build.md)).
+2. **A path resolves against the directory of the level that declares it, and stays in the document.** Everything under a scene entry (`scene`, every graph ref, every asset) resolves against `<project-id>/<scene-id>/`; a project's `work` against `<project-id>/`; only the top-level `plugins` against the document root. Graph refs are the paths on disk ([build.md](build.md)). Every segment of a path is `..` or a name a build writes (`[A-Za-z0-9_-][A-Za-z0-9_.-]*`), and `..` never climbs above the root, so a scene's credits can name `../licenses/…`; a project or scene id is one such name. `parseManifest` checks every id and path as written, never normalizing first, and refuses the document before anything is fetched (`template/src/manifest/path.ts`): a backslash, `%2e%2e`, a tab inside `..` or an empty segment is what a URL parser would read as another origin or a step out of the base path. A splat's `url` and a `collider_url` with a scheme are the only references out of a document: `http(s)`, and fetched only through a host's own `remote` ([frontend.md](frontend.md)).
 3. **A default is a `"default": true` flag on the entry.** At most one sibling may set it (two is a build error, `_check_defaults`), and when none does the first in document order is the default. Projects and policies both work this way.
 4. **A key is omitted when it carries the default**: `in_keys` is absent when it is `["actor"]`, `out_keys` when it is `["action"]`. The reader supplies the default; the writer never emits noise.
 5. **`mdp` is always written on a policy**, even when a scene has one MDP: a reader that never needs a fallback cannot get the fallback wrong.
@@ -38,7 +38,7 @@ There are no per-project `index.html` copies: the SPA selects a project from `?p
 
 ## Ids
 
-Every id is `name2id(name)` (`document/ids.py`): lowercased, every run of characters outside `[a-z0-9]` collapsed to one `_`, ends stripped. That keeps an id safe as a file name and a storage key, and readable in a URL. A name with no ASCII letter or digit sanitizes to an empty id and is refused.
+Every id is `name2id(name)` (`document/ids.py`): lowercased, every run of characters outside `[a-z0-9]` collapsed to one `_`, ends stripped. That keeps an id safe as a file name and a storage key, and readable in a URL. A name with no ASCII letter or digit sanitizes to an empty id and is refused. A traced term or group keeps its own name as its graph's file name (`onnx_ref`), so one outside the viewer's names fails the build.
 
 | id | unique within |
 |---|---|
@@ -75,7 +75,7 @@ Clearing the policy still restores, so a scene with no policy is as compiled. Th
 
 ## `format` and `version`
 
-- **`version`** is the mjswan release that wrote the document. The release workflow sets `_version.py` and the template's `package.json` from one input, so the Python version and the npm engine version are the same string and `https://cdn.jsdelivr.net/npm/mjswan@<version>/dist/mjswan.js` resolves for every released version. A **host** uses `version` to select the engine.
+- **`version`** is the mjswan release that wrote the document. The release workflow sets `_version.py` and the template's `package.json` from one input, so the Python version and the npm engine version are the same string and `https://cdn.jsdelivr.net/npm/mjswan@<version>/dist/mjswan.js` resolves for every released version. A **host** uses `version` to select the engine, so it must be a release's form, `X.Y.Z` or `X.Y.Z-<prerelease>` (`release.yml`'s check, pinned by `version.test.ts`): `parseManifest` refuses any other, and `mjswan/manifest`'s `engineUrl(version)` builds the CDN URL only from one, so a document cannot point a host at another path. `compareVersions` orders releases as semver does, for a host keeping a floor.
 - **`format`** (`DOCUMENT_FORMAT` in `document/manifest.py`) is an integer describing the document's structure, bumped by hand **only** when a released engine that reads the current format would misread the new structure. The **engine** uses it to protect itself: `parseManifest` refuses a document whose `format` exceeds `MAX_DOCUMENT_FORMAT` (`template/src/manifest/index.ts`), naming both and the document's `version`, and refuses a document with no `format` (the pre-manifest layout, a root `assets/config.json`). Every earlier format still parses.
 
 So no document is migrated from one format to the next: each format so far only adds, and a newer engine reads an older document as it is. A breaking change, after which an engine can no longer read an older format, also needs a migration that brings stored documents forward.

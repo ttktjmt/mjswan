@@ -7,7 +7,15 @@ import { Loader } from './components/Loader';
 import { signalReady, signalError } from './core/utils/readySignal';
 import { createEngine } from './engine';
 import type { EnginePlugins, MjswanEngine, MjswanEngineState, SceneInput } from './engine';
-import { parseManifest, sanitizeName, type Catalog, type ProjectCatalog, type ByteSource } from './manifest';
+import {
+  documentUrl,
+  parseManifest,
+  sanitizeName,
+  type ByteSource,
+  type Catalog,
+  type ProjectCatalog,
+} from './manifest';
+import type { Bytes } from './core/utils/bytes';
 import type { MdpHandlers } from './ControlPanel/MdpSection';
 import {
   applyUrlState,
@@ -30,10 +38,9 @@ function paramFlag(param: string): boolean {
   return new URLSearchParams(window.location.search).get(param) !== '0';
 }
 
-/** Lazy fetch of a build-relative asset path against the SPA base URL. */
-function makeByteSource(base: string): ByteSource {
-  return (relPath) => async () => {
-    const url = `${base}${relPath}`.replace(/([^:])\/{2,}/g, '$1/');
+/** Lazy fetch of `url` as bytes. */
+function fetchBytes(url: string | URL): Bytes {
+  return async () => {
     const res = await fetch(url);
     if (!res.ok) {
       throw new Error(`Failed to fetch ${url}: ${res.status}`);
@@ -42,17 +49,22 @@ function makeByteSource(base: string): ByteSource {
   };
 }
 
+/** Lazy fetch of a document's file under the SPA base URL. */
+function makeByteSource(base: string): ByteSource {
+  return (relPath) => fetchBytes(documentUrl(base, relPath));
+}
+
 async function loadCatalog(base: string): Promise<Catalog> {
   const params = new URLSearchParams(window.location.search);
   const override = params.get(MANIFEST_PARAM);
-  const manifestUrl = override
-    ? new URL(override, window.location.href).toString()
-    : `${base}manifest.json`.replace(/([^:])\/{2,}/g, '$1/');
+  const manifestUrl = override ? new URL(override, window.location.href).toString() : documentUrl(base, 'manifest.json');
   const res = await fetch(manifestUrl, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch ${manifestUrl}: ${res.status}`);
   }
-  return parseManifest(await res.text(), makeByteSource(base));
+  // A splat the build names by URL loads for the site's own manifest only: one from
+  // `?manifest=` belongs to whoever wrote the link, who would pick the host it loads from.
+  return parseManifest(await res.text(), makeByteSource(base), override ? {} : { remote: fetchBytes });
 }
 
 /**

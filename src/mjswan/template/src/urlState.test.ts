@@ -74,10 +74,12 @@ describe('pluginModuleUrl', () => {
     expect(pluginModuleUrl('/app/', 'assets/plugins.js', search, page)).toBeNull();
   });
 
-  // Joined as strings, base '/' and a leading slash would form a scheme-relative URL.
-  it('keeps a leading slash on the page origin', () => {
-    expect(pluginModuleUrl('/', '/other.test/p.js', '', page)).toBe('https://example.org/other.test/p.js');
-  });
+  it.each(['demo/s/assets/plugins.js', 'assets/x.js', '/other.test/p.js', 'assets/plugins.js?x', undefined])(
+    'loads no module but the one a build writes (%s)',
+    (path) => {
+      expect(pluginModuleUrl('/app/', path, '?scene=a', page)).toBeNull();
+    },
+  );
 
   it.each(['//other.test/p.js', '/\\other.test/p.js', 'https://other.test/p.js'])(
     'refuses a module on another origin (%s)',

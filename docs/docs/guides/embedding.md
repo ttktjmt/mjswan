@@ -231,15 +231,16 @@ anything itself, so you decide where the bytes come from:
 
 ```ts
 import { createEngine } from 'mjswan';
-import { parseManifest } from 'mjswan/manifest';
+import { documentUrl, parseManifest } from 'mjswan/manifest';
 
+// The parser asks only for paths inside the document; documentUrl keeps each under base.
 const base = 'https://example.com/myapp/';
 const bytes = (path: string) => async () =>
-  (await fetch(new URL(path, base))).arrayBuffer();
+  (await fetch(documentUrl(base, path))).arrayBuffer();
 
 const engine = await createEngine(document.getElementById('viewer')!);
 const catalog = parseManifest(
-  await (await fetch(new URL('manifest.json', base))).text(),
+  await (await fetch(documentUrl(base, 'manifest.json'))).text(),
   bytes,
 );
 

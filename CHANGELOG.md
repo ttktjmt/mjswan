@@ -529,6 +529,17 @@ shortcuts.
 
 ### Changed
 
+- **`parseManifest(manifest, source, { remote })` fetches a splat or collider named by URL
+  only through `remote`** (engine API). Without it, such a splat is left out of the
+  catalog and such a collider dropped. A host showing its own build's URL splats passes
+  `remote: (url) => async () => (await fetch(url)).arrayBuffer()`. The parser also
+  refuses a document whose ids or paths leave it, whose `version` is not a release's, or
+  whose skin or collider names a file outside itself, and `Catalog.pluginsPath` is set
+  only for `uses_custom_js: true`. A host builds its byte source's URLs with the new
+  `documentUrl(base, path)`. Every document a build writes passes.
+- **A traced term or group whose name is not a file name fails the build.** Its name
+  names its graph's file, and the viewer now reads only letters, digits, `_`, `-` and
+  `.` (not first) in one: rename a term called `a/b` or `foo bar`.
 - **A project cannot take the id `assets`, the engine's directory in an app.** A project
   named "Assets" is renamed "Assets_1", id `assets_1`, with a warning, as a second project
   of one name is: its files sat among the engine's, so `save_document` packed the engine
@@ -1592,6 +1603,24 @@ shortcuts.
 
 ### Security
 
+- **The viewer fetches nothing from outside the document it shows.** `parseManifest`
+  joined a document's ids and paths onto the base URL as written, so a project id
+  `\evil.test` made the bundled app on a site hosted at its root fetch the scene from
+  `https://evil.test/...`, a `%2e%2e` or a tab inside `..` left the base path, and a
+  splat `url` or absolute `collider_url` was fetched as given: a published document or a
+  `?manifest=` link could have every viewer request files from a host its author picked,
+  and swap them after publishing. Every id and path is now checked when the manifest is
+  parsed, each segment a name a build writes or `..` never above the root, and the
+  document refused before anything is fetched. A splat or collider named by URL is fetched only through the
+  `remote` a host passes: the bundled app passes one for its own build's manifest, none
+  for a `?manifest=` link. Skins and colliders are parsed with every external buffer and
+  image refused, before any request. The app imports a plugins module only for
+  `uses_custom_js: true` and only from `assets/plugins.js`.
+- **A document's `version` must be a release's.** A host picks an engine by it, and the
+  "newer format" error quoted it. `parseManifest` refuses a `version` other than `X.Y.Z`
+  or `X.Y.Z-<prerelease>`, and `mjswan/manifest` adds `engineUrl(version)`,
+  `compareVersions` and `isReleaseVersion`, so a host builds an engine URL from a
+  release and nothing else.
 - **A `.swn` document carries data, never code.** `mjswan serve` and
   `MjswanApp.from_document` refused a document with `uses_custom_js: true` but unpacked
   every other entry and served it beside the engine, and the viewer imports the

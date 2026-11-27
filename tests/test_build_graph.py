@@ -19,6 +19,18 @@ class TestOnnxRef:
         # them.
         assert onnx_ref("obs", "policy", "walk") != onnx_ref("obs", "policy", "crawl")
 
+    @pytest.mark.parametrize(
+        "name", ["a/b", "..", ".hidden", "a b", "a\\b", "%2e%2e", "", "jöint"]
+    )
+    def test_a_name_the_viewer_cannot_read_as_a_file_is_refused(self, name):
+        """The viewer refuses a document naming such a file, so the build does first."""
+        with pytest.raises(ValueError, match="Rename it"):
+            onnx_ref("obs", name, "mdp/mdp_0")
+
+    @pytest.mark.parametrize("name", ["base_lin_vel", "Track-Pose", "joint_pos.v2"])
+    def test_a_term_name_is_its_files(self, name):
+        assert onnx_ref("obs", name) == f"obs/{name}.onnx"
+
 
 class TestWriteOnnx:
     def test_writes_the_bytes_at_the_ref(self, tmp_path):

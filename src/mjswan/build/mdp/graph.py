@@ -5,7 +5,12 @@ The ref the manifest carries *is* the path on disk, relative to the scene direct
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+#: A name the viewer takes as a path segment (``template/src/manifest/path.ts``): letters,
+#: digits, ``_`` and ``-``, then ``.`` too.
+_FILE_NAME = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.-]*")
 
 
 def onnx_ref(kind: str, name: str, scope: str | None = None) -> str:
@@ -13,7 +18,13 @@ def onnx_ref(kind: str, name: str, scope: str | None = None) -> str:
 
     *scope* is the owning MDP's directory, ``mdp/<mdp-id>``: term and group names are
     unique within an MDP but not within a scene, so unscoped, two MDPs would collide.
+    The name becomes the file's, so it must be one the viewer reads as a file name.
     """
+    if not _FILE_NAME.fullmatch(name):
+        raise ValueError(
+            f"{kind} term or group {name!r} names its graph's file, and the viewer reads "
+            "only letters, digits, '_', '-' and '.' (not first) in one. Rename it."
+        )
     ref = f"{kind}/{name}.onnx"
     return ref if scope is None else f"{scope}/{ref}"
 
