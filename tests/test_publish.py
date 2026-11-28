@@ -234,7 +234,7 @@ class TestHttpTransportUserAgent:
             seen.append(req.get_header("User-agent"))
             return _Resp()
 
-        monkeypatch.setattr("mjswan.cloud.publish.urllib.request.urlopen", fake_urlopen)
+        monkeypatch.setattr("mjswan.cloud.publish.open_url", fake_urlopen)
         t = HttpTransport()
         t.post_json("https://api.mjswan.com/x", {}, "tok")
         t.put_bytes("https://r2.example.com/x", b"data", "application/json")

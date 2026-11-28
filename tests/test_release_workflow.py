@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,8 @@ from mjswan.build.frontend import ClientBuilder
 
 yaml = pytest.importorskip("yaml")
 
-WORKFLOWS = Path(__file__).resolve().parents[1] / ".github/workflows"
+ROOT = Path(__file__).resolve().parents[1]
+WORKFLOWS = ROOT / ".github/workflows"
 WORKFLOW = WORKFLOWS / "release.yml"
 PUBLISH_PYPI = WORKFLOWS / "publish-pypi.yml"
 PUBLISH_NPM = WORKFLOWS / "publish-npm.yml"
@@ -128,6 +130,29 @@ def test_every_action_is_pinned_to_a_commit():
                         name,
                         ref,
                     )
+
+
+def test_every_uv_install_is_checked_against_the_pinned_release():
+    """setup-uv verifies only the uv versions it knows and installs any other unchecked,
+    so each step names the version `required-version` pins and its `checksum`: the
+    sha256 of that release's `uv-x86_64-unknown-linux-gnu.tar.gz` (ubuntu-latest)."""
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    pinned = pyproject["tool"]["uv"]["required-version"]
+    assert pinned.startswith("=="), "a checksum needs one exact uv version"
+    steps = [
+        (path.name, job_name, step.get("with") or {})
+        for path in sorted(WORKFLOWS.glob("*.yml"))
+        for job_name, job in _jobs(path).items()
+        for step in job.get("steps", [])
+        if "setup-uv" in step.get("uses", "")
+    ]
+
+    assert steps
+    for where in steps:
+        inputs = where[2]
+        assert inputs.get("version") == pinned.removeprefix("=="), where[:2]
+        assert re.fullmatch(r"[0-9a-f]{64}", inputs.get("checksum", "")), where[:2]
+    assert len({inputs["checksum"] for _, _, inputs in steps}) == 1
 
 
 def test_pypi_release_builds_the_spa_alone():

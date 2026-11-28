@@ -2,6 +2,7 @@
 
 import { Inflate } from 'fflate';
 import type { MainModule } from 'mujoco';
+import type { ModelFormat } from '../scene/scene';
 
 /**
  * What a `.mjz` may hold, checked as it unpacks. A host that renders archives it did not
@@ -15,6 +16,16 @@ export interface ArchiveLimits {
   maxInflatedBytes: number;
   /** Extensions a file's name may end in, lowercase with the dot (`'.xml'`). */
   extensions: readonly string[];
+}
+
+/**
+ * Refuse a `.mjb` while `limits` are set: they hold only what a `.mjz` unpacks to, and a
+ * `.mjb` would reach MuJoCo's binary loader unchecked.
+ */
+export function checkModelFormat(format: ModelFormat, limits: ArchiveLimits | undefined): void {
+  if (limits && format === 'mjb') {
+    throw new Error('The scene is a .mjb, which this host does not open: it opens .mjz scenes only.');
+  }
 }
 
 /** Where a model's files are written for MuJoCo to open. */

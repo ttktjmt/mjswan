@@ -128,7 +128,7 @@ Compile and save the application.
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `output_dir` | `str \| Path \| None` | `None` | Output directory. Defaults to `dist/` next to the calling script. Relative paths are resolved against the caller's directory. |
+| `output_dir` | `str \| Path \| None` | `None` | Output directory. Defaults to `dist/` next to the calling script. Relative paths are resolved against the caller's directory. It must be missing, empty or a previous build (a directory with mjswan's `manifest.json`), which is replaced once the new build is complete, so a failed build leaves the previous one; any other directory raises `ValueError` and is left as it is. |
 
 **Returns:** `MjswanApp`
 

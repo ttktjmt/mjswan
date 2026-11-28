@@ -121,8 +121,8 @@ class TestAuthTransportUserAgent:
                 return False
 
         monkeypatch.setattr(
-            auth.urllib.request,
-            "urlopen",
+            auth,
+            "open_url",
             lambda req: (seen.append(req.get_header("User-agent")), _Resp())[1],
         )
         t = AuthTransport()

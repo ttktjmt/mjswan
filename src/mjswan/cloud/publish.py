@@ -52,7 +52,13 @@ from ..license import (
 )
 from ..license.vrm import VrmLicense, describe, vrm_license
 from .blob import cut, sha256
-from .transport import USER_AGENT
+from .transport import (
+    REDIRECT_CODES,
+    USER_AGENT,
+    open_url,
+    refused_redirect,
+    require_token_safe,
+)
 
 # ── Client-side constraints (mirror the server's; fail fast and locally) ──────
 
@@ -99,9 +105,13 @@ def resolve_api_base(api_base: str | None) -> str:
     Order: explicit ``api_base`` → ``$MJSWAN_API_BASE`` → :data:`DEFAULT_API_BASE`
     (the mjswan Cloud Production API). The env var lets a publish target a local
     ``wrangler dev`` (``http://localhost:8787``) or the RC API (``api-rc.mjswan.com``).
+    Anything but https, or http on a loopback host, raises :class:`PublishError`.
     """
-    return (api_base or os.environ.get(API_BASE_ENV_VAR) or DEFAULT_API_BASE).rstrip(
+    base = (api_base or os.environ.get(API_BASE_ENV_VAR) or DEFAULT_API_BASE).rstrip(
         "/"
+    )
+    return require_token_safe(
+        base, f"The Cloud API base URL (${API_BASE_ENV_VAR})", PublishError
     )
 
 
@@ -190,9 +200,11 @@ class HttpTransport:
     @staticmethod
     def _send(req: urllib.request.Request) -> HttpResponse:
         try:
-            with urllib.request.urlopen(req) as resp:  # noqa: S310 (trusted base URL)
+            with open_url(req) as resp:
                 return HttpResponse(status=resp.status, body=resp.read())
         except urllib.error.HTTPError as exc:
+            if exc.code in REDIRECT_CODES:
+                raise PublishError(refused_redirect(req, exc)) from None
             # 4xx/5xx — read the structured error body instead of raising.
             return HttpResponse(status=exc.code, body=exc.read())
         except urllib.error.URLError as exc:
@@ -862,8 +874,8 @@ def _parse_json(resp: HttpResponse, step: str) -> dict:
     """Parse a successful response body as JSON, or raise an actionable error.
 
     A 2xx whose body is *not* JSON usually means the request was intercepted
-    before it reached the API — most often an access proxy's login/redirect page
-    (e.g. Cloudflare Access), or ``$MJSWAN_API_BASE`` pointing at the wrong host.
+    before it reached the API — most often an access proxy's login page (e.g.
+    Cloudflare Access), or ``$MJSWAN_API_BASE`` pointing at the wrong host.
     Surface that instead of a raw ``JSONDecodeError``.
     """
     try:
@@ -873,7 +885,7 @@ def _parse_json(resp: HttpResponse, step: str) -> dict:
         raise PublishError(
             f"{step}: expected a JSON response but got non-JSON (HTTP "
             f"{resp.status}). The request was likely intercepted — e.g. a "
-            "login/redirect page from an access proxy (Cloudflare Access), or "
+            "login page from an access proxy (Cloudflare Access), or "
             "$MJSWAN_API_BASE points somewhere that isn't the mjswan Cloud API. "
             f"First bytes: {snippet!r}"
         )

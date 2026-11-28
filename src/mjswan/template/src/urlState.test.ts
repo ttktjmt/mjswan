@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyUrlState, pluginModuleUrl, type UrlState } from './urlState';
+import { applyUrlState, manifestOverrideUrl, pluginModuleUrl, type UrlState } from './urlState';
 
 // The URL carries ids, not display names.
 const SELECTED: UrlState = {
@@ -57,6 +57,32 @@ describe('applyUrlState', () => {
     expect(applyUrlState('?panel=0&debug=0', SELECTED)).toBe(
       'project=demo_two&scene=humanoid&policy=walk',
     );
+  });
+});
+
+describe('manifestOverrideUrl', () => {
+  const page = 'https://example.org/app/?scene=a';
+
+  it('names no manifest without the parameter, or with it empty', () => {
+    expect(manifestOverrideUrl('?scene=a', page)).toBeNull();
+    expect(manifestOverrideUrl('?manifest=', page)).toBeNull();
+  });
+
+  it("resolves a manifest on the page's origin against the page", () => {
+    expect(manifestOverrideUrl('?manifest=other%2Fmanifest.json', page)).toBe('https://example.org/app/other/manifest.json');
+    expect(manifestOverrideUrl('?manifest=%2Fother%2Fmanifest.json', page)).toBe('https://example.org/other/manifest.json');
+  });
+
+  // Its files would load from this page's base, under another site's names and links.
+  it.each([
+    'https://other.test/manifest.json',
+    '//other.test/manifest.json',
+    'http://example.org/app/manifest.json',
+    'https://example.org:8443/app/manifest.json',
+    'data:application/json,{}',
+  ])('refuses a manifest on another origin (%s)', (value) => {
+    const search = `?manifest=${encodeURIComponent(value)}`;
+    expect(() => manifestOverrideUrl(search, page)).toThrow('which this page does not open');
   });
 });
 

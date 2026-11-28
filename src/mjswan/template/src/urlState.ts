@@ -39,6 +39,22 @@ export function applyUrlState(search: string, state: UrlState): string {
   return params.toString();
 }
 
+/**
+ * The manifest a `?manifest=` link names, resolved against the page, or null without one.
+ * One on another origin is refused: the document's files load from the page's own base
+ * wherever its manifest is, so another site's could only put its text on this one's files.
+ */
+export function manifestOverrideUrl(search: string, page: string): string | null {
+  const value = new URLSearchParams(search).get(MANIFEST_PARAM);
+  if (!value) return null;
+  const url = new URL(value, page);
+  const origin = new URL(page).origin;
+  if (url.origin !== origin) {
+    throw new Error(`?manifest= names a manifest outside ${origin}, which this page does not open.`);
+  }
+  return url.href;
+}
+
 /** Where a build writes the custom-TS plugins module, beside the engine. */
 export const PLUGINS_PATH = 'assets/plugins.js';
 

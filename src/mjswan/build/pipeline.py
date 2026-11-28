@@ -21,6 +21,8 @@ Output structure::
 from __future__ import annotations
 
 import gc
+import os
+import secrets
 import shutil
 import warnings
 from pathlib import Path
@@ -36,6 +38,7 @@ from rich.progress import (
     TextColumn,
 )
 
+from ..document import MANIFEST_NAME, read_manifest
 from ..envs.mdp.actions.actions import (
     MuscleActivationActionCfg,
     validate_muscle_actuators,
@@ -77,16 +80,92 @@ def write_app(
 ) -> None:
     """Write ``projects`` as a complete web application at ``output_path``.
 
-    ``output_path`` is wiped first. ``base_path``, ``gtm_id``, ``mt`` and ``debug`` are
-    the frontend build's options (see :meth:`.frontend.ClientBuilder.build`);
+    ``output_path`` must be missing, empty or a previous build, which is replaced; any
+    other directory is refused before anything is deleted. The app is written to a
+    directory beside it and moved into place once complete, so a build that fails
+    leaves the previous one. ``base_path``, ``gtm_id``, ``mt`` and ``debug`` are the
+    frontend build's options (see :meth:`.frontend.ClientBuilder.build`);
     ``build_frontend`` forces or skips the Node build.
     """
     _check_defaults(projects)
-    if output_path.exists():
-        shutil.rmtree(output_path)
+    output_path = Path(os.path.abspath(output_path))
+    _check_output(output_path)
+    staging = output_path.with_name(f".{output_path.name}.{secrets.token_hex(4)}.tmp")
+    staging.mkdir(parents=True)
+    try:
+        _write_app(
+            projects,
+            staging,
+            base_path=base_path,
+            gtm_id=gtm_id,
+            mt=mt,
+            debug=debug,
+            build_frontend=build_frontend,
+        )
+        _swap_in(staging, output_path)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
 
-    output_path.mkdir(parents=True, exist_ok=True)
+    print(f"✓ Saved mjswan application to: {output_path}")
 
+
+def _check_output(output_path: Path) -> None:
+    """Refuse an output path ``write_app`` may not replace: a link, a file, or a
+    directory holding anything but a previous build. ``build(".")`` would otherwise
+    delete the working directory."""
+    if output_path.is_symlink():
+        raise ValueError(
+            f"{output_path} is a symbolic link. Build into the directory it names."
+        )
+    if not output_path.exists():
+        return
+    if not output_path.is_dir():
+        raise ValueError(f"{output_path} is a file, not a directory to build into.")
+    if any(output_path.iterdir()) and not _is_build(output_path):
+        raise ValueError(
+            f"{output_path} is not empty and holds no mjswan build ({MANIFEST_NAME}), "
+            "so build() will not delete it. Build into a new or empty directory, or "
+            "delete this one first."
+        )
+
+
+def _is_build(path: Path) -> bool:
+    """Whether *path* holds a build: a ``manifest.json`` that lists projects."""
+    try:
+        manifest = read_manifest(path)
+    except (OSError, ValueError):
+        return False
+    return isinstance(manifest, dict) and isinstance(manifest.get("projects"), list)
+
+
+def _swap_in(staging: Path, output_path: Path) -> None:
+    """Move *staging* to *output_path*, the previous build out of the way first and
+    deleted once the new one is in place."""
+    old = staging.with_name(f"{staging.name}.old") if output_path.exists() else None
+    if old is not None:
+        output_path.rename(old)
+    try:
+        staging.rename(output_path)
+    except BaseException:
+        if old is not None:
+            old.rename(output_path)
+        raise
+    if old is not None:
+        shutil.rmtree(old, ignore_errors=True)
+
+
+def _write_app(
+    projects: list[ProjectConfig],
+    output_path: Path,
+    *,
+    base_path: str,
+    gtm_id: str | None,
+    mt: bool,
+    debug: bool,
+    build_frontend: bool | None,
+) -> None:
+    """Write every file of the app into the empty directory ``output_path``."""
     template_dir = TEMPLATE_DIR
     client_builder: ClientBuilder | None = None
     if template_dir.exists():
@@ -285,8 +364,6 @@ def write_app(
             steps.close()
 
     write_manifest(output_path, projects, scene_entries)
-
-    print(f"✓ Saved mjswan application to: {output_path}")
 
 
 def write_mt_headers(output_path: Path) -> None:

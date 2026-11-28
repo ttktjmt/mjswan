@@ -48,7 +48,12 @@ The build is written to a temporary directory and discarded when the server exit
 mjswan serve <dist-dir | document.swn> [--port 8080] [--host localhost] [--no-open] [--height 600]
 ```
 
-Serve a pre-built `dist/` directory with the COOP/COEP headers set. Use this to re-launch an app you previously built with `builder.build()`.
+Serve a pre-built `dist/` directory with the COOP/COEP headers set. Use this to re-launch an app you previously built with `builder.build()`. A directory with no `manifest.json` is refused.
+
+Bound to a loopback host (the default), the server answers only requests addressed to
+`localhost`, `127.0.0.1` or `[::1]`, on any port, so a forwarded port works. A page elsewhere
+on the web cannot read the files by pointing its own domain at your machine (DNS rebinding).
+Bound to another address, such as `--host 0.0.0.0`, it answers any request.
 
 A `.swn` works too. A document holds the simulation but no engine, so mjswan expands it into a
 temporary directory, lays the packaged engine over it and serves that; the directory goes away when
@@ -153,7 +158,7 @@ of the engine. A `.swn` uploads exactly the file set its directory would.
 | `--description` | — | Optional description. |
 | `--tag` | — | Tag to attach. Repeatable. |
 | `--token` | `$MJSWAN_TOKEN` | Access token, for CI. Skips the interactive login. |
-| `--api-base` | `$MJSWAN_API_BASE`, then `https://api.mjswan.com` | Cloud API base URL. |
+| `--api-base` | `$MJSWAN_API_BASE`, then `https://api.mjswan.com` | Cloud API base URL: https, or http on a loopback host for a local server. |
 
 If you are not signed in and no token is supplied, the browser login runs first
 automatically. Builds that use custom-TS MDP terms are rejected: Cloud cannot

@@ -21,7 +21,7 @@ import {
   type GraphicsInput,
   type GraphicsSettings,
 } from '../scene/graphics';
-import { loadMjzFile, resetWorking, WORKING, type ArchiveLimits } from '../utils/mjzLoader';
+import { checkModelFormat, loadMjzFile, resetWorking, WORKING, type ArchiveLimits } from '../utils/mjzLoader';
 import { type Bytes } from '../utils/bytes';
 import type { EnginePlugins } from '../plugins';
 import type { SplatTransform, SplatMesh } from '../scene/splat';
@@ -697,6 +697,8 @@ export class mjswanRuntime {
   }
 
   async loadEnvironment(scene: ResolvedScene): Promise<void> {
+    // Before anything is torn down, so a refused scene leaves the current one running.
+    checkModelFormat(scene.modelFormat ?? 'mjz', this.archive);
     // Before the graph swap below, or a running term steps a session it just released.
     await this.stop();
     this.scenePlugins = scene.plugins ?? {};

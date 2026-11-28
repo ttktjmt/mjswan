@@ -539,6 +539,11 @@ shortcuts.
 - **The build warns about files packed from outside a scene's model folder**, once per
   scene (`add_scene_mjlab` checks each entity against its own folder); `asset_root=`
   silences it. A scene MuJoCo cannot compile stops the build with a `ValueError` naming it.
+- **`build()` builds only into a missing or empty directory or over a previous build.**
+  Any other directory raises `ValueError` and is left as it is: delete it, or build
+  elsewhere. `mjswan serve` refuses a directory with no `manifest.json`, and
+  `mjswan publish` and `mjswan login` refuse an `MJSWAN_API_BASE` or
+  `MJSWAN_SUPABASE_URL` that is not https or a loopback host.
 
 - **Pull, Push and Grab stand aside while the simulation is paused.** Each acts through
   the physics step, so a drag on a paused simulation drew an arrow and moved nothing. While
@@ -1588,6 +1593,36 @@ shortcuts.
 
 ### Security
 
+- **`mjswan publish` and `mjswan login` follow no redirect, and send a token only over
+  https.** Both opened requests with urllib's default handler, which copies the
+  `Authorization` header to wherever a 30x points, whatever its host or scheme, so a
+  redirect from the API or Supabase, or an `MJSWAN_API_BASE` / `MJSWAN_SUPABASE_URL` set
+  to a host that redirects, handed the access token to another origin. A redirect is now
+  an error naming its target, and either base URL must be https, or http on
+  `localhost`, `127.0.0.1` or `::1` for a local server.
+- **`mjswan serve` answers only requests addressed to it.** It bound localhost but served
+  whatever `Host` a request named, so a page that pointed its own domain at 127.0.0.1
+  (DNS rebinding) could read the served tree. Bound to a loopback host, the server now
+  answers 403 unless `Host` names `localhost`, `127.0.0.1` or `[::1]`, on any port, so a
+  forwarded port still works; bound elsewhere, Colab's included, it answers any request.
+  `serve` also refuses a directory with no `manifest.json`.
+- **`build()` deletes only a previous build.** It ran `shutil.rmtree` on whatever
+  output directory it was given, so `build(".")` or `build(Path.home())` deleted that
+  directory. It now refuses, before deleting anything, a link, a file, or a directory
+  holding anything but a previous build (one with mjswan's `manifest.json`). The app is
+  written beside the output and moved into place once complete, so a failed build
+  leaves the previous one where it was.
+- **CI checks uv's checksum.** `setup-uv` 7.6.0 knows checksums up to uv 0.10.10, so it
+  installed the pinned 0.13.9 unverified, with a debug message. Every workflow now passes
+  the pinned version and its checksum, and a test holds each step to `required-version`.
+- **An engine with `archive` limits refuses a `.mjb` scene.** The limits checked only what
+  a `.mjz` unpacks to, so a host rendering documents other people publish still handed a
+  `.mjb` scene's bytes to MuJoCo's binary loader. `loadScene` now rejects a `.mjb` while
+  `archive` is set, before the current scene is torn down.
+- **The app opens a `?manifest=` link's manifest only on its own origin.** It fetched one
+  from any site, and while the document's files still came from the app's own base, its
+  names, credits, license text and links showed on the host's origin, the demo's
+  included. A manifest on another origin is now refused before it is fetched.
 - **The viewer fetches nothing from outside the document it shows.** A document's ids and
   paths could make the bundled app fetch from another host or leave the base path, and a
   splat `url` or absolute `collider_url` was fetched as given. `parseManifest` now checks

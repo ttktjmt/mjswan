@@ -254,6 +254,9 @@ class Builder:
         Args:
             output_dir: Optional directory to save the application files.
                        If None, defaults to 'dist' in the caller's directory.
+                       It must be missing, empty or a previous build, which is
+                       replaced once the new one is complete; any other
+                       directory raises ``ValueError`` and is left as it is.
 
         Returns:
             MjswanApp instance ready to be launched.

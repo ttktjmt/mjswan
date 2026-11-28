@@ -8,7 +8,9 @@ See ``context/document.md``.
 
 from __future__ import annotations
 
+import ipaddress
 import re
+import urllib.parse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,9 +20,40 @@ if TYPE_CHECKING:
 #: A Vite bundle file, named by its content hash (`plugins.js` beside it is not).
 _HASHED_ASSET = re.compile(r"/assets/[^/]+-[\w-]{8}\.\w+")
 
+#: What a server bound to loopback answers to, whichever of them it was bound with.
+_LOOPBACK_NAMES = frozenset({"localhost", "127.0.0.1", "::1"})
 
-def _serving_handler(app_dir: Path) -> type:
-    """The request handler ``launch`` serves ``app_dir`` with."""
+
+def _hosts_answered(bind_host: str) -> frozenset[str] | None:
+    """The ``Host`` names a server bound to *bind_host* answers, or ``None`` for any.
+
+    Bound to loopback, a request naming another host comes from a page that pointed its
+    own domain here (DNS rebinding). Bound elsewhere, Colab's server included, the server
+    was opened to other machines on purpose.
+    """
+    try:
+        loopback = (
+            bind_host.lower() == "localhost"
+            or ipaddress.ip_address(bind_host).is_loopback
+        )
+    except ValueError:
+        loopback = False
+    return _LOOPBACK_NAMES | {bind_host.lower()} if loopback else None
+
+
+def _host_name(header: str | None) -> str | None:
+    """The host a ``Host`` header names, lowercased and without its port."""
+    if not header:
+        return None
+    try:
+        return urllib.parse.urlsplit(f"//{header}").hostname
+    except ValueError:
+        return None
+
+
+def _serving_handler(app_dir: Path, hosts: frozenset[str] | None = None) -> type:
+    """The request handler ``launch`` serves ``app_dir`` with, answering only requests
+    addressed to one of ``hosts`` when given."""
     import http.server
     import os
     from http import HTTPStatus
@@ -35,6 +68,10 @@ def _serving_handler(app_dir: Path) -> type:
             super().__init__(*args, directory=directory, **kwargs)
 
         def send_head(self):
+            # The port is not checked: a port forwarded over SSH arrives under another.
+            if hosts is not None and _host_name(self.headers.get("Host")) not in hosts:
+                self.send_error(HTTPStatus.FORBIDDEN, "Unknown host")
+                return None
             # translate_path drops `..` but open() follows links, also for the index page
             # the stdlib picks for a directory (both names: index_pages is 3.12+).
             path = self.translate_path(self.path)
@@ -91,10 +128,11 @@ class MjswanApp:
     def from_document(cls, source: str | Path) -> "MjswanApp":
         """The app for a built directory, or for a ``.swn`` document.
 
-        A directory is already an app and is served where it sits. A document carries no
-        engine, so it is unpacked into a temporary directory (removed at exit) with the
-        packaged engine laid over it, built first if no matching SPA is cached. One that
-        asks for a plugins module, or holds a file no build writes, is refused first.
+        A directory is already an app and is served where it sits, if it holds a
+        ``manifest.json``. A document carries no engine, so it is unpacked into a
+        temporary directory (removed at exit) with the packaged engine laid over it, built
+        first if no matching SPA is cached. One that asks for a plugins module, or holds a
+        file no build writes, is refused first.
         """
         import atexit
         import shutil
@@ -102,6 +140,7 @@ class MjswanApp:
 
         from .build.frontend import TEMPLATE_DIR, ClientBuilder, install_spa
         from .document import (
+            MANIFEST_NAME,
             DocumentError,
             author_code,
             is_document,
@@ -113,6 +152,12 @@ class MjswanApp:
         if not source.exists():
             raise FileNotFoundError(f"No such app or document: {source}")
         if not is_document(source):
+            if not (source / MANIFEST_NAME).is_file():
+                raise DocumentError(
+                    f"{source} holds no {MANIFEST_NAME}, so it is not a built mjswan app "
+                    "and is not served. Give the directory builder.build() wrote, or a "
+                    ".swn."
+                )
             return cls(source.resolve())
 
         # A custom-TS module ships with the engine; one a document named would run here.
@@ -206,7 +251,8 @@ class MjswanApp:
 
         Automatically detects Google Colab and displays the viewer as an
         inline iframe. Outside Colab, starts a blocking server and optionally
-        opens a browser tab.
+        opens a browser tab. Bound to a loopback host, the server answers only
+        requests addressed to ``localhost``, ``127.0.0.1`` or ``[::1]``.
 
         Args:
             host: Host to bind the server to (ignored in Colab).
@@ -219,8 +265,6 @@ class MjswanApp:
 
         import socket
         import socketserver
-
-        handler = _serving_handler(self._app_dir)
 
         def _find_available_port(
             bind_host: str, start_port: int, max_tries: int = 1000
@@ -250,6 +294,8 @@ class MjswanApp:
 
             import threading
 
+            handler = _serving_handler(self._app_dir, _hosts_answered(bind_host))
+
             def _serve():
                 with _ReusableTCPServer((bind_host, port), handler) as httpd:
                     httpd.serve_forever()
@@ -274,6 +320,7 @@ class MjswanApp:
         if open_browser:
             webbrowser.open(f"http://{host}:{port}")
 
+        handler = _serving_handler(self._app_dir, _hosts_answered(host))
         try:
             with _ReusableTCPServer((host, port), handler) as httpd:
                 httpd.serve_forever()

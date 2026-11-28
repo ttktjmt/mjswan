@@ -42,7 +42,13 @@ from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-from .transport import USER_AGENT
+from .transport import (
+    REDIRECT_CODES,
+    USER_AGENT,
+    open_url,
+    refused_redirect,
+    require_token_safe,
+)
 
 # ── Supabase configuration (public; overridable via env) ──────────────────────
 
@@ -69,7 +75,10 @@ LOGIN_TIMEOUT_SECONDS: int = 300
 
 
 def supabase_url() -> str:
-    return os.environ.get(SUPABASE_URL_ENV_VAR, DEFAULT_SUPABASE_URL).rstrip("/")
+    url = os.environ.get(SUPABASE_URL_ENV_VAR, DEFAULT_SUPABASE_URL).rstrip("/")
+    return require_token_safe(
+        url, f"The Supabase URL (${SUPABASE_URL_ENV_VAR})", AuthError
+    )
 
 
 def supabase_publishable_key() -> str:
@@ -253,9 +262,11 @@ class AuthTransport:
     @staticmethod
     def _send(req: urllib.request.Request) -> _Response:
         try:
-            with urllib.request.urlopen(req) as resp:  # noqa: S310 (trusted base)
+            with open_url(req) as resp:
                 return _Response(status=resp.status, body=resp.read())
         except urllib.error.HTTPError as exc:
+            if exc.code in REDIRECT_CODES:
+                raise AuthError(refused_redirect(req, exc)) from None
             return _Response(status=exc.code, body=exc.read())
         except urllib.error.URLError as exc:
             raise AuthError(f"Network error contacting Supabase: {exc.reason}")
