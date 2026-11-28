@@ -1612,6 +1612,9 @@ shortcuts.
   holding anything but a previous build (one with mjswan's `manifest.json`). The app is
   written beside the output and moved into place once complete, so a failed build
   leaves the previous one where it was.
+- **CI checks uv's checksum.** `setup-uv` 7.6.0 knows checksums up to uv 0.10.10, so it
+  installed the pinned 0.13.9 unverified, with a debug message. Every workflow now passes
+  the pinned version and its checksum, and a test holds each step to `required-version`.
 - **An engine with `archive` limits refuses a `.mjb` scene.** The limits checked only what
   a `.mjz` unpacks to, so a host rendering documents other people publish still handed a
   `.mjb` scene's bytes to MuJoCo's binary loader. `loadScene` now rejects a `.mjb` while
