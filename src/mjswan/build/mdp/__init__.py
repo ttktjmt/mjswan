@@ -14,7 +14,7 @@ Called from :mod:`mjswan.build.manifest` once per MDP.
 from __future__ import annotations
 
 from .action import serialize_actions
-from .actuator import serialize_actuators
+from .actuator import serialize_actuators, warn_ignored_gains
 from .command import (
     command_config,
     command_widths,
@@ -58,6 +58,7 @@ __all__ = [
     "serialize_termination",
     "serialize_terminations",
     "stamp_provenance",
+    "warn_ignored_gains",
     "write_command_artifact",
     "write_onnx",
 ]

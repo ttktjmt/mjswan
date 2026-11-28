@@ -40,6 +40,7 @@ from .mdp import (
     serialize_events,
     serialize_observation_group,
     serialize_terminations,
+    warn_ignored_gains,
 )
 from .skin import skin_entry
 
@@ -223,6 +224,7 @@ def mdp_entry(
             out_dir=scene_dir,
             scope=scope,
         )
+        warn_ignored_gains(entry.get("actions") or {}, entry["actuators"])
     if mdp.events:
         events = serialize_events(
             mdp.events,

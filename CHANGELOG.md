@@ -21,10 +21,10 @@ shortcuts.
   and its friction) to a graph per MDP, and the browser evaluates it every physics
   substep, synchronously, on the joints' state and the targets the action terms set, as
   mjlab's entity does. The MDP entry's `actuators` names each graph and the joints its
-  columns follow. A law has to be elementwise and stateless: the build refuses one that
-  traces to another operator or keeps state between calls (`LearnedMlpActuatorCfg`'s
-  network and history), naming `mjswan.register_actuator`, which traces a law you write in
-  its place.
+  columns follow. A law has to be elementwise, float32 and stateless: the build refuses
+  one that traces to another operator or to integer or double values, or keeps state
+  between calls (`LearnedMlpActuatorCfg`'s network and history, or an actuator's own
+  `update`), naming `mjswan.register_actuator`, which traces a law you write in its place.
 
 - **`asset_root=` on `add_scene` and `add_scene_mjlab` keeps a scene's files to the
   folders you choose**, for a model you do not trust: any other file must be in
@@ -543,7 +543,9 @@ shortcuts.
   joints toward zero, a joint no term drives is held toward zero, and a target stays until
   the episode's reset zeroes it, each as in mjlab. The build no longer copies an
   actuator's gains onto the term, nor warns that a DC motor's curve or an
-  `IdealPdActuatorCfg` subclass's own fields do not run.
+  `IdealPdActuatorCfg` subclass's own fields do not run. A term's own `stiffness` and
+  `damping` no longer run on a joint such a law drives, where they used to win over the
+  actuator's, and the build warns that they are ignored.
 - **`parseManifest(manifest, source, { remote })`** (engine API): a splat or collider
   named by URL is fetched only through `remote`, and left out without it. The parser
   refuses ids, paths and `version` values no build writes, and skins or colliders naming

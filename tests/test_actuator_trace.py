@@ -4,6 +4,7 @@ physics substep: what traces, what is refused and why, and the MDP's ``actuators
 from __future__ import annotations
 
 import json
+import warnings
 
 import numpy as np
 import pytest
@@ -15,7 +16,10 @@ import mujoco  # noqa: E402
 import onnx  # noqa: E402
 from onnx.reference import ReferenceEvaluator  # noqa: E402
 
-from mjswan.build.mdp.actuator import serialize_actuators  # noqa: E402
+from mjswan.build.mdp.actuator import (  # noqa: E402
+    serialize_actuators,
+    warn_ignored_gains,
+)
 from mjswan.compile.actuator import (  # noqa: E402
     INPUTS,
     OUTPUT,
@@ -132,6 +136,102 @@ def test_a_law_that_does_not_export_is_refused(env, actuator):
         trace_actuator(
             built, len(targets), what="Actuator", compute=lambda a, cmd: net(cmd.vel)
         )
+
+
+def test_an_actuator_with_its_own_update_is_refused(env, actuator):
+    # mjlab calls `update` every physics step and the check never does, so the state it
+    # advances would be frozen into the graph.
+    from dataclasses import dataclass
+
+    from mjlab.actuator.pd_actuator import IdealPdActuator
+
+    class FilteredPdActuator(IdealPdActuator):
+        def initialize(self, mj_model, model, data, device):
+            super().initialize(mj_model, model, data, device)
+            self._vel = torch.zeros(data.nworld, len(self._target_names))
+            self._last = torch.zeros_like(self._vel)
+
+        def compute(self, cmd):
+            self._last = cmd.vel.clone()
+            torque = self.stiffness * (cmd.position_target - cmd.pos)
+            return torque - self.damping * self._vel
+
+        def update(self, dt):
+            self._vel = 0.5 * self._vel + 0.5 * self._last
+
+    @dataclass(kw_only=True)
+    class FilteredPdActuatorCfg(actuator.IdealPdActuatorCfg):
+        def build(self, entity, target_ids, target_names):
+            return FilteredPdActuator(self, entity, target_ids, target_names)
+
+    built, targets = build_actuator(
+        env,
+        "robot",
+        FilteredPdActuatorCfg(target_names_expr=(".*",), stiffness=40.0, damping=2.0),
+    )
+
+    with pytest.raises(UnsupportedActuator, match=r"own update\(\).*register_actuator"):
+        trace_actuator(built, len(targets), what="Actuator")
+    trace_actuator(
+        built,
+        len(targets),
+        what="Actuator",
+        compute=lambda a, cmd: a.stiffness * (cmd.position_target - cmd.pos),
+    )
+
+
+@pytest.mark.parametrize(
+    ("law", "cause"),
+    [
+        (lambda a, cmd: torch.where(cmd.vel >= 0, 1, -1) * cmd.vel, "int64 values"),
+        (lambda a, cmd: (cmd.vel.double() * 2).float(), "double values"),
+    ],
+    ids=["integer-literals", "double"],
+)
+def test_a_graph_the_evaluator_cannot_read_is_refused(env, actuator, law, cause):
+    # ONNX runs these, but the browser's evaluator reads floats and bools only.
+    built, targets = build_actuator(env, "robot", _ideal_pd(actuator))
+
+    with pytest.raises(UnsupportedActuator, match=cause):
+        trace_actuator(built, len(targets), what="Actuator", compute=law)
+
+
+def test_a_trace_env_of_several_worlds_is_refused(env, actuator):
+    built, targets = build_actuator(env, "robot", _ideal_pd(actuator))
+
+    with pytest.raises(ValueError, match="num_envs=2"):
+        trace_actuator(built, len(targets), what="Actuator", num_envs=2)
+
+
+def test_term_gains_on_joints_a_law_drives_warn():
+    # v0.13.1 ran a term's own gains there; the traced law ignores them.
+    actuators = {"IdealPdActuator_0": {"joints": ["robot/hip", "robot/knee"]}}
+    pd = {"type": "joint_position", "actuator_names": ["robot/.*"]}
+    actions = {
+        "joint_pos": {**pd, "stiffness": 80.0},
+        "every_joint": {"type": "joint_position", "damping": 2.0},
+        "wheels": {
+            "type": "joint_velocity",
+            "actuator_names": ["robot/w"],
+            "damping": 1,
+        },
+        "elbow": {**pd, "damping": {"robot/elbow": 1.0}},
+        "thrust": {**pd, "type": "torque", "stiffness": 1.0},
+        "plain": pd,
+    }
+
+    with pytest.warns(RuntimeWarning) as record:
+        warn_ignored_gains(actions, actuators)
+
+    messages = [str(w.message) for w in record]
+    assert len(messages) == 2
+    assert messages[0].startswith(
+        "Action term 'joint_pos' sets stiffness on ['robot/hip', 'robot/knee']"
+    )
+    assert messages[1].startswith("Action term 'every_joint' sets damping")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        warn_ignored_gains(actions, {})
 
 
 def test_the_mdp_entry_lists_each_graph_and_its_joints(env, actuator, tmp_path):

@@ -281,7 +281,8 @@ becomes `robot/(?:a|b)`. mjswan's own classes are used as written.
 `stiffness` and `damping` are mjswan-specific, for a motor actuator (`biastype=none`)
 that no mjlab actuator config drives, such as one a plain MJCF scene declares: the browser
 computes its PD from them. Both accept a scalar, a per-joint list (aligned with
-`policy_joint_names`), or a dict keyed by joint name.
+`policy_joint_names`), or a dict keyed by joint name. On a joint an mjlab actuator's law
+drives (see below) they are not run, and the build warns.
 
 ### Actuators
 
@@ -300,9 +301,10 @@ computes their control from the target.
 A law has to be elementwise and stateless, so the browser can run it synchronously in the
 physics loop. The build refuses one it cannot trace or that traces to other operators,
 such as `LearnedMlpActuatorCfg`'s network, and one that keeps state between calls, such as
-that network's history. `mjswan.register_actuator` names a law to trace in place of an
-actuator's own `compute`, for one the build refuses, or for the law a policy was trained
-with where your mjlab runs another:
+that network's history or state its own `update()` advances every physics step. Its
+values have to be float32: write `1.0`, not `1`, in a law. `mjswan.register_actuator`
+names a law to trace in place of an actuator's own `compute`, for one the build refuses,
+or for the law a policy was trained with where your mjlab runs another:
 
 ```python
 import mjswan

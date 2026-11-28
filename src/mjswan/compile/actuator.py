@@ -2,15 +2,18 @@
 synchronously every physics substep.
 
 The browser's evaluator runs only elementwise operators over per-joint vectors and
-scalars (``SUPPORTED_OPS``), so a graph using any other is refused, naming it. The graph
-holds no state: it is checked against the live ``compute`` over a run of calls, so a law
-that keeps state between calls (a filter, a history) disagrees with it and is refused.
+scalars (``SUPPORTED_OPS``) of floats and bools, so a graph using any other is refused,
+naming it. The graph holds no state: it is checked against the live ``compute`` over a
+run of calls, so a law that keeps state between calls (a filter, a history) disagrees
+with it and is refused, as is an actuator with its own ``update``, which mjlab calls
+every physics step and the check never does.
 
 See ``context/tracing.md``.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -18,7 +21,7 @@ from typing import Any
 import torch
 from torch import nn
 
-from .export import _export_onnx, check_against_module
+from .export import _export_onnx, _prepare_single_env_export, check_against_module
 
 #: ``(actuator, cmd) -> torque``: ``managers.action_manager.ActuatorLaw``.
 _Compute = Callable[[Any, Any], Any]
@@ -125,22 +128,94 @@ def _example(width: int) -> tuple[torch.Tensor, ...]:
     return (*(draw(_SPREAD[name]) for name in INPUTS[:-1]), draw(_EFFORT_SPREAD))
 
 
+def _has_own_update(actuator: Any) -> bool:
+    from mjlab.actuator.actuator import Actuator
+
+    return getattr(type(actuator), "update", Actuator.update) is not Actuator.update
+
+
+def _evaluator_refusal(model: Any, width: int) -> str | None:
+    """Why ``evaluator.ts`` would refuse *model* over *width* joints past its operator
+    set, or ``None``: it reads float and bool tensors, each a scalar or one value per
+    joint, and casts to those two types only."""
+    from onnx import TensorProto
+
+    kinds = (TensorProto.FLOAT, TensorProto.BOOL)
+
+    def name(data_type: int) -> str:
+        return TensorProto.DataType.Name(data_type).lower()
+
+    def shape_refusal(dims: list[int], what: str) -> str | None:
+        count = math.prod(dims)
+        per_joint = (
+            count == width
+            and sum(d != 1 for d in dims) <= 1
+            and bool(dims)
+            and dims[-1] == width
+        )
+        if count == 1 or per_joint:
+            return None
+        return f"{what} has shape {dims}, neither a scalar nor one value per joint"
+
+    def tensor_refusal(tensor: Any, what: str) -> str | None:
+        if tensor.data_type not in kinds:
+            return (
+                f"{what} holds {name(tensor.data_type)} values, where it reads floats "
+                "and bools only (write 1.0 rather than 1, and keep tensors float32)"
+            )
+        return shape_refusal(list(tensor.dims), what)
+
+    for tensor in model.graph.initializer:
+        if why := tensor_refusal(tensor, f"initializer {tensor.name!r}"):
+            return why
+    for node in model.graph.node:
+        if node.domain not in ("", "ai.onnx"):
+            return f"a {node.op_type} node is in operator domain {node.domain!r}"
+        attrs = {a.name: a for a in node.attribute}
+        if node.op_type == "Constant":
+            if "value" in attrs:
+                why = tensor_refusal(attrs["value"].t, "a Constant")
+            elif "value_floats" in attrs:
+                why = shape_refusal([len(attrs["value_floats"].floats)], "a Constant")
+            elif "value_float" in attrs:
+                why = None
+            else:
+                why = "a Constant holds neither floats nor bools"
+            if why:
+                return why
+        elif node.op_type == "Cast" and attrs["to"].i not in kinds:
+            return (
+                f"a Cast makes {name(attrs['to'].i)} values, where it casts to float "
+                "and bool only (keep tensors float32)"
+            )
+    return None
+
+
 def trace_actuator(
     actuator: Any,
     width: int,
     *,
     what: str,
     compute: _Compute | None = None,
+    num_envs: int = 1,
     opset: int = 17,
 ) -> ActuatorExport:
     """Trace *actuator*'s torque law over *width* joints, or *compute* in its place.
 
-    Raises :class:`UnsupportedActuator` for a law that does not export or uses an
-    operator outside :data:`SUPPORTED_OPS`, and ``DivergentGraph`` for one the graph
-    does not reproduce, as a law keeping state between calls does not.
+    Raises :class:`UnsupportedActuator` for an actuator with its own ``update``, a law
+    that does not export, or a graph the browser's evaluator would refuse, and
+    ``DivergentGraph`` for one the graph does not reproduce, as a law keeping state
+    between calls does not. *num_envs* is the trace env's, which must be one.
     """
     import onnx
 
+    _prepare_single_env_export(num_envs)
+    if compute is None and _has_own_update(actuator):
+        raise UnsupportedActuator(
+            f"{what} has its own update(), which mjlab calls after every physics step "
+            "and the browser's stateless law cannot: any state it advances would be "
+            f"frozen into the graph. {_WAYS_OUT}"
+        )
     law = _Law(actuator, compute or _own_compute)
     example = _example(width)
     try:
@@ -158,14 +233,18 @@ def trace_actuator(
             f"{what} does not trace to a graph ({type(exc).__name__}: {reason}). "
             f"{_WAYS_OUT}"
         ) from exc
-    ops = tuple(
-        sorted({n.op_type for n in onnx.load_from_string(onnx_bytes).graph.node})
-    )
+    model = onnx.load_from_string(onnx_bytes)
+    ops = tuple(sorted({n.op_type for n in model.graph.node}))
     if unsupported := [op for op in ops if op not in SUPPORTED_OPS]:
         raise UnsupportedActuator(
             f"{what} traces to {', '.join(unsupported)}, which the browser's actuator "
             "evaluator does not run: it runs elementwise operators only, every physics "
             f"substep. {_WAYS_OUT}"
+        )
+    if why := _evaluator_refusal(model, width):
+        raise UnsupportedActuator(
+            f"{what} traces to a graph the browser's actuator evaluator does not run: "
+            f"{why}. {_WAYS_OUT}"
         )
     check_against_module(
         law,
