@@ -102,6 +102,18 @@ class ClientBuilder:
         else:
             return self.nodeenv_dir / "bin" / "npm"
 
+    def _node_env(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+        """The environment Node tools run in: the nodeenv first on ``PATH``.
+
+        npm and esbuild start through ``env node``, as do the scripts npm runs, so
+        without it they run on whatever Node the machine has (Cloudflare Pages' 22).
+        """
+        env = {**os.environ, **(extra or {})}
+        env["PATH"] = os.pathsep.join(
+            filter(None, (str(self._get_node_bin().parent), env.get("PATH")))
+        )
+        return env
+
     def _ensure_nodeenv_installed(self) -> None:
         try:
             import nodeenv  # noqa: F401
@@ -172,7 +184,9 @@ class ClientBuilder:
                 shutil.rmtree(node_modules)
 
         print("Installing npm dependencies (npm install)...")
-        subprocess.check_call([str(npm_bin), "install"], cwd=self.project_dir)
+        subprocess.check_call(
+            [str(npm_bin), "install"], cwd=self.project_dir, env=self._node_env()
+        )
 
     def sync_version_from_python(self) -> None:
         """Sync package.json version with Python package __version__."""
@@ -214,13 +228,10 @@ class ClientBuilder:
                 f"Available scripts: {list(package_data.get('scripts', {}).keys())}"
             )
         print(f"Running npm script: {script_name}")
-        build_env = os.environ.copy()
-        if env:
-            build_env.update(env)
         subprocess.check_call(
             [str(npm_bin), "run", script_name],
             cwd=self.project_dir,
-            env=build_env,
+            env=self._node_env(env),
         )
 
     def _plugin_alias_args(self) -> list[str]:
@@ -328,6 +339,7 @@ class ClientBuilder:
                     *self._plugin_alias_args(),
                 ],
                 cwd=self.project_dir,
+                env=self._node_env(),
             )
         finally:
             entry.unlink(missing_ok=True)
