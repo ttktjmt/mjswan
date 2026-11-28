@@ -147,7 +147,7 @@ def _swap_in(staging: Path, output_path: Path) -> None:
         output_path.rename(old)
     try:
         staging.rename(output_path)
-    except OSError:
+    except BaseException:
         if old is not None:
             old.rename(output_path)
         raise

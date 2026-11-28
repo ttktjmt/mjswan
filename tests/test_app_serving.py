@@ -105,6 +105,7 @@ def test_a_loopback_server_refuses_requests_addressed_elsewhere(loopback_port, h
     ("bind", "answered"),
     [
         ("localhost", {"localhost", "127.0.0.1", "::1"}),
+        ("LocalHost", {"localhost", "127.0.0.1", "::1"}),
         ("127.0.0.1", {"localhost", "127.0.0.1", "::1"}),
         ("127.0.0.2", {"localhost", "127.0.0.1", "::1", "127.0.0.2"}),
         ("::1", {"localhost", "127.0.0.1", "::1"}),

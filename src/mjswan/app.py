@@ -33,7 +33,8 @@ def _hosts_answered(bind_host: str) -> frozenset[str] | None:
     """
     try:
         loopback = (
-            bind_host == "localhost" or ipaddress.ip_address(bind_host).is_loopback
+            bind_host.lower() == "localhost"
+            or ipaddress.ip_address(bind_host).is_loopback
         )
     except ValueError:
         loopback = False

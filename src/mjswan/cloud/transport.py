@@ -53,8 +53,8 @@ def refused_redirect(req: urllib.request.Request, exc: urllib.error.HTTPError) -
     target = exc.headers.get("Location") or "no location"
     return (
         f"{host} answered with a redirect ({exc.code}) to {target}. mjswan follows no "
-        "redirect, which would take the request's credentials along; point it at the "
-        "URL the redirect names, if you trust it."
+        "redirect, which would take the request's credentials along. If you trust that "
+        "URL, set it as the base URL instead."
     )
 
 
