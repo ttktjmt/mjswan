@@ -6,7 +6,7 @@
 
 The order, and why each step sits there:
 
-1. Refuse two siblings both marked default (`_check_defaults`), then wipe the output directory.
+1. Refuse two siblings both marked default (`_check_defaults`), and an output path that is a link, a file, or a directory holding anything but a previous build (a `manifest.json` that lists projects), before anything is deleted: `build(".")` would otherwise delete the working directory. Everything below is written to a directory beside the output (`.<name>.<token>.tmp`) and moved into place last (`_swap_in`), the previous build out of the way first and deleted after. A failed build so leaves the previous one, and leaves no half-written directory without a `manifest.json`, which the guard would refuse next time; building in place had both faults.
 2. Build the frontend (`ClientBuilder`, reusing a cached SPA when it matches) and lay the engine down (`install_spa`). The SPA is project-independent, so it is the same for every build with the same options.
 3. Compile author TypeScript terms to `assets/plugins.js` when `uses_custom_js()` is true ([frontend.md](frontend.md) has why it is a separate module).
 4. `write_mt_headers` writes the COOP/COEP `_headers` file for `mt=True`.

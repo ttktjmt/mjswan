@@ -539,6 +539,11 @@ shortcuts.
 - **The build warns about files packed from outside a scene's model folder**, once per
   scene (`add_scene_mjlab` checks each entity against its own folder); `asset_root=`
   silences it. A scene MuJoCo cannot compile stops the build with a `ValueError` naming it.
+- **`build()` builds only into a missing or empty directory or over a previous build.**
+  Any other directory raises `ValueError` and is left as it is: delete it, or build
+  elsewhere. `mjswan serve` refuses a directory with no `manifest.json`, and
+  `mjswan publish` and `mjswan login` refuse an `MJSWAN_API_BASE` or
+  `MJSWAN_SUPABASE_URL` that is not https or a loopback host.
 
 - **Pull, Push and Grab stand aside while the simulation is paused.** Each acts through
   the physics step, so a drag on a paused simulation drew an arrow and moved nothing. While
@@ -1601,6 +1606,12 @@ shortcuts.
   answers 403 unless `Host` names `localhost`, `127.0.0.1` or `[::1]`, on any port, so a
   forwarded port still works; bound elsewhere, Colab's included, it answers any request.
   `serve` also refuses a directory with no `manifest.json`.
+- **`build()` deletes only a previous build.** It ran `shutil.rmtree` on whatever
+  output directory it was given, so `build(".")` or `build(Path.home())` deleted that
+  directory. It now refuses, before deleting anything, a link, a file, or a directory
+  holding anything but a previous build (one with mjswan's `manifest.json`). The app is
+  written beside the output and moved into place once complete, so a failed build
+  leaves the previous one where it was.
 - **An engine with `archive` limits refuses a `.mjb` scene.** The limits checked only what
   a `.mjz` unpacks to, so a host rendering documents other people publish still handed a
   `.mjb` scene's bytes to MuJoCo's binary loader. `loadScene` now rejects a `.mjb` while
