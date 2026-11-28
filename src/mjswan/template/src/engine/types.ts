@@ -487,7 +487,9 @@ export interface CreateEngineOptions {
   handTracking?: boolean;
   /**
    * What a `.mjz` may hold, checked as it unpacks rather than read from its directory: a
-   * host that renders archives it did not build passes its own upload rules. Default none.
+   * host that renders archives it did not build passes its own upload rules. With limits
+   * set, `loadScene` refuses a `.mjb`, which MuJoCo's binary loader would read unchecked.
+   * Default none.
    */
   archive?: ArchiveLimits;
 }

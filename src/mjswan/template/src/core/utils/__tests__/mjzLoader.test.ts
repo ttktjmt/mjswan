@@ -7,7 +7,7 @@ import { Zip, ZipDeflate, ZipPassThrough, zipSync } from 'fflate';
 import type { MainModule } from 'mujoco';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { loadMjzFile, resetWorking, WORKING, type ArchiveLimits } from '../mjzLoader';
+import { checkModelFormat, loadMjzFile, resetWorking, WORKING, type ArchiveLimits } from '../mjzLoader';
 
 const LIMITS: ArchiveLimits = { maxEntries: 3, maxInflatedBytes: 1024 * 1024, extensions: ['.xml', '.stl'] };
 const SCENE = '<mujoco><compiler meshdir="."/></mujoco>';
@@ -114,6 +114,19 @@ describe('loadMjzFile', () => {
     await expect(loadMjzFile(mujoco, many.buffer as ArrayBuffer, LIMITS)).rejects.toThrow('holds 4 files; this host opens at most 3');
     const slanted = await zip({ 'meshes\\base.stl': 's', 'scene.xml': SCENE });
     await expect(loadMjzFile(mujoco, slanted.buffer as ArrayBuffer, LIMITS)).rejects.toThrow('holds "meshes\\base.stl"');
+  });
+});
+
+describe('checkModelFormat', () => {
+  // The limits hold what a .mjz unpacks to; a .mjb would reach mj_loadModel unchecked.
+  it('refuses a .mjb while limits are set', () => {
+    expect(() => checkModelFormat('mjb', LIMITS)).toThrow('The scene is a .mjb, which this host does not open');
+  });
+
+  it('takes a .mjz under limits, and either format without them', () => {
+    expect(() => checkModelFormat('mjz', LIMITS)).not.toThrow();
+    expect(() => checkModelFormat('mjb', undefined)).not.toThrow();
+    expect(() => checkModelFormat('mjz', undefined)).not.toThrow();
   });
 });
 

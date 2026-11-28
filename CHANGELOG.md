@@ -1588,6 +1588,10 @@ shortcuts.
 
 ### Security
 
+- **An engine with `archive` limits refuses a `.mjb` scene.** The limits checked only what
+  a `.mjz` unpacks to, so a host rendering documents other people publish still handed a
+  `.mjb` scene's bytes to MuJoCo's binary loader. `loadScene` now rejects a `.mjb` while
+  `archive` is set, before the current scene is torn down.
 - **The viewer fetches nothing from outside the document it shows.** A document's ids and
   paths could make the bundled app fetch from another host or leave the base path, and a
   splat `url` or absolute `collider_url` was fetched as given. `parseManifest` now checks
