@@ -57,23 +57,9 @@ class BaseActionCfg(ActionTermCfg):
     "hold_prob", "update_period", "per_env_phase"}``. Resolved from the actuator configs
     when unset."""
 
-    saturation_effort: float | list[float] | dict[str, float] | None = None
-    """mjswan-specific: mjlab's ``DcMotorActuatorCfg.saturation_effort`` on this term's
-    joints. With ``velocity_limit``, the browser clips the motor torque it computes as
-    mjlab's ``dc_motor_clip`` does. Resolved from the actuator configs when unset."""
-
-    velocity_limit: float | list[float] | dict[str, float] | None = None
-    """mjswan-specific: mjlab's ``DcMotorActuatorCfg.velocity_limit``. See
-    ``saturation_effort``."""
-
     def _add_delay(self, entry: dict[str, Any]) -> None:
         if self.delay:
             entry["delay"] = self.delay
-
-    def _add_torque_curve(self, entry: dict[str, Any]) -> None:
-        if self.saturation_effort is not None and self.velocity_limit is not None:
-            entry["saturation_effort"] = self.saturation_effort
-            entry["velocity_limit"] = self.velocity_limit
 
     def to_dict(self) -> dict[str, Any]:
         if self.unsupported_reason is not None:
@@ -96,10 +82,9 @@ class JointPositionActionCfg(BaseActionCfg):
 
     Mirrors ``mjlab.envs.mdp.actions.actions.JointPositionActionCfg``.
 
-    ``stiffness`` and ``damping`` are mjswan-specific fields for PD control
-    in the browser runtime.  In mjlab these are actuator model properties,
-    but mjswan needs them in the policy config because the TS runtime
-    computes PD externally for motor actuators (biastype=none).
+    ``stiffness`` and ``damping`` are mjswan-specific: the browser runs this PD for a
+    motor actuator (``biastype=none``) that no traced mjlab actuator law covers, as on a
+    scene built from a plain MJCF. An mjlab task's actuators bring their own law.
     """
 
     use_default_offset: bool = True
@@ -108,12 +93,12 @@ class JointPositionActionCfg(BaseActionCfg):
     stiffness: float | list[float] | dict[str, float] | None = None
     """Position gain (kp) for PD control.  Scalar, per-joint list, or dict
     mapping joint names (must match ``policy_joint_names``) to values.
-    Only used by the TS runtime for motor actuators with external PD."""
+    Used by the browser for a motor actuator no traced actuator law covers."""
 
     damping: float | list[float] | dict[str, float] | None = None
     """Velocity gain (kd) for PD control.  Scalar, per-joint list, or dict
     mapping joint names (must match ``policy_joint_names``) to values.
-    Only used by the TS runtime for motor actuators with external PD."""
+    Used by the browser for a motor actuator no traced actuator law covers."""
 
     def to_dict(self) -> dict[str, Any]:
         if self.unsupported_reason is not None:
@@ -130,7 +115,6 @@ class JointPositionActionCfg(BaseActionCfg):
             entry["stiffness"] = self.stiffness
         if self.damping is not None:
             entry["damping"] = self.damping
-        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry
@@ -174,7 +158,6 @@ class ReferenceJointPositionActionCfg(BaseActionCfg):
             entry["stiffness"] = self.stiffness
         if self.damping is not None:
             entry["damping"] = self.damping
-        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry
@@ -210,7 +193,6 @@ class CommandJointPositionActionCfg(BaseActionCfg):
             entry["stiffness"] = self.stiffness
         if self.damping is not None:
             entry["damping"] = self.damping
-        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry
@@ -248,7 +230,6 @@ class RelativeJointPositionActionCfg(BaseActionCfg):
             entry["stiffness"] = self.stiffness
         if self.damping is not None:
             entry["damping"] = self.damping
-        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry
@@ -281,7 +262,6 @@ class JointVelocityActionCfg(BaseActionCfg):
         entry["actuator_names"] = list(self.actuator_names)
         if self.damping is not None:
             entry["damping"] = self.damping
-        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry
@@ -314,7 +294,6 @@ class JointEffortActionCfg(BaseActionCfg):
             entry["stiffness"] = self.stiffness
         if self.damping is not None:
             entry["damping"] = self.damping
-        self._add_torque_curve(entry)
         self._add_clip(entry)
         self._add_delay(entry)
         return entry

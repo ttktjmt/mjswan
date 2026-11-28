@@ -29,8 +29,8 @@ One deliberate exception: with the `mjlab` extra installed, `envs/mdp/commands.p
 
 - **Packages and modules mjswan names are singular**: `build/`, `source/`, `license/`, `document/`, `build/asset.py`, `compile/slot.py`, `mjlab/observation.py`.
 - **mjlab-mirror paths keep mjlab's spelling**: `managers/observation_manager.py`, `envs/mdp/observations.py`, `envs/mdp/actions/`. Their import paths are a public contract (`from mjswan.managers.observation_manager import ObservationTermCfg` reads as mjlab's), so they are the one place plural names stay.
-- **A file never repeats its package's name**: `mjlab/observation.py`, not `adapters/mjlab_adapter.py`; `build/frontend.py`, not `build/build_client.py`. The same short name under `mjlab/`, `build/mdp/` and `compile/` (`observation`, `termination`, `event`, `command`, `action`) is intended: one module per manager kind per stage, always read qualified by its package.
-- **An underscore does not mean module-private.** Some helpers lost theirs when a module split (`term_provenance`, `resolved_params`, `is_from_mjlab`), but many shared names keep one: `compile/`'s tracers import `export.py`'s `_export_onnx` and `_register_consts`, and `mjlab/`, `build/` and `compile/parity.py` read the term registries in `envs/mdp/` and `managers/` (`_custom_registry`, `_action_registry`).
+- **A file never repeats its package's name**: `mjlab/observation.py`, not `adapters/mjlab_adapter.py`; `build/frontend.py`, not `build/build_client.py`. The same short name under `mjlab/`, `build/mdp/` and `compile/` (`observation`, `termination`, `event`, `command`, `action`, `actuator`) is intended: one module per manager kind per stage, always read qualified by its package.
+- **An underscore does not mean module-private.** Some helpers lost theirs when a module split (`term_provenance`, `resolved_params`, `is_from_mjlab`), but many shared names keep one: `compile/`'s tracers import `export.py`'s `_export_onnx` and `_register_consts`, and `mjlab/`, `build/` and `compile/parity.py` read the term registries in `envs/mdp/` and `managers/` (`_custom_registry`, `_action_registry`, `_actuator_registry`).
 
 ## mjlab in three relations
 
@@ -40,7 +40,7 @@ One deliberate exception: with the `mjlab` extra installed, `envs/mdp/commands.p
 
 ## Where things live
 
-- A manifest key: `build/manifest.py` (project, scene, MDP and policy entries, and the `manifest.json` write) or `build/mdp/<kind>.py` (one per traced term kind), nowhere else. `compile/` returns bytes and records (`TermExport`, `EventExport`, `CommandExport`, `GroupExport`) and nothing more.
+- A manifest key: `build/manifest.py` (project, scene, MDP and policy entries, and the `manifest.json` write) or `build/mdp/<kind>.py` (one per traced term kind), nowhere else. `compile/` returns bytes and records (`TermExport`, `EventExport`, `CommandExport`, `GroupExport`, `ActuatorExport`) and nothing more.
 - A tracing question: `compile/<pass or kind>.py`.
 - Anything that reads an mjlab object: `mjlab/`.
 - Fetching versus converting: `source/wandb.py` and `source/hf.py` turn a reference into local files and know nothing about what the files mean. The `.pt` → ONNX conversion is `mjlab.runner.export_checkpoint`, fed by `source.wandb.fetch_checkpoints`; the Hub path downloads an `.onnx` and stops. Each source backs one `add_<layer>_<source>()` family, and its functions share one vocabulary (`fetch_onnx`, `fetch_motion_npz`) with no `_from_wandb` / `_from_hf` suffix, since the module already says which.

@@ -76,6 +76,9 @@ import {
   type ResolvedActionTerm,
 } from '../action/applyAction';
 import { ActionManager, type ManagedActionTerm } from '../action/ActionManager';
+import { ActuatorSet, targetKind } from '../actuator/ActuatorSet';
+import { ActuatorGraph } from '../actuator/evaluator';
+import { actuatorGraphRefs } from '../onnx/graphRefs';
 import {
   OnnxActionProcess,
   type OnnxActionGraphConfig,
@@ -1811,7 +1814,9 @@ export class mjswanRuntime {
       // Before any graph runs: a startup event and a command reset run theirs during the load.
       const budget = new BufferBudget();
       reserveTermFeeds(config, budget, structured);
-      if (!kept) await this.policyGraphs.load(policy.graphs ?? []);
+      // An actuator law is evaluated in step, never by ONNX Runtime.
+      const actuatorRefs = actuatorGraphRefs(config);
+      if (!kept) await this.policyGraphs.load((policy.graphs ?? []).filter((g) => !actuatorRefs.has(g.name)));
       if (config.events && config.events.length > 0) {
         this.eventManager = new EventManager(
           config.events,
@@ -1941,7 +1946,8 @@ export class mjswanRuntime {
       // The rest of the first reset, in mjlab's order: observations, actions, then commands.
       const state = this.policyStateBuilder.build();
       this.policyRunner.reset(state);
-      const actions = this.buildActionManager(config, runner, this.policyStateBuilder, budget);
+      const actuators = this.buildActuators(config, policy.graphs ?? []);
+      const actions = this.buildActionManager(config, runner, this.policyStateBuilder, budget, actuators);
       await actions?.reset();
       // Before the commands' reset, which can read an action term.
       this.actionManager = actions;
@@ -1997,11 +2003,34 @@ export class mjswanRuntime {
     }
   }
 
+  /**
+   * The policy's traced actuator laws, each over the model addresses of its joints, or
+   * null when it has none (a document before format 11, or a robot of builtin actuators).
+   */
+  private buildActuators(
+    config: PolicyConfig,
+    graphs: ReadonlyArray<{ name: string; data: ArrayBuffer }>,
+  ): ActuatorSet | null {
+    const entries = Object.entries(config.actuators ?? {});
+    if (entries.length === 0 || !this.mjModel || !this.mjData) return null;
+    const bytes = new Map(graphs.map((g) => [g.name, g.data]));
+    const actuators = entries.map(([name, entry]) => {
+      const data = bytes.get(entry.onnx);
+      if (!data) throw new Error(`Actuator "${name}": its graph ${entry.onnx} did not load.`);
+      const mapping = new PolicyStateBuilder(this.mujoco, this.mjModel!, this.mjData!, entry.joints).getControlMapping();
+      if (!mapping) throw new Error(`Actuator "${name}": a joint of ${entry.joints.join(', ')} has no actuator to drive.`);
+      return { name, graph: ActuatorGraph.fromOnnx(data, entry.joints.length, name), ...mapping };
+    });
+    console.log(`[ActuatorSet] ${actuators.length} actuator law(s) loaded`);
+    return new ActuatorSet(actuators);
+  }
+
   private buildActionManager(
     config: PolicyConfig,
     runner: PolicyRunner,
     stateBuilder: PolicyStateBuilder,
     budget: BufferBudget,
+    actuators: ActuatorSet | null = null,
   ): ActionManager | null {
     const jointNames = runner.getPolicyJointNames();
     const targetActuator = this.targetActuatorTest();
@@ -2054,6 +2083,8 @@ export class mjswanRuntime {
       // Pattern-keyed, unlike the exact-name siblings above.
       const { clipLo, clipHi } = resolveActionClip(actionTerm.clip, subsetJointNames, n);
 
+      const kind = targetKind(controlType);
+      const actuatorTargets = actuators ? mapping.qposAdr.map((adr) => actuators.targetOf(adr, kind)) : undefined;
       const positionActuator = mapping.ctrlAdr.map(targetActuator);
       const isPosition = positionActuator.some(Boolean);
       const isMotor = positionActuator.some((v) => !v);
@@ -2061,7 +2092,8 @@ export class mjswanRuntime {
         console.warn(`[PolicyRunner] Action term "${termKey}": mixed actuator types detected.`);
       }
       const gain = controlType === 'joint_velocity' ? kd : kp;
-      if (isMotor && controlType !== 'torque' && gain.every((v) => v === 0)) {
+      const bareMotor = positionActuator.some((v, i) => !v && !actuatorTargets?.[i]);
+      if (bareMotor && controlType !== 'torque' && gain.every((v) => v === 0)) {
         console.error(
           `[PolicyRunner] Action term "${termKey}": motor actuators with no ` +
           `${controlType === 'joint_velocity' ? 'damping' : 'stiffness'}, so every ctrl ` +
@@ -2070,7 +2102,13 @@ export class mjswanRuntime {
       }
       console.log(
         `[PolicyRunner] Action term "${termKey}" (${controlType}): ${n} joint(s), ` +
-        `mode: ${isPosition ? 'actuator (ctrl=target)' : 'motor (ctrl=torque, external PD)'}`
+        `mode: ${
+          actuatorTargets?.some(Boolean)
+            ? 'actuator law (ctrl=traced torque)'
+            : isPosition
+              ? 'actuator (ctrl=target)'
+              : 'motor (ctrl=torque, external PD)'
+        }`
       );
 
       return {
@@ -2095,6 +2133,7 @@ export class mjswanRuntime {
         processed: new Float32Array(n),
         active: false,
         ...substepOptions(actionTerm, subsetJointNames, termKey, this.termRng, budget),
+        ...(actuatorTargets ? { actuatorTargets } : {}),
       };
     };
 
@@ -2121,9 +2160,10 @@ export class mjswanRuntime {
         stiffness: config.stiffness,
         damping: config.damping,
       };
-      return new ActionManager([
-        { name: 'legacy', term: buildEntry('legacy', controlType, mapping, legacy, true) },
-      ]);
+      return new ActionManager(
+        [{ name: 'legacy', term: buildEntry('legacy', controlType, mapping, legacy, true) }],
+        actuators,
+      );
     }
 
     // ── Multi-term path: iterate every entry in the `actions` block ─────────
@@ -2251,7 +2291,7 @@ export class mjswanRuntime {
       console.warn('[PolicyRunner] No valid action terms found in config.actions.');
       return null;
     }
-    return new ActionManager(results);
+    return new ActionManager(results, actuators);
   }
 
   /** `isTargetActuator` against the loaded model, with this MuJoCo build's bias values. */
@@ -2349,7 +2389,7 @@ export class mjswanRuntime {
     // With the sim state, as mjlab does: a force from before the reset would otherwise
     // keep an `illegal_contact` term firing.
     this.contactSensors.reset();
-    // mjlab's `scene.reset` resets the actuators' command delays with the entity.
+    // mjlab's `scene.reset` resets the actuators' command delays and targets with the entity.
     this.actionManager?.resetActuators();
     // Reset with the sim state, not the terms: it reads nothing from the scene.
     if (this.onnxModule) {
@@ -2412,6 +2452,7 @@ export class mjswanRuntime {
       this.contactSensors.size > 0 ? () => this.advanceContactSensors() : undefined,
       from,
       to,
+      this.actionManager?.actuators ?? null,
     );
   }
 

@@ -1017,7 +1017,7 @@ class TestPolicyTermsDerivedFromEnvCfg:
         assert inherited._config.mdp.episode_length_s is None
 
     @pytest.mark.mjlab
-    def test_a_dc_motor_curve_reaches_the_action_term(
+    def test_a_dc_motor_is_traced_for_the_policys_mdp(
         self, minimal_model, minimal_onnx
     ):
         actuator = pytest.importorskip("mjlab.actuator")
@@ -1045,9 +1045,9 @@ class TestPolicyTermsDerivedFromEnvCfg:
                 name="Policy", policy=minimal_onnx, policy_joint_names=["robot/hip"]
             )._config
 
-        term = (cfg.actions or {})["joint_pos"]
-        assert term.saturation_effort == {"robot/hip": 30.0}
-        assert term.velocity_limit == {"robot/hip": 20.0}
+        # Its law, torque-speed curve included, is traced at build time.
+        assert cfg.mdp._actuators == (("robot", motor),)
+        assert not hasattr((cfg.actions or {})["joint_pos"], "saturation_effort")
 
 
 def _fake_checkpoints(*names: str):

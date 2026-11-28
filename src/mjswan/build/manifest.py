@@ -35,10 +35,12 @@ from .mdp import (
     command_widths,
     debug_vis_entry,
     serialize_actions,
+    serialize_actuators,
     serialize_command,
     serialize_events,
     serialize_observation_group,
     serialize_terminations,
+    warn_ignored_gains,
 )
 from .skin import skin_entry
 
@@ -206,6 +208,23 @@ def mdp_entry(
                 scope=scope,
                 on_term=on_term,
             )
+    if mdp._actuators:
+        if env is None:
+            raise ValueError(
+                f"MDP {mdp_id!r} on scene {scene_dir.name!r} has mjlab actuators whose "
+                "torque law the build traces, but the scene has no trace env to build "
+                "them on. `add_scene_mjlab` supplies one; a plain `add_scene` scene "
+                "needs `scene.set_trace_env(build_single_entity_trace_env(spec_fn))`."
+            )
+        on_term("actuators")
+        entry["actuators"] = serialize_actuators(
+            mdp._actuators,
+            policy["policy_joint_names"] or (),
+            env=env,
+            out_dir=scene_dir,
+            scope=scope,
+        )
+        warn_ignored_gains(entry.get("actions") or {}, entry["actuators"])
     if mdp.events:
         events = serialize_events(
             mdp.events,

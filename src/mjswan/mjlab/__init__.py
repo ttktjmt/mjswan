@@ -22,12 +22,10 @@ from .action import (
     adapt_actions,
     resolve_action_scales,
     resolve_actuator_delays,
-    resolve_dc_motor_curves,
     resolve_default_joint_vel,
-    resolve_pd_gains,
     warn_split_delays,
-    warn_unrun_actuator_fields,
 )
+from .actuator import build_actuator, traced_actuator_cfgs
 from .command import adapt_commands
 from .detect import is_from_mjlab
 from .env import build_mjlab_env, build_single_entity_trace_env
@@ -48,16 +46,15 @@ __all__ = [
     "adapt_terminations",
     "apply_mjlab_sim_options",
     "apply_terrain_spawn",
+    "build_actuator",
     "build_mjlab_env",
     "build_single_entity_trace_env",
     "ensure_mjlab_extensions",
     "is_from_mjlab",
     "resolve_action_scales",
     "resolve_actuator_delays",
-    "resolve_dc_motor_curves",
     "resolve_default_joint_vel",
-    "resolve_pd_gains",
     "resolve_runner_defaults",
+    "traced_actuator_cfgs",
     "warn_split_delays",
-    "warn_unrun_actuator_fields",
 ]

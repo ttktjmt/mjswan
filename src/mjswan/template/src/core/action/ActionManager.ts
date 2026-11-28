@@ -8,6 +8,7 @@
 
 import { inHold, processAction, type ProcessContext, type ResolvedActionTerm } from './applyAction';
 import type { OnnxActionProcess } from './OnnxActionProcess';
+import type { ActuatorSet } from '../actuator/ActuatorSet';
 
 /** One term and, for a traced one, the graph that processes it. */
 export interface ManagedActionTerm {
@@ -22,7 +23,11 @@ export class ActionManager {
   /** Each traced term's last logged failure: one that repeats every step is logged once. */
   private readonly lastError = new Map<string, string>();
 
-  constructor(private readonly entries: readonly ManagedActionTerm[]) {
+  constructor(
+    private readonly entries: readonly ManagedActionTerm[],
+    /** The policy's traced actuator laws, which `applyAction` runs after the terms. */
+    readonly actuators: ActuatorSet | null = null,
+  ) {
     this.terms = entries.map((entry) => entry.term);
     this.byName = new Map(entries.map((entry) => [entry.name, entry]));
   }
@@ -72,9 +77,13 @@ export class ActionManager {
     for (const { traced } of this.entries) await traced?.reset();
   }
 
-  /** mjlab's actuator reset, which comes with the sim state's: the command delays start over. */
+  /**
+   * mjlab's actuator reset, which comes with the sim state's: the command delays start
+   * over, and every actuator target is zero again.
+   */
   resetActuators(): void {
     for (const term of this.terms) for (const delay of term.delays) delay.reset();
+    this.actuators?.reset();
   }
 
   /**

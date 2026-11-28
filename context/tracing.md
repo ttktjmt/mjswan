@@ -1,6 +1,6 @@
 # Tracing MDP terms to ONNX
 
-`compile/`: how a task's own term functions become ONNX graphs the browser runs, what may and may not be traced, and how parity is held. Read this before touching `compile/`, `build/mdp/` or the frontend's manager layer (`template/src/core/{observation,termination,event,command,action,onnx}/`).
+`compile/`: how a task's own term functions and actuator laws become ONNX graphs the browser runs, what may and may not be traced, and how parity is held. Read this before touching `compile/`, `build/mdp/` or the frontend's manager layer (`template/src/core/{observation,termination,event,command,action,actuator,onnx}/`).
 
 ## The split
 
@@ -10,11 +10,11 @@ mjswan reimplements none of mjlab's MDP term functions. Each manager's **term bo
 |---|---|---|
 | Observation | ONNX, fused per group | concatenate, noise, clip, scale, history |
 | Termination | ONNX, fused, awaited every step | OR across terms |
-| Action | none for mjlab's own classes; ONNX for a task's own `process_actions` | `raw * scale + offset`, clip; every substep: ramp, hold, command delay, PD, actuator write |
+| Action | none for mjlab's own classes; ONNX for a task's own `process_actions` | `raw * scale + offset`, clip; every substep: ramp, hold, command delay, the target into an actuator law (below) or a PD, actuator write |
 | Event | ONNX, run only when the trigger fires | interval countdown, startup-once, reset gating |
 | Command | ONNX, state threaded explicitly | resample timer, held state, UI override |
 
-Only these five managers exist. Reward, curriculum, metrics and recorders are training concerns and mjswan is a playback tool: a task's config for them is ignored and never emitted (`tests/test_artifact_hygiene.py`). Training-only term fields (`noise`, `delay_*`, `enable_corruption`) are accepted and ignored.
+Only these five managers exist. An mjlab actuator's torque law is traced too, but evaluated by mjswan's own synchronous evaluator rather than ONNX Runtime (*Actuator laws*, below). Reward, curriculum, metrics and recorders are training concerns and mjswan is a playback tool: a task's config for them is ignored and never emitted (`tests/test_artifact_hygiene.py`). Training-only term fields (`noise`, `delay_*`, `enable_corruption`) are accepted and ignored.
 
 Why ONNX rather than a hand-written interpreter: the traced graph *is* the computation, run by a standard runtime already loaded for the policy, so there is no second copy of mjlab's math to keep numerically in step and no closed op set to grow before a new mjlab field works. An ONNX graph is pure data interpreted by a fixed runtime, so it is effect-free and safe for mjswan Cloud to render ([frontend.md](frontend.md) has the security line).
 
@@ -27,11 +27,11 @@ Why ONNX rather than a hand-written interpreter: the traced graph *is* the compu
 - `record.py`: the discovery pass. A `sim` slot is narrowed to the rows the term indexes when discovery can tell which, unioned across a group's terms, and shipped whole otherwise. Structured sensors (`RayCastSensor`, `ContactSensor`) contribute one slot per field read. Event and command bodies record under tagged keys and have their `write_*_to_sim` calls captured; an event's `env.sim.model` writes land on a copy (`model.py`) and are captured too.
 - `replay.py`: the replay pass, serving the recorded slots back while torch traces; a read discovery never saw raises (see *What cannot be traced*).
 - `export.py`: classification, narrowing, constant buffers and the `torch.onnx.export` call (a graph with no inputs and no random op is rewritten as its `Constant` outputs; every graph passes `onnx.checker`'s full check), the single-env guard, the vetted exporter warnings it silences, and two checks an observation, termination or event graph passes before it ships: `check_against_module` runs the source module against it on perturbed inputs, and `no_hidden_reads` fails a refused read the body swallowed (`slot.refuse_read`).
-- `term.py` / `event.py` / `command.py` / `action.py` / `group.py`: one trace per kind:
+- `term.py` / `event.py` / `command.py` / `action.py` / `actuator.py` / `group.py`: one trace per kind:
   - a value term: a termination that reads nothing fails the build (it would fire every step or never), a baked observation warns by name;
   - an event: writes become outputs, randomness an explicit `rand` input. A class term runs as the instance mjlab built with the env (a new one when the scene's params differ), the env and entities it keeps routed through the proxies, and fails if a call changes its state or it keeps a live object inside a plain object. `EVENTS_WITH_NOTHING_TO_WRITE` names the ones whose trace legitimately captures no write;
   - a stateful command: hidden state promoted to graph I/O, a draw-selected env set gated by `gate.py`, what its `reset` adds gated by `reset_mask`, and the graph checked against the term's own body before it ships;
-  - a task's own action term (below);
+  - a task's own action term, and an actuator's torque law (below);
   - the fused observation and termination groups.
 - `model.py`: an event's `env.sim.model`: reads become slots, writes outputs.
 - `gate.py`: env sets a draw selects, kept whole and gated.
@@ -111,6 +111,16 @@ reset(slots..., prev_<f>..., [rand])        -> (next_<f>...)
 - A traced term costs one awaited graph run per control step (`OnnxActionProcess`); its reset graphs run in the reset chain ([frontend.md](frontend.md)).
 - mjlab zeroes the targets at a reset and writes them once before the next step, so a delayed actuator acts on zero for its first `lag` substeps; the browser starts each delay's history from that zero frame. Randomized lags come from the browser's seeded RNG (mjlab's distribution, not its stream). The browser keeps one delay per action term, so joints of two terms behind one mjlab delay buffer draw their lags apart, and the build warns when that lag is random. Lags an event sets through `Actuator.set_lags` are not run.
 
+## Actuator laws: traced, evaluated synchronously
+
+mjlab turns an entity's targets into `ctrl` every physics substep (`Entity.write_data_to_sim`): MuJoCo computes the control of the builtin and XML actuators from the target, and mjlab computes every other actuator's in Python, its `compute(ActuatorCmd)` over the joints' targets, positions and velocities (an ideal PD within its effort limit, a DC motor's torque-speed curve, a subclass's friction). The browser runs those laws as traced graphs.
+
+- **One graph per actuator config, per MDP** (`compile/actuator.py`, `build/mdp/actuator.py`): `mjlab/actuator.py`'s `traced_actuator_cfgs` lists the configs of the entities the MDP's action terms drive, from that MDP's own env config, leaving out the ones MuJoCo computes; the build constructs each afresh on the trace env (`build_actuator`) and traces its `compute`, or the law `register_actuator` names for its config class, as `pos, vel, pos_target, vel_target, effort_target -> torque`, one column per joint. The entry is keyed `<Class>_<index>` and lists the model joints its columns follow.
+- **Elementwise and stateless, or refused.** The graph may use only `SUPPORTED_OPS`, operators over per-joint vectors and scalars of float32 and bool (an integer literal, as in `torch.where(c, 1, -1)`, traces to int64, so the build checks the tensors and casts as the evaluator reads them, not only the operators), and is checked against the live `compute` over a run of calls (`check_against_module`), so a law that keeps state between calls disagrees and fails. An actuator with its own `update` is refused outright: mjlab calls it every physics step and the check never does, so the state it advances would be frozen into the graph. `LearnedMlpActuatorCfg` fails both ways (a TorchScript network the exporter cannot follow, and an input history), as does a law with a matrix product. The message names the ways out: `register_actuator`, or a builtin actuator. One that drives tendons or sites warns and is left out, since the browser feeds a law joint state only.
+- **Evaluated synchronously, every substep** (`core/actuator/`): ONNX Runtime Web answers with a Promise, which has no place in the substep loop. `onnx.ts` reads the graph's protobuf (bounded: bytes, nodes, tensor sizes), and `evaluator.ts` compiles its nodes once into closures over preallocated `Float32Array`s, each step rounded to float32 as ONNX's is. Its operator set is `SUPPORTED_OPS`, and `actuatorParity.test.ts` holds the two in step.
+- **Targets as mjlab keeps them** (`ActuatorSet.ts`): a term writes its target, after any command delay, into the law's input for the kind mjlab's term of that kind sets (position, velocity or effort), and `applyAction` then runs every law on the state the last `mj_step` left and writes `ctrl`. Targets persist until an episode's reset zeroes them (mjlab's `EntityData.clear_state`), so a joint no term drives is held toward zero, as mjlab holds it. A term's own `stiffness` / `damping` on a joint a law drives are not run, and the build warns (`warn_ignored_gains`).
+- **Why this is not the rejected DSL** (*Rejected*): the evaluator runs ONNX's own operators on the graph the trace produced from the actuator's code, not a hand-written copy of mjlab's math; an actuator law is a few elementwise operators in every actuator mjlab defines but its learned one, and in the reference tasks' own; and a law outside the set is refused at build time rather than approximated.
+
 ## What cannot be traced
 
 `torch.onnx.export` records one path through the code. What it cannot record:
@@ -132,6 +142,7 @@ Numeric parity is mandatory: every traced graph is checked against the live mjla
 | `core/onnx/__tests__/slotReaderParity.test.ts` | the reader hands those graphs mjlab's numbers, for every `EntityData` property and each entity's `EntityIndexing` (fixture from `dump_slot_fixture.py`: two tasks and a synthetic tendon-driven entity) |
 | `core/engine/__tests__/rolloutParity.test.ts` | the layers **composed**: state → reader → real ORT session → fused obs → group vector (fixture from `dump_rollout_fixture.py`) |
 | `core/action/__tests__/actionParity.test.ts` | task-defined action terms against mjlab, substep by substep, through the real process graph and native apply (fixture from `dump_action_fixture.py`) |
+| `core/actuator/__tests__/actuatorParity.test.ts` | traced actuator laws against mjlab, substep by substep, through the real `applyAction` and `ActuatorSet`, and the evaluator's operator set against `SUPPORTED_OPS` (fixture from `dump_actuator_fixture.py`: an ideal PD, a delayed DC motor, a velocity term over a friction law) |
 | `tests/test_artifact_hygiene.py` | no training-only manager keys and no Python term source in the emitted bundle |
 
 Rollout parity **replays** mjlab's states rather than co-simulating: mjlab integrates with `mujoco_warp` while the browser runs MuJoCo's own WASM build, so a free-running comparison would measure MuJoCo against itself. The CI side (`parity.yml`, and why it runs weekly) is in [ci.md](ci.md).
@@ -153,5 +164,7 @@ Do not re-add these as unfinished requirements.
 - **Commands as native, untraced classes**: stateful is not untraceable.
 - **Fusing the observation graph into the policy graph**: see *Fusion*.
 - **Tracing `apply_actions`**: an awaited run per substep, for behaviour that in every task found reduces to a handful of shapes.
+- **Running actuator laws in ONNX Runtime**: an awaited run per substep, as for `apply_actions`. The synchronous evaluator above runs the same graphs.
+- **A PD on the action term in place of the actuator's law** (formats 10 and earlier, with a DC motor's curve copied onto the term): a hand-written copy of each actuator's math, which missed every subclass's own (WBC-Mjlab's friction), dropped the position half of a velocity term's PD, and left a joint no term drives limp where mjlab holds it toward zero.
 - **Wrapping the policy to hold an action term's state**: it can integrate a delta but not ramp across substeps, hold per substep or delay a command, and it changes the policy's interface.
 - **A native class per task's action term**: every task would need an mjswan release, and the term's arithmetic would drift from the task's own code. The trace runs the task's code.

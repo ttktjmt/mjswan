@@ -69,6 +69,12 @@ class MdpConfig:
     _adapted: bool = field(default=False, init=False, repr=False, compare=False)
     """Set once the first policy has filled and adapted this config on a scene."""
 
+    _actuators: tuple[tuple[str, Any], ...] = field(
+        default=(), init=False, repr=False, compare=False
+    )
+    """``(entity name, mjlab actuator cfg)`` for each actuator whose torque law the build
+    traces, set with the adaptation from the env config the actions came from."""
+
 
 __all__ = ["MdpConfig"]
 

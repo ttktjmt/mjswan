@@ -8,9 +8,10 @@ mjlab stays a soft dependency: it is imported lazily inside the functions that n
 
 - **`observation.py`, `termination.py`, `command.py`, `action.py`, `event.py`**: the per-manager adapters. Observation, termination and event bodies are *not* name-resolved to mirrors: mjlab's own functions are traced directly ([tracing.md](tracing.md)). What remains is config-shape adaptation:
   - reducing mjlab's network-keyed observation dict to the actor's group via the task's runner config (`rl_cfg.obs_groups`): only groups it attributes to a network are renamed or dropped (`critic` is dropped), so an author's extra slots survive. A lone group lands under the default slot, `actor` ([document.md](document.md));
-  - `clip_actions`, action-scale, PD-gain, default-velocity and actuator-delay resolution;
+  - `clip_actions`, action-scale, default-velocity and actuator-delay resolution;
   - translating `MyoMuscleActivationActionCfg` to `MuscleActivationActionCfg` ([mdp.md](mdp.md)), and a task's own action class to `TracedActionCfg`;
   - `apply_terrain_spawn`, which swaps mjlab's untraceable `reset_root_state_from_flat_patches` for mjswan's patch-based reset (the browser runs one env where mjlab spreads many across the terrain).
+- **`actuator.py`**: `traced_actuator_cfgs`, the actuator configs whose law mjlab computes in Python (not the builtin and XML ones, which MuJoCo computes), and `build_actuator`, which builds one on the trace env for its law to be traced ([tracing.md](tracing.md)).
 - **`task.py`**: what a scene takes from `env_cfg` (the control rate, terrain data, entity specs, the viewer config).
 - **`runner.py`**: what playback takes from `rl_cfg` (`resolve_runner_defaults`), and how a `model_*.pt` becomes ONNX (`create_pt_onnx_export_context`, `export_checkpoint`), aligning the observation normalizer with the checkpoint. It reuses mjlab's own policy export rather than a second mechanism.
 - **`env.py`**: the trace envs. `build_single_entity_trace_env(spec_fn)` is a plain scene's ([tracing.md](tracing.md) has what it is and why); `build_mjlab_env()` grows `nconmax` / `njmax` until a task's env fits a single-env re-use. `TraceCommandManager` supplies trace-time stand-ins for commands the browser owns (a `ui_command` has no Python side).

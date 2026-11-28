@@ -8,7 +8,7 @@
  */
 
 /** Sections of a policy config whose entries may carry a traced graph. */
-const POLICY_SECTIONS = ['observations', 'actions', 'terminations', 'commands', 'events'] as const;
+const POLICY_SECTIONS = ['observations', 'actions', 'actuators', 'terminations', 'commands', 'events'] as const;
 
 function collectFrom(value: unknown, into: Set<string>): void {
   if (Array.isArray(value)) {
@@ -24,6 +24,16 @@ function collectFrom(value: unknown, into: Set<string>): void {
     if (typeof ref === 'string') into.add(ref);
   }
   for (const nested of Object.values(record)) collectFrom(nested, into);
+}
+
+/**
+ * The actuator laws' graph paths, which `core/actuator/` evaluates in place of an ONNX
+ * Runtime session.
+ */
+export function actuatorGraphRefs(config: Record<string, unknown>): Set<string> {
+  const refs = new Set<string>();
+  collectFrom(config.actuators, refs);
+  return refs;
 }
 
 /** Graph paths a policy's config refers to (scene-relative), sorted for determinism. */

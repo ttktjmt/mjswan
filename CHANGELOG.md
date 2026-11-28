@@ -14,6 +14,18 @@ shortcuts.
 
 ### Added
 
+- **mjlab actuators run their own torque law in the browser** (**document format 11**,
+  [#250](https://github.com/ttktjmt/mjswan/issues/250)). The build traces the `compute` of
+  each actuator whose control mjlab computes in Python (`IdealPdActuatorCfg`,
+  `DcMotorActuatorCfg`, and a subclass with its own, such as WBC-Mjlab's `UnitreeActuator`
+  and its friction) to a graph per MDP, and the browser evaluates it every physics
+  substep, synchronously, on the joints' state and the targets the action terms set, as
+  mjlab's entity does. The MDP entry's `actuators` names each graph and the joints its
+  columns follow. A law has to be elementwise, float32 and stateless: the build refuses
+  one that traces to another operator or to integer or double values, or keeps state
+  between calls (`LearnedMlpActuatorCfg`'s network and history, or an actuator's own
+  `update`), naming `mjswan.register_actuator`, which traces a law you write in its place.
+
 - **`asset_root=` on `add_scene` and `add_scene_mjlab` keeps a scene's files to the
   folders you choose**, for a model you do not trust: any other file must be in
   `spec.assets` or raises `ValueError`. A Hugging Face snapshot also admits its `blobs/`.
@@ -525,6 +537,15 @@ shortcuts.
 
 ### Changed
 
+- **An mjlab task's motors follow its actuators' laws, not a PD on the action term.** A
+  term on such an actuator sets the actuator's target, as mjlab's term does, and the law
+  writes the torque. So a velocity term on an actuator with `stiffness` also pulls its
+  joints toward zero, a joint no term drives is held toward zero, and a target stays until
+  the episode's reset zeroes it, each as in mjlab. The build no longer copies an
+  actuator's gains onto the term, nor warns that a DC motor's curve or an
+  `IdealPdActuatorCfg` subclass's own fields do not run. A term's own `stiffness` and
+  `damping` no longer run on a joint such a law drives, where they used to win over the
+  actuator's, and the build warns that they are ignored.
 - **`parseManifest(manifest, source, { remote })`** (engine API): a splat or collider
   named by URL is fetched only through `remote`, and left out without it. The parser
   refuses ids, paths and `version` values no build writes, and skins or colliders naming
@@ -1050,6 +1071,10 @@ shortcuts.
   weekly CI parity sweep catches upstream drift. The `examples` extra adds `onnxruntime`.
 
 ### Removed
+
+- **`saturation_effort` and `velocity_limit` on mjswan's action term classes**, which
+  carried a DC motor's torque-speed curve onto the term (format 10). The motor's traced law
+  runs the curve; the engine still reads both from a format 10 document.
 
 - **`engine.setReferenceVisible`, the "Show reference" checkbox and `?ref=0`.** The ghost
   is the `motion` term's debug drawing: `engine.debugVis.set('command:motion', enabled)`
