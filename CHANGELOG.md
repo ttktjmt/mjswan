@@ -1588,6 +1588,13 @@ shortcuts.
 
 ### Security
 
+- **`mjswan publish` and `mjswan login` follow no redirect, and send a token only over
+  https.** Both opened requests with urllib's default handler, which copies the
+  `Authorization` header to wherever a 30x points, whatever its host or scheme, so a
+  redirect from the API or Supabase, or an `MJSWAN_API_BASE` / `MJSWAN_SUPABASE_URL` set
+  to a host that redirects, handed the access token to another origin. A redirect is now
+  an error naming its target, and either base URL must be https, or http on
+  `localhost`, `127.0.0.1` or `::1` for a local server.
 - **An engine with `archive` limits refuses a `.mjb` scene.** The limits checked only what
   a `.mjz` unpacks to, so a host rendering documents other people publish still handed a
   `.mjb` scene's bytes to MuJoCo's binary loader. `loadScene` now rejects a `.mjb` while

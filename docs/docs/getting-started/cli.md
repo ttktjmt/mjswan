@@ -153,7 +153,7 @@ of the engine. A `.swn` uploads exactly the file set its directory would.
 | `--description` | — | Optional description. |
 | `--tag` | — | Tag to attach. Repeatable. |
 | `--token` | `$MJSWAN_TOKEN` | Access token, for CI. Skips the interactive login. |
-| `--api-base` | `$MJSWAN_API_BASE`, then `https://api.mjswan.com` | Cloud API base URL. |
+| `--api-base` | `$MJSWAN_API_BASE`, then `https://api.mjswan.com` | Cloud API base URL: https, or http on a loopback host for a local server. |
 
 If you are not signed in and no token is supplied, the browser login runs first
 automatically. Builds that use custom-TS MDP terms are rejected: Cloud cannot

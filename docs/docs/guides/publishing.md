@@ -142,7 +142,7 @@ flow is skipped:
 | Variable | Effect |
 |---|---|
 | `MJSWAN_TOKEN` | Access token. Equivalent to `--token`; skips the interactive login. |
-| `MJSWAN_API_BASE` | Cloud API base URL. Defaults to `https://api.mjswan.com`. |
+| `MJSWAN_API_BASE` | Cloud API base URL. Defaults to `https://api.mjswan.com`. Requests to it carry your token, so it must be https, or http on `localhost`, `127.0.0.1` or `::1` for a local server; a redirect is refused rather than followed. |
 | `MJSWAN_WEB_BASE` | Web app base used to build the printed page URL. Defaults to `https://mjswan.com`. |
 
 ## Embedding a published simulation

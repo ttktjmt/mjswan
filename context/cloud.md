@@ -23,4 +23,6 @@ The size and count limits (`MAX_*` in `publish.py`) are checked before any uploa
 
 ## Login
 
-`mjswan login` (`auth.py`) signs in through the browser and keeps a refreshable session in `~/.config/mjswan/credentials.json` (mode `0600`), so the CLI never holds a long-lived secret; the client key in `auth.py` is public by design. `MJSWAN_TOKEN` skips the sign-in for CI. `transport.py` sets the user agent every request sends, since the API refuses Python's default one.
+`mjswan login` (`auth.py`) signs in through the browser and keeps a refreshable session in `~/.config/mjswan/credentials.json` (mode `0600`), so the CLI never holds a long-lived secret; the client key in `auth.py` is public by design. `MJSWAN_TOKEN` skips the sign-in for CI.
+
+`transport.py` is what both clients send a request with: the user agent, since the API refuses Python's default one, and an opener that follows no redirect, since urllib's handler copies `Authorization` to the new URL whatever its host or scheme. A 30x is an error naming its target. A base URL a token goes to (`MJSWAN_API_BASE`, `MJSWAN_SUPABASE_URL`) is https, or http on `localhost`, `127.0.0.1` or `::1` for a local `wrangler dev`.
