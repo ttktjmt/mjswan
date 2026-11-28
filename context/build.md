@@ -42,7 +42,7 @@ One module per term kind (`observation`, `termination`, `event`, `command`, `act
 
 `template/` stays where npm, Vite, CI and hatch expect it; this module drives it.
 
-- Runs the Vite build, with a local `nodeenv` when Node is not installed system-wide.
+- Runs the Vite build on the Node.js its local `nodeenv` installs (`NODE_VERSION`), whatever Node the machine has. npm, the scripts it runs and esbuild start through `env node`, so `_node_env` puts the nodeenv first on their `PATH`; without it, Cloudflare Pages' own Node 22 ran the build.
 - Caches the built SPA by a key of the mjswan version, the build options (`base_path`, `gtm_id`, `mt`, `debug`) and a SHA-256 fingerprint of the app's sources, config and declared dependencies (not `node_modules`, `dist`, `package-lock.json` or the tests the wheel leaves out). The SPA carries no project data and no author code, so any build with a matching key can reuse it.
 - `install_spa` copies the built engine and its `LICENSE` / `NOTICE` into an app directory, for the builder and for `MjswanApp.from_document` alike.
 - `build_plugins_module` bundles author `ts_src` terms into `plugins.js` with esbuild, aliasing every `mjswan/<sub>` subpath of `package.json`'s `exports` to its engine source and `three` to `src/engine/plugin-three-shim.cjs` (why: [frontend.md](frontend.md)). The engine is never rebuilt for it.

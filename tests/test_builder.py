@@ -12,6 +12,7 @@ Run all tests (CI):               pytest
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import warnings
@@ -373,6 +374,28 @@ class TestNodeenv:
 
         assert [cmd[2] for cmd, _ in calls] == ["pip", "nodeenv"]
         assert all(kw["cwd"] == cb.project_dir for _, kw in calls)
+
+    def test_npm_and_its_scripts_run_on_the_nodeenvs_node(self, tmp_path, monkeypatch):
+        """npm starts through `env node`, as its scripts do: with a machine's own Node
+        first on PATH (Cloudflare Pages' 22), that Node would run the build."""
+        calls = []
+        monkeypatch.setattr(
+            subprocess, "check_call", lambda cmd, **kw: calls.append((cmd, kw))
+        )
+        monkeypatch.setenv("PATH", "/opt/node22/bin")
+        (tmp_path / "package.json").write_text(
+            json.dumps({"scripts": {"build:spa": "vite build"}})
+        )
+        cb = ClientBuilder(tmp_path)
+
+        cb.install_dependencies()
+        cb.run_build_script("build:spa", env={"MJSWAN_BASE_PATH": "/sub/"})
+
+        node_dir = str(cb._get_node_bin().parent)
+        assert [cmd[1:] for cmd, _ in calls] == [["install"], ["run", "build:spa"]]
+        for _, kw in calls:
+            assert kw["env"]["PATH"].split(os.pathsep) == [node_dir, "/opt/node22/bin"]
+        assert calls[1][1]["env"]["MJSWAN_BASE_PATH"] == "/sub/"
 
 
 class TestFrontendBuildCache:

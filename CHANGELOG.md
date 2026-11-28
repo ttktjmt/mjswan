@@ -1136,6 +1136,11 @@ shortcuts.
 
 ### Fixed
 
+- **The frontend build runs on the Node.js it installs (24.19.0).** npm and the scripts it
+  runs start through `env node`, and the build left its own Node off `PATH`, so a
+  machine's Node ran them instead: Cloudflare Pages' Node 22, with an `EBADENGINE`
+  warning against the template's `node >=24.19.0`.
+
 - **A geom with a material is drawn in its own `rgba` when it sets one (anything but the
   default grey), and not at all at alpha 0, as in MuJoCo.** The viewer always took the
   material's colour, so a textured plane hidden at alpha 0 inside an opaque floor was
