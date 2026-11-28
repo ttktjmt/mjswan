@@ -335,6 +335,17 @@ class TestServingADocument:
         self._engine(monkeypatch, tmp_path)
         assert MjswanApp.from_document(built).app_dir == built.resolve()
 
+    def test_a_directory_or_file_without_a_manifest_is_not_served(self, tmp_path):
+        site = tmp_path / "site"
+        site.mkdir()
+        (site / "index.html").write_text("<!doctype html>")
+        notes = tmp_path / "notes.txt"
+        notes.write_text("not an app")
+
+        for source in (site, notes):
+            with pytest.raises(DocumentError, match="holds no manifest.json"):
+                MjswanApp.from_document(source)
+
     def test_a_document_becomes_an_app_beside_a_copy_of_the_engine(
         self, built, monkeypatch, tmp_path
     ):

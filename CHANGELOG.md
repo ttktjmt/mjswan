@@ -1595,6 +1595,12 @@ shortcuts.
   to a host that redirects, handed the access token to another origin. A redirect is now
   an error naming its target, and either base URL must be https, or http on
   `localhost`, `127.0.0.1` or `::1` for a local server.
+- **`mjswan serve` answers only requests addressed to it.** It bound localhost but served
+  whatever `Host` a request named, so a page that pointed its own domain at 127.0.0.1
+  (DNS rebinding) could read the served tree. Bound to a loopback host, the server now
+  answers 403 unless `Host` names `localhost`, `127.0.0.1` or `[::1]`, on any port, so a
+  forwarded port still works; bound elsewhere, Colab's included, it answers any request.
+  `serve` also refuses a directory with no `manifest.json`.
 - **An engine with `archive` limits refuses a `.mjb` scene.** The limits checked only what
   a `.mjz` unpacks to, so a host rendering documents other people publish still handed a
   `.mjb` scene's bytes to MuJoCo's binary loader. `loadScene` now rejects a `.mjb` while

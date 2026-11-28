@@ -94,7 +94,13 @@ def serve_cmd(
         typer.Argument(help="A built mjswan dist directory, or a .swn document."),
     ],
     port: Annotated[int, typer.Option(help="HTTP server port.")] = 8080,
-    host: Annotated[str, typer.Option(help="HTTP server host.")] = "localhost",
+    host: Annotated[
+        str,
+        typer.Option(
+            help="HTTP server host. On loopback, only requests addressed to "
+            "localhost, 127.0.0.1 or [::1] are answered."
+        ),
+    ] = "localhost",
     no_open: Annotated[
         bool, typer.Option("--no-open", help="Do not open browser automatically.")
     ] = False,
