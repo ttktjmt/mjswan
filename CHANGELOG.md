@@ -1592,6 +1592,10 @@ shortcuts.
   a `.mjz` unpacks to, so a host rendering documents other people publish still handed a
   `.mjb` scene's bytes to MuJoCo's binary loader. `loadScene` now rejects a `.mjb` while
   `archive` is set, before the current scene is torn down.
+- **The app opens a `?manifest=` link's manifest only on its own origin.** It fetched one
+  from any site, and while the document's files still came from the app's own base, its
+  names, credits, license text and links showed on the host's origin, the demo's
+  included. A manifest on another origin is now refused before it is fetched.
 - **The viewer fetches nothing from outside the document it shows.** A document's ids and
   paths could make the bundled app fetch from another host or leave the base path, and a
   splat `url` or absolute `collider_url` was fetched as given. `parseManifest` now checks

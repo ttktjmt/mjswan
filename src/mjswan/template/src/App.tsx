@@ -20,7 +20,7 @@ import type { MdpHandlers } from './ControlPanel/MdpSection';
 import {
   applyUrlState,
   DEBUG_PARAM,
-  MANIFEST_PARAM,
+  manifestOverrideUrl,
   PANEL_PARAM,
   pluginModuleUrl,
   POLICY_PARAM,
@@ -55,9 +55,8 @@ function makeByteSource(base: string): ByteSource {
 }
 
 async function loadCatalog(base: string): Promise<Catalog> {
-  const params = new URLSearchParams(window.location.search);
-  const override = params.get(MANIFEST_PARAM);
-  const manifestUrl = override ? new URL(override, window.location.href).toString() : documentUrl(base, 'manifest.json');
+  const override = manifestOverrideUrl(window.location.search, window.location.href);
+  const manifestUrl = override ?? documentUrl(base, 'manifest.json');
   const res = await fetch(manifestUrl, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch ${manifestUrl}: ${res.status}`);
