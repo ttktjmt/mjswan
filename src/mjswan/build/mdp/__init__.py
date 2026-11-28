@@ -5,7 +5,8 @@ Each module here serializes one kind of term. A plain-callable term body is trac
 against the scene's live env by :mod:`mjswan.compile`, written under
 ``<scene>/mdp/<mdp-id>/`` by :mod:`.graph`, and returned as the manifest-shaped entry
 the runtime consumes; a ``*Binding``-typed term (a custom TS class) serializes through
-its own ``to_dict()``. Action terms trace nothing and only merge.
+its own ``to_dict()``. Action terms trace only a task's own class, and each actuator
+whose law mjlab computes in Python is traced in :mod:`.actuator`.
 
 Called from :mod:`mjswan.build.manifest` once per MDP.
 """
@@ -13,6 +14,7 @@ Called from :mod:`mjswan.build.manifest` once per MDP.
 from __future__ import annotations
 
 from .action import serialize_actions
+from .actuator import serialize_actuators
 from .command import (
     command_config,
     command_widths,
@@ -47,6 +49,7 @@ __all__ = [
     "onnx_ref",
     "raycast_sensor_descriptor",
     "serialize_actions",
+    "serialize_actuators",
     "serialize_command",
     "serialize_event",
     "serialize_events",

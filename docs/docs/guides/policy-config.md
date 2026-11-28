@@ -278,24 +278,56 @@ pattern prefixed with its entity to match the namespaced joint names an mjlab sc
 carries, and an alternation is grouped first so the prefix covers every branch: `a|b`
 becomes `robot/(?:a|b)`. mjswan's own classes are used as written.
 
-`stiffness` and `damping` are mjswan-specific — in mjlab they live on the actuator, but
-the browser runtime computes PD externally for motor actuators with `biastype=none`, so
-they have to be in the policy config. Both accept a scalar, a per-joint list (aligned with
+`stiffness` and `damping` are mjswan-specific, for a motor actuator (`biastype=none`)
+that no mjlab actuator config drives, such as one a plain MJCF scene declares: the browser
+computes its PD from them. Both accept a scalar, a per-joint list (aligned with
 `policy_joint_names`), or a dict keyed by joint name.
+
+### Actuators
+
+An mjlab actuator whose control mjlab computes in Python runs in the browser as mjlab runs
+it: `IdealPdActuatorCfg`, `DcMotorActuatorCfg` with its torque-speed curve, and a
+subclass with a `compute` of its own, such as WBC-Mjlab's `UnitreeActuator` and its
+friction. The build traces each actuator's `compute` to a graph, and the browser evaluates
+it every physics substep on the joints' positions and velocities and the targets the
+action terms set. Each term sets the target mjlab's term of its kind sets: a position
+term the position target, a velocity term the velocity target, an effort term the effort.
+A target no term sets stays zero, as in mjlab, so a velocity term on an actuator with
+`stiffness` also pulls its joints toward zero. The builtin actuators
+(`BuiltinPositionActuatorCfg` and the rest) and `XmlActuatorCfg` need nothing: MuJoCo
+computes their control from the target.
+
+A law has to be elementwise and stateless, so the browser can run it synchronously in the
+physics loop. The build refuses one it cannot trace or that traces to other operators,
+such as `LearnedMlpActuatorCfg`'s network, and one that keeps state between calls, such as
+that network's history. `mjswan.register_actuator` names a law to trace in place of an
+actuator's own `compute`, for one the build refuses, or for the law a policy was trained
+with where your mjlab runs another:
+
+```python
+import mjswan
+
+
+def pd_without_friction(actuator, cmd):
+    torque = actuator.stiffness * (cmd.position_target - cmd.pos)
+    torque += actuator.damping * (cmd.velocity_target - cmd.vel)
+    return torque + cmd.effort_target
+
+
+mjswan.register_actuator("UnitreeActuatorCfg", pd_without_friction)
+```
+
+`compute(actuator, cmd)` gets the built actuator and mjlab's `ActuatorCmd`. The build
+looks the law up itself, so `register_actuator` may come before or after `add_policy`. An
+actuator that drives tendons or sites warns and is not run.
 
 An actuator's command delay (mjlab's `delay_min_lag`, `delay_max_lag`, `delay_hold_prob`,
 `delay_update_period`, `delay_per_env_phase`) runs in the browser for every kind of term:
-the build reads it off the actuator configs, as it reads the gains. Lags drawn at random
-follow mjlab's distribution from the browser's seeded RNG, not torch's stream.
+the build reads it off the actuator configs. Lags drawn at random follow mjlab's
+distribution from the browser's seeded RNG, not torch's stream.
 
-A `DcMotorActuatorCfg`'s torque-speed curve runs too: the build reads its
-`saturation_effort` and `velocity_limit` onto the term, and the browser clips the motor's
-torque as mjlab's `dc_motor_clip` does.
-
-What the browser does not run warns at build time rather than being dropped silently: an
-mjlab action field mjswan's class does not have, when it holds a non-default value, and
-whatever an `IdealPdActuatorCfg` does beyond its PD within the effort limit, a DC motor's
-curve and its command delay, such as a subclass's own fields (a friction model).
+An mjlab action field mjswan's class does not have warns at build time when it holds a
+non-default value, rather than being dropped silently.
 
 ### Task-defined action terms
 

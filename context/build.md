@@ -26,7 +26,7 @@ A project's `work` and a scene's `credits` (`credit.py`) name the license files,
 
 ## `mdp/`: one `.onnx` per traced term
 
-One module per term kind (`observation`, `termination`, `event`, `command`, `action`), each tracing plain-callable bodies via `compile/` against the scene's live env, writing `.onnx` bytes under `<scene_dir>/mdp/<mdp-id>/{obs,term,command,event,action}/` and returning the manifest-shaped entry.
+One module per term kind (`observation`, `termination`, `event`, `command`, `action`, `actuator`), each tracing plain-callable bodies via `compile/` against the scene's live env, writing `.onnx` bytes under `<scene_dir>/mdp/<mdp-id>/{obs,term,command,event,action,actuator}/` and returning the manifest-shaped entry.
 
 - **`graph.py`** owns the path convention and the one write. The ref the manifest carries *is* the path on disk, relative to the scene directory, and is scoped by MDP: term and group names are unique within an MDP but not within a scene, so two MDPs' `actor` groups would otherwise collide. As a backstop, the write refuses to replace a *different* graph already at one path. `stamp_provenance` writes who traced a graph into its own `metadata_props`, since a `.onnx` travels without the manifest that names it.
 - **Fusion**: one graph per observation group (clip-then-scale folded in, mjlab's order) and one per termination group (a bool lane per term, so per-term reset reasons survive). A group with a `*Binding` term or per-term history does not fuse; a lone traced termination is deliberately left unfused. Why, and what is never fused: [tracing.md](tracing.md).
@@ -35,6 +35,7 @@ One module per term kind (`observation`, `termination`, `event`, `command`, `act
 - **`sensor.py`** describes the raycast, contact and camera sensors a graph reads (a camera's `rgb` only, fed as float32 and cast back to uint8 in the graph).
 - **`debug_vis.py`** describes the Debug Viz drawings that are not command terms (raycast sensors with `debug_vis`, mjlab's `upright` reward), warning for a reward drawing it does not know.
 - **`action.py`** merges each action term's `to_dict()` over the sidecar's authored block (a motor robot's PD gains), and for a task's own action class (`TracedActionCfg`) builds the term on the trace env, writes its `action/` process and reset graphs, and names the native apply its binding or mjlab base gives ([tracing.md](tracing.md)). Actions serialize before observations, which may read a traced term's state.
+- **`actuator.py`** builds each actuator config the MDP's `_actuators` lists (resolved by `scene.py` from the MDP's env config) on the trace env, traces its law (a registered one before its own `compute`) into `actuator/<Class>_<index>.onnx`, and writes the MDP entry's `actuators`: each graph and the model joints its columns follow ([tracing.md](tracing.md)). A plain scene with no trace env cannot have them; `manifest.py` raises.
 - **`binding.py`**: `require_ts_src`, the check that a `*Binding` names its TypeScript.
 
 ## `frontend.py`: the Python side of `template/`

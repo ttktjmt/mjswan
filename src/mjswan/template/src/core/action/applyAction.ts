@@ -5,8 +5,10 @@
  *   into the term's `processed` targets. A traced term's graph does this instead
  *   (`OnnxActionProcess`).
  * - `applyAction`, once per physics substep: `processed` into `ctrl`, through the native
- *   per-substep options (a ramp, a hold, a relative target, a command delay) and the PD a
- *   motor needs. Synchronous, with no ONNX: it runs on the hottest loop.
+ *   per-substep options (a ramp, a hold, a relative target, a command delay). A joint an
+ *   mjlab actuator law drives gets the result as its target, and the law's graph turns it
+ *   into `ctrl` (`core/actuator/`); any other motor gets the PD here. Synchronous, with no
+ *   ONNX Runtime: it runs on the hottest loop.
  *
  * Free functions over `mjData`, not methods on the DOM-bound runtime, so the parity tests
  * can drive them in Node.
@@ -15,6 +17,7 @@
  */
 
 import { CommandDelay, resolveDelays, type DelayConfigEntry, type DelayRng } from './commandDelay';
+import type { ActuatorSet, TargetSlot } from '../actuator/ActuatorSet';
 import { compileNamePattern } from '../policy/namePattern';
 import { BufferBudget } from '../policy/bufferBudget';
 
@@ -69,7 +72,10 @@ export interface ResolvedActionTerm {
   positionActuator: boolean[];
   kp: Float32Array;
   kd: Float32Array;
-  /** A DC motor's `saturation_effort` and `velocity_limit` per joint, `Infinity` for other motors. */
+  /**
+   * A DC motor's `saturation_effort` and `velocity_limit` per joint, `Infinity` for other
+   * motors, as a format 10 document gives them.
+   */
   saturationEffort?: Float32Array;
   velocityLimit?: Float32Array;
   /** `muscle_activation` only: how a raw action becomes a control. */
@@ -105,6 +111,11 @@ export interface ResolvedActionTerm {
   holding: boolean;
   /** mjlab's actuator command delays on the term's joints, one per mjlab delay buffer. */
   delays: CommandDelay[];
+  /**
+   * Per joint, where an mjlab actuator law takes this term's target, or null where the
+   * joint's `ctrl` is written here. Absent without traced actuators.
+   */
+  actuatorTargets?: ReadonlyArray<TargetSlot | null>;
 }
 
 /** MuJoCo's `mjNGAIN`, the stride of `actuator_gainprm`. */
@@ -269,13 +280,15 @@ type DataViews = Pick<MjData, 'ctrl' | 'qpos' | 'qvel'>;
  * Zeroes `ctrl` first, so an actuator no term claims stays at rest rather than holding
  * the previous step's value, as mjlab resets a target no term writes. With no term at all
  * (no policy), `ctrl` keeps what a keyframe or the host set, as in MuJoCo's own viewer.
- * `substep` counts from 0 within the control step, for a term that ramps across it.
+ * `substep` counts from 0 within the control step, for a term that ramps across it. The
+ * *actuators*' laws run last, on the targets the terms wrote.
  */
 export function applyAction(
   mjData: MjData,
   terms: readonly ResolvedActionTerm[],
   substep = 0,
   decimation = 1,
+  actuators: ActuatorSet | null = null,
 ): void {
   if (terms.length === 0) return;
   // Read once: each embind getter allocates a new view.
@@ -284,6 +297,7 @@ export function applyAction(
   for (const term of terms) {
     if (term.active) applyActionTerm(views, term, substep, decimation);
   }
+  actuators?.apply(views.qpos, views.qvel, views.ctrl);
 }
 
 /** Per-term scratch for the targets one substep computes, so `apply` allocates nothing. */
@@ -331,8 +345,13 @@ function applyActionTerm(
   }
   for (const delay of term.delays) delay.apply(targets);
 
-  const { saturationEffort, velocityLimit } = term;
+  const { saturationEffort, velocityLimit, actuatorTargets } = term;
   for (let i = 0; i < n; i++) {
+    const slot = actuatorTargets?.[i];
+    if (slot) {
+      slot.values[slot.column] = targets[i];
+      continue;
+    }
     const ctrlIndex = ctrlAdr[i];
     if (ctrlIndex < 0) continue;
     if (positionActuator[i]) {
@@ -352,7 +371,8 @@ function applyActionTerm(
 
 /**
  * mjlab's `dc_motor_clip` without its `force_limit` bound, which MuJoCo then applies as the
- * motor's `ctrlrange` with the same result.
+ * motor's `ctrlrange` with the same result. Read from a format 10 document only: a
+ * newer build traces the motor's whole law (`core/actuator/`).
  */
 export function dcMotorClip(effort: number, saturation: number, velocityLimit: number, vel: number): number {
   if (!Number.isFinite(saturation)) return effort;
@@ -449,9 +469,10 @@ export function stepPhysics(
   onSubstepEnd?: () => void,
   from = 0,
   to = decimation,
+  actuators: ActuatorSet | null = null,
 ): boolean {
   for (let substep = from; substep < to; substep++) {
-    applyAction(mjData, terms, substep, decimation);
+    applyAction(mjData, terms, substep, decimation, actuators);
     onSubstep?.();
     const time = mjData.time;
     mujoco.mj_step(mjModel, mjData);

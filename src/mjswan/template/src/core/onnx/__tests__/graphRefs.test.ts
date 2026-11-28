@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { policyGraphRefs } from '../graphRefs';
+import { actuatorGraphRefs, policyGraphRefs } from '../graphRefs';
 
 describe('policyGraphRefs', () => {
   it('collects refs from observations, terminations, commands and events', () => {
@@ -96,5 +96,32 @@ describe('policyGraphRefs — fused groups', () => {
         },
       }),
     ).toEqual(['term/terminations.onnx']);
+  });
+});
+
+describe('actuatorGraphRefs', () => {
+  // The engine evaluates these itself; loaded into ONNX Runtime too, each costs a session.
+  const config = {
+    actions: { joint_pos: { type: 'joint_position', process: { onnx: 'mdp/m/action/delta.onnx' } } },
+    actuators: {
+      IdealPdActuator_0: { joints: ['robot/hip'], onnx: 'mdp/m/actuator/IdealPdActuator_0.onnx' },
+      DcMotorActuator_1: { joints: ['robot/knee'], onnx: 'mdp/m/actuator/DcMotorActuator_1.onnx' },
+    },
+  };
+
+  it("collects the actuator laws' graphs alone", () => {
+    expect([...actuatorGraphRefs(config)].sort()).toEqual([
+      'mdp/m/actuator/DcMotorActuator_1.onnx',
+      'mdp/m/actuator/IdealPdActuator_0.onnx',
+    ]);
+    expect(actuatorGraphRefs({ actions: config.actions }).size).toBe(0);
+  });
+
+  it('leaves them among the graphs a policy fetches', () => {
+    expect(policyGraphRefs(config)).toEqual([
+      'mdp/m/action/delta.onnx',
+      'mdp/m/actuator/DcMotorActuator_1.onnx',
+      'mdp/m/actuator/IdealPdActuator_0.onnx',
+    ]);
   });
 });

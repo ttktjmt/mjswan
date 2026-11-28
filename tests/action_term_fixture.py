@@ -480,19 +480,22 @@ def arm_env(
     delay_lag: int = 0,
     observations: dict | None = None,
     floating: bool = False,
+    actuators: tuple | None = None,
 ) -> ManagerBasedRlEnv:
     """The arm on position actuators at 200 Hz, its terms *actions*, reset once.
 
     *delay_lag* delays every actuator's command by that many physics steps;
     *observations* are the env's observation groups. A *floating* arm has a free base,
-    so the model has no mocap body, as a legged robot's has none.
+    so the model has no mocap body, as a legged robot's has none. *actuators* replace
+    the position actuators, *delay_lag* then unused.
     """
     xml = ARM.replace('pos="0 0 0.5">', 'pos="0 0 0.5">\n      <freejoint/>', 1)
     entity = EntityCfg(
         spec_fn=lambda: mujoco.MjSpec.from_string(xml if floating else ARM),
         init_state=EntityCfg.InitialStateCfg(joint_pos=HOME),
         articulation=EntityArticulationInfoCfg(
-            actuators=(
+            actuators=actuators
+            or (
                 BuiltinPositionActuatorCfg(
                     target_names_expr=(".*",),
                     stiffness=20.0,

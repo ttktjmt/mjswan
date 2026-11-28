@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from mjswan.envs.mdp.actions import JointVelocityActionCfg
-from mjswan.mjlab import resolve_default_joint_vel, resolve_pd_gains
+from mjswan.mjlab import resolve_default_joint_vel
 
 JOINTS = ["robot/left_hip", "robot/left_wheel", "robot/right_wheel"]
 
@@ -55,20 +55,6 @@ def test_offset_kept_without_use_default_offset():
     )
     resolve_default_joint_vel({"vel": cfg}, JOINTS, _env_cfg({".*": 1.0}))
     assert cfg.offset == 0.5
-
-
-def test_motor_damping_from_the_actuator_config():
-    class IdealPdActuatorCfg:
-        target_names_expr = (".*_wheel",)
-        stiffness = 20.0
-        damping = 0.3
-
-    cfg = JointVelocityActionCfg(actuator_names=("robot/.*_wheel",))
-    resolve_pd_gains(
-        {"vel": cfg}, JOINTS, _env_cfg({".*": 0.0}, (IdealPdActuatorCfg(),))
-    )
-    assert cfg.damping == {"robot/left_wheel": 0.3, "robot/right_wheel": 0.3}
-    assert cfg.to_dict()["damping"] == cfg.damping
 
 
 @pytest.mark.mjlab

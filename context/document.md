@@ -94,7 +94,7 @@ They are read by different parties for different decisions, so a document carrie
 | 8 | a motion's `frame_fields` | hold the reading graph's previous value |
 | 9 | camera sensors, image-shaped policy inputs, modelled skins, a scene's `graphics` | misread the camera, retarget a modelled skin as a character, draw every scene one way |
 | 10 | an action term's DC motor `saturation_effort` / `velocity_limit` | run those motors without the curve |
-| 11 | a scene's `term_defaults` | start every term as mjlab's |
+| 11 | a scene's `term_defaults`; an MDP's `actuators` (traced torque laws, in place of a term's DC motor curve) | start every term as mjlab's; run the plain PD on a term's gains, or no torque at all |
 
 The frontend still runs a few older documents' native markers (a pre-format-4 `time_out`, a pre-format-5 `prev_action` and model-field descriptor: [frontend.md](frontend.md)).
 

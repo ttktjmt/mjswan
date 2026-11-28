@@ -66,6 +66,16 @@ export type ActionConfigEntry = {
   [key: string]: unknown;
 };
 
+/** An mjlab actuator's traced torque law (format 11). */
+export type ActuatorConfigEntry = {
+  /** The model joints the law drives, in its graph's column order. */
+  joints: string[];
+  /** The law's graph, scene-relative, run by `core/actuator/` rather than ONNX Runtime. */
+  onnx: string;
+  func?: string;
+  doc?: string;
+};
+
 export type TerminationConfigEntry = {
   name: string;
   params?: Record<string, unknown>;
@@ -110,6 +120,8 @@ export type PolicyConfig = {
   }>;
   observations?: Record<string, ObservationGroupConfig>;
   actions?: Record<string, ActionConfigEntry>;
+  /** The MDP's traced actuator laws, keyed by a name of their class and place. */
+  actuators?: Record<string, ActuatorConfigEntry>;
   terminations?: Record<string, TerminationConfigEntry>;
   /** The MDP's event terms, switched with the policy rather than held by the scene. */
   events?: EventConfig[];

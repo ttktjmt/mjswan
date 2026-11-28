@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import mujoco
 import pytest
 
@@ -11,7 +9,6 @@ from mjswan.envs.mdp.actions import (
     JointPositionActionCfg,
     MuscleActivationActionCfg,
 )
-from mjswan.mjlab import resolve_pd_gains
 from mjswan.policy import action_term_joint_names, drives_joints
 
 # A free base no actuator drives, a hip the policy drives, two elbows a command drives.
@@ -138,22 +135,6 @@ def test_a_pattern_keyed_offset_resolves_against_its_own_joints(robot, minimal_o
     arm = _elbows(offset={".*_elbow": 0.3})
     _add(robot, minimal_onnx, commands={"arm": _sliders("l", "r")}, arm=arm)
     assert arm.offset == {"left_elbow": 0.3, "right_elbow": 0.3}
-
-
-def test_motor_gains_come_from_the_actuator_config():
-    class IdealPdActuatorCfg:
-        target_names_expr = (".*_elbow",)
-        stiffness = 14.0
-        damping = 0.5
-
-    robot_cfg = SimpleNamespace(
-        articulation=SimpleNamespace(actuators=(IdealPdActuatorCfg(),))
-    )
-    env_cfg = SimpleNamespace(scene=SimpleNamespace(entities={"robot": robot_cfg}))
-    arm = _elbows()
-    resolve_pd_gains({"arm": arm}, ["left_elbow", "right_elbow"], env_cfg)
-    assert arm.stiffness == {"left_elbow": 14.0, "right_elbow": 14.0}
-    assert arm.damping == {"left_elbow": 0.5, "right_elbow": 0.5}
 
 
 def test_policy_joint_names_leave_out_a_command_term(robot):

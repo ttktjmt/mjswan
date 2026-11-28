@@ -34,10 +34,8 @@ from mjswan.mjlab import (
     camera_groups,
     resolve_action_scales,
     resolve_actuator_delays,
-    resolve_dc_motor_curves,
-    resolve_pd_gains,
     resolve_runner_defaults,
-    warn_unrun_actuator_fields,
+    traced_actuator_cfgs,
 )
 
 # ---------------------------------------------------------------------------
@@ -947,234 +945,64 @@ class TestAdaptCommands:
 
 
 # ===================================================================
-# Tests: PD gains from the entity's actuator configs
+# Tests: the actuators whose torque law the build traces
 # ===================================================================
 
 
-def _fake_actuator_cls(class_name: str) -> type:
-    """An actuator cfg the adapter recognizes by the class name in its MRO."""
-
-    class Cls:
-        def __init__(self, target_names_expr, stiffness, damping):
-            self.target_names_expr = target_names_expr
-            self.stiffness = stiffness
-            self.damping = damping
-
-    Cls.__name__ = class_name
-    return Cls
+def _env_cfg_with(*actuators: Any, entity: str = "robot") -> Any:
+    entity_cfg = SimpleNamespace(articulation=SimpleNamespace(actuators=actuators))
+    return SimpleNamespace(scene=SimpleNamespace(entities={entity: entity_cfg}))
 
 
-#: The browser owes the ideal-PD family's gains; the builtin position one contributes none.
-_FakeIdealPdActuatorCfg = _fake_actuator_cls("IdealPdActuatorCfg")
-_FakeBuiltinPositionActuatorCfg = _fake_actuator_cls("BuiltinPositionActuatorCfg")
-
-
-class _FakeDcMotorActuatorCfg(_FakeIdealPdActuatorCfg):
-    def __init__(self, target_names_expr, saturation_effort, velocity_limit):
-        super().__init__(target_names_expr, 40.0, 2.0)
-        self.saturation_effort = saturation_effort
-        self.velocity_limit = velocity_limit
-
-
-_FakeDcMotorActuatorCfg.__name__ = "DcMotorActuatorCfg"
-
-
-def _env_cfg_with(*actuators: Any) -> Any:
-    entity = SimpleNamespace(articulation=SimpleNamespace(actuators=actuators))
-    return SimpleNamespace(scene=SimpleNamespace(entities={"robot": entity}))
-
-
-class TestResolvePdGains:
-    """A motor actuator's PD runs in the browser, off gains mjlab keeps on the entity."""
-
-    JOINTS = [
-        "robot/left_knee_joint",
-        "robot/right_knee_joint",
-        "robot/waist_yaw_joint",
-    ]
-
-    def test_gains_expand_to_the_joints_the_patterns_match(self):
-        from mjswan.envs.mdp.actions import ReferenceJointPositionActionCfg
-
-        actions = {"joint_pos": ReferenceJointPositionActionCfg()}
-        resolve_pd_gains(
-            actions,
-            self.JOINTS,
-            _env_cfg_with(
-                _FakeIdealPdActuatorCfg((".*_knee_joint",), 99.0, 6.3),
-                _FakeIdealPdActuatorCfg(("waist_yaw_joint",), 40.0, 2.5),
-            ),
-        )
-
-        term = actions["joint_pos"]
-        assert term.stiffness == {
-            "robot/left_knee_joint": 99.0,
-            "robot/right_knee_joint": 99.0,
-            "robot/waist_yaw_joint": 40.0,
-        }
-        assert term.damping == {
-            "robot/left_knee_joint": 6.3,
-            "robot/right_knee_joint": 6.3,
-            "robot/waist_yaw_joint": 2.5,
-        }
-
-    def test_a_builtin_position_actuator_contributes_nothing(self):
-        from mjswan.envs.mdp.actions import JointPositionActionCfg
-
-        actions = {"joint_pos": JointPositionActionCfg()}
-        resolve_pd_gains(
-            actions,
-            self.JOINTS,
-            _env_cfg_with(_FakeBuiltinPositionActuatorCfg((".*",), 99.0, 6.3)),
-        )
-
-        assert actions["joint_pos"].stiffness is None
-        assert actions["joint_pos"].damping is None
-
-    def test_an_explicit_gain_wins(self):
-        from mjswan.envs.mdp.actions import JointPositionActionCfg
-
-        actions = {"joint_pos": JointPositionActionCfg(stiffness=1.0)}
-        resolve_pd_gains(
-            actions,
-            self.JOINTS,
-            _env_cfg_with(_FakeIdealPdActuatorCfg((".*",), 99.0, 6.3)),
-        )
-
-        assert actions["joint_pos"].stiffness == 1.0
-        assert actions["joint_pos"].damping is None
-
-
-class TestResolveDcMotorCurves:
-    """A DC motor's curve runs in the browser, off fields mjlab keeps on the actuator."""
-
-    JOINTS = TestResolvePdGains.JOINTS
-
-    def test_the_curve_expands_to_the_joints_its_motors_match(self):
-        from mjswan.envs.mdp.actions import JointPositionActionCfg
-
-        actions = {"joint_pos": JointPositionActionCfg()}
-        resolve_dc_motor_curves(
-            actions,
-            self.JOINTS,
-            _env_cfg_with(
-                _FakeDcMotorActuatorCfg((".*_knee_joint",), 30.0, 20.0),
-                _FakeIdealPdActuatorCfg(("waist_yaw_joint",), 40.0, 2.5),
-            ),
-        )
-
-        term = actions["joint_pos"]
-        assert term.saturation_effort == {
-            "robot/left_knee_joint": 30.0,
-            "robot/right_knee_joint": 30.0,
-        }
-        assert term.velocity_limit == {
-            "robot/left_knee_joint": 20.0,
-            "robot/right_knee_joint": 20.0,
-        }
-
-    def test_no_dc_motor_leaves_the_term_unclipped(self):
-        from mjswan.envs.mdp.actions import JointPositionActionCfg
-
-        actions = {"joint_pos": JointPositionActionCfg()}
-        resolve_dc_motor_curves(
-            actions,
-            self.JOINTS,
-            _env_cfg_with(_FakeIdealPdActuatorCfg((".*",), 99.0, 6.3)),
-        )
-
-        assert actions["joint_pos"].saturation_effort is None
-        assert actions["joint_pos"].velocity_limit is None
-
-    def test_the_curve_reaches_the_manifest_entry(self):
-        from mjswan.envs.mdp.actions import JointPositionActionCfg
-
-        entry = JointPositionActionCfg(
-            saturation_effort={"robot/left_knee_joint": 30.0},
-            velocity_limit={"robot/left_knee_joint": 20.0},
-        ).to_dict()
-
-        assert entry["saturation_effort"] == {"robot/left_knee_joint": 30.0}
-        assert entry["velocity_limit"] == {"robot/left_knee_joint": 20.0}
-        assert "saturation_effort" not in JointPositionActionCfg().to_dict()
-
-
-@pytest.mark.mjlab
-class TestWarnUnrunActuatorFields:
-    """An ideal-PD actuator warns for each field the browser does not run."""
+class TestTracedActuatorCfgs:
+    """mjlab computes an actuator's law in Python unless MuJoCo computes it."""
 
     @pytest.fixture
     def actuator(self):
         return pytest.importorskip("mjlab.actuator")
 
-    @staticmethod
-    def _two_terms_on_one_entity() -> dict:
-        from mjswan.envs.mdp.actions import JointPositionActionCfg
-
-        return {"legs": JointPositionActionCfg(), "arms": JointPositionActionCfg()}
-
-    def test_a_plain_ideal_pd_actuator_does_not_warn(self, actuator):
-        # Armature and friction loss are baked into the model the browser loads.
-        cfg = actuator.IdealPdActuatorCfg(
-            target_names_expr=(".*",),
-            stiffness=40.0,
-            damping=2.0,
-            effort_limit=30.0,
-            armature=0.01,
-            frictionloss=0.1,
+    def test_the_ideal_pd_family_is_traced_and_builtins_are_not(self, actuator):
+        pd = actuator.IdealPdActuatorCfg(
+            target_names_expr=("hip.*",), stiffness=40.0, damping=2.0
         )
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            warn_unrun_actuator_fields(
-                self._two_terms_on_one_entity(), _env_cfg_with(cfg)
-            )
-
-    def test_a_subclass_field_warns_once(self, actuator):
-        @dataclass(kw_only=True)
-        class FrictionPdActuatorCfg(actuator.IdealPdActuatorCfg):
-            """wbc's `UnitreeActuatorCfg` in brief: friction torques on top of the PD."""
-
-            fs: float = 0.0
-            fd: float = 0.0
-
-        cfg = FrictionPdActuatorCfg(
-            target_names_expr=(".*",), stiffness=40.0, damping=2.0, fs=2.4
-        )
-        with pytest.warns(
-            RuntimeWarning,
-            match=r"'FrictionPdActuatorCfg' on \('\.\*',\) sets fs=2\.4, which",
-        ) as record:
-            warn_unrun_actuator_fields(
-                self._two_terms_on_one_entity(), _env_cfg_with(cfg)
-            )
-        assert len(record) == 1
-
-    def test_a_dc_motor_curve_does_not_warn(self, actuator):
-        # The browser runs it: resolve_dc_motor_curves hands it to the term.
-        cfg = actuator.DcMotorActuatorCfg(
-            target_names_expr=(".*",),
+        dc = actuator.DcMotorActuatorCfg(
+            target_names_expr=("knee.*",),
             stiffness=40.0,
             damping=2.0,
             effort_limit=20.0,
             saturation_effort=30.0,
-            velocity_limit=20.0,
+            velocity_limit=10.0,
         )
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            warn_unrun_actuator_fields(
-                self._two_terms_on_one_entity(), _env_cfg_with(cfg)
-            )
+        builtin = actuator.BuiltinPositionActuatorCfg(
+            target_names_expr=("ankle.*",), stiffness=40.0, damping=2.0
+        )
+        found = traced_actuator_cfgs(_env_cfg_with(pd, builtin, dc), ["robot"])
 
-    def test_a_command_delay_does_not_warn(self, actuator):
-        # The browser runs it: resolve_actuator_delays hands it to the term.
-        cfg = actuator.IdealPdActuatorCfg(
-            target_names_expr=(".*",), stiffness=40.0, damping=2.0, delay_max_lag=3
+        assert found == (("robot", pd), ("robot", dc))
+
+    def test_only_the_entities_actions_drive(self, actuator):
+        pd = actuator.IdealPdActuatorCfg(
+            target_names_expr=(".*",), stiffness=40.0, damping=2.0
         )
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            warn_unrun_actuator_fields(
-                self._two_terms_on_one_entity(), _env_cfg_with(cfg)
-            )
+
+        assert traced_actuator_cfgs(_env_cfg_with(pd, entity="cart"), ["robot"]) == ()
+        assert traced_actuator_cfgs(_env_cfg_with(pd), ["robot", "robot"]) == (
+            ("robot", pd),
+        )
+        assert traced_actuator_cfgs(None, ["robot"]) == ()
+
+    def test_a_tendon_actuator_warns_and_is_left_out(self, actuator):
+        from mjlab.actuator.actuator import TransmissionType
+
+        tendon = actuator.IdealPdActuatorCfg(
+            target_names_expr=("finger",),
+            stiffness=40.0,
+            damping=2.0,
+            transmission_type=TransmissionType.TENDON,
+        )
+
+        with pytest.warns(RuntimeWarning, match="drives tendons"):
+            assert traced_actuator_cfgs(_env_cfg_with(tendon), ["robot"]) == ()
 
 
 def _delayed_actuator(patterns: tuple[str, ...], max_lag: int, **fields: Any) -> Any:
@@ -1195,7 +1023,11 @@ def _delayed_actuator(patterns: tuple[str, ...], max_lag: int, **fields: Any) ->
 class TestResolveActuatorDelays:
     """mjlab delays an actuator's command; the browser runs the delay per action term."""
 
-    JOINTS = TestResolvePdGains.JOINTS
+    JOINTS = [
+        "robot/left_knee_joint",
+        "robot/right_knee_joint",
+        "robot/waist_yaw_joint",
+    ]
 
     def test_each_distinct_setting_lists_the_joints_it_delays(self):
         from mjswan.envs.mdp.actions import JointPositionActionCfg

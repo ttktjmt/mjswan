@@ -60,8 +60,11 @@ ENGINE_DIR = "assets"
 #: 10: an action term may carry a DC motor's torque-speed curve (``saturation_effort``,
 #: ``velocity_limit``). An older engine would run those motors without it.
 #:
-#: 11: a scene may carry ``term_defaults``, what its terms do when the viewer opens. An
-#: older engine would start every term as mjlab's.
+#: 11: a scene may carry ``term_defaults``, what its terms do when the viewer opens, and
+#: an MDP ``actuators``, each an mjlab actuator's torque law traced to a graph the engine
+#: evaluates every physics substep, in place of the PD it computed and a DC motor's
+#: ``saturation_effort`` / ``velocity_limit``, which no build writes any more. An older
+#: engine would start every term as mjlab's, and run the plain PD or no torque at all.
 DOCUMENT_FORMAT = 11
 
 #: Input slots the runtime fills itself rather than from an observation group: the

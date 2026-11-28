@@ -115,4 +115,43 @@ def register_action(mjlab_name: str, binding: ActionBinding) -> None:
     _action_registry[mjlab_name] = binding
 
 
-__all__ = ["ActionBinding", "ActionTermCfg", "ApplyKind", "register_action"]
+#: ``(actuator, cmd) -> torque``, over mjlab's built actuator and its ``ActuatorCmd``.
+ActuatorLaw = Callable[[Any, Any], Any]
+
+_actuator_registry: dict[str, ActuatorLaw] = {}
+
+
+def register_actuator(mjlab_name: str, compute: ActuatorLaw) -> None:
+    """Trace *compute* in place of the ``compute`` of every actuator whose config class
+    is named *mjlab_name*, for the law a policy was trained with where the pinned mjlab
+    runs another.
+
+    ``compute(actuator, cmd)`` gets the built actuator and mjlab's ``ActuatorCmd`` and
+    returns the torque, in elementwise tensor operations the browser can run. The build
+    looks it up, so this may come before or after ``add_policy``; a later call replaces an
+    earlier one. WBC-Mjlab's G1 policies were trained on mjlab 1.4.0, whose ideal PD
+    clipped through the actuator's torque-speed envelope::
+
+        def unitree_with_envelope(actuator, cmd):
+            torque = actuator.stiffness * (cmd.position_target - cmd.pos)
+            torque += actuator.damping * (cmd.velocity_target - cmd.vel)
+            torque = clip_unitree_effort(
+                torque + cmd.effort_target, cmd.vel, actuator._envelope
+            )
+            stick = torch.tanh(cmd.vel / actuator._activation_vel)
+            friction = actuator._friction_static * stick
+            return torque - friction - actuator._friction_dynamic * cmd.vel
+
+        mjswan.register_actuator("UnitreeActuatorCfg", unitree_with_envelope)
+    """
+    _actuator_registry[mjlab_name] = compute
+
+
+__all__ = [
+    "ActionBinding",
+    "ActionTermCfg",
+    "ActuatorLaw",
+    "ApplyKind",
+    "register_action",
+    "register_actuator",
+]
